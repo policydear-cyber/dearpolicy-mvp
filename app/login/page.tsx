@@ -5,6 +5,8 @@ import { PRIVACY_NOTICE_FINAL } from "@/lib/privacy/notice-status";
 import { useSearchParams } from "next/navigation";
 import { customerMessage } from "@/components/customer-text";
 import { safeInviteNext } from "@/lib/auth/invite-return";
+// Only ever navigate within this app after sign-in: `next` comes from the query string and could point anywhere.
+import { sameSitePath } from "@/lib/auth/same-site-path";
 
 const LINK_ERRORS: Record<string, string> = {
   missing_code: "That link is missing its confirmation code. Please request a new one.",
@@ -124,11 +126,6 @@ function LoginForm() {
   );
 }
 
-/** Only ever navigate within this app after sign-in: `next` comes from the
- * query string and could otherwise point anywhere. */
-function sameSitePath(value: unknown): string | null {
-  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : null;
-}
 
 export default function LoginPage() {
   return (

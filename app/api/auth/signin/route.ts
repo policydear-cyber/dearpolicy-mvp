@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { safeInviteNext } from "@/lib/auth/invite-return";
+import { sameSitePath } from "@/lib/auth/same-site-path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
 import { CONFIRM_EMAIL_MESSAGE, SIGNUP_CLOSED_MESSAGE, SignupClosedError } from "@/lib/auth/signup-gate";
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
   }
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
-  const next = typeof body.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//") && !body.next.startsWith("/\\") ? body.next : null;
+  const next = sameSitePath(body.next);
   const formRedirect = (path: string) => NextResponse.redirect(new URL(path, request.url), 303);
   const backToLogin = (error: string) => formRedirect(`/login?error=${error}${next ? `&next=${encodeURIComponent(next)}` : ""}`);
   if (!email || !password) {

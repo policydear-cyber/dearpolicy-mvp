@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { NextRequest } from "next/server";
 import { inviteReturnPath, safeInviteNext } from "../../lib/auth/invite-return";
+import { sameSitePath } from "../../lib/auth/same-site-path";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_API_KEY|SUPABASE|DEV_AUTH/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network in this test"); }) as typeof fetch;
@@ -95,4 +96,17 @@ test("the pending-invitations list reads the fields the API sends (Expires was a
   assert.ok(used.has("expiresAt"));
   assert.match(panel, /<label>Expires<\/label><span>\{sgDate\(invitation\.expiresAt\)\}<\/span>/);
   assert.match(read("app/api/household/invitations/route.ts"), /const invitations = await listInvitations\(ctx\.userId, ctx\.householdId\);\n\s+return NextResponse\.json\(\{ invitations \}\);/);
+});
+
+test("after sign-in, only a path on this site: tab, newline and backslash tricks are refused everywhere", () => {
+  for (const good of ["/", "/family", "/invite?token=" + TOKEN, "/claims/abc?x=1#y", "/%2F%2Fevil.example"]) assert.equal(sameSitePath(good), good, good);
+  for (const bad of ["//evil.example", "/\\evil.example", "/\t/evil.example", "/\n/evil.example", "/\r//evil.example", "\t//evil.example", "https://evil.example",
+    "javascript:alert(1)", "", " /family", "/\u0000x", "\\\\evil.example", null, 1, ["/"]]) assert.equal(sameSitePath(bad), null, JSON.stringify(bad));
+  const login = read("app/login/page.tsx"), signin = read("app/api/auth/signin/route.ts"), cb = read("app/api/auth/callback/route.ts");
+  for (const [f, src] of [["login", login], ["signin", signin], ["callback", cb]] as const) {
+    assert.match(src, /import \{ sameSitePath \} from "@\/lib\/auth\/same-site-path";/, f);
+    assert.doesNotMatch(src, /startsWith\("\/\/"\)/, `${f} has no prefix-only check left`);
+  }
+  assert.match(signin, /const next = sameSitePath\(body\.next\);/);
+  assert.match(cb, /return sameSitePath\(next\) \?\? "\/";/);
 });

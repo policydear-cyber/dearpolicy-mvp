@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { safeInviteNext } from "@/lib/auth/invite-return";
+import { sameSitePath } from "@/lib/auth/same-site-path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
 import { secureFirstProof, signupMode, SignupClosedError } from "@/lib/auth/signup-gate";
@@ -13,8 +14,7 @@ export const ROUTE_AUTH = "public" as const;
 // open-redirect vulnerability if it ever contained an absolute/protocol-
 // relative URL.
 function sanitizeNext(next: string | null): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/";
-  return next;
+  return sameSitePath(next) ?? "/";
 }
 
 /** Handles every Supabase Auth email-link flow that lands back in this app
