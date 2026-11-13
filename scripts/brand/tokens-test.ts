@@ -73,6 +73,15 @@ test("1. no colour literal outside the token blocks", () => {
     .filter((l) => !l.startsWith(join("app", "layout.tsx")));
   assert.deepEqual(inline, [], "pages and components use var(--token), never a colour literal");
 
+  // Other stylesheets (e.g. components/public/public-site.css) use tokens only.
+  const sheets: string[] = [];
+  const walkCss = (dir: string) => { for (const n of readdirSync(dir)) { const p = join(dir, n); if (statSync(p).isDirectory()) walkCss(p); else if (n.endsWith(".css") && p !== join("app", "globals.css")) sheets.push(p); } };
+  walkCss("app"); walkCss("components");
+  // Comments (even across lines) and url(#fragment) references are not colours.
+  const sheetLiterals = sheets.flatMap((f) => readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").split("\n")
+    .filter((l) => COLOUR.test(l.replace(/url\([^)]*\)/g, ""))).map((l) => `${f}: ${l.trim().slice(0, 120)}`));
+  assert.deepEqual(sheetLiterals, [], "every stylesheet uses var(--token), never a colour literal");
+
   const layout = readFileSync(join("app", "layout.tsx"), "utf8");
   assert.ok(layout.includes(`color: "${resolve(light, "--bg")}"`), "light browser theme colour equals --bg");
   assert.ok(layout.includes(`color: "${resolve(dark, "--bg")}"`), "dark browser theme colour equals dark --bg");
@@ -80,8 +89,8 @@ test("1. no colour literal outside the token blocks", () => {
 
 test("2. every var(--token) the app uses is defined", () => {
   const defined = new Set([...Object.keys(light), ...Object.keys(dark), ...[...css.matchAll(/(--[a-z0-9-]+):/g)].map((m) => m[1])]);
-  const files = [join("app", "globals.css")];
-  const walk = (dir: string) => { for (const n of readdirSync(dir)) { const p = join(dir, n); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(n)) files.push(p); } };
+  const files: string[] = [];
+  const walk = (dir: string) => { for (const n of readdirSync(dir)) { const p = join(dir, n); if (statSync(p).isDirectory()) walk(p); else if (/\.(tsx?|css)$/.test(n)) files.push(p); } };
   walk("app"); walk("components");
   // A component may set a custom property itself, e.g. style={{ "--tab": 1 }}.
   for (const f of files) for (const m of readFileSync(f, "utf8").matchAll(/["'](--[a-z0-9-]+)["']\s*:/g)) defined.add(m[1]);

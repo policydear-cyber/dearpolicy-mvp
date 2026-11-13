@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { benefitGroupKey,groupHeading } from "@/lib/policies/group-heading";
 import { useEffect,useMemo,useState } from "react";
+import { CurrencyPicker } from "@/components/currency-picker";
 
 /** OPERATOR: benefit extraction review (moved out of the household Benefits
  * page in V1.1 -- households no longer confirm headings, fix rows or re-read
@@ -328,10 +329,7 @@ export default function OperatorBenefitExtractionPage(){
                 <small>{KINDS.find(k=>k.value===draft.kind)?.hint}</small></div>
               {draft.kind!=="none"&&<div className="field"><label htmlFor="benefit-amount">{draft.kind==="sum_insured"?"Percentage":draft.kind==="daily"?"Amount for each day":draft.kind==="expense_cap"?"Limit":"Amount"}</label>
                 <div className="schedule-amount-row">
-                  {draft.kind!=="sum_insured"&&<select aria-label="Currency" value={draft.currency} onChange={e=>setDraft({...draft,currency:e.target.value})}>
-                    <option value="">Currency in policy</option>
-                    {["SGD","USD","MYR","HKD","AUD","GBP","EUR"].map(c=><option value={c} key={c}>{c}</option>)}
-                  </select>}
+                  {draft.kind!=="sum_insured"&&<CurrencyPicker value={draft.currency} placeholder="Currency in policy" onChange={c=>setDraft(d=>d&&{...d,currency:c})} />}
                   <input id="benefit-amount" inputMode="decimal" value={draft.amount} onChange={e=>setDraft({...draft,amount:e.target.value})} />
                   {draft.kind==="sum_insured"&&<span className="schedule-unit">% of the sum insured</span>}
                 </div></div>}

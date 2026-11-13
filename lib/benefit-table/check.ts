@@ -17,6 +17,7 @@ import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
+import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
@@ -214,7 +215,11 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   ownShareNamed?: boolean;
   /** The currency the row's cap itself prints ("up to S$15,000"), when it prints one: a cap in another currency than the
    * amount it limits cannot be compared with it, so no amount is worked out (assemble.ts). */
-  capCurrency?: string | null };
+  capCurrency?: string | null;
+  /** The whole printed line or lines the row's quote is on, and the line after them, as the page prints them (assemble.ts
+   * perPersonRow: a row whose own line or the next prints another figure, such as an age or a child's rate, is not every
+   * named insured's). Unset when the quote was not placed on its page. */
+  rowText?: string; nextLine?: string; prevLine?: string };
 export type Dropped = { what: string; why: string };
 /** periodFrom and periodTo: the document's own period of cover, each kept only when the document prints it. */
 export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
@@ -835,6 +840,11 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   };
   const allText = doc.pages.map((p) => p.text).join("\n");
   out.coverPeople = [...new Set(readCovers.map((c) => str(c?.person)).filter((n): n is string => !!n && nameOnPage(n, allText)))];
+  // The lines premium-waiver riders were read from (page and words, spacing aside), with the figure each waives: a row on
+  // one of them that prints that same figure is the waived premium. Another figure on the line (a cover a glued line joins
+  // to the waiver's, Critic #460) keeps its own amount.
+  const waiverLines = new Map<string, number[]>();
+  const lineAt = (at: Source) => `${at.page}\u0000${at.excerpt.toLowerCase().replace(/\s+/g, " ").trim()}`;
   for (const c of readCovers) {
     const label = `cover "${c?.cover}" for ${c?.person}`;
     const person = str(c?.person), product = str(c?.product), cover = str(c?.cover), quote = str(c?.quote);
@@ -851,6 +861,16 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // premium is not this cover's sum: the cover is kept without it.
     const sumWhy = OWN_FIGURE_CHECKS.on && sumInsured != null ? amountOnlyInContext(pageText(source.page), sumInsured, { premium: true }) : null;
     if (sumWhy) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} is printed only as ${figureContextWords(sumWhy)}; kept the cover without it` }); sumInsured = null; }
+    // A premium-waiver rider pays the policy's premiums, never a sum of its own: the figure in its sum column is the premium
+    // it waives (live 13 Nov: "Crisis Waiver III  150.00" shown as a S$150 cover). The cover stays, with no sum (the same
+    // rule as intake, lib/documents/waiver-rider).
+    // The cover's own name only: its quote may be a glued line whose first cell is another rider (Critic #460).
+    const waived = namesWaiverRider(cover) ? num(c.sumInsured) : null;
+    if (waived != null) waiverLines.set(lineAt(source), [...(waiverLines.get(lineAt(source)) ?? []), waived]);
+    if (sumInsured != null && namesWaiverRider(cover)) {
+      out.dropped.push({ what: label, why: `sum insured ${sumInsured} is on a premium-waiver rider's line: the premium it waives, not a sum it pays; kept the cover without it` });
+      sumInsured = null;
+    }
     // A sum the quote does not print is taken from the page's one sum insured line instead, on the same tests as a premium
     // on its own line: the page is about this life only, and the reading gives this person no other cover there. Else the
     // cover is kept without the sum, on the same footing as a cover read with no sum: an unproved sum never costs the
@@ -980,6 +1000,10 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // projection is not this benefit's: the row stays, paid as its words say, with no figure (lib/documents/own-figure).
     const valueWhy = OWN_FIGURE_CHECKS.on && value != null && pays !== "percent" ? amountOnlyInContext(source.excerpt, value, { title: pageText(source.page) }) : null;
     if (valueWhy) { out.dropped.push({ what: label, why: `figure ${value} is printed only as ${figureContextWords(valueWhy)}; kept the row without it` }); pays = "words"; value = null; }
+    // A row read from a premium-waiver rider's own cover line that prints the figure the rider waives: that figure is a
+    // premium, never an amount paid out, so the row stays with no figure. Only that line: a benefit that describes a waiver in its own words ("Waiver
+    // of Premium Benefit up to S$5,000 of future premiums") keeps them.
+    if (value != null && (waiverLines.get(lineAt(source)) ?? []).some((w) => Math.abs(w - value!) < 0.005)) { out.dropped.push({ what: label, why: `figure ${value} is on a premium-waiver rider's line: the premium it waives, not an amount it pays; kept the row without it` }); pays = "words"; value = null; }
     const FIGURED = ["amount", "up_to", "per_day", "per_period", "percent", "value"];
     if (FIGURED.includes(pays) && value == null) { out.dropped.push({ what: label, why: `"${pays}" row with no figure` }); continue; }
     if (!FIGURED.includes(pays)) value = null;
@@ -1074,13 +1098,20 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const firstDay = (v: unknown) => { const printed = pays === "per_day" || int(v) != null ? startDay(source.excerpt) : undefined; return printed === undefined ? day(v) : printed; };
     const fromDay = firstDay(b.fromDay), maxDays = day(b.maxDays);
     const at = placed.get(source);
+    const lines = at ? (() => {
+      const text = pageText(source.page), from = text.lastIndexOf("\n", at.start - 1) + 1, to = lineEndAt(text, at.end);
+      const prevFrom = from > 0 ? text.lastIndexOf("\n", from - 2) + 1 : -1;
+      return { rowText: text.slice(from, to), nextLine: to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "",
+        prevLine: prevFrom >= 0 ? text.slice(prevFrom, from - 1) : "" };
+    })() : null;
     const kind = limitKind({ benefit, section: str(b.section), quote: source.excerpt, sentence: at ? quoteSentence(pageText(source.page), at.start, at.end) : null });
     out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}),
-      ...(ownShareNamed ? { ownShareNamed } : {}) });
+      ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}),
+      ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}) });
   }
   return out;
 }

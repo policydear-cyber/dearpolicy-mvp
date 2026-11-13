@@ -9,6 +9,7 @@
  * minor units; nothing here does arithmetic or trusts a client number.
  */
 import { parseAmountMinor } from "./medical-bill-evidence";
+import { isIsoCurrency } from "@/lib/format/currency";
 import type { ClaimEvidenceExtractedFields } from "./types";
 
 export const BILL_REVIEW_SCALAR_KEYS = ["patientName", "hospitalName", "hospitalCountry", "admissionDate", "dischargeDate", "admissionType", "wardType"] as const;
@@ -34,7 +35,7 @@ function textOrNull(value: unknown): value is string | null {
   return value === null || (typeof value === "string" && value.length <= MAX_TEXT);
 }
 function currencyOrNull(value: unknown): value is string | null {
-  return value === null || (typeof value === "string" && /^[A-Za-z]{3}$/.test(value));
+  return value === null || (typeof value === "string" && /^[A-Za-z]{3}$/.test(value) && isIsoCurrency(value.toUpperCase()));
 }
 
 export function validateBillReviewFields(input: unknown): BillReviewValidation {
@@ -65,7 +66,7 @@ export function validateBillReviewFields(input: unknown): BillReviewValidation {
       if (typeof row.amountText !== "string" || parseAmountMinor(row.amountText) === null) {
         fieldErrors[`${at}.amountText`] = "Enter the amount exactly as printed, for example 1,250.00.";
       }
-      if (!currencyOrNull(row.currency ?? null)) fieldErrors[`${at}.currency`] = "Use a three-letter currency code such as SGD, or leave it blank.";
+      if (!currencyOrNull(row.currency ?? null)) fieldErrors[`${at}.currency`] = "Use the three-letter currency code printed on the bill, such as SGD or THB, or leave it blank.";
       rows.push(key === "billLineItems"
         ? { category: typeof label === "string" ? label.trim() : "", description: typeof row.description === "string" && row.description.trim() ? row.description.trim() : null, amountText: row.amountText, currency: typeof row.currency === "string" ? row.currency.toUpperCase() : null }
         : { source: typeof label === "string" ? label.trim() : "", amountText: row.amountText, currency: typeof row.currency === "string" ? row.currency.toUpperCase() : null });

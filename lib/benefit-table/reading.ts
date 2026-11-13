@@ -19,6 +19,8 @@ export const PAYS = ["amount", "up_to", "per_day", "per_period", "percent", "val
 export const PERIODS = ["week", "month", "quarter", "half_year", "year"] as const;
 export const BASES = ["guaranteed", "non_guaranteed", "illustrated"] as const;
 export const PERCENT_OF = ["sum_insured", "fixed_amount", "other"] as const;
+/** For whom a row is, on a document naming two or more insured people (assemble.ts perPersonRows). */
+export const FOR_WHOM = ["each_named_insured", "some_insured"] as const;
 
 export type ReadCover = { person: string; product: string; cover: string; plan: string | null; riderOf: string | null; policyNumber: string | null;
   sumInsured: number | null; premium: number | null; premiumQuote?: string | null; premiumFrequency: string | null; asOf: string | null; startDate: string | null; endDate: string | null; page: number; quote: string };
@@ -28,6 +30,8 @@ export type ReadBenefit = {
   percentOf: (typeof PERCENT_OF)[number] | null; baseAmount: number | null; baseQuote: string | null;
   cap: number | null; capQuote: string | null;
   fromDay: number | null; maxDays: number | null; conditions: string[]; page: number; quote: string;
+  /** Left out (undefined) unless the reader says; anything but "each_named_insured" gives the row to no one by this rule. */
+  forWhom?: (typeof FOR_WHOM)[number] | null;
 };
 export type Reading = {
   document: { kind: (typeof DOCUMENT_KINDS)[number]; product: string | null; insurer: string | null; namedPeople: string[]; plan: string | null; periodFrom: string | null; periodTo: string | null };
@@ -63,7 +67,7 @@ export const READING_SCHEMA = object({
     basis: { anyOf: [{ type: "string", enum: BASES }, { type: "null" }] }, asOf: optional("string"),
     percentOf: { anyOf: [{ type: "string", enum: PERCENT_OF }, { type: "null" }] }, baseAmount: nullable("number"), baseQuote: nullable("string"),
     cap: nullable("number"), capQuote: nullable("string"),
-    fromDay: optional("integer"), maxDays: optional("integer"),
+    fromDay: optional("integer"), maxDays: optional("integer"), forWhom: { type: "string", enum: FOR_WHOM, optional: true },
     conditions: { type: "array", items: { type: "string" } },
     page: { type: "integer" }, quote: { type: "string" },
   }) },
@@ -91,6 +95,7 @@ benefits: every row that says what is paid or held, or that something is not cov
 - percentOf: for a percentage, what the page says it is a percentage of: "sum_insured" when it says sum insured or sum assured or coverage amount; "fixed_amount" when it prints a figure ("% of S$5,000"), and then baseAmount is that figure and baseQuote the exact words that print it; "other" otherwise. null for other rows.
 - cap and capQuote: for a percentage, the most it pays when the row prints one ("100% of Sum Insured (up to S$400,000)", "15% of Sum Insured or up to S$50,000, whichever is lesser", "up to a maximum amount of $400,000"): cap is that figure as a plain number and capQuote the exact words that print it, with the figure in full. null for both when the row prints no such limit.
 - fromDay and maxDays: for a daily benefit, the first paid day and the most days, as printed.
+- forWhom: only on a document that names two or more insured people; left out otherwise, and whenever you are not sure. "each_named_insured" when the document itself says this row's figure is for each insured person it names (a column, heading or line such as "Limit per insured person" or "each insured person") and nothing anywhere in the document limits the row, or changes its figure, for some of them: not its label, its section or sub-heading, a footnote, or a note elsewhere (a child, an adult, a senior, an infant, an age group, a policyholder or a spouse, one named person or one life, "half for children"). "some_insured" when anything does.
 - conditions: the conditions printed for this row (its footnote, its heading's "due to Accident", its own "only if ..."), each as exact words from this document. Never a condition from another row.
 - page and quote: the page and the exact words of the row, with its figure. Copy the words as they appear, including odd spacing or line breaks within a table row. Never shorten with "..." inside a figure.
 

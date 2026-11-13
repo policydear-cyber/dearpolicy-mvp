@@ -10,6 +10,7 @@ import { unreadAmountLine } from "@/lib/policies/unread-amount-line";
 import { sharedPolicyNote,sharedPolicyText } from "@/lib/policies/shared-policy";
 import { pointsToScheduleSum,SCHEDULE_SUM_POINTER } from "@/lib/policies/no-amount-pointer";
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
+import { CurrencyPicker } from "@/components/currency-picker";
 
 /** Benefits: what the household's documents say each policy pays.
  *
@@ -48,10 +49,10 @@ type Member={id:string;display_name:string;relationship:string};
  * own wording), or honestly not established. */
 function paysLine(b:Benefit):{text:string;established:boolean}{
   if(b.planColumns&&b.planFigure)return {text:`For your ${b.planFigure.plan} plan: ${b.planFigure.figureText}. The document prints a different amount for each plan.`,established:true};
-  if(b.planColumns)return {text:"The document prints a different amount for each plan, and which plan is yours is not shown, so no amount is used for it.",established:false};
+  if(b.planColumns)return {text:"The document prints a different amount for each plan. Your documents don't show which plan is yours, so no amount is used.",established:false};
   if(b.attention==="unreadable"&&b.wholeSum?.length)return {text:"Pays the whole sum insured, as each person's own policy document gives it:",established:true};
   if(b.attention==="unreadable")return {text:unreadAmountLine(b.sourcePage,b.quote,b.benefitName),established:false};
-  if(b.attention==="confirm"||b.needsConfirmation)return {text:"Described in the document. The amount has not been verified against the page yet, so it is not used in answers.",established:false};
+  if(b.attention==="confirm"||b.needsConfirmation)return {text:"Described in the document. Its amount isn't matched to its page yet, so it isn't used in answers.",established:false};
   if(b.formulaKind==="none")return {text:b.pays||"As stated in the document.",established:true};
   return {text:b.pays,established:true};
 }
@@ -151,7 +152,7 @@ export default function BenefitsPage(){
       <p className="lead">Each benefit as your policy prints it, with its page and conditions. Where a document doesn&rsquo;t make an amount clear, this page says so instead of guessing. <Link className="text-link" href="/ledger">See by person →</Link></p>
     </div></header>
 
-    {error&&<div className="alert error" role="alert"><strong>Your benefits could not be loaded.</strong><span> Please refresh the page in a moment.</span></div>}
+    {error&&<div className="alert error" role="alert"><strong>Your benefits couldn&rsquo;t be loaded.</strong><span> Your documents are safe. Refresh the page in a moment.</span></div>}
     {stillReading&&(stuck.length&&!retrying
       ?<div className="unread-documents stalled" role="status"><div><strong>{stuckTitle(stuck,"this page")}</strong><StuckDocuments stuck={stuck}/><span>{stuck.length===1?"Its":"Their"} benefits are missing below. You can still ask about {stuck.length===1?"it":"them"} in Ask DearPolicy.</span></div><button type="button" className="button secondary compact" onClick={()=>void retryReading()}>Try again</button></div>
       :readStalled&&!retrying
@@ -165,14 +166,14 @@ export default function BenefitsPage(){
           {family.map(m=><option value={m.id} key={m.id}>{m.display_name}</option>)}
         </select></div>
       <div className="field"><label htmlFor="schedule-search">Find a benefit</label>
-        <input id="schedule-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Fracture, hospital cash, dental…" /></div>
+        <input id="schedule-search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="For example, fracture or hospital cash" /></div>
     </section>
 
     {status&&<div className="schedule-status" role="status">{status}</div>}
 
     {loading?<div className="empty-card">Loading your benefits…</div>
       :!benefits.length?<div className="empty-card">{stillReading?((readStalled||stuck.length)&&!retrying?"No benefits to show yet, because those documents couldn’t be read. Try again above, or ask about them in Ask DearPolicy.":"Your documents are still being read. You can already ask a question in Ask DearPolicy."):readyDocs>0?<>No benefit details have been listed from your documents yet. <Link className="text-link" href="/coverage">Coverage</Link> shows the cover found in them, and you can ask about any policy in Ask DearPolicy.</>:<>No benefits yet. Upload a policy document or benefit summary and DearPolicy reads it for you. <Link className="text-link" href="/policies">Upload documents →</Link></>}</div>
-      :!visible.length?<div className="empty-card">No benefit matches that search.</div>
+      :!visible.length?<div className="empty-card">No benefit matches that search. Try another word.</div>
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>
           <div className="section-heading"><div><div className="eyebrow">{rows[0].insurer??"POLICY"}</div><h2>{groupHeading(groups,product)}</h2></div>
@@ -195,7 +196,7 @@ export default function BenefitsPage(){
               {benefit.attention==="unreadable"&&CLARIFIABLE.has(benefit.formulaKind)&&<UnreadableAmount benefit={benefit} onSaved={async(message)=>{setStatus(message);await load();}} />}
               <details className="source-details">
                 <summary>Source{benefit.sourcePage?` · page ${benefit.sourcePage}`:""} · {benefit.documentName}</summary>
-                {benefit.quote?<blockquote>{benefit.quote}</blockquote>:<p className="muted">No passage recorded for this benefit.</p>}
+                {benefit.quote?<blockquote>{benefit.quote}</blockquote>:<p className="muted">No quote from the document was saved for this benefit.</p>}
                 {benefit.conditions.length>0&&<ul>{benefit.conditions.map((c,i)=><li key={i}>{c}</li>)}</ul>}
               </details>
             </li>;})}
@@ -233,16 +234,13 @@ function UnreadableAmount({benefit,onSaved}:{benefit:Benefit;onSaved:(message:st
       const payload=await response.json().catch(()=>({}));
       if(!response.ok||payload.error)throw new Error(payload.error);
       setOpen(false);await onSaved(`Saved the amount for “${benefit.benefitName}”.`);
-    }catch(e){setError(customerError(e,"That could not be saved. Please try again."));}
+    }catch(e){setError(customerError(e,"That amount couldn't be saved. Try again."));}
     finally{setSaving(false);}
   }
   if(!open)return <button type="button" className="link-button" onClick={()=>setOpen(true)}>I can read the amount on my copy</button>;
   return <div className="clarify-amount">
     <div className="schedule-amount-row">
-      <select aria-label="Currency" value={currency} onChange={e=>setCurrency(e.target.value)}>
-        <option value="">Currency</option>
-        {["SGD","USD","MYR","HKD","AUD","GBP","EUR"].map(c=><option value={c} key={c}>{c}</option>)}
-      </select>
+      <CurrencyPicker value={currency} onChange={setCurrency} />
       <input aria-label="Amount as printed" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="Amount as printed" />
       <button type="button" className="button primary compact" disabled={saving} onClick={()=>void save()}>{saving?"Saving…":"Save"}</button>
       <button type="button" className="button secondary compact" disabled={saving} onClick={()=>setOpen(false)}>Cancel</button>

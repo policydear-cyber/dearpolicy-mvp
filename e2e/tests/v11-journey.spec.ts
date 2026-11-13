@@ -241,7 +241,7 @@ test.describe.serial("V1.1 release journey", () => {
         await owner.locator("#fm-new-relationship").selectOption(p.relationship);
         await owner.locator("#fm-new-preferred").fill(p.preferred);
         await owner.getByRole("button", { name: "+ Add person" }).click();
-        await expect(owner.locator(".profile-add-panel [role=status]")).toHaveText("Profile added.", { timeout: 60_000 });
+        await expect(owner.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.", { timeout: 60_000 });
       }
     });
     const family = (await api<{ family: { id: string; display_name: string }[] }>(owner, "/api/family")).body.family;
@@ -492,7 +492,7 @@ test.describe.serial("V1.1 release journey", () => {
       await other.locator("#fm-new-relationship").selectOption(p.relationship);
       await other.locator("#fm-new-preferred").fill(p.preferred);
       await other.getByRole("button", { name: "+ Add person" }).click();
-      await expect(other.locator(".profile-add-panel [role=status]")).toHaveText("Profile added.", { timeout: 60_000 });
+      await expect(other.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.", { timeout: 60_000 });
       const famB = (await api<{ family: { id: string; display_name: string }[] }>(other, "/api/family")).body.family;
       journey["member:josephineB"] = famB[0]?.id;
       const d = docs.find((x) => x.key === "otherHouseholdAccident")!;
