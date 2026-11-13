@@ -645,7 +645,9 @@ function tierMarkers(benefit: string): string[] {
  * "Option A" and "Option B"). Then its rows are for whoever holds each plan, never every named person's (Critic 1 on #466).
  * One "Basic" or "Standard" alone is part of a benefit's name. Withhold-only. */
 function contrastsTiers(benefits: CheckedBenefit[]): boolean {
-  return new Set(benefits.flatMap((b) => tierMarkers(b.benefit))).size >= 2;
+  // Two rows, each with markers, that differ: one row's own words ("Cancellation option cover") are no contrast.
+  const sets = benefits.map((b) => tierMarkers(b.benefit).sort().join("|")).filter(Boolean);
+  return new Set(sets).size >= 2;
 }
 /** Whether a row's name names an insured life: a role or relation word (LIFE_TAG), a word of a person the
  * document names, or their initials ("AR" for Asha Rao). */

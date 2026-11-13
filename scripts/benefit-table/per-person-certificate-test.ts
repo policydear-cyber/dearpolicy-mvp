@@ -192,7 +192,7 @@ test("a row named 'Sum insured' does not name a life: the certificate's rows are
   const t = run({ lives: ["Asha Rao", "Ben Rao"], column: "Limit per insured person", rows: [{ benefit: "Sum insured", cell: "S$100,000", value: 100000 }, { benefit: "Trip cancellation", cell: "S$5,000", value: 5000 }] });
   for (const id of ["a", "b"]) assert.deepEqual(shownFor(t, id).map((x) => x.split(" | ")[0]), ["Sum insured", "Trip cancellation"], id);
 });
-for (const first of ["Return journey home (economy class)", "Basic medical expenses", "Standard baggage cover"]) {
+for (const first of ["Return journey home (economy class)", "Basic medical expenses", "Standard baggage cover", "Cancellation option cover", "Emergency return by business class", "Package holiday cancellation"]) {
   test(`one tier-like word alone ("${first}") is part of a benefit's name: the rows are still every named person's (Critic 1 on #466)`, () => {
     const t = run({ lives: ["Asha Rao", "Ben Rao"], column: "Limit per insured person", rows: [{ benefit: first, cell: "S$5,000", value: 5000 }, { benefit: "Trip cancellation", cell: "S$5,000", value: 5000 }] });
     for (const id of ["a", "b"]) assert.deepEqual(shownFor(t, id).map((x) => x.split(" | ")[0]), [first, "Trip cancellation"], id);
