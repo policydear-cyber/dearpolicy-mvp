@@ -129,7 +129,7 @@ function ChatContent(){
   const composer=useRef<HTMLTextAreaElement|null>(null);
   // Text typed into the box before the page finished loading is kept: React would otherwise hold "" while the box shows
   // the text, and Send would stay greyed out (browser-e2e, 13 Nov).
-  useEffect(()=>{const typed=composer.current?.value??"";if(typed)setQuestion(previous=>previous||typed.slice(0,MAX_QUESTION_LENGTH));},[]);
+  useEffect(()=>{const typed=composer.current?.value??"";if(typed)setQuestion(typed.slice(0,MAX_QUESTION_LENGTH));},[]);
   /** Document id -> file name, so each source row says which file it is. */
   const [documentFiles,setDocumentFiles]=useState<Record<string,string>>({});
   const [library,setLibrary]=useState<Library|null>(null);
