@@ -84,6 +84,20 @@ test("a visitor cannot claim a session by sending the hint header themselves", a
   assert.equal(api.status, 401);
 });
 
+test("the hint is set on every page middleware lets through, never taken from the visitor", async () => {
+  const middleware = await load();
+  // Signed out, the sign-in pages say "no session" too, so a click from /login or /privacy to "/" draws the public frame.
+  for (const p of ["/login", "/signup", "/reset-password", "/privacy"]) {
+    assert.equal(forwarded(await middleware(at(p, { headers: { "x-dearpolicy-signed-in": "1" } })), "x-dearpolicy-signed-in"), "0", p);
+  }
+  process.env.DEV_AUTH_ENABLED = "1";
+  try {
+    for (const p of ["/policies", "/chat", "/learn/x/y", "/login"]) {
+      assert.equal(forwarded(await middleware(at(p, { headers: { "x-dearpolicy-signed-in": "0" } })), "x-dearpolicy-signed-in"), "1", p);
+    }
+  } finally { delete process.env.DEV_AUTH_ENABLED; }
+});
+
 test("signed out, every other page still goes to sign-in", async () => {
   const middleware = await load();
   const pages = pageRoutes();
@@ -189,7 +203,7 @@ test("the public pages reach no database, session, household, document, chat or 
 test("robots.txt lets crawlers read only the landing page and Learn; the sitemap lists only public pages", async () => {
   const robots = (await import("../../app/robots")).default();
   const rule = Array.isArray(robots.rules) ? robots.rules[0] : robots.rules;
-  assert.deepEqual(rule.allow, ["/$", "/learn"]);
+  assert.deepEqual(rule.allow, ["/$", "/learn", "/_next/static/", "/dearpolicy-logo.png", "/icon.png"]);
   assert.deepEqual(rule.disallow, ["/"]);
   assert.equal(robots.sitemap, "https://dearpolicy-mvp.vercel.app/sitemap.xml");
   const urls = (await import("../../app/sitemap")).default().map((e) => new URL(e.url).pathname);

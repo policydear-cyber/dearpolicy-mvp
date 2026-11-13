@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 const STEPS: Array<{ icon: IconName; title: string; text: string }> = [
-  { icon: "upload", title: "Upload your documents", text: "Policy schedules, policy wordings, certificates and benefit summaries, from any insurer. PDFs and scans both work, in English." },
+  { icon: "upload", title: "Upload your documents", text: "Policy schedules, policy wordings, certificates and benefit summaries, from any insurer, in English, as PDFs (scanned copies too)." },
   { icon: "family", title: "Link each one to a person", text: "Say whose cover each document is. A policy for your daughter stays hers, even when it shares a policy number with someone else\u2019s." },
   { icon: "ask", title: "Ask in plain words", text: "“Is Mei covered if she breaks her arm?” DearPolicy answers from your own documents and shows the page each answer came from." },
 ];

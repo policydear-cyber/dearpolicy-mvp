@@ -35,7 +35,7 @@
 .landing-cite { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--brand-ink); }
 .landing-cite .icon { width: 16px; height: 16px; flex: none; }
 .landing-section { padding: 40px 0 8px; border-top: 1px solid var(--line); margin-top: 24px; }
-.landing-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: none; border-radius: var(--r-md); background: var(--accent-tint); color: var(--money); }
+.landing-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: none; border-radius: var(--r-md); background: var(--brand-tint); color: var(--brand-ink); }
 .landing-icon .icon { width: 22px; height: 22px; }
 .landing-steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 .landing-steps li { display: flex; gap: 14px; align-items: flex-start; }
