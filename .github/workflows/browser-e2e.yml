@@ -11,7 +11,7 @@ on:
 
 jobs:
   browser-e2e:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
       postgres:
@@ -105,7 +105,7 @@ jobs:
   # to start in production and which a production server refuses to start with (lib/launch/guards.ts). Synthetic keys
   # only; no real Supabase project, credential or secret is used.
   v11-auth:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 120
     services:
       postgres:
@@ -181,7 +181,7 @@ jobs:
   # test server (e2e/support/rag2-loop-server.ts: DEARPOLICY_RAG_LOOP=1, the adversarial suite's SCRIPTED model,
   # household Tan seeded by e2e/support/seed-rag2-conversation.ts). It serves the `next build` output with NODE_ENV=test.
   rag2-conversation:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     services:
       postgres:
@@ -310,7 +310,7 @@ jobs:
   # V1 core-loop certification (e2e/tests/v1-core-loop.spec.ts), in its two phases on a fresh database: household B on
   # its own server as user B first, then household A (which also checks nothing of B's is visible to A).
   v1-core-loop:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 180
     services:
       postgres:

@@ -607,6 +607,31 @@ export function ownLineCovers(readings: CheckedReading[], held: ReadonlySet<stri
 }
 /** A printed line's place: its page and words, spacing aside. */
 export const ownLineKey = (s: Source) => `${s.page}\u0000${s.excerpt.toLowerCase().replace(/\s+/g, " ").trim()}`;
+export const ANOTHER_VERSION_WHY = "linked to another document's copy of the same policy, and this document prints more than one cover of it";
+const REFUSED_VERSION = "\u0000refused";
+/** For a section of a personal document (schedule, certificate) linked to a cover this document does not print, where that
+ * cover is printed by another personal document with the same policy number as one this document prints: the cover key
+ * of this document's own version of that policy. A renewal schedule's benefits were linked to the expired schedule's
+ * cover of the same policy (the two readings named the cover a little differently, so they were two covers), and its
+ * percentages were worked out on last year's sums insured (TE-ACC-20261113, Okafor: fracture GBP 1,200 for 1,500; PTD
+ * GBP 60,000 for 80,000). Only this document's own covers that print a sum insured are its version. REFUSED_VERSION when this document prints more than one cover with that policy number, so which
+ * of its own covers is meant is not known; null when the link stands as it is. Policy numbers only decide which documents
+ * are copies of one policy; nothing is merged or added across them. */
+function ownVersionOf(readings: CheckedReading[]) {
+  const byDoc = new Map(readings.map((r) => [r.documentId, r]));
+  const printed = (r: CheckedReading) => r.covers.filter((c) => c.policyNumber?.trim()).map((c) => ({ key: coverKeyOf(c), number: c.policyNumber! }));
+  return (docId: string | undefined, coverKey: string): string | null => {
+    const r = docId ? byDoc.get(docId) : undefined;
+    if (!r || r.kind !== "personal_proof" || r.covers.some((c) => coverKeyOf(c) === coverKey)) return null;
+    // Only this document's covers that print their own sum insured: a certificate that names the policy but prints no sum
+    // keeps its link to the copy that does, so no figure worked out on that sum is lost.
+    const mine = printed(r).filter((m) => r.covers.some((c) => coverKeyOf(c) === m.key && c.sumInsured != null));
+    const elsewhere = readings.filter((o) => o !== r && o.kind === "personal_proof").flatMap(printed).filter((c) => c.key === coverKey);
+    const versions = mine.filter((m) => elsewhere.some((e) => samePolicyNumber(e.number, m.number)));
+    const keys = [...new Set(versions.map((v) => v.key))];
+    return keys.length === 1 ? keys[0] : keys.length > 1 ? REFUSED_VERSION : null;
+  };
+}
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = [], now: Date = new Date()): BenefitTable {
   const { covers, unmatched, illustration, ambiguous, types } = coversOf(readings, family, singaporeDay(now));
   // The household's word on a headline amount: a correction replaces the printed sum insured for every row worked out on
@@ -626,7 +651,13 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const docOf = new Map(readings.flatMap((r) => r.benefits.map((b) => [sectionKeyOf(r.documentId, b), r.documentId] as const)));
   const refusedLinks: BenefitTable["refusedLinks"] = [];
   const linkOf = new Map<string, SectionLink>();
-  for (const l of links) {
+  const ownVersion = ownVersionOf(readings);
+  for (const linked of links) {
+    // A personal document's own sections are paid under its own version of the policy, never another document's copy of
+    // the same policy (an earlier or later schedule of the same policy number), whatever the link says.
+    const own = linked.cover ? ownVersion(docOf.get(linked.section), linked.cover) : null;
+    if (own === REFUSED_VERSION) { refusedLinks.push({ link: linked, why: ANOTHER_VERSION_WHY }); continue; }
+    const l = own ? { ...linked, cover: own } : linked;
     const type = l.cover ? types.find((t) => t.key === l.cover) : null;
     const section = sections.find((s) => s.key === l.section);
     if (!section) { refusedLinks.push({ link: l, why: "no such section" }); continue; }
