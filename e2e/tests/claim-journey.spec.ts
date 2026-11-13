@@ -56,8 +56,11 @@ async function openAssessment(answer: import("@playwright/test").Locator) {
 async function ask(page: Page, text: string) {
   const answers = page.locator(".message.assistant:not(:has(.thinking))");
   const before = await answers.count();
+  // Typed once: text put in the box while the page is still loading must keep Send ready (app/chat/page.tsx).
+  const send = page.getByRole("button", { name: /send/i });
   await page.getByLabel("Message to DearPolicy").fill(text);
-  await page.getByRole("button", { name: /send/i }).click();
+  await expect(send).toBeEnabled({ timeout: 60_000 });
+  await send.click();
   await expect(answers).toHaveCount(before + 1, { timeout: 180_000 });
   await expect(page.locator(".message-body.thinking")).toHaveCount(0, { timeout: 180_000 });
   return answers.nth(before);
