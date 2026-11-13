@@ -25,7 +25,7 @@ import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
-import { keepsCapIn, multipleIn, timesWords } from "@/lib/benefit-table/multiplier";
+import { decideMultiple, keepsCapIn, timesWords } from "@/lib/benefit-table/multiplier";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
@@ -817,8 +817,9 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
   base: { value: number; docIndex: number; quote: string }; cap: { value: number; docIndex: number; page: number; quote: string } | null;
   /** The row's own printed condition that pays a multiple of its amount in a case the household stated ("a compound
    * fracture is paid at double", lib/benefit-table/multiplier.ts): read again here from its stored page. When it is set and
-   * the figure cannot be worked out again, the card is left out, never shown as the single amount. */
-  times?: { times: number; docIndex: number; page: number; quote: string } | null };
+   * the figure cannot be worked out again, the card is left out, never shown as the single amount. `own` (the row's benefit
+   * and quote) and `section` let the checks decide the case again from the household's own words (decideMultiple). */
+  times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null } | null };
 /** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
  * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
  * sum under a cover heading or on a page that names one life; the benefit table had already tied each row to the person's
@@ -833,7 +834,7 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
  * - a maximum is printed with its currency right after a cap word in its quoted words, in the same currency, and the row
  *   prints no cap when none is given;
  * - the amount is worked out here: the percentage of the base in cents, and the lesser of that and the maximum. */
-function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found, household: Household, person: string): Checked | null {
+function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found, household: Household, person: string, written: string[] = []): Checked | null {
   if (!(sf.percent > 0) || !sf.currency || sf.currency === "$") return null;
   const rf = locateQuote(household, sf.row.quote, sf.row.docIndex);
   if (!rf || rf.docIndex !== sf.row.docIndex || rf.page !== sf.row.page) return null;
@@ -891,9 +892,12 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   if (sf.times) {
     const tf = locateQuote(household, sf.times.quote, sf.times.docIndex);
     if (!tf || tf.docIndex !== sf.row.docIndex || tf.page !== sf.times.page) return null;
-    const m = multipleIn(sf.times.quote);
-    if (!m || m === "unsure" || Math.abs(m.times - sf.times.times) > 1e-9) return null;
-    times = m.times; timesFound = tf;
+    // Decided again from the condition's words and the household's own (written: the current message first), never
+    // trusted from the row step: the same one plain multiple, stated plainly for this person.
+    const d = decideMultiple([sf.times.quote], { own: sf.times.own, section: sf.times.section, cap: cap?.value ?? null },
+      { current: written[0] ?? "", earlier: written.slice(1), person, namedIn: (t) => membersNamedIn(household, t) });
+    if (d?.kind !== "apply" || Math.abs(d.m.times - sf.times.times) > 1e-9) return null;
+    times = d.m.times; timesFound = tf;
     if (cap && Math.round(sf.base.value * sf.percent * times) / 100 > cap.value + 0.005 && !keepsCapIn(sf.times.quote, cap.value)) return null;
   }
   const share = Math.round(sf.base.value * sf.percent) / 100;
@@ -2163,7 +2167,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       // Two such rows read the same and are worked on different sums (two policies of one cover): which one this is, is doubt.
       const sfs = person && serverWords.has(st.text) ? serverFigures.filter((f) => f.text === st.text && f.person === person && f.quote === st.quote) : [];
       const sf = new Set(sfs.map((f) => `${f.base.value}|${f.base.docIndex}|${f.cap?.value ?? ""}`)).size === 1 ? sfs[0] : undefined;
-      const served = sf ? serverFigureChecked(sf, st, found, household, person!) : null;
+      const served = sf ? serverFigureChecked(sf, st, found, household, person!, written) : null;
       if (served) { checked.push(served); continue; }
       // A row paying a multiple in a case the household stated is never checked as its single amount: no figure.
       if (sfs.some((f) => f.times)) { report.dropped.push({ kind: st.kind, why: "the amount in the case described could not be worked out again", text: st.text }); continue; }
