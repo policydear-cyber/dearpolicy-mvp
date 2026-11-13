@@ -830,7 +830,9 @@ const HEADING_NOTE_SHAPES = [
 function perPersonColumnRow(r: CheckedReading, b: CheckedBenefit, next: string): boolean {
   if ((r.tiedNotes ?? []).length) return false;
   if (PAYMENT_LABEL.test(b.benefit) || (r.premiumFigures ?? []).some((v) => b.value != null && Math.abs(v - b.value) < 0.005)) return false;
-  const words = [b.benefit, b.section ?? "", b.column ?? "", b.rowText ?? b.source.excerpt, next, ...b.conditions].join("\n");
+  // The line below is the row's own words only when it carries on the row's cell (starts in lower case); a note line
+  // printed under the table is read by the note-line rule (check.ts tiedNotes; per-person-shared gate round 3).
+  const words = [b.benefit, b.section ?? "", b.column ?? "", b.rowText ?? b.source.excerpt, /^\s*[a-z]/.test(next) ? next : "", ...b.conditions].join("\n");
   if (TIED_TO_LIVES.test(words) || livesTogether(words) || HOUSEHOLD_LABEL.test(b.benefit) || HOUSEHOLD_LABEL.test(b.section ?? "") || PREMIUM.test(words) || PAYMENT_LABEL.test(b.section ?? "")) return false;
   const people = [...r.namedPeople, ...r.covers.map((c) => c.person)];
   for (const mark of new Set([...marksIn(b.rowText ?? b.source.excerpt), ...(b.columnMarks ?? [])])) {
@@ -1225,6 +1227,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
       // A per-person limit given to every named insured (perPersonRow) is checked against each one's kind of life even on
       // their own certificate: it was not printed on their own line.
       const everyNamed = who != null && r.documentId === c.source.documentId && !!perPersonRow(r, b, l.cover);
+      // A family plan's cap set as a multiple of each person's own limit stays with each person's row as its condition.
+      const capNotes = everyNamed ? (r.capNotes ?? []).filter((n) => !b.conditions.includes(n)) : [];
       const tier = r.documentId === c.source.documentId && !everyNamed ? null
         : tierProblem(everyNamed ? { benefit: `${b.benefit} ${b.section ?? ""}`, column: b.column } : b, ownTierWords(c, readings), ageOn(family.find((m) => m.id === p.id)?.date_of_birth, singaporeDay(now)), everyNamed || isAgeTier(r, b));
       // A row for another tier stays on the table with no amount and the reason, so nothing is lost without a word.
@@ -1236,7 +1240,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
           ? { kind: "none", why: "the person's own schedule prints this cover as not covered" } : named ? figureFor(named.b, named.cover, r.kind === "illustration") : figureFor(b, c, r.kind === "illustration");
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,
-        conditions: b.limitsHeading && belowSumInsured(figure, c) && !b.conditions.includes(b.source.excerpt) ? [...b.conditions, b.source.excerpt] : b.conditions, source: b.source, baseSource: named ? named.cover.source : b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
+        conditions: [...(b.limitsHeading && belowSumInsured(figure, c) && !b.conditions.includes(b.source.excerpt) ? [...b.conditions, b.source.excerpt] : b.conditions), ...capNotes], source: b.source, baseSource: named ? named.cover.source : b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
         percent: b.pays === "percent" ? b.value : null, percentOf: named ? "sum_insured" : b.pays === "percent" ? b.percentOf : null,
         base: named ? named.cover.sumInsured : b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
         baseCorrected: named ? named.cover.confirmation?.status === "corrected" : b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null,

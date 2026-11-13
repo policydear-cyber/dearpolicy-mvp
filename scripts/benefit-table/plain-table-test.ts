@@ -288,16 +288,20 @@ test("H4: the base bug stays fixed: 'Benefits for children under 18 are 50% of t
 });
 // R5-H2 (plain-table gate round 5): a per-person column ("Limit per insured person") is held to the plain path's checks:
 // shared and family words, the heading's own footnote and note, payment and premium rows.
-function perPersonColumn(o: { heading?: string; column?: string; rows?: [string, string, number][]; extra?: string[] }) {
+type PerPersonDoc = { heading?: string; column?: string; rows?: [string, string, number][]; extra?: string[]; under?: string[] };
+function perPersonColumn(o: PerPersonDoc) {
+  const t = perPersonTable(o);
+  return Object.fromEntries(["a", "b", "k"].map((id) => [id, t.people.find((p) => p.id === id)!.rows.filter((x) => x.figure.kind !== "none").map((x) => x.benefit)]));
+}
+function perPersonTable(o: PerPersonDoc) {
   const lives = ["Asha Rao", "Ben Rao", "Kiran Rao"];
   const rows = o.rows ?? [["Overseas medical expenses", "S$500,000", 500000], ["Trip cancellation", "S$10,000", 10000]];
   const column = o.column ?? "Limit per insured person";
   const text = ["GLOBE TRAVEL ANNUAL - CERTIFICATE OF INSURANCE", `Certificate C-7\tInsured persons: ${lives.join(", ")}`, "Insured person\tCover", ...lives.map((n) => `${n}\tGlobe Travel Annual`),
-    o.heading ?? `Benefit\t${column}`, ...rows.map(([b, c]) => `${b}\t${c}`), "Terms and conditions apply.", ...(o.extra ?? [])].join("\n");
+    o.heading ?? `Benefit\t${column}`, ...rows.map(([b, c]) => `${b}\t${c}`), ...(o.under ?? []), "Terms and conditions apply.", ...(o.extra ?? [])].join("\n");
   const { r, links } = build({ id: TRAVEL, lives, text, rows: rows.map(([benefit, cell, value]) => ({ benefit, value, quote: `${benefit}\t${cell}`, column })) });
   for (const b of r.benefits) b.forWhom = "each_named_insured";
-  const t = assembleTable([r], BASE_FAMILY, links, [], NOW);
-  return Object.fromEntries(["a", "b", "k"].map((id) => [id, t.people.find((p) => p.id === id)!.rows.filter((x) => x.figure.kind !== "none").map((x) => x.benefit)]));
+  return assembleTable([r], BASE_FAMILY, links, [], NOW);
 }
 const noOne = { a: [], b: [], k: [] };
 test("R5-H2 positive: a per-person column with no shared, family or premium words still gives each person both limits", () => {
@@ -341,7 +345,7 @@ test("R5-H2: 'Trip cancellation S$120' under a per-person column, the premium li
 // withholds it: a row's own words that row alone, a note off the rows every row.
 const SIX: [string, string, number][] = [["Overseas medical expenses", "S$500,000", 500000], ["Emergency medical evacuation", "S$1,000,000", 1000000],
   ["Trip cancellation", "S$10,000", 10000], ["Travel delay", "S$1,000", 1000], ["Baggage delay", "S$500", 500], ["Personal liability", "S$1,000,000", 1000000]];
-const sixWith = (o: { rows?: [string, string, number][]; heading?: string; column?: string; extra?: string[] }) => perPersonColumn({ rows: SIX, ...o });
+const sixWith = (o: PerPersonDoc) => perPersonColumn({ rows: SIX, ...o });
 const each = (names: string[]) => ({ a: names, b: names, k: names });
 const SIX_NAMES = SIX.map(([b]) => b);
 test("gate PPS-1 baseline: the six-row certificate gives each person all six limits", () => assert.deepEqual(sixWith({}), each(SIX_NAMES)));
@@ -406,6 +410,40 @@ for (const line of ["The limits are the most we pay for all insured persons toge
 }
 for (const cell of ["S$500,000 combined for all insured", "S$500,000 in total for the travellers"]) {
   test(`gate PPS-2: a medical row printing '${cell}' is no one's own; the other rows stay each person's`, () =>
+    assert.deepEqual(sixWith({ rows: withSix("Overseas medical expenses", ["Overseas medical expenses", cell, 500000]) }), each(SIX_NAMES.slice(1))));
+}
+// Per-person-shared gate round 3: a note line printed right under the table is read by the note-line rule, never as the last
+// row's own words; a family plan's cap set as a multiple of each person's limit keeps each person's rows, with the note.
+for (const line of ["Limits apply per insured person per policy period.", "If you cancel, the refund of premium is shared pro-rata.", "Any dispute between the insured and us may be referred to FIDReC.",
+  "Any dispute between you and us may be referred to FIDReC.", "Benefits are payable per insured person regardless of the number of claims.", "Search and rescue costs are shared with other rescued parties.",
+  "Medical: one limit applies for each insured person.", "Shared rooms are covered.", "In the event of a claim, all insured persons must cooperate together with us."]) {
+  test(`gate PPS-3: '${line}' printed right under the table keeps every per-person limit, the last row too`, () => assert.deepEqual(sixWith({ under: [line] }), each(SIX_NAMES)));
+}
+test("gate PPS-3: a cell carried on to the next line ('per family') is still the row's own words", () => {
+  const got = sixWith({ under: ["per family"] });
+  for (const id of ["a", "b", "k"]) assert.ok(!got[id].includes("Personal liability"), `${id}: ${got[id]}`);
+});
+for (const line of ["For Family Plan, the most we pay for all insured persons combined is twice the limit shown.", "For Family Plan, baggage and travel delay limits are 200% of the individual limit for the whole family.",
+  "Family plan maximum: 2 times the per insured person limit, in aggregate.", "Couple plans: the limits shown apply to each insured person, up to three times the limit shown for all insured persons together."]) {
+  test(`gate PPS-3: the family-plan multiple '${line}' keeps each person's rows, with the note as each row's condition`, () => {
+    const t = perPersonTable({ rows: SIX, extra: [line] });
+    for (const id of ["a", "b", "k"]) {
+      const rows = t.people.find((p) => p.id === id)!.rows.filter((x) => x.figure.kind !== "none");
+      assert.deepEqual(rows.map((x) => x.benefit), SIX_NAMES, id);
+      for (const x of rows) assert.ok(x.conditions.includes(line), `${id} ${x.benefit}: ${x.conditions}`);
+    }
+  });
+}
+for (const line of ["For Family Plan, the most we pay for all insured persons combined is S$1,000,000.", "For Family Plan, limits are shared by the family, twice the amounts in brackets."]) {
+  test(`gate PPS-3: a family cap that is no multiple of each person's limit ('${line}') withholds every per-person limit`, () => assert.deepEqual(sixWith({ extra: [line] }), noOne));
+}
+for (const line of ["These sums are pooled across the travellers.", "The amounts are what we pay for the trip, not for each traveller.", "The benefit limit applies once to the certificate, whatever the number of travellers.",
+  "Benefit limits are for the travellers as a unit.", "Travellers on this certificate draw on the same limits.", "The insured persons are covered up to the limits shown in total.",
+  "Each benefit limit covers every traveller named on this certificate.", "Limits are for both."]) {
+  test(`gate PPS-3: the note '${line}' withholds every per-person limit`, () => assert.deepEqual(sixWith({ extra: [line] }), noOne));
+}
+for (const cell of ["S$500,000 for the certificate", "S$500,000 (all travellers)", "S$500,000 for both"]) {
+  test(`gate PPS-3: a medical row printing '${cell}' is no one's own; the other rows stay each person's`, () =>
     assert.deepEqual(sixWith({ rows: withSix("Overseas medical expenses", ["Overseas medical expenses", cell, 500000]) }), each(SIX_NAMES.slice(1))));
 }
 test("H4: 'Signed on behalf of the policyholder: N. Okafor' does not block the plain table", () => {
