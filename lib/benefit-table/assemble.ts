@@ -793,8 +793,16 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const lead = (benefit: string) => headKey(benefit).split(" ").filter(Boolean).slice(0, 2).join(" ");
   const leadCount = new Map<string, number>();
   for (const r of readings) for (const b of r.benefits) if (b.value != null) { const k = `${r.documentId}\u0000${lead(b.benefit)}`; leadCount.set(k, (leadCount.get(k) ?? 0) + 1); }
+  // And a rate is the only rate of its kind under its heading: two daily (or periodic) rates with different figures in one
+  // table whose rows do not say whose they are may be one per life ("Hospital cash GBP 80" and "Daily hospital income GBP
+  // 120"), so neither is everyone's (Critic N on #447).
+  const rates = new Map<string, Set<number>>();
+  for (const r of readings) for (const b of r.benefits) if ((b.pays === "per_day" || b.pays === "per_period") && b.value != null) {
+    const k = `${r.documentId}\u0000${norm(b.section)}\u0000${b.pays}\u0000${b.period ?? ""}`; rates.set(k, (rates.get(k) ?? new Set()).add(b.value));
+  }
   const printedOnceOn = (documentId: string, b: CheckedBenefit) => (labelCount.get(`${documentId}\u0000${headKey(b.benefit)}`) ?? 0) === 1
-    && (leadCount.get(`${documentId}\u0000${lead(b.benefit)}`) ?? 0) <= 1;
+    && (leadCount.get(`${documentId}\u0000${lead(b.benefit)}`) ?? 0) <= 1
+    && (b.pays !== "per_day" && b.pays !== "per_period" || (rates.get(`${documentId}\u0000${norm(b.section)}\u0000${b.pays}\u0000${b.period ?? ""}`)?.size ?? 0) <= 1);
   for (const r of readings) for (const b of r.benefits) {
     const l = placedOf(sectionKeyOf(r.documentId, b), b);
     if (!l) continue;

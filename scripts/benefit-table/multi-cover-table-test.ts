@@ -268,7 +268,7 @@ test("a daily rate printed once for each life (two rates, no heading saying whos
 
 for (const labels of [["Daily hospital income (Asha Rao)", "Daily hospital income (Ben Rao)"], ["Daily hospital income - Insured", "Daily hospital income - Spouse"], ["Daily hospital income (child)", null],
   ["Daily hospital income Mum", "Daily hospital income Dad"], ["Daily hospital income Life Assured 1", "Daily hospital income Life Assured 2"], ["Daily hospital income Insured A", "Daily hospital income Insured B"],
-  ["Daily hospital income AR", "Daily hospital income BR"], ["Hospital cash", "Hospital cash for a child under 18"]] as [string, string | null][]) {
+  ["Daily hospital income AR", "Daily hospital income BR"], ["Hospital cash", "Hospital cash for a child under 18"], ["Hospital cash", "Daily hospital income"]] as [string, string | null][]) {
   test(`TE D1: a rate whose label names a life or role ("${labels[0]}") is never every insured person's`, () => {
     const lines = labels.filter((l): l is string => !!l).map((l, i) => `${l}\tPHP ${i ? 500 : 1000} per day, up to 90 days`);
     const text = `FAMILY PERSONAL ACCIDENT\nPolicy number: F-1\nAsha Rao\tPHP 1,000,000\nBen Rao\tPHP 500,000\nBENEFITS\n${lines.join("\n")}\nEnd.`;
@@ -324,6 +324,19 @@ test("Critic 5: a label followed by other words and a number ('Death TPD 50,000'
     cover({ person: "Asha Rao", product: "Life", cover: "Death", quote: "Death" }),
   ], [row({ benefit: "Death TPD", pays: "amount", value: 50000, quote: "Death TPD 50,000" })]));
   assert.deepEqual(shown(assembleTable([r], asha, noLink(DOC))), []);
+});
+
+test("Critic M (documented, fails closed): one figure column under two benefit headings is not the sole column, so the link is refused", () => {
+  const text = "ACME TRAVEL - CERTIFICATE\nCertificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)\nMEDICAL\nOverseas medical expenses\t$500,000\nTRAVEL\nTrip cancellation\t$5,000\nEnd.";
+  const c = (person: string) => cover({ person, product: "Acme Travel", cover: "Travel", plan: "couple plan", policyNumber: "T-5", quote: "Certificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)" });
+  const col = "Limit per insured person";
+  const r = checkReading(page(DOC, text), reading("Acme Travel", ["Asha Rao", "Ben Rao"], [c("Asha Rao"), c("Ben Rao")], [
+    row({ section: "MEDICAL", column: col, benefit: "Overseas medical expenses", pays: "up_to", value: 500000, quote: "Overseas medical expenses\t$500,000" }),
+    row({ section: "TRAVEL", column: col, benefit: "Trip cancellation", pays: "up_to", value: 5000, quote: "Trip cancellation\t$5,000" }),
+  ], "couple plan"));
+  const key = coverKeyOf({ product: "Acme Travel", cover: "Travel", plan: "couple plan" });
+  const t = assembleTable([r], asha, ["MEDICAL", "TRAVEL"].map((section) => ({ section: sectionKeyOf(DOC, { section, column: col }), cover: key, why: "x" })));
+  assert.deepEqual([...shown(t, 0), ...shown(t, 1)], [], "hidden, never shown wrongly (as on main)");
 });
 
 console.log(`benefit-table multi-cover table: ${passed} passed, ${failures.length} failed`);
