@@ -17,6 +17,7 @@ import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
+import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
@@ -835,6 +836,11 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   };
   const allText = doc.pages.map((p) => p.text).join("\n");
   out.coverPeople = [...new Set(readCovers.map((c) => str(c?.person)).filter((n): n is string => !!n && nameOnPage(n, allText)))];
+  // The lines premium-waiver riders were read from (page and words, spacing aside), with the figure each waives: a row on
+  // one of them that prints that same figure is the waived premium. Another figure on the line (a cover a glued line joins
+  // to the waiver's, Critic #460) keeps its own amount.
+  const waiverLines = new Map<string, number[]>();
+  const lineAt = (at: Source) => `${at.page}\u0000${at.excerpt.toLowerCase().replace(/\s+/g, " ").trim()}`;
   for (const c of readCovers) {
     const label = `cover "${c?.cover}" for ${c?.person}`;
     const person = str(c?.person), product = str(c?.product), cover = str(c?.cover), quote = str(c?.quote);
@@ -851,6 +857,16 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // premium is not this cover's sum: the cover is kept without it.
     const sumWhy = OWN_FIGURE_CHECKS.on && sumInsured != null ? amountOnlyInContext(pageText(source.page), sumInsured, { premium: true }) : null;
     if (sumWhy) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} is printed only as ${figureContextWords(sumWhy)}; kept the cover without it` }); sumInsured = null; }
+    // A premium-waiver rider pays the policy's premiums, never a sum of its own: the figure in its sum column is the premium
+    // it waives (live 13 Nov: "Crisis Waiver III  150.00" shown as a S$150 cover). The cover stays, with no sum (the same
+    // rule as intake, lib/documents/waiver-rider).
+    // The cover's own name only: its quote may be a glued line whose first cell is another rider (Critic #460).
+    const waived = namesWaiverRider(cover) ? num(c.sumInsured) : null;
+    if (waived != null) waiverLines.set(lineAt(source), [...(waiverLines.get(lineAt(source)) ?? []), waived]);
+    if (sumInsured != null && namesWaiverRider(cover)) {
+      out.dropped.push({ what: label, why: `sum insured ${sumInsured} is on a premium-waiver rider's line: the premium it waives, not a sum it pays; kept the cover without it` });
+      sumInsured = null;
+    }
     // A sum the quote does not print is taken from the page's one sum insured line instead, on the same tests as a premium
     // on its own line: the page is about this life only, and the reading gives this person no other cover there. Else the
     // cover is kept without the sum, on the same footing as a cover read with no sum: an unproved sum never costs the
@@ -980,6 +996,10 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // projection is not this benefit's: the row stays, paid as its words say, with no figure (lib/documents/own-figure).
     const valueWhy = OWN_FIGURE_CHECKS.on && value != null && pays !== "percent" ? amountOnlyInContext(source.excerpt, value, { title: pageText(source.page) }) : null;
     if (valueWhy) { out.dropped.push({ what: label, why: `figure ${value} is printed only as ${figureContextWords(valueWhy)}; kept the row without it` }); pays = "words"; value = null; }
+    // A row read from a premium-waiver rider's own cover line that prints the figure the rider waives: that figure is a
+    // premium, never an amount paid out, so the row stays with no figure. Only that line: a benefit that describes a waiver in its own words ("Waiver
+    // of Premium Benefit up to S$5,000 of future premiums") keeps them.
+    if (value != null && (waiverLines.get(lineAt(source)) ?? []).some((w) => Math.abs(w - value!) < 0.005)) { out.dropped.push({ what: label, why: `figure ${value} is on a premium-waiver rider's line: the premium it waives, not an amount it pays; kept the row without it` }); pays = "words"; value = null; }
     const FIGURED = ["amount", "up_to", "per_day", "per_period", "percent", "value"];
     if (FIGURED.includes(pays) && value == null) { out.dropped.push({ what: label, why: `"${pays}" row with no figure` }); continue; }
     if (!FIGURED.includes(pays)) value = null;

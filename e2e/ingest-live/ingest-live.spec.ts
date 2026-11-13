@@ -59,7 +59,7 @@ test("live ingestion journey", async ({ page }) => {
     if (m.dateOfBirth) await page.locator("#fm-new-dob").fill(m.dateOfBirth);
     if (m.preferredName) await page.locator("#fm-new-preferred").fill(m.preferredName);
     await page.getByRole("button", { name: "+ Add person" }).click();
-    soft(await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Profile added.", { timeout: 60_000 }).then(() => true, () => false), `family: "${m.displayName}" not confirmed as added`);
+    soft(await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Family member added.", { timeout: 60_000 }).then(() => true, () => false), `family: "${m.displayName}" not confirmed as added`);
     const after = (await api<{ family: { id: string; display_name: string }[] }>(page, "/api/family")).body.family ?? [];
     const made = after.find((x) => x.display_name === m.displayName);
     if (soft(made, `family: "${m.displayName}" was not created through the Family page`)) members[m.displayName] = made!.id;

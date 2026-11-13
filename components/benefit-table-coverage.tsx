@@ -3,7 +3,7 @@
 import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { useState } from "react";
-import { benefitNames, bySection, keyBenefits, money, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
+import { benefitNames, bySection, keyBenefits, money, noSumText, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
 import { rowsForCover } from "@/lib/benefit-table/cover-rows";
 import { sharedCoverText } from "@/lib/benefit-table/shared-cover";
 
@@ -66,7 +66,7 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
     <header className="cov-cover-head">
       <div className="cov-cover-name"><strong>{coverName(cover)}</strong>{coverLine(cover)?<small>{coverLine(cover)}</small>:null}</div>
       <div className="cov-si">
-        <b>{cover.sumInsured!=null?money(cover.sumInsured,cover.currency):"Sum insured not printed"}</b>
+        <b>{cover.sumInsured!=null?money(cover.sumInsured,cover.currency):noSumText(cover)}</b>
         <small>{premium?<>Premium {premium} </>:null}<PageLink source={premium&&cover.premiumSource?cover.premiumSource:cover.source}/></small>
       </div>
     </header>

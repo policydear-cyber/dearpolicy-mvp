@@ -2,6 +2,7 @@
  * by section. Pure, and used in the browser, so it takes only the fields the page receives. Nothing here changes an
  * amount: it chooses which rows to show first and how to word them, never a figure. */
 import type { Figure, TableRow } from "./assemble";
+import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 
 /** "a month" for a period the reading names ("half_year": "a half year"); "for every three-hour delay" for a block a plan
  * table prints in words (lib/benefit-table/chat planTableRows). Here, not in assemble.ts: this file runs in the browser,
@@ -112,4 +113,15 @@ export function bySection<T extends { section: string | null }>(rows: T[]): { se
 /** As lib/benefit-table/assemble.ts writes an amount (not imported from there: this module runs in the browser). */
 export function money(n: number, currency: string | null): string {
   return `${currency === "SGD" ? "S$" : currency ? currency + " " : "$"}${n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
+}
+
+/** What a cover card says in place of a sum it does not show, true to why: a line whose figures the page check could not
+ * confirm prints a sum that is not checked (live 13 Nov: two riders said "Sum insured not printed" while the page prints
+ * their sums); a premium-waiver rider prints the premium it waives, not a sum of its own; otherwise no sum is printed.
+ * "[amount not checked]" is lib/documents/layout-check NOT_CHECKED, written out as this module runs in the browser. */
+export function noSumText(cover: { cover: string; source?: { excerpt?: string | null } | null }): string {
+  const line = cover.source?.excerpt ?? "";
+  if (line.includes("[amount not checked]")) return "Sum insured not checked against the page";
+  if (namesWaiverRider(cover.cover)) return "Waives premiums: no sum of its own";
+  return "Sum insured not printed";
 }
