@@ -219,7 +219,12 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   /** The whole printed line or lines the row's quote is on, and the line after them, as the page prints them (assemble.ts
    * perPersonRow: a row whose own line or the next prints another figure, such as an age or a child's rate, is not every
    * named insured's). Unset when the quote was not placed on its page. */
-  rowText?: string; nextLine?: string; prevLine?: string };
+  rowText?: string; nextLine?: string; prevLine?: string;
+  /** The figure column's own heading as the page prints it over the row ("Limit per insured person"), when the table has
+   * two cells a line (label, figure), the heading line above it has two cells and no figure, and every line between them
+   * is a two-cell row: read only by assemble.ts perPersonRows when the reader left the column out (paid run
+   * ppr-plain-20261113-01, N24: one certificate's column read as null). Unset otherwise. */
+  headingAbove?: string };
 export type Dropped = { what: string; why: string };
 /** periodFrom and periodTo: the document's own period of cover, each kept only when the document prints it. */
 export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
@@ -1304,8 +1309,18 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const lines = at ? (() => {
       const text = pageText(source.page), from = text.lastIndexOf("\n", at.start - 1) + 1, to = lineEndAt(text, at.end);
       const prevFrom = from > 0 ? text.lastIndexOf("\n", from - 2) + 1 : -1;
-      return { rowText: text.slice(from, to), nextLine: to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "",
-        prevLine: prevFrom >= 0 ? text.slice(prevFrom, from - 1) : "" };
+      const cells = (l: string) => l.split("\t").filter((c) => c.trim()).length;
+      const rowText = text.slice(from, to);
+      let headingAbove: string | undefined;
+      if (!rowText.includes("\n") && cells(rowText) === 2) {
+        const before = text.slice(0, from).split("\n").slice(0, -1).reverse();
+        for (const l of before.slice(0, 40)) {
+          if (cells(l) !== 2) break;
+          if (!/\d/.test(l)) { headingAbove = l.split("\t").filter((c) => c.trim()).at(-1)!.trim(); break; }
+        }
+      }
+      return { rowText, nextLine: to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "",
+        prevLine: prevFrom >= 0 ? text.slice(prevFrom, from - 1) : "", ...(headingAbove ? { headingAbove } : {}) };
     })() : null;
     const kind = limitKind({ benefit, section: str(b.section), quote: source.excerpt, sentence: at ? quoteSentence(pageText(source.page), at.start, at.end) : null });
     out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
