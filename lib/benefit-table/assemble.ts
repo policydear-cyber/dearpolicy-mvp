@@ -790,25 +790,22 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   // hospital income Mum" and "... Dad", "... Life Assured 1" and "... 2", "Hospital cash" and "Hospital cash (child)" are
   // one benefit printed for several lives, whatever word tells the lives apart (TE on #447, D1). The first two words (one
   // for a one-word name) are compared, so this needs no list of names or roles.
-  // A benefit is printed for several lives when another row of the document prints a different figure under a name that
-  // is the same but for one word in any place, or that holds all its words and more ("Daily hospital income Mum" and
-  // "... Dad", "Mum hospital cash" and "Dad hospital cash", "Accident Mum" and "Accident Dad", "Life Assured 1" and "2",
-  // "Hospital cash" and "Hospital cash (child)"), linking words such as "of" aside. Whatever word tells the lives apart, no
-  // list of names or roles is needed (TE D1 and Critic P, Q on #447). Two benefits whose names differ by one word and print
-  // different figures ("Loss of baggage" $3,000, "Loss of passport" $500) cannot be told from that, so they are given to no
-  // one: withheld with the reason, never another life's figure. The same figure under such names is no one else's amount,
-  // so it stays everyone's ("Personal accident death" and "... disablement", both $100,000).
+  // A row may be one life's when another row of the document prints the same kind of figure (daily, periodic, limit or
+  // lump sum) at a different amount under a name that shares any word with it, linking words such as "of" aside: "Hospital
+  // cash Mum" and "... Dad", "Mum hospital cash", "Accident Mum", "Hospital cash Main Insured" and "... Joint Life",
+  // "Hospital cash" and "Daily hospital income Dad". Then neither is given to every holder by the "each insured" or the
+  // unlabelled-rate rule: whatever words tell the lives apart, in any place and of any length, with no list of names or
+  // roles (TE D1, Critic P, Q, R on #447). This also withholds two benefits that only share a word and print different
+  // amounts ("Loss of baggage" $3,000, "Loss of passport" $500): shown with the reason, as on main, never another life's
+  // figure. The same amount under such names is no one else's figure, so it stays everyone's.
   const LINK_WORDS = new Set(["of", "for", "the", "a", "an", "and", "or", "to", "in", "on", "by", "with", "per", "due"]);
   const wordsOf = (benefit: string) => new Set(headKey(benefit).split(" ").filter((w) => w && !LINK_WORDS.has(w)));
   const figureKey = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
-  const related = (x: Set<string>, y: Set<string>) => {
-    const onlyX = [...x].filter((w) => !y.has(w)).length, onlyY = [...y].filter((w) => !x.has(w)).length;
-    return x.size > 0 && y.size > 0 && (onlyX === 0 || onlyY === 0 || (onlyX === 1 && onlyY === 1));
-  };
+  const related = (x: Set<string>, y: Set<string>) => [...x].some((w) => y.has(w));
   const perLife = new Set<CheckedBenefit>();
   for (const r of readings) {
-    const rows = r.benefits.filter((x) => x.value != null).map((x) => ({ x, w: wordsOf(x.benefit), f: figureKey(x) }));
-    for (const one of rows) if (rows.some((o) => o !== one && o.f !== one.f && related(one.w, o.w))) perLife.add(one.x);
+    const rows = r.benefits.filter((x) => x.value != null).map((x) => ({ x, w: wordsOf(x.benefit), f: figureKey(x), kind: `${x.pays}|${x.period ?? ""}` }));
+    for (const one of rows) if (rows.some((o) => o !== one && o.kind === one.kind && o.f !== one.f && related(one.w, o.w))) perLife.add(one.x);
   }
   // And a rate given to everyone with no word saying so is the only rate of its kind under its heading: two daily (or
   // periodic) rates with different figures in one table whose rows do not say whose they are may be one per life

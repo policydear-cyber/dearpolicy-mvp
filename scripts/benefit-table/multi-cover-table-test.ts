@@ -351,8 +351,10 @@ test("Critic O (documented, fails closed): on a 'per insured person' list, rows 
   assert.equal(t.unlinkedSections[0]?.why, NOT_TOLD_WHY, "the two loss rows are said to be withheld, never dropped silently");
 });
 
-test("Critic Q: a tag before or after a one-word or two-word benefit name ('Mum hospital cash', 'Accident Mum') is one benefit per life", () => {
-  for (const [a, b] of [["Mum hospital cash", "Dad hospital cash"], ["Insured A hospital cash", "Insured B hospital cash"], ["Accident Mum", "Accident Dad"], ["Hospitalisation Mum", "Hospitalisation Dad"]]) {
+test("Critic Q, R: a tag of any length before or after a one-word or two-word benefit name ('Mum hospital cash', 'Accident Mum') is one benefit per life", () => {
+  for (const [a, b] of [["Mum hospital cash", "Dad hospital cash"], ["Insured A hospital cash", "Insured B hospital cash"], ["Accident Mum", "Accident Dad"], ["Hospitalisation Mum", "Hospitalisation Dad"],
+    ["Hospital cash Main Insured", "Hospital cash Joint Life"], ["Hospital cash Account Holder", "Hospital cash Co Applicant"], ["Hospital cash First Life", "Hospital cash Second Insured"],
+    ["Hospital cash", "Daily hospital income Dad"]]) {
     const lines = [[a, 80], [b, 120]].map(([x, v]) => `${x}\tGBP ${v} per day per insured person`);
     const text = `FAMILY PA\nPolicy number: F-1\nAsha Rao\tGBP 100,000\nBen Rao\tGBP 80,000\nBENEFITS\n${lines.join("\n")}\nEnd.`;
     const c = (person: string, sum: number) => cover({ person, product: "Family PA", cover: "Personal accident", policyNumber: "F-1", sumInsured: sum, quote: `${person}\tGBP ${sum.toLocaleString("en-US")}` });
