@@ -129,6 +129,11 @@ test("U9 unnamed, quoted from Grace's schedule, Daniel's own schedule prints the
 test("U10 a follow-up naming no one after a question about Grace: Daniel's own figure is not shown", () =>
   assert.deepEqual(cards(house([GRACE(), DANIEL()]), [{ document: "D2", quote: D, amount: "S$120,000" }], ["And the critical illness benefit?", "What can Grace claim?"]), []));
 
+for (const w of ["What about my husband?", "And for the whole family?", "What do both of us get?", "And my spouse?"]) {
+  test(`U12 "${w}" after a question about Grace: Daniel's figure is shown as his, not dropped`, () =>
+    assert.deepEqual(cards(house([GRACE(), DANIEL()]), [{ document: "D2", quote: D, amount: "S$120,000" }], [w, "What can Grace claim?"]), ["Daniel Tern: S$120,000"]));
+}
+
 test("U11 a later card replacing an earlier one does not move a label onto another statement's card (Critic #444 F1)", () => {
   const ng = "Ng Siew Lan", tan = "Tan Wei Kiat";
   const h = { accountId: "51515151-5151-4515-8515-515151515151", members: [{ name: ng, relationship: "self" }, { name: tan, relationship: "spouse" }], documents: [
