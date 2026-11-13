@@ -49,6 +49,7 @@
     "benefit-table:claim-journeys-test": "node --import tsx scripts/benefit-table/claim-journeys-test.ts",
     "benefit-table:own-line-test": "node --import tsx scripts/benefit-table/own-line-test.ts",
     "benefit-table:multi-cover-table-test": "node --import tsx scripts/benefit-table/multi-cover-table-test.ts",
+    "benefit-table:per-person-certificate-test": "node --import tsx scripts/benefit-table/per-person-certificate-test.ts",
     "benefit-table:joint-schedule-test": "node --import tsx scripts/benefit-table/joint-schedule-test.ts",
     "benefit-table:cover-owner-test": "node --import tsx scripts/benefit-table/cover-owner-test.ts",
     "ai:reading-spend-cap-test": "node --import tsx scripts/ai/reading-spend-cap-test.ts",

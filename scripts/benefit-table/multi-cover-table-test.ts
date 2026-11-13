@@ -11,9 +11,9 @@
  *      another policy's (a shared number never joins people), another document's, or one of two same-named covers.
  *   3. A column heading made only of figure words ("Limit per insured person", "Sum assured / amount") is the document's
  *      one column of figures, not a plan, when it is the only column heading the document prints.
- *   4. On a document printed for several lives, a row whose figure is no one's own sum is no one's, whatever it says
- *      ("per insured person", a rate printed once): main's rule from #449, kept after the #447 merge Critic found age-group
- *      and child rows given to every holder. It is withheld with the reason, never dropped.
+ *   4. On a document printed for several lives, a row whose figure is no one's own sum is no one's (main's rule from #449),
+ *      except a certificate's one column of per-person limits, which each insured person it names gets when nothing on the
+ *      row says it is one life's (perPersonRows; per-person-certificate-test.ts). Withheld rows are said, never dropped.
  *   5. A bare "$" stays a figure with its currency not stated: never dropped, never given a currency.
  *   npm run benefit-table:multi-cover-table-test */
 import assert from "node:assert/strict";
@@ -192,8 +192,10 @@ function travel(column: string, extraColumn: string | null = null, lives: string
   const insured = `Certificate number T-5\tInsured: ${lives.join(" and ")} (${plan})`;
   const text = `ACME TRAVEL - CERTIFICATE\n${insured}\nBenefit\t${column}${extraColumn ? `\t${extraColumn}` : ""}\nOverseas medical expenses\t$500,000${extraColumn ? "\t$1,000,000" : ""}\nTrip cancellation\t$5,000${extraColumn ? "\t$10,000" : ""}\nEnd.`;
   const c = (person: string) => cover({ person, product: "Acme Travel", cover: "Annual multi-trip travel insurance", plan, policyNumber: "T-5", quote: insured });
-  const rows = [row({ column, benefit: "Overseas medical expenses", pays: "up_to", value: 500000, quote: `Overseas medical expenses\t$500,000` }),
-    row({ column, benefit: "Trip cancellation", pays: "up_to", value: 5000, quote: `Trip cancellation\t$5,000` })];
+  // The reader says each row is for each insured person named (forWhom) only on a certificate naming two or more.
+  const forWhom = lives.length > 1 ? "each_named_insured" : undefined;
+  const rows = [row({ column, benefit: "Overseas medical expenses", pays: "up_to", value: 500000, quote: `Overseas medical expenses\t$500,000`, forWhom }),
+    row({ column, benefit: "Trip cancellation", pays: "up_to", value: 5000, quote: `Trip cancellation\t$5,000`, forWhom })];
   if (extraColumn) rows.push(row({ column: extraColumn, benefit: "Trip cancellation", pays: "up_to", value: 10000, quote: `$10,000` }));
   const r = checkReading(page(DOC, text), reading("Acme Travel", lives, lives.map(c), rows, plan));
   const key = coverKeyOf({ product: "Acme Travel", cover: "Annual multi-trip travel insurance", plan });
@@ -219,12 +221,15 @@ for (const column of ["Limit per insured person", "Maximum amount payable each i
     for (const x of t.people[0].rows) assert.equal((x.figure as { currency: unknown }).currency, null, "a bare $ is never given a currency");
     assert.deepEqual(t.unlinkedSections, []);
   });
-  test(`"${column}" on a two-life certificate: linked, not a plan, but no one is given a limit the page cannot prove is theirs (main's rule from #449); said, never dropped`, () => {
+  test(`"${column}" on a two-life certificate naming both: each named insured sees each limit, currency not stated (perPersonRows)`, () => {
     const { r, links } = travel(column);
     const t = assembleTable([r], asha, links);
     assert.deepEqual(t.refusedLinks, []);
-    assert.deepEqual([...shown(t, 0), ...shown(t, 1)], []);
-    assert.equal(t.unlinkedSections[0]?.why, NOT_TOLD_WHY);
+    for (const i of [0, 1]) assert.deepEqual(shown(t, i), [
+      "Annual multi-trip travel insurance | Overseas medical expenses | up to $500,000 (currency not stated)",
+      "Annual multi-trip travel insurance | Trip cancellation | up to $5,000 (currency not stated)",
+    ], `person ${i}`);
+    assert.deepEqual(t.unlinkedSections, []);
   });
 }
 
@@ -349,16 +354,16 @@ for (const where of ["row", "column"] as const) test(`TE D1-labelled: per-life r
   }
 });
 
-test("Critic O and the #447 merge Critic (fails closed): a two-life 'per insured person' list gives no one a figure that is not their own sum", () => {
+test("Critic O (fails closed): on a two-life 'per insured person' list, rows whose names share a word are shown to both when they print the same figure, and to no one when they print different figures", () => {
   const lines = [["Loss of baggage", 3000], ["Loss of passport", 500], ["Personal accident death", 100000], ["Personal accident disablement", 100000], ["Overseas medical expenses", 500000]] as const;
   const text = `ACME TRAVEL - CERTIFICATE\nCertificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)\nBenefit\tLimit per insured person\n${lines.map(([l, v]) => `${l}\t$${v.toLocaleString("en-US")}`).join("\n")}\nEnd.`;
   const c = (person: string) => cover({ person, product: "Acme Travel", cover: "Travel", plan: "couple plan", policyNumber: "T-5", quote: "Certificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)" });
   const col = "Limit per insured person";
   const r = checkReading(page(DOC, text), reading("Acme Travel", ["Asha Rao", "Ben Rao"], [c("Asha Rao"), c("Ben Rao")],
-    lines.map(([l, v]) => row({ column: col, benefit: l, pays: "up_to", value: v, quote: `${l}\t$${v.toLocaleString("en-US")}` })), "couple plan"));
+    lines.map(([l, v]) => row({ column: col, benefit: l, pays: "up_to", value: v, quote: `${l}\t$${v.toLocaleString("en-US")}`, forWhom: "each_named_insured" })), "couple plan"));
   const t = assembleTable([r], asha, [{ section: sectionKeyOf(DOC, { section: null, column: col }), cover: coverKeyOf({ product: "Acme Travel", cover: "Travel", plan: "couple plan" }), why: "x" }]);
-  for (const i of [0, 1]) assert.deepEqual(t.people[i].rows.map((x) => x.benefit), [], shown(t, i).join("\n"));
-  assert.equal(t.unlinkedSections[0]?.why, NOT_TOLD_WHY, "the rows are said to be withheld, never dropped silently");
+  for (const i of [0, 1]) assert.deepEqual(t.people[i].rows.map((x) => x.benefit), ["Personal accident death", "Personal accident disablement", "Overseas medical expenses"], shown(t, i).join("\n"));
+  assert.equal(t.unlinkedSections[0]?.why, NOT_TOLD_WHY, "the two loss rows are said to be withheld, never dropped silently");
 });
 
 test("Critic Q, R: a tag of any length before or after a one-word or two-word benefit name ('Mum hospital cash', 'Accident Mum') is one benefit per life", () => {

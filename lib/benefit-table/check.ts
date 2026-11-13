@@ -215,7 +215,11 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   ownShareNamed?: boolean;
   /** The currency the row's cap itself prints ("up to S$15,000"), when it prints one: a cap in another currency than the
    * amount it limits cannot be compared with it, so no amount is worked out (assemble.ts). */
-  capCurrency?: string | null };
+  capCurrency?: string | null;
+  /** The whole printed line or lines the row's quote is on, and the line after them, as the page prints them (assemble.ts
+   * perPersonRow: a row whose own line or the next prints another figure, such as an age or a child's rate, is not every
+   * named insured's). Unset when the quote was not placed on its page. */
+  rowText?: string; nextLine?: string };
 export type Dropped = { what: string; why: string };
 /** periodFrom and periodTo: the document's own period of cover, each kept only when the document prints it. */
 export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
@@ -1094,13 +1098,18 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const firstDay = (v: unknown) => { const printed = pays === "per_day" || int(v) != null ? startDay(source.excerpt) : undefined; return printed === undefined ? day(v) : printed; };
     const fromDay = firstDay(b.fromDay), maxDays = day(b.maxDays);
     const at = placed.get(source);
+    const lines = at ? (() => {
+      const text = pageText(source.page), from = text.lastIndexOf("\n", at.start - 1) + 1, to = lineEndAt(text, at.end);
+      return { rowText: text.slice(from, to), nextLine: to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "" };
+    })() : null;
     const kind = limitKind({ benefit, section: str(b.section), quote: source.excerpt, sentence: at ? quoteSentence(pageText(source.page), at.start, at.end) : null });
     out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}),
-      ...(ownShareNamed ? { ownShareNamed } : {}) });
+      ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}),
+      ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}) });
   }
   return out;
 }
