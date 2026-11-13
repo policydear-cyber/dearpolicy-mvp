@@ -682,7 +682,7 @@ function CoversPicker({ policy, family, planChoice, onSave, referenceLinks }: { 
     {covered.length
       ? <span><b>Applies to</b> {summary}{planMissing && <small className="covers-plan-missing"> · plan not chosen yet</small>}</span>
       : referenceLinks.length
-        ? <span><b>Used for</b> {referenceLinks.join(", ")}<small className="covers-plan-missing"> · as the wording for their plan</small></span>
+        ? <span><b>Used for</b> {referenceLinks.join(", ")}<small className="covers-plan-note"> · as the wording for their plan</small></span>
         : <span><b>Applies to</b> nobody yet<small className="covers-plan-missing"> · choose who it applies to so answers can use it</small></span>}
     {saved && <span className="covers-saved" role="status">Saved</span>}
     <button type="button" className="mini-button" onClick={() => setOpen(true)} aria-expanded={false}>{linked ? "Change" : "Choose"}</button>
