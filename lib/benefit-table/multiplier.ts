@@ -80,40 +80,54 @@ const shapes = (perDay: boolean) => [
   new RegExp(String.raw`^(?:(?:${OWN_OBJECT}|(.+?))\s+(?:is|are)\s+)?((?:paid|payable)\s+(?:at\s+)?(?:double|twice|treble|triple|half)|doubled|halved|trebled|tripled)\s+(?:for|if|when|where|while)\s+${CASE_TEXT}${tail(perDay)}$`, "i"),
 ] as const;
 /** Words a case never holds: money and benefit nouns, quantities and order words ("after any earlier payment", "the
- * remaining limit", "pro rata", "for all fractures", "in total"), and kinds of benefit ("medical expenses", "hospital
- * cash", "death cover", gate round 10). A case holding one is a base, a deduction, a limit or another benefit, never only
- * the event the multiple is paid in. */
+ * remaining limit", "pro rata", "for all fractures", "in total"). A case holding one is a base, a deduction or a limit,
+ * never only the event the multiple is paid in. */
 const NOT_A_CASE = new Set(("benefit benefits amount amounts sum sums allowance allowances lump payment payments paid excess balance remaining limit limits " +
   "maximum total all any each pro rata proportion proportional share shared co-pay copay co-payment copayment insurance claim claims earlier previous prior " +
-  "already after before instead except unless expense expenses cost costs cash cover death treatment treatments hospital daily weekly physiotherapy").split(" "));
+  "already after before instead except unless").split(" "));
+/** Kinds of benefit, in groups of words for one kind ("medical expenses", "hospital cash", "death cover", "an in-patient
+ * stay", "a broken tooth", gate rounds 10-11): a case holding one is that benefit's, unless a word of its group is in this
+ * row's own benefit name ("loss of sight in both eyes" on a "Loss of sight" row). */
+const BENEFIT_KINDS = ["expense expenses cost costs bill bills medical treatment treatments care surgery surgical physiotherapy",
+  "hospital in-patient inpatient stay nursing", "cash daily weekly nightly", "death", "cover", "dental teeth tooth", "sight eye eyes"].map((g) => g.split(" "));
+/** A word's stem for the case's anchor on the row's own name: "fracture" and "fractured", "bone" and "bones". */
+const anchorStem = (w: string) => w.toLowerCase().replace(/(?:ing|ed|es|s|e)$/, "");
 /** Whether a note is one of the two shapes, its multiple of this row's own amount and its case plain, with nothing else:
- * no other base ("double the Sum Insured", "the death benefit is doubled"), no deduction or limit before or after it, and
- * a case naming no other benefit ("hospital cash for a compound fracture is paid at double"). */
+ * no other base ("double the Sum Insured", "the death benefit is doubled"), no deduction or limit before or after it, a
+ * case naming no other benefit ("hospital cash for a compound fracture is paid at double"), and a case sharing a word with
+ * this row's own benefit name ("a compound fracture" on "Fracture of arm, wrist or leg"; gate round 11: the anchor that
+ * keeps the case this row's). */
 function plainShape(note: string, m: { at: RegExpMatchArray; count: number }, row: RowFacts): boolean {
   if (m.count !== 1 || ARITHMETIC.test(note) || OTHER_BASE.test(note)) return false;
   const ownSection = row.section ? sectionKey(row.section) : "";
   const name = (row.own.split("\n")[0] ?? "").trim().toLowerCase();
   const mine = new Set(tokens(name).map(stem));
-  const ofMine = (mid: string | undefined) => tokens(mid ?? "").every((w) => (w === "section" && !!ownSection) || w === ownSection || ["benefit", "basic", "daily", "this", "that", "its"].includes(w) || mine.has(stem(w)));
+  const anchors = new Set(tokens(name).filter((w) => !NOT_CASE.has(w)).map(anchorStem));
+  const otherKinds = new Set(BENEFIT_KINDS.filter((g) => !g.some((w) => mine.has(stem(w)))).flat());
+  // "daily", "weekly", "nightly" name this row's own amount only on a row that pays per day (gate round 11).
+  const ownWords = ["benefit", "basic", "this", "that", "its", ...(row.perDay ? ["daily", "weekly", "nightly"] : [])];
+  const ofMine = (mid: string | undefined) => tokens(mid ?? "").every((w) => (w === "section" && !!ownSection) || w === ownSection || ownWords.includes(w) || mine.has(stem(w)));
   // The other benefits read from the same document: a case sharing a word with one of their names (besides this row's own
   // name's words and grammar) is about that benefit.
   const theirs = new Set(tokens(row.docNames ?? "").map(stem).filter((w) => !NOT_CASE.has(w) && !mine.has(w)));
-  /** A case: at most 6 words besides a/an/the, in shape A no "for" ("<benefit> for <case>"), none of NOT_A_CASE, and no
-   * word of another benefit's name. */
-  const caseOk = (c: string, shapeA: boolean) => {
+  /** A case: at most 6 words besides a/an/the, no "for" ("<benefit> for <case>", in either shape), none of NOT_A_CASE, no
+   * kind of benefit but this row's own, no word of another benefit's name, and at least one word of this row's own name. */
+  const caseOk = (c: string) => {
     const w = c.toLowerCase().replace(/[<>"'’()]/g, " ").split(/\s+/).filter((x) => x && !["a", "an", "the"].includes(x));
-    return w.length > 0 && w.length <= 6 && !(shapeA && w.includes("for")) && w.every((x) => !NOT_A_CASE.has(x) && !theirs.has(stem(x)));
+    return w.length > 0 && w.length <= 6 && !w.includes("for")
+      && w.every((x) => !NOT_A_CASE.has(x) && !otherKinds.has(x) && !theirs.has(stem(x)))
+      && w.some((x) => x.length >= 3 && anchors.has(anchorStem(x)));
   };
   const text = note.replace(/^\s*note\s*(?:\([a-z0-9]+\)|[a-z0-9]+\b)?\s*[:.-]\s*/i, "").trim();
   const [shapeA, shapeB] = shapes(!!row.perDay);
   const a = shapeA.exec(text);
-  if (a) return caseOk(a[1], true) && ofMine(a[2]);
+  if (a) return caseOk(a[1]) && ofMine(a[2]);
   const b = shapeB.exec(text);
   if (!b) return false;
   // Shape B's subject: its own benefit name, this row's own amount ("the amount", "the Section 3 amount"), or none (then
   // never "twice").
   const subjectOk = b[2] != null ? b[2].trim().toLowerCase().replace(/^the\s+/, "") === name : b[1] != null ? ofMine(b[1]) : !/\btwice\b/i.test(b[3]);
-  return subjectOk && caseOk(b[4], false);
+  return subjectOk && caseOk(b[4]);
 }
 
 /** A condition that keeps the row's printed maximum on the multiplied amount: it prints only that maximum's figure, or says

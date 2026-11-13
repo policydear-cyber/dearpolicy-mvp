@@ -1061,8 +1061,19 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   }
   for (const s of sections) if (notTold.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_TOLD_WHY, source: firstSource.get(s.key) ?? null });
   for (const s of sections) if (notTheirs.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_THEIR_DOCUMENT_WHY, source: firstSource.get(s.key) ?? null });
-  return { people, unmatchedCovers: unmatched, ambiguousCovers: ambiguous, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks, notForPerson };
+  const table: BenefitTable = { people, unmatchedCovers: unmatched, ambiguousCovers: ambiguous, illustrationCovers: illustration, unlinkedSections, staleConfirmations, refusedLinks, notForPerson };
+  // Every benefit each document's reading names, also rows no person's table shows (a family schedule's fixed amounts):
+  // kept beside the table, never in it, so what the table shows and sends is unchanged (benefitNamesRead).
+  const names = new Map<string, string[]>();
+  for (const r of readings) names.set(r.documentId, [...new Set([...(names.get(r.documentId) ?? []), ...r.benefits.map((b) => b.benefit).filter(Boolean)])]);
+  NAMES_READ.set(table, names);
+  return table;
 }
+const NAMES_READ = new WeakMap<BenefitTable, Map<string, string[]>>();
+/** The benefit names a document's reading named, for a table assembleTable made (lib/benefit-table/multiplier.ts: a row
+ * multiple's case naming another benefit of the same document is that benefit's, PR #472 round 11). Empty for a table made
+ * any other way. */
+export const benefitNamesRead = (table: BenefitTable, documentId: string): string[] => NAMES_READ.get(table)?.get(documentId) ?? [];
 
 // In headline.ts, which runs in the browser and must not import this file's database code (main 999048d: no build).
 import { periodWords } from "./headline";

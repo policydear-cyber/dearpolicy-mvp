@@ -285,9 +285,14 @@ test("round 9: the whole note is an allow-list (front included): a base, deducti
   const lined: [string, string][] = [
     [KEEPS, "this pays £800 (double)"], ["Note (a): a compound fracture is paid at double the Section 3 amount, subject to the same limit.", "this pays £800 (double)"],
     ["Note (a): a compound fracture is paid at double the Section 3 amount.", "this pays £800 (double)"], [FINGER, "this pays half: £200"],
-    [WORK, "this pays £800 (double)"], [BOTH2, "this pays £800 (double)"], ["Note (a): the Section 3 amount is doubled while travelling on public transport.", "this pays £800 (double)"],
-    ["Note (a): fracture of arm, wrist or leg is doubled if the accident occurs abroad.", "this pays £800 (double)"],
+    [BOTH2, "this pays £800 (double)"], ["Note (a): fracture of arm, wrist or leg is doubled for a fracture abroad.", "this pays £800 (double)"],
   ];
+  // Round 11: a case sharing no word with this row's own name ("Fracture of arm, wrist or leg") gets no line, however
+  // plain: the anchor that keeps the case this row's. These lost their line (L20's note among them).
+  for (const note of [WORK, ABROAD, PT, "Note (a): fracture of arm, wrist or leg is doubled if the accident occurs abroad."]) {
+    const a = G(note, "Grace has a compound fracture.", note), main = G(note, "Grace has a compound fracture.", "");
+    assert.equal(JSON.stringify(a.kept), JSON.stringify(main.kept), note);
+  }
   for (const [note, rest] of lined) {
     const a = G(note, "Grace has a compound fracture.", note);
     assert.deepEqual(a.amounts, ["£400"], note);
@@ -344,10 +349,54 @@ test("round 10: a case sharing a word with another benefit read from the same do
   assert.equal(noteMultiple(joint, { ...row, docNames: "Dislocation of a joint\nBurns" }), null);
   // The row's own name's words are not another benefit's ("Fracture of skull" beside this row).
   assert.ok(noteMultiple("Note (a): a compound fracture is paid at double the amount.", { ...row, docNames: "Fracture of skull\nBurns" }));
-  const perDay = "Note (c): intensive care is paid at double the amount per day.";
+  const perDay = "Note (c): hospital admission abroad is paid at double the daily amount per day.";
   const daily = { own: "Hospital income\n6\tHospital income\tRM 100 per day in hospital", section: "6", cap: null };
   assert.equal(noteMultiple(perDay, daily), null);
   assert.equal(noteMultiple(perDay, { ...daily, perDay: true })?.times, 2);
+});
+test("round 11: other benefits' words, 'for' in either shape, 'daily' on a lump sum, and a case with no word of the row's name get no line", () => {
+  const refused = [
+    "Note (a): medical bills of a compound fracture are paid at double.",
+    "Note (a): paid at double for medical care of a compound fracture.",
+    "Note (a): an in-patient stay with a compound fracture is paid at double.",
+    "Note (a): the amount is doubled for surgery bills for a compound fracture.",
+    "Note (a): doubled for surgery bills for a compound fracture.",
+    "Note (a): a compound fracture is paid at double the daily amount.",
+    "Note (a): a compound fracture is paid at double the weekly amount.",
+    "Note (a): a compound fracture needing nursing is paid at double the amount.",
+    "Note (a): dental fractures are paid at double the amount.",
+    "Note (a): blindness is paid at double the amount.",
+    "Note (a): the amount is doubled if the accident happens at work.",
+  ];
+  for (const note of refused) for (const pct of [2, 5]) for (const [who, q] of [["Grace Okafor", "Grace has a compound fracture."], ["Daniel Okafor", "Daniel has a compound fracture."]]) {
+    const h = fractureSchedule(note, pct);
+    const a = ask(h, who, /Fracture/, q, note), main = ask(h, who, /Fracture/, q, "");
+    assert.equal(JSON.stringify(a.kept), JSON.stringify(main.kept), `${note} ${pct}% ${who}`);
+    assert.doesNotMatch(a.basis, IF, `${note} ${pct}% ${who}`);
+  }
+  // Synonyms of another row's kind on rows named "Loss of a limb" and "Injury"; the kind is allowed on its own row.
+  const limb = { own: "Loss of a limb\n1\tLoss of a limb\t50% of the Sum Insured", section: "1", cap: null };
+  const injury = { own: "Injury\n2\tInjury\t5% of the Sum Insured", section: "2", cap: null };
+  for (const [note, row] of [["Note (a): loss of an eye is paid at double the amount.", limb], ["Note (a): blindness is paid at double the amount.", limb],
+    ["Note (a): a broken tooth is paid at double the amount.", injury], ["Note (a): injury to the teeth is paid at double the amount.", injury]] as const)
+    assert.equal(noteMultiple(note, row), null, note);
+  assert.ok(noteMultiple("Note (a): loss of a limb at work is paid at double the amount.", limb));
+  assert.ok(noteMultiple("Note: loss of sight in both eyes is paid at twice the amount", { own: "Loss of sight\n1\tLoss of sight\t10% of the Sum Insured", section: "1", cap: null }));
+});
+test("round 11: a benefit the document's reading names but no person's table shows still counts as another benefit's", () => {
+  const plaster = "Note (a): a compound fracture needing a plaster cast is paid at double the amount.";
+  const line = FRACTURE, cast = "5\tPlaster cast allowance\tGBP 100 per accident", hosp = "6\tHospital cash\tGBP 50 per day";
+  const make = (withCast: boolean) => schedule([DANIEL, GRACE], [line, plaster, ...(withCast ? [cast] : []), hosp], [
+    ben({ section: "3", benefit: "Fracture of arm, wrist or leg", pays: "percent", value: 2, percentOf: "sum_insured", quote: line, cap: 1500, capQuote: "maximum GBP 1,500 per accident", conditions: [plaster] }),
+    ...(withCast ? [ben({ section: "5", benefit: "Plaster cast allowance", pays: "amount", value: 100, quote: cast })] : []),
+    ben({ section: "6", benefit: "Hospital cash", pays: "amount", value: 50, period: "day", quote: hosp }),
+  ]);
+  const without = ask(make(false), "Grace Okafor", /Fracture/, "Grace has a compound fracture in a plaster cast.", plaster);
+  assert.ok(IF.test(without.basis), without.basis);
+  const h = make(true);
+  const a = ask(h, "Grace Okafor", /Fracture/, "Grace has a compound fracture in a plaster cast.", plaster);
+  assert.deepEqual(a.amounts, ["£400"]);
+  assert.doesNotMatch(a.basis, IF);
 });
 test("round 9: half of a share already above the maximum gets no line (of the share or of what is paid is not said)", () => {
   // Daniel: 2% of GBP 80,000 is GBP 1,600, above the GBP 1,500 maximum: his card is up to GBP 1,500.
@@ -477,7 +526,7 @@ test("W/X/Y/Z/T: with the note set on Grace's card, her card is her single amoun
     assert.ok(!a.kept.some((s) => s.amount?.text === "£800"), `${label}: a flat £800`);
     // The line is said for exactly the notes whose structure checks (a plain multiple of the row's own case, within the
     // maximum), whatever the household's words.
-    const lined = [KEEPS, ABROAD, FINGER, WORK, PT].includes(note) && !o.row;
+    const lined = [KEEPS, FINGER].includes(note) && !o.row;
     assert.equal(IF.test(a.basis), lined, `${label}: ${a.basis}`);
     if (lined) assert.ok(a.basis.includes(ifLine(note, "")), `${label}: the note's own words`);
     // Never the household's words in the line.
@@ -517,7 +566,10 @@ test("L1-L21: plain statements of the case for Grace show GBP 400 and the condit
   for (const [note, q, earlier] of cases) {
     const a = G(note, q, note, earlier);
     assert.deepEqual(a.amounts, ["£400"], q);
-    assert.ok(a.basis.endsWith(ifLine(note, "this pays £800 (double)")), `${q}: ${a.basis}`);
+    // L20's note ("the amount is doubled if the accident happens at work") shares no word with the row's own name since
+    // round 11's anchor: £400 with no line, as on main.
+    if (note === WORK) assert.doesNotMatch(a.basis, IF, q);
+    else assert.ok(a.basis.endsWith(ifLine(note, "this pays £800 (double)")), `${q}: ${a.basis}`);
   }
 });
 

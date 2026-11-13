@@ -7,7 +7,7 @@
  * household sees in the chat is an amount on their Coverage page, checked twice. */
 import type { BenefitTable, Figure, PersonCover, TableRow } from "./assemble";
 import type { Source } from "./check";
-import { figureText, periodWords } from "./assemble";
+import { benefitNamesRead, figureText, periodWords } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
@@ -18,6 +18,9 @@ import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN, anyMoneyFigures, statedCurrencyCode } from "@/lib/format/currency";
 import { PREMIUM } from "@/lib/coverage/table-figures";
+/** Every benefit name the reading of a row's document named (assemble.ts benefitNamesRead), also rows no person's table
+ * shows: what a row multiple's case may not name (multipleFacts). Kept beside the rows, never on them. */
+const READ_NAMES = new WeakMap<object, string[]>();
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null;
   /** The limit's own line, or the same benefit's line for the same figure in another of the person's documents, says the
@@ -67,6 +70,7 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
     const row: ChatRow = { ...r, id: `R${rows.length + 1}`, docIndex, baseDocIndex: r.baseSource ? index.get(r.baseSource.documentId) ?? null : null };
     // Only a premium line coverRows made is a premium; a row copied from one (a rate, an intensive-care row) is not.
     if (PREMIUM_LINES.has(r)) row.premium = true; else delete row.premium;
+    READ_NAMES.set(row, benefitNamesRead(table, r.source.documentId));
     rows.push(row);
   };
   for (const p of table.people) for (const r of p.rows) add(r);
@@ -1494,7 +1498,9 @@ function multipleFacts(row: ChatRow, rows: readonly ChatRow[]): RowFacts {
   const others = [...new Set(rows.filter((o) => o.personId === row.personId && !sameBenefit(o.benefit, row.benefit)).map((o) => benefitName(o.benefit)))].join("\n");
   // Every other benefit read from the same document, whoever's row (gate round 10: a note's case naming one is that
   // benefit's, "hospital cash for a compound fracture is paid at double").
-  const docNames = [...new Set(rows.filter((o) => o.docIndex === row.docIndex && !sameBenefit(o.benefit, row.benefit)).map((o) => benefitName(o.benefit)))].join("\n");
+  // Read from the document's reading too (READ_NAMES), so a fixed-amount row a family schedule shows for no one counts.
+  const docNames = [...new Set([...rows.filter((o) => o.docIndex === row.docIndex).map((o) => o.benefit), ...(READ_NAMES.get(row) ?? [])]
+    .filter((b) => !sameBenefit(b, row.benefit)).map((b) => benefitName(b)))].join("\n");
   const perDay = row.figure.kind === "printed" && row.figure.unit === "per_day";
   return { own: `${row.benefit}\n${row.source.excerpt}`, section: row.section ?? null, cap, others, docNames, perDay };
 }
