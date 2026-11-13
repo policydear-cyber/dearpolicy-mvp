@@ -1328,7 +1328,7 @@ const sameFigure = (a: Figure, b: Figure) => (a.kind === "printed" || a.kind ===
  * days: no money figure other than the daily rate, and no cap word once "max 30 days" is taken out. A stay is never worked
  * out past an overall limit ("S$100 a day, max 30 days, overall limit S$2,000", Critic R108-1). */
 // "Maximum 30 days", "up to a maximum of 30 days", or "up to 30 days": the most days the rate is paid, not a money cap.
-const MAX_DAYS = /\b(?:(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?|up\s+to\s+)\(?\d+\)?\s*(?:continuous\s+|consecutive\s+)?days?\b(?!\s+(?:after|before|of|from|following|prior|since|once|beyond|within))/gi;
+const MAX_DAYS = /\b(?:(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?\d+\)?\s*(?:continuous\s+|consecutive\s+)?days?\b|up\s+to\s+\(?\d+\)?\s*(?:continuous\s+|consecutive\s+)?days?\b(?=\s*(?:$|[,.;:)\n]|(?:per|each|a|an|in\s+(?:any|one|a|each|total|all)|for\s+(?:any|one|each|all)|of\s+(?:(?:continuous|consecutive)\s+)?(?:hospital\w*|confinement|stay|admission|in-?patient\w*)|in\s+hospital|during)\b)))/gi;
 function dailyRateAlone(row: ChatRow, household: Household): boolean {
   if (row.figure.kind !== "printed") return false;
   const found = locateQuote(household, row.source.excerpt, row.docIndex);
@@ -1481,6 +1481,9 @@ const sumInsuredShare = (row: ChatRow) => row.figure.kind === "worked_out" && ro
  * be read as one figure. */
 export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, household: Household): ServerFigure | null {
   if (!sumInsuredShare(row) || row.figure.kind !== "worked_out" || typeof st.quote !== "string") return null;
+  // A row whose own conditions print money or a limit ("No more than S$1,000 is paid for any one fracture") is never given
+  // this way: the worked-out share could be more than it pays.
+  if (row.conditions.some((c) => statesMoney(c) || CAP_WORDS.test(c) || /\b(?:no\s+more\s+than|not\s+more\s+than|at\s+most|limit)/i.test(c))) return null;
   const currency = row.figure.currency!;
   let cap: ServerFigure["cap"] = null;
   if (row.capSource) {
@@ -1490,7 +1493,7 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
     if (capDoc < 0 || value == null) return null;
     cap = { value, docIndex: capDoc, page: row.capSource.page, quote: row.capSource.excerpt };
   }
-  return { text: String(st.text), person: baseName(row.person), quote: st.quote, percent: row.percent!, currency,
+  return { text: String(st.text), person: baseName(row.person), quote: st.quote, percent: row.percent!, currency, value: row.figure.amount,
     row: { docIndex: row.docIndex, page: row.source.page, quote: row.source.excerpt },
     base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap };
 }

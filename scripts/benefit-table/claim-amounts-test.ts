@@ -35,13 +35,25 @@ test("a code that opens the next figure is never the number before it's (dates, 
     ["Daniel Roe\tSpouse\t02/11/1982\tGBP 80,000", 80000, "GBP"],
     ["Ahmad bin Ali\t880101-14-5555\tMYR 150,000", 150000, "MYR"],
     ["Marie Dupont\t42\tEUR 60,000", 60000, "EUR"],
-    ["Policy 1234567 USD 25,000", 25000, "USD"],
-    ["Age 45 SGD 300,000", 300000, "SGD"],
+    ["Ngozi Ade\t1982-11-02 GBP 80,000", 80000, "GBP"],
+    ["Ngozi Ade\t2 Nov 1982 GBP 80,000", 80000, "GBP"],
+    ["Tamati Ruru\tPolicyholder\t12/04/1983\t300,000 NZD", 300000, "NZD"],
+    ["Ines Moreau\tID 55120 age 41 EUR 90,000", 90000, "EUR"],
   ];
   for (const [line, value, currency] of cases) {
     const f = moneyFiguresIn(line);
     assert.deepEqual(f.map((x) => [x.value, x.currency]), [[value, currency]], line);
     assert.deepEqual(anyMoneyFigures(line).map((x) => x.value), [value], line);
+  }
+});
+test("control: tables that print the code after the figure keep every figure, whatever its size (Critic #449 round 2)", () => {
+  const cases: [string, number[]][] = [["2000 SGD 1 visit", [2000]], ["Room 2000 SGD 30 days", [2000]], ["Accidental death 1999 USD 2 lives", [1999]],
+    ["Excess 250 EUR 25,000 EUR", [250, 25000]], ["Daily hospital cash\t100 SGD\t3,000 SGD", [100, 3000]], ["5000 MYR 50,000 MYR", [5000, 50000]],
+    ["500 SGD/1,000 SGD", [500, 1000]], ["Hospital cash\t100 SGD\t30 days", [100]], ["Death\t50,000 EUR\t25,000 EUR", [50000, 25000]],
+    ["Funeral expenses\t10,000 NZD\t5,000 NZD", [10000, 5000]], ["Ahmad Bin Ali\tx\t120 MYR\t150,000 MYR", [120, 150000]], ["max 2000 MYR\t1 claim", [2000]]];
+  for (const [line, want] of cases) {
+    assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
+    assert.deepEqual(anyMoneyFigures(line).map((x) => x.value), want, line);
   }
 });
 test("control: a figure with its code after it is still read", () => {
@@ -67,7 +79,7 @@ test("control: a money cap, or a cap word before another percentage, still marks
 });
 
 // ---------- Households ----------
-type Person = { name: string; relationship: string; line: string; sum: number };
+type Person = { name: string; relationship: string; line: string; sum: number; dob?: string };
 type Spec = { id: string; insurer: string; product: string; policyNumber: string | null; sign: string; currency: string; people: Person[]; page1: string; page2: string;
   benefits: Record<string, unknown>[]; personPage?: number };
 const ACC = "44444444-4444-4444-4444-444444444444";
@@ -81,7 +93,7 @@ const ben = (o: Record<string, unknown>) => ({ section: null, column: null, pays
   cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 2, ...o });
 
 function build(spec: Spec, extra: Household["documents"] = []) {
-  const family: FamilyMember[] = spec.people.map((p, i) => ({ id: `m${i}`, display_name: p.name, relationship: p.relationship }));
+  const family: FamilyMember[] = spec.people.map((p, i) => ({ id: `m${i}`, display_name: p.name, relationship: p.relationship, date_of_birth: p.dob ?? null }));
   const d = hdoc(spec.id, `${spec.product}.pdf`, spec.product, spec.insurer, spec.policyNumber, spec.people.map((p) => p.name), [spec.page1, spec.page2]);
   const house: Household = { accountId: ACC, members: spec.people.map((p) => ({ name: p.name, relationship: p.relationship })), documents: [d, ...extra] };
   const reading = checkReading(src(d), { document: { kind: "personal_proof", product: spec.product, insurer: spec.insurer, namedPeople: spec.people.map((p) => p.name), plan: null, periodFrom: null, periodTo: null },
@@ -311,12 +323,43 @@ test("a child's share printed only in the row's words is the child's alone, what
     }
   }
 });
-test("a payment per child ('for each child under 21') is not a child's row: each parent's share is worked out (Critic #449 F6)", () => {
-  const quote = "Education fund for each child under 21\t10% of the Sum Insured";
-  const h = schedule({ people: MYR.people, page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\n${quote}`,
-    benefits: [ben({ benefit: "Education fund for each child under 21", pays: "percent", value: 10, percentOf: "sum_insured", quote })] });
-  const r = rowOf(h, "Ahmad Bin Ali", (x) => /Education/.test(x.benefit));
-  assert.ok(r?.figure.kind === "worked_out" && r.figure.amount === 15000, JSON.stringify(r?.figure));
+test("a row that names a kind of life without saying whose it is shows no amount for anyone (Critic #449 F6, round 2)", () => {
+  for (const benefit of ["Education fund for each child under 21", "Education grant for children aged under 21", "Education support for each dependent child under 21", "Child hospital cash", "Hospital cash (children)"]) {
+    const quote = `${benefit}\t10% of the Sum Insured`;
+    const h = schedule({ people: MYR.people, page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\n${quote}`,
+      benefits: [ben({ benefit, pays: "percent", value: 10, percentOf: "sum_insured", quote })] });
+    for (const p of MYR.people) {
+      assert.equal(rowOf(h, p.name, (x) => x.benefit === benefit)?.figure.kind ?? "none", "none", `${benefit}: ${p.name}`);
+      assert.deepEqual(ask(h, p.name, new RegExp(benefit.replace(/[()]/g, "\\$&"))).amounts, [], `${benefit}: ${p.name}`);
+    }
+  }
+});
+test("the date of birth decides an under-18 row before the relationship; an in-law is an adult (Critic #449 round 2)", () => {
+  const quote = "For an insured child under 18, limited to 50% of the Sum Insured.";
+  const people: Person[] = [
+    { name: "Ahmad Bin Ali", relationship: "self", line: "Ahmad Bin Ali\tPolicyholder\t01/01/1988\tRM 150,000", sum: 150000 },
+    { name: "Imran Bin Ahmad", relationship: "child", dob: "1998-09-09", line: "Imran Bin Ahmad\tChild\t09/09/1998\tRM 40,000", sum: 40000 },
+    { name: "Nur Binti Ahmad", relationship: "child", dob: "2016-09-09", line: "Nur Binti Ahmad\tChild\t09/09/2016\tRM 30,000", sum: 30000 },
+    { name: "Hafiz Bin Yusof", relationship: "son-in-law", line: "Hafiz Bin Yusof\tSon-in-law\t01/02/1992\tRM 60,000", sum: 60000 }];
+  const h = schedule({ people, page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\nAccidental death\t${quote}`,
+    benefits: [ben({ benefit: "Accidental death", pays: "percent", value: 50, percentOf: "sum_insured", quote })] });
+  const fig = (n: string) => rowOf(h, n, (x) => x.benefit === "Accidental death")?.figure;
+  assert.equal(fig("Imran Bin Ahmad")?.kind ?? "none", "none", "a son aged 28 is not under 18");
+  assert.ok(fig("Nur Binti Ahmad")?.kind === "worked_out", JSON.stringify(fig("Nur Binti Ahmad")));
+  assert.equal(fig("Hafiz Bin Yusof")?.kind ?? "none", "none", "son-in-law");
+  const cols = schedule({ people, page2: ADULT_CHILD_PAGE, benefits: adultChildRows });
+  assert.equal(rowOf(cols, "Hafiz Bin Yusof", (r) => r.column === "Adult")?.figure.kind, "printed");
+  assert.equal(rowOf(cols, "Hafiz Bin Yusof", (r) => r.column === "Child")?.figure.kind ?? "none", "none");
+});
+test("an age-group row on a family schedule is settled by the date of birth, and is no one's without it", () => {
+  const benefit = "Hospital cash for insured persons aged 65 and above", quote = `${benefit}\tRM 50 per day`;
+  const people: Person[] = [
+    { name: "Ahmad Bin Ali", relationship: "self", dob: "1950-01-01", line: "Ahmad Bin Ali\tPolicyholder\t01/01/1950\tRM 150,000", sum: 150000 },
+    { name: "Siti Binti Omar", relationship: "spouse", dob: "1970-01-01", line: "Siti Binti Omar\tSpouse\t01/01/1970\tRM 100,000", sum: 100000 },
+    { name: "Adam Bin Ahmad", relationship: "child", line: "Adam Bin Ahmad\tChild\t09/09/2016\tRM 40,000", sum: 40000 }];
+  const h = schedule({ people, page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\n${quote}`, benefits: [ben({ benefit, pays: "per_day", value: 50, quote })] });
+  assert.equal(rowOf(h, "Ahmad Bin Ali", (x) => x.benefit === benefit)?.figure.kind, "printed");
+  for (const n of ["Siti Binti Omar", "Adam Bin Ahmad"]) assert.equal(rowOf(h, n, (x) => x.benefit === benefit)?.figure.kind ?? "none", "none", n);
 });
 test("control: 'up to N%' by a scale is never shown as a fixed amount (Critic #449 F3)", () => {
   for (const quote of ["Fractures\tUp to 50% of the Sum Insured according to the Scale of Fractures", "Permanent partial disablement\tUp to 100% of the Sum Insured as per the Scale of Benefits"]) {
@@ -329,9 +372,14 @@ test("control: 'up to N%' by a scale is never shown as a fixed amount (Critic #4
   }
 });
 test("control: a time window ('a stay that begins up to 30 days after the accident') is not a day limit (Critic #449 F5)", () => {
-  const h = family({ ...MYR, hospitalRule: "payable from the second day, for a stay that begins up to 30 days after the accident" });
+  for (const rule of ["payable from the second day, for a stay that begins up to 30 days after the accident", "payable from the second day, for a stay that begins up to 30 days post accident", "payable from the second day, for a stay starting up to 30 days later"]) {
+    const h = family({ ...MYR, hospitalRule: rule });
+    const a = ask(h, "Siti Binti Omar", /Hospital allowance/, "Siti was in hospital for 45 days. How much hospital allowance?", { perDay: { stayDays: 45 } });
+    assert.ok(!a.amounts.includes("RM2,400"), `${rule}: ${JSON.stringify(a.amounts)}`);
+  }
+  const h = family({ ...MYR, hospitalRule: "payable from the second day, up to 60 days of hospitalisation" });
   const a = ask(h, "Siti Binti Omar", /Hospital allowance/, "Siti was in hospital for 45 days. How much hospital allowance?", { perDay: { stayDays: 45 } });
-  assert.ok(!a.amounts.includes("RM2,400"), JSON.stringify(a.amounts));
+  assert.ok(a.amounts.includes("RM3,520"), `44 x RM80: ${JSON.stringify(a.amounts)}`);
 });
 test("a person whose name is part of another member's name still gets their own figure (Critic #449 F8)", () => {
   const people: Person[] = [

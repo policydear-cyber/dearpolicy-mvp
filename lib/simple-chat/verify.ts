@@ -773,6 +773,8 @@ function cappedAmount(st: ModelStatement, at: Found, household: Household, perso
  * the words it rests on, never a figure to take on trust. The row's percentage of the person's own sum insured, the line
  * that prints that sum, and the row's printed maximum, if any. Built only by the server, never from the model's JSON. */
 export type ServerFigure = { text: string; person: string; quote: string; percent: number; currency: string;
+  /** The amount the benefit table shows for the row: the figure worked out again here must be the same, or none is given. */
+  value: number;
   /** The row's own printed words (a capped row's statement quotes its cap instead). */
   row: { docIndex: number; page: number; quote: string };
   base: { value: number; docIndex: number; quote: string }; cap: { value: number; docIndex: number; page: number; quote: string } | null };
@@ -840,6 +842,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const worked = Math.round(sf.base.value * sf.percent) / 100;
   const capped = !!cap && worked > cap.value;
   const value = capped ? cap!.value : worked;
+  if (!sameValue(value, sf.value)) return null;
   const cur = currencyOf(onLine[0].raw, line, bdoc, bf.page);
   const money = (v: number) => formatMoney(cur.sign, v);
   const where = `${docLabel(household, bdoc)}, page ${bf.page}`;
@@ -1186,11 +1189,12 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   if (moneyFiguresIn(rule).some((f) => !sameValue(f.value, amount.value))) return null;
   if (/\b(?:limits?|aggregate|overall|in\s+total|in\s+all|ceiling|capped|not\s+more\s+than|no\s+more\s+than|reduced|thereafter|half)\b/i.test(rule)) return null;
   const starts = [...rule.matchAll(/\b(after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?day\b/gi)];
-  // "Maximum 30 days", or "up to 30 days" (per stay, accident or year: the most days it pays). Never a time window: "a
-  // stay that begins up to 30 days after the accident" limits when, not how many days (Critic #449 F5).
-  const maxes = [...rule.matchAll(/\b(?:max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?|up\s+to\s+)\(?(\d+)\)?\s*days?\b(?!\s+(?:after|before|of|from|following|prior|since|once|beyond|within))/gi)];
+  // "Maximum 30 days", or "up to 30 days" (per stay, accident or year: the most days it pays). Only when it ends the
+  // clause or names what it limits ("per accident", "of hospitalisation", "in any one year"): "a stay that begins up to 30
+  // days after/post the accident" or "starting up to 30 days later" limits when, not how many days (Critic #449 F5).
+  const maxes = [...rule.matchAll(/\b(?:max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*days?\b|up\s+to\s+\(?(\d+)\)?\s*days?\b(?=\s*(?:$|[,.;:)\n]|(?:per|each|a|an|in\s+(?:any|one|a|each|total|all)|for\s+(?:any|one|each|all)|of\s+(?:(?:continuous|consecutive)\s+)?(?:hospital\w*|confinement|stay|admission|in-?patient\w*)|in\s+hospital|during)\b)))/gi)];
   if (starts.length !== 1 || maxes.length !== 1) return null;
-  const startDay = Number(starts[0][2]), most = Number(maxes[0][1]);
+  const startDay = Number(starts[0][2]), most = Number(maxes[0][1] ?? maxes[0][2]);
   // Every number of days printed is one of these two: "(30) days" and "10th day" only.
   const dayNumbers = [...rule.matchAll(/(\d+)\)?\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?days?\b/gi)].map((m) => Number(m[1]));
   if (dayNumbers.some((d) => d !== startDay && d !== most)) return null;
