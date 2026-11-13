@@ -1053,9 +1053,18 @@ function benefitFor(det: string | undefined, adj: string | undefined, noun: stri
   if (word) return `${det ? `${det} ` : ""}${word} benefit${plural}`;
   return det ? (plural ? "these benefits" : "this benefit") : plural ? "benefits" : "benefit";
 }
-/** Words after "is" or "are" that keep it ("is paid", "are payable", "is halved"): anything else ("does not apply") is
- * said of the benefit without it. */
-const KEEPS_VERB = /^(?:[\p{L}-]+ed|paid|payable|made|given|shown|set|held|borne|kept|met|applicable|subject|limited|capped|not)\b/iu;
+/** Whether "is" or "are" goes before what follows "X is quoted below and ...": only before a verb of its own. Kept by
+ * default ("is paid", "is available from day 3", "are the same for each child"); dropped before an auxiliary or modal
+ * ("does not apply", "can be claimed"), before a singular verb in "-s" after "is" ("applies", "stops"), and before a
+ * plural verb from a closed list after "are" ("need", "exceed", "apply"). When unsure, kept. */
+const AUXILIARY = /^(?:does|do|did|doesn['’]t|don['’]t|didn['’]t|can|cannot|can['’]t|will|won['’]t|would|wouldn['’]t|may|might|must|should|shouldn['’]t|has|have|had|hasn['’]t|haven['’]t)\b/i;
+const PLURAL_VERB = /^(?:apply|stop|cover|need|exceed|include|require|end|start|begin|depend|count|reduce|increase|pay|differ|vary|follow|continue|remain|run|last|rise|fall|change|cease|lapse)\b/i;
+const SINGULAR_VERB = /^[a-z]+(?<!ss|us|is)s\b/;
+function dropsVerb(verb: string, next: string): boolean {
+  const word = next.trimStart();
+  if (AUXILIARY.test(word)) return true;
+  return /^is$/i.test(verb) ? SINGULAR_VERB.test(word) : PLURAL_VERB.test(word);
+}
 /** A clause that does nothing but promise the quote ("so the daily amount is quoted here from the policy, not given as a
  * card"): it goes whole. */
 const ONLY_QUOTE_PROMISE = new RegExp(String.raw`^(?:(?:and|but|so|while|although|though)\s+)?(?:[\p{L}'’-]+\s+){0,4}${QUOTED_NOUN}\s+(?:is|are)\s+${QUOTED_WORDS}(?:\s+(?:from|in|as)\b[^,;.]*)?(?:,\s*(?:and\s+)?not\s+(?:given|shown)\s+(?:as|on)\s+(?:a\s+)?cards?)?\s*[.!?]?$`, "iu");
@@ -1111,7 +1120,7 @@ function withoutQuotePointer(sentence: string): string | null {
       .replace(QUOTED_AND, (m, det: string | undefined, adj: string | undefined, noun: string, pl: string, verb: string, at: number, all: string) => {
         const said = benefitFor(det, adj, noun, pl, all.slice(0, at));
         if (!said) return m;
-        return KEEPS_VERB.test(all.slice(at + m.length)) ? `${said} ${said.endsWith("benefits") ? "are" : verb} ` : `${said} `;
+        return dropsVerb(verb, all.slice(at + m.length)) ? `${said} ` : `${said} ${said.endsWith("benefits") ? "are" : verb.toLowerCase()} `;
       })
       .replace(QUOTED_AS_NAME, (m, det: string | undefined, adj: string | undefined, noun: string, pl: string, at: number, all: string) => benefitFor(det, adj, noun, pl, all.slice(0, at)) ?? m))
     // A promise left inside a clause that says more ("the figure is quoted below and paid from day 3") cannot be said of
