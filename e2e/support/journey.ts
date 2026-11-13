@@ -157,7 +157,7 @@ export async function signUpThroughUi(page: Page, args: { email: string; passwor
   await page.getByLabel("Email").fill(args.email);
   await page.getByLabel("Password").fill(args.password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("status")).toContainText("Check your email for a confirmation link");
+  await expect(page.getByRole("status")).toContainText("Open the link we sent to finish creating your account");
 }
 export async function signInThroughUi(page: Page, email: string, password: string, next?: string) {
   await page.goto(next ? `/login?next=${encodeURIComponent(next)}` : "/login");

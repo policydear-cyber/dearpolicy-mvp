@@ -94,7 +94,7 @@ export function HouseholdAccess() {
   return (
     <>
       <section className="section">
-        <div className="section-heading"><div><h2>Who can sign in</h2><p>People who sign in to this household with their own email. Everyone here sees the same family, documents and answers. Owners can also invite people, rename the household, download its data and delete it.</p></div></div>
+        <div className="section-heading"><div><h2>Who can sign in</h2><p>People who sign in to this household with their own email. Everyone here sees the same family, documents and answers. Owners can also invite and remove people, rename the household, download its data and delete it.</p></div></div>
         <div className="profile-list" data-testid="household-access">
           {members.map((member) => {
             const isSelf = member.userId === callerUserId;

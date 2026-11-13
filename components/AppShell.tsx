@@ -138,7 +138,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const titled = [...items].sort((a, b) => b.href.length - a.href.length).find((item) => item.href !== "/" && isActive(item.href))
     ?? (pathname === "/" && items.length ? items[0] : null);
   // Pages reached through another menu item still name themselves in the browser tab.
-  const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your household", "/reset-password": "Reset password", "/privacy": "Privacy",
+  const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your account", "/reset-password": "Reset password", "/privacy": "Privacy",
     "/ledger": "Coverage", "/schedule": "Benefits", "/coverage": "Coverage", "/family": "People", "/usage": "Plan usage", "/claims": "Past events" };
   const pageName = ownTitles[pathname] ?? titled?.label;
   const pageTitle = pageName ? `${pageName} · DearPolicy` : "DearPolicy";

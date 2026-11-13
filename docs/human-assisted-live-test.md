@@ -89,8 +89,8 @@ into the manifest, and check each email contains the run identifier exactly.
 **Sign-up variant (tests real email confirmation):** instead of creating owner A in
 the dashboard, owner A signs up on `/signup` with `yourname+<run id>@<your domain>`
 (an inbox they control) and a household name of `<run id> Household A`, then clicks
-the confirmation link in that inbox. Expected: "Check your email for a confirmation
-link…", no sign-in possible before the link is clicked, and the link lands signed in.
+the confirmation link in that inbox. Expected: "Check your email. Open the link we sent to finish
+creating your account.", no sign-in possible before the link is clicked, and the link lands signed in.
 
 ## 2. Owner A: household, people and documents ⏸
 

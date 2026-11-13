@@ -10,7 +10,7 @@ const LINK_ERRORS: Record<string, string> = {
   invalid_or_expired_link: "That link has expired or has already been used. Please ask for a new one.",
   invalid_credentials: "Incorrect email or password.",
   missing_credentials: "Enter your email and password.",
-  confirm_email: "Check your email. We sent you a link to confirm your address. Open it, then sign in.",
+  confirm_email: "Check your email. We sent you a link to confirm your address. Opening it signs you in.",
   invite_only: "DearPolicy is open by invitation only at the moment. If you were invited, use the email address the invitation was sent to.",
 };
 

@@ -21,7 +21,7 @@ export default function UpdatePasswordPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(customerMessage(data.error, "We couldn't change your password. The link may have expired. Ask for a new one from Forgot your password on the sign-in page."));
+        setError(customerMessage(data.error, "We couldn't change your password. The link may have expired. Ask for a new one from “Forgot your password?” on the sign-in page."));
         return;
       }
       router.push("/");
