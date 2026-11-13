@@ -394,6 +394,65 @@ test("Y1-Y10: a case that is a non-member's, reported, or said of nothing gives 
     assert.ok(a.leftOut, q);
   }
 });
+// ---------- Round 6: whom the case is about is an allow-list (named subject, pronoun after one, continuation) ----------
+test("Z1-Z8: a case whose subject is not this person, or a pronoun after someone else, gives no amount", () => {
+  const FELL = ["Grace broke her arm in a fall."];
+  // [current message, earlier messages, chat person, household]
+  const cases: [string, string[], string | null, Person[]][] = [
+    ["My nephew has a compound fracture.", [], null, [GRACE]],                                                   // Z1
+    ["The kid next door has a compound fracture.", [], "Grace Okafor", [DANIEL, GRACE]],                         // Z2
+    ["A pupil has a compound fracture.", [], "Grace Okafor", [DANIEL, GRACE]],                                   // Z3
+    ["A pupil at her school has a compound fracture.", FELL, null, [DANIEL, GRACE]],                             // Z3b
+    ["The teacher has a compound fracture.", FELL, null, [DANIEL, GRACE]],                                       // Z3c
+    ["Her coach has a compound fracture.", FELL, null, [DANIEL, GRACE]],                                         // Z3d
+    ["The dog has a compound fracture.", FELL, null, [DANIEL, GRACE]],                                           // Z3e
+    ["Grace broke her arm. Her coach was hurt too. He has a compound fracture.", [], null, [DANIEL, GRACE]],     // Z4
+    ["He has a compound fracture.", ["Grace broke her arm.", "Her coach was hurt too."], null, [DANIEL, GRACE]], // Z4b
+    ["Grace drove Daniel to A&E. He has a compound fracture.", [], null, [DANIEL, GRACE]],                       // Z4c
+    ["Grace visited Daniel in hospital. He has a compound fracture.", [], null, [DANIEL, GRACE]],                // Z4d
+    ["Grace looked after Daniel. He has a compound fracture.", [], null, [DANIEL, GRACE]],                       // Z4e
+    ["Grace is caring for Daniel. He has a compound fracture.", [], null, [DANIEL, GRACE]],                      // Z4f
+    ["Daniel went to hospital with Grace. He has a compound fracture.", [], null, [DANIEL, GRACE]],              // Z5
+    ["Grace sat next to Daniel. He has a compound fracture.", [], null, [DANIEL, GRACE]],                        // Z5b
+    ["Grace's boyfriend has a compound fracture.", [], null, [DANIEL, GRACE]],                                   // Z6
+    ["Grace's horse has a compound fracture.", [], null, [DANIEL, GRACE]],                                       // Z6b
+    ["The leaflet says a compound fracture heals slowly.", FELL, null, [DANIEL, GRACE]],                         // Z7
+    ["Compound fractures are serious.", FELL, null, [DANIEL, GRACE]],                                            // Z7b
+    ["The nurse said \"compound fracture\" about the patient in the next bed.", FELL, null, [DANIEL, GRACE]],    // Z7c
+    ["The radio said a compound fracture is common in rugby.", FELL, null, [DANIEL, GRACE]],                     // Z7d
+    ["A compound fracture is the worst kind.", FELL, null, [DANIEL, GRACE]],                                     // Z7e
+    ["He has a compound fracture.", [], "Grace Okafor", [DANIEL, GRACE]],                                        // Z8
+    ["He has a compound fracture.", [], null, [GRACE]],                                                          // Z8b
+    ["Grace rode a horse. It has a compound fracture.", [], null, [DANIEL, GRACE]],
+    ["Grace and her coach fell. He has a compound fracture.", [], null, [DANIEL, GRACE]],
+    ["Grace hit the cyclist who has a compound fracture.", [], null, [DANIEL, GRACE]],
+    ["Grace has a compound fracture and Daniel too.", [], null, [DANIEL, GRACE]],
+    ["Grace does not have a compound fracture.", [], null, [DANIEL, GRACE]],
+  ];
+  for (const [q, earlier, chat, people] of cases) {
+    const a = ask(fractureSchedule(KEEPS, 2, people), "Grace Okafor", /Fracture/, q, KEEPS, earlier, undefined, chat);
+    assert.deepEqual(a.amounts, [], q);
+    assert.ok(a.leftOut, q);
+  }
+});
+test("M1-M10: plain statements the old deny-lists blocked give GBP 800 with the note set", () => {
+  const cases: [string, string[]][] = [
+    ["Grace's case is a compound fracture.", []],                                   // M1
+    ["A car hit Grace and she has a compound fracture.", []],                       // M2
+    ["Grace has a compound fracture and is otherwise fine.", []],                   // M3
+    ["Grace (my wife) has a compound fracture.", []],                               // M4
+    ["She's got a compound fracture.", ["Grace broke her arm."]],                   // M5
+    ["Grace was knocked off her bike; it is a compound fracture.", []],             // M6
+    ["Grace fell at the park; she has a compound fracture.", []],                   // M7
+    ["Our daughter Grace has a compound fracture.", []],                            // M8
+    ["Grace was hit by another car and has a compound fracture.", []],             // M10
+    ["Grace fell. It happened at the park and it is a compound fracture.", []],
+  ];
+  for (const [q, earlier] of cases) assert.deepEqual(G(KEEPS, q, KEEPS, earlier).amounts, ["£800"], q);
+  // Left blocked by the allow-list (no amount, never a wrong one): Grace is the doctor's object (M11), and "I" is a second
+  // person in the sentence a pronoun leans on (M9).
+  for (const q of ["The doctor told Grace it is a compound fracture.", "Grace and I were cycling; she has a compound fracture."]) assert.deepEqual(G(KEEPS, q, KEEPS).amounts, [], q);
+});
 // Known, not covered (gate round 5, Y8): the note's case words in the injury's own clause but not as its circumstance
 // ("Grace fractured her wrist at home and was travelling on public transport to the hospital") still read as the case when
 // the model sets the note; no cheap word rule tells the two apart.
