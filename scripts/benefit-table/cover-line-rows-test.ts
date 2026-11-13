@@ -8,6 +8,8 @@ import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, sectionsOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { type SourceDoc } from "@/lib/benefit-table/check";
 import { checkStored } from "@/lib/benefit-table/service";
+import { chatRows } from "@/lib/benefit-table/chat";
+import type { Household } from "@/lib/simple-chat/library";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|GEMINI|_API_KEY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network in this test"); }) as typeof fetch;
@@ -44,7 +46,7 @@ function read(blocks: [string, Line[]][], o: { benefits?: "all" | number[]; bloc
   const t = assembleTable([r], family, []);
   const person = (n: string) => t.people.find((p) => p.name === n || (p as { displayName?: string }).displayName === n) ?? t.people[family.findIndex((f) => f.display_name === n)];
   const rows = (n: string) => person(n).rows.map((x) => ({ cover: x.cover, benefit: x.benefit, amount: x.figure.kind === "printed" || x.figure.kind === "worked_out" ? (x.figure as { amount: number }).amount : null }));
-  return { r, t, rows };
+  return { r, t, rows, doc };
 }
 const LINES: Line[] = [["Harbour Protector", "In Force", "100,000.00", "150.00"], ["Accelerated Disability", "In Force", "13,500.00", "0.00"],
   ["Accident Death & Dismemberment III", "Manual Lapse", "10,000.00", "1.53"], ["Medical Reimbursement III", "Manual Lapse", "1,000.00", "2.13"]];
@@ -115,7 +117,15 @@ test("R11 once another document lists what the cover pays, its schedule line giv
   const t = assembleTable([r, w], family, [{ section: sectionKeyOf(WORD, w.benefits[0]), cover: coverKeyOf(base), why: "its wording" }]);
   const ann = t.people.find((p) => p.id === "a")!;
   assert.deepEqual(ann.rows.filter((x) => !x.coverLine).map((x) => x.benefit).sort(), ["Accidental death", "Terminal illness"]);
-  assert.deepEqual(ann.rows.filter((x) => x.coverLine), [], "no cover line of this product stays beside its wording's rows");
+  // The base plan's own line gives way to its wording's rows; the riders' lines, which that wording does not list, stay.
+  assert.deepEqual(ann.rows.filter((x) => x.coverLine).map((x) => [x.cover, x.figure.kind === "printed" ? x.figure.amount : null]).sort(),
+    LINES.slice(1).map((l) => [l[0], num(l[2])]).sort());
+});
+test("R12 chat: a cover's line is never a second card beside its own \"Sum insured\" row", () => {
+  const { t, doc } = read([[ANN, LINES]]);
+  const rows = chatRows(t, { documents: [{ policyId: DOC, name: doc.name, pages: doc.pages }], members: [], people: [] } as unknown as Household);
+  assert.ok(rows.length > 0 && rows.every((r) => !r.coverLine), JSON.stringify(rows.map((r) => [r.benefit, r.coverLine])));
+  for (const l of LINES) assert.ok(rows.filter((r) => r.figure.kind === "printed" && r.figure.amount === num(l[2])).length <= 1, `${l[0]}: one card for its sum`);
 });
 
 console.log(`cover-line rows: ${passed} passed, ${failures.length} failed`);

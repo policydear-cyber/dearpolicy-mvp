@@ -1064,11 +1064,12 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), ...(c.holding ? { holding: c.holding } : {}), coverEnded: c.ended ?? null, ...(b.coverLine ? { coverLine: true } : {}) });
     }
   }
-  // A cover's own schedule line is its row only while nothing else says what that cover, or another cover of its product,
-  // pays for the person: a wording read later (or another document's rows) takes its place, never sits beside it.
+  // A cover's own schedule line is its row only while nothing else says what that very cover pays for the person: a wording
+  // read later (or another document's rows) takes its place, never sits beside it. Another cover's rows (a base plan's
+  // wording) never hide a rider's line (Critic and TE #469 F2).
   for (const p of people) {
-    const listed = p.rows.filter((r) => !r.coverLine);
-    if (listed.length) p.rows = p.rows.filter((r) => !r.coverLine || !listed.some((x) => x.coverKey === r.coverKey || x.product === r.product));
+    const listed = new Set(p.rows.filter((r) => !r.coverLine).map((r) => r.coverKey));
+    if (listed.size) p.rows = p.rows.filter((r) => !r.coverLine || !listed.has(r.coverKey));
   }
   for (const s of sections) if (notTold.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_TOLD_WHY, source: firstSource.get(s.key) ?? null });
   for (const s of sections) if (notTheirs.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_THEIR_DOCUMENT_WHY, source: firstSource.get(s.key) ?? null });

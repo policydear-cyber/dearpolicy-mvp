@@ -68,7 +68,9 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
     if (PREMIUM_LINES.has(r)) row.premium = true; else delete row.premium;
     rows.push(row);
   };
-  for (const p of table.people) for (const r of p.rows) add(r);
+  // A cover's own schedule line (coverLine) is its "Sum insured" row below already (coverRows): never a second card for one
+  // sum (TE #469 F1).
+  for (const p of table.people) for (const r of p.rows) if (!r.coverLine) add(r);
   // One premium per policy and person: a schedule read as two covers (a benefit and its death benefit) prints one premium.
   const premiums = new Set<string>();
   // First-year premiums come last, so the other rows keep their numbers.
