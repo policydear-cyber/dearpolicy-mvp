@@ -178,7 +178,7 @@ for (const [a, b] of [["Mum hospital cash", "Dad hospital cash"], ["Hospital cas
   ["Toddler medical expenses", "Medical expenses"], ["Pensioner hospital cash", "Hospital cash"],
   // Critic 1 on #466: a tier, a title, a sex or a plan size is not a kind of benefit.
   ["Gold medical expenses", "Silver medical expenses"], ["Hospital cash Mr", "Hospital cash Mrs"], ["Accidental death male", "Accidental death female"],
-  ["Medical expenses individual", "Medical expenses couple"], ["Standard trip cancellation", "Premier trip cancellation"], ["Hospital cash Rao A", "Hospital cash Rao B"]]) {
+  ["Medical expenses individual", "Medical expenses couple"], ["Standard trip cancellation", "Premier trip cancellation"], ["Hospital cash Rao A", "Hospital cash Rao B"], ["Gold Plan medical", "Silver Plan dental"], ["Option A hospital cash", "Option B medical expenses"]]) {
   test(`one benefit printed per life ("${a}", "${b}") is no one's, even marked for every named person`, () => {
     const t = run({ lives: ["Asha Rao", "Ben Rao"], column: "Limit per insured person",
       rows: [{ benefit: a, cell: "USD 100,000", value: 100000 }, { benefit: b, cell: "USD 50,000", value: 50000 }, { benefit: "Personal liability", cell: "USD 1,000,000", value: 1000000 }] });

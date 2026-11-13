@@ -627,11 +627,14 @@ const LIFE_TAG = /\b(?:mum|mom|mummy|mommy|mother|dad|daddy|father|grand(?:ma|pa
  * not name (whoseRows, documentLives). */
 /** The words of a row name, possessives and the "per (insured) person" phrase taken out. */
 const labelWords = (s: string) => norm(s.replace(/['’]s\b/gi, "").replace(/\b(?:per|each|every|for\s+(?:each|every))\s+(?:insured\s+)?(?:persons?|insured|lives?|members?)\b/gi, " ")).split(" ").filter(Boolean);
-/** Whether a row's name names an insured life: a role or relation word (LIFE_TAG), a word of a person the
+/** A plan or tier in a row's own name ("Gold Plan medical", "Option B dental"): the row is for whoever holds that plan, so
+ * the document's rows are not every named person's (Critic 1 on #466). Withhold-only. */
+const PLAN_TIER = /\b(?:plan|plans|tier|tiers|option|options|package|packages|class|gold|silver|platinum|bronze|basic|standard|premier|classic|deluxe|elite|superior|executive|essential|essentials)\b/i;
+/** Whether a row's name names an insured life, or a plan or tier (PLAN_TIER): a role or relation word (LIFE_TAG), a word of a person the
  * document names, or their initials ("AR" for Asha Rao). */
 function namesALife(benefit: string, people: string[]): boolean {
   const ws = labelWords(benefit), text = ws.join(" ");
-  if (LIFE_TAG.test(text)) return true;
+  if (LIFE_TAG.test(text) || PLAN_TIER.test(text)) return true;
   const own = new Set<string>();
   for (const p of people) {
     const pw = norm(p).split(" ").filter(Boolean);
