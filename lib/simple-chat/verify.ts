@@ -1105,6 +1105,14 @@ function percentAmount(st: ModelStatement, found: Found, household: Household, p
     return { ok: true, amount: { value, text: formatMoney(cur.sign, value), currencyResolved: cur.resolved, illustration: true } };
   }
 }
+/** A term or a plan word straight before the figure ("Plan 3", "Policy Term 20", "Plan No. 4"), when the figure is printed
+ * as a plain whole number (no thousands separator): "Harbour Flexi Plan  100,000.00" is the plan's sum. */
+const TERM_OR_PLAN_BEFORE = /\b(?:term|plans?)(?:\s*\((?:years?|yrs?|months?)\))?(?:\s+(?:no\.?|number|code|#))?\s*[:\-]?\s*$/i;
+/** A cover's status cell, which stands between its name and its sum on many schedules. */
+const STATUS_CELL = /^(?:in\s*force|active|lapsed|manual\s+lapse|paid[\s-]*up|premium\s+paying|premium\s+holiday|matured|terminated|surrendered|reinstated|current|valid)$/i;
+/** A cell that is a term or a plan number, not a cover's name: "Term", "Premium Term", "Policy Term (Years)", "Plan",
+ * "Plan No.", "Plan Type". */
+const TERM_OR_PLAN_CELL = /^(?:(?:premium|policy|benefit|cover(?:age)?|payment|contract|payout)\s+)?(?:term|plans?)(?:\s*\((?:years?|yrs?|months?)\)|\s+in\s+(?:years|months)|\s+(?:no\.?|number|code|type|#))?\.?$/i;
 function plainAmount(st: ModelStatement, found: Found, household: Household): AmountCheck {
   const doc = household.documents[found.docIndex];
   const raw = (st.amount ?? "").trim();
@@ -1145,7 +1153,17 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
     // A figure whose row names a count or a rate is not money, whatever the page's currency (R59-6).
     const label = at ? found.excerpt.slice(Math.max(0, found.excerpt.lastIndexOf("\n", at.index) + 1), at.index) : "";
     // "Per visit" and "per (policy) year" say how often a sum applies, not what is counted; "limit" never makes a count money (R68-1).
-    const counted = label.replace(/\bper\s+(?:policy\s+)?(?:year|visit|annum)\b/gi, " ");
+    // "Term" and "plan" in a cover's own name ("Term Life", "Long Term Care", "Harbour Flexi Plan", "Hospital Plan B") are
+    // not what its figure counts; they count only as a cell of their own ("Premium Term", "Policy Term (Years)", "Plan",
+    // "Plan No."), whatever money word is beside it (follow-up to #460: such covers' sums were dropped from the chat).
+    const counted = label.replace(/\bper\s+(?:policy\s+)?(?:year|visit|annum)\b/gi, " ").replace(/\b(?:term|plans?)\b/gi, " ");
+    // The figure's own label: the nearest cell before it on its page row, a status cell ("In Force") aside. Only that cell
+    // can make the figure a term or a plan number: "Plan Type:  Harbour Flexi Plan  Sum Assured:  100,000.00" is a sum (Critic #463).
+    const printedFigure = at?.[1] ?? at?.[0] ?? "";
+    const figureAt = new RegExp(String.raw`(?<![\d.,])${printedFigure.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\d.,]*\d)`);
+    const rowText = rows.split("\n").find((l) => !!printedFigure && figureAt.test(l)) ?? "";
+    const ownCell = rowText.slice(0, rowText.search(figureAt)).split(/\t| {2,}|:|\|/).map((c) => c.trim()).filter((c) => c && !STATUS_CELL.test(c)).at(-1) ?? "";
+    if (TERM_OR_PLAN_CELL.test(ownCell) || (TERM_OR_PLAN_BEFORE.test(label) && /^\d{1,4}(?:\.0+)?$/.test(at?.[1] ?? at?.[0] ?? ""))) return { ok: false, why: "the figure's row names a count or a rate, not money" };
     if (/\b(?:units?|rates?|age|ages|years?|points?|factors?|percent(?:age)?|days?|months?|weeks?|times|ratio|count|number|no\.?|plans?|co-?insurance|sessions?|visits?|claims|stays?|admissions?|nights?|period|term|survival|waiting)\b/i.test(counted) && !/\b(?:premium|instalment|benefit|sum|amount|fee|cost|charge|payable|assured|insured|co-?payment|deductible|excess)\b/i.test(counted)) return { ok: false, why: "the figure's row names a count or a rate, not money" };
     // With no currency anywhere, nothing else says the figure is money: a row that names a count, a rate, an age or a term
     // gives no amount, whatever else it names ("Benefit Age  99", "Premium Term (Years)  20"), Critic #460.
