@@ -225,7 +225,7 @@ test("a household with no people is asked to add them before choosing a file, ne
   assert.match(page, /fetch\("\/api\/family", \{ cache: "no-store" \}\)\.then\(async \(r\) => r\.ok \? r\.json\(\) : null\)\.catch\(\(\) => null\)/);
   assert.match(page, /setFamilyKnown\(!!f && Array\.isArray\(f\.family\)\)/);
   // The empty Library under the prompt points to no upload "above" (TE #416).
-  assert.match(page, /familyKnown && !family\.length \? "No documents yet\. Add the people your policies cover first/);
+  assert.match(page, /familyKnown && !family\.length \? "No documents yet\. First add the people your policies cover/);
   assert.match(page, /data-testid="upload-needs-family"[\s\S]{0,600}href="\/family"/);
   assert.match(read("app/api/policies/upload/accept.ts"), /Add the people your policies cover on the Family page first/);
 });

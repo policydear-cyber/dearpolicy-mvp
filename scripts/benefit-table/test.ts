@@ -41,10 +41,11 @@ test("cover rows printed with the person's name are kept, with the currency the 
   assert.equal(certReading.covers[0].currency, "SGD");
   assert.equal(certReading.covers[0].source.page, 1);
 });
-test("a cover whose sum insured is not in its quote is dropped", () => {
+test("a cover whose sum insured is not printed is kept without the sum (an unproved sum never drops the cover)", () => {
   const r = checkReading(cert, doc("personal_proof", [cover("Lim Wei Jie", "Group Personal Accident", 300000, "Lim Wei Jie S$200,000 As of 01/01/2024")], []));
-  assert.equal(r.covers.length, 0);
-  assert.match(r.dropped[0].why, /not printed/);
+  assert.equal(r.covers.length, 1);
+  assert.equal(r.covers[0].sumInsured, null);
+  assert.match(r.dropped[0].why, /not printed.*kept the cover without it/);
 });
 test("a cover whose quote is not on any page is dropped", () => {
   const r = checkReading(cert, doc("personal_proof", [cover("Lim Wei Jie", "Group Personal Accident", 200000, "Lim Wei Jie S$200,000 As of 02/02/2025")], []));

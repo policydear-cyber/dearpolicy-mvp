@@ -1999,6 +1999,8 @@ function basisOf(household: Household, c: Checked): string {
   return `${po.percent}% of ${c.person}'s ${cover ? cover + " " : ""}sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc, c.base.found.page).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
 }
 
+/** Words that point at people without naming them: relationships and groups, in any household. */
+const PEOPLE_WORDS = /\b(?:husband|wife|spouse|partner|son|daughter|child|children|kids?|baby|babies|mother|mum|mom|father|dad|parents?|brother|sister|sibling|grand(?:mother|father|ma|pa|son|daughter|child|children|parents?)|in-laws?|family|we|us|our|both|everyone|everybody|all of us)\b/i;
 /** `written` is what the household wrote in this conversation (this question first): a stay length is taken only from it. */
 /** `serverWords`: statement texts the server wrote itself (the benefit table's row labels, lib/benefit-table/chat.ts). Only a
  * statement whose text is exactly one of them keeps its words without the money filter; everything else is filtered. */
@@ -2012,12 +2014,59 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const aboutFiles = new Set<number>();
   /** Texts written here from the library's own record: never held to that record again. */
   const fromRecord = new Set<string>();
+  /** A statement with no person whose quote is one member's own document: the cards it adds (those not in `had`) that have
+   * no person are labelled with that member once it is done. By the card itself, never by its place: a later card can
+   * remove an earlier one (Critic #444 F1). */
+  let ownerLabel: { had: Set<Checked>; who: string } | null = null;
+  const labelOwner = () => {
+    if (ownerLabel) for (const c of checked) if (!ownerLabel.had.has(c) && c.found && !c.person) c.person = ownerLabel.who;
+    ownerLabel = null;
+  };
+  /** Who the household is asking about: the members its latest message names, or, when it names no one and points at no one
+   * else either ("And the death benefit?"), the last earlier message that names someone (Critic #444 F3). A message that
+   * points at people without naming them ("my husband", "the kids", "our family", "both of us") is never read with an
+   * earlier one (Critic #444 re-review): no one is taken as asked about. */
+  const pointsAtPeople = (w: string) => PEOPLE_WORDS.test(w) || household.members.some((m) => {
+    const rel = (m.relationship ?? "").toLowerCase().trim();
+    return rel.length >= 3 && rel !== "self" && new RegExp(String.raw`\b${rel.replace(/[^a-z ]/g, "")}s?\b`, "i").test(w);
+  });
+  const askedAbout = (() => {
+    for (const w of written) {
+      const names = membersNamedIn(household, w);
+      if (names.length) return names;
+      if (pointsAtPeople(w)) return [];
+    }
+    return [];
+  })();
   for (const st of model.statements) {
+    labelOwner();
     const preferred = st.document ? Number(/^D(\d+)$/i.exec(st.document.trim())?.[1] ?? NaN) - 1 : null;
     let found = st.quote ? locateQuote(household, st.quote, Number.isFinite(preferred) ? preferred : null) ?? (st.kind === "amount" && moneyFiguresIn(st.quote).length ? acrossTwoLines(household, st.quote) : null) : null;
     const person = matchMember(household, st.person);
     if (st.kind === "amount") {
       if (!found) { report.dropped.push({ kind: st.kind, why: "quote not found in the stored pages", text: st.text }); continue; }
+      // No person the household can be told (none given, "she", "the life assured"), yet the quote sits in a document that
+      // is some members' own and not others': the figure is theirs. It is dropped when the question names only other
+      // members, and otherwise its card names the one owner, never nobody (TE new-household walk 13 Nov, defect 1:
+      // Daniel's S$400,000 shown with no person when Grace's death benefit was asked). Only the label: what is worked out
+      // for a statement with no person stays as it was (no percentage of anyone's sum is worked out).
+      if (!person) {
+        const members = household.members.map((m) => baseName(m.name));
+        const owners = members.filter((n) => !someoneElsesDocument(household, found!.docIndex, n));
+        if (owners.length && owners.length < members.length) {
+          let who: string | null = owners.length === 1 ? owners[0] : null;
+          if (askedAbout.length && !askedAbout.some((n) => owners.includes(n))) {
+            // As for a named person: the same line printed in an asked-about member's own document is shown from theirs.
+            const theirs = askedAbout.map((n) => ({ n, f: household.documents.map((_, di) => di).filter((di) => !someoneElsesDocument(household, di, n))
+              .map((di) => locateQuote(household, st.quote!, di)).find((f) => f && !someoneElsesDocument(household, f.docIndex, n)) ?? null })).find((x) => x.f);
+            if (!theirs) { report.dropped.push({ kind: st.kind, why: "the quote is from another person's document", text: st.text }); continue; }
+            found = theirs.f!;
+            const ownersThere = members.filter((n) => !someoneElsesDocument(household, found!.docIndex, n));
+            who = ownersThere.length === 1 ? ownersThere[0] : ownersThere.length < members.length && ownersThere.includes(theirs.n) && askedAbout.length === 1 ? theirs.n : null;
+          }
+          if (who) ownerLabel = { had: new Set(checked), who };
+        }
+      }
       // A quote placed in another member's own document stands only where the person's own documents print it too.
       if (person && someoneElsesDocument(household, found.docIndex, person)) {
         const own = household.documents.map((_, di) => di).filter((di) => !someoneElsesDocument(household, di, person))
@@ -2157,6 +2206,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       checked.push({ s: st, found, amount: null, person, note: null, billed: st.kind === "not_found" && st.ofBill ? billUncovered(st, written) : null });
     }
   }
+  labelOwner();
   // For a question about the documents, the points about single files become one list per set of people, wherever the
   // first of them stood (libraryGroups).
   const filePoints = checked.filter((c) => c.libraryDoc != null);

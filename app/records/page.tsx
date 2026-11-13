@@ -24,7 +24,7 @@ function PersonPremiums({ person }: { person: Person }) {
   const p=person.premiums;
   return <section className="section premium-breakdown-panel">
     <div className="section-heading"><div><h2>{person.display_name}</h2>
-      <p className="note premium-cost-line">{p.totals.length?<>{perCurrency(p.totals,"monthly")}/month, about {perCurrency(p.totals,"annual")} a year {premiumSourceCaption(p.items.map(i=>i.source))}. Portfolio shows the same cost.</>:p.items.length?"These premiums are not added up: none of them says which currency it is in.":p.countedElsewhere?.length&&!p.missing.length?"No separate premium: "+person.display_name+"’s cover is paid under another family member’s policy (see the note below).":"No premium found yet."}</p></div></div>
+      <p className="note premium-cost-line">{p.totals.length?<>{perCurrency(p.totals,"monthly")}/month, about {perCurrency(p.totals,"annual")} a year {premiumSourceCaption(p.items.map(i=>i.source))}. Home shows the same cost.</>:p.items.length?"These premiums are not added up: none of them says which currency it is in.":p.countedElsewhere?.length&&!p.missing.length?"No separate premium: "+person.display_name+"’s cover is paid under another family member’s policy (see the note below).":"No premium found yet."}</p></div></div>
     <div className="premium-breakdown-list">
       {p.items.map(i=><PremiumRow item={i} key={i.id}/>)}
       {p.oneOff.map(i=><PremiumRow item={i} once key={i.id}/>)}
@@ -59,7 +59,7 @@ export default function RecordsPage() {
         <div className="payment-list">
           {failed && <div className="alert error" role="alert">Your payments could not be loaded. Please refresh the page in a moment.</div>}
           {!records && !failed && <div className="empty-card" role="status">Loading your payments…</div>}
-          {records?.map((r)=><div className="payment-row" key={r.id}><div className="payment-brand">{(r.insurer??"IN").slice(0,2).toUpperCase()}</div><div className="payment-main"><strong>{r.product_name??r.insurer??"Insurance payment"}</strong><span>{r.family_member_name??"Shared / family payment"}{r.policy_number?` · ${r.policy_number}`:""}</span></div><div className="payment-amount"><strong>{money(r.amount,r.currency)}</strong><span>{r.frequency??r.payment_date??r.period_start??"payment record"}</span></div></div>)}
+          {records?.map((r)=><div className="payment-row" key={r.id}><div className="payment-brand">{(r.insurer??"IN").slice(0,2).toUpperCase()}</div><div className="payment-main"><strong>{r.product_name??r.insurer??"Insurance payment"}</strong><span>{r.family_member_name??"Shared family payment"}{r.policy_number?` · ${r.policy_number}`:""}</span></div><div className="payment-amount"><strong>{money(r.amount,r.currency)}</strong><span>{r.frequency??r.payment_date??r.period_start??"payment record"}</span></div></div>)}
           {records && !records.length && <div className="empty-card">No payment records yet. Upload the latest receipt or renewal notice from an insurer on <Link href="/policies" className="text-link">Documents</Link>.</div>}
         </div>
       </section>

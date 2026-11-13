@@ -44,15 +44,15 @@ test.describe.serial("mobile critical path", () => {
     await page.goto("/policies");
     await page.locator(".upload-form select").selectOption({ label: `${person} · self` });
     await page.locator(".upload-form input[type=file]").setInputFiles({ name: file, mimeType: "application/pdf", buffer: await syntheticWordingPdf("mobile-wording") });
-    await page.getByRole("button", { name: "Upload & analyse" }).tap();
-    await expect(page.locator(".upload-panel .upload-status")).toContainText("Upload received");
+    await page.getByRole("button", { name: "Upload and read" }).tap();
+    await expect(page.locator(".upload-panel .upload-status")).toContainText("DearPolicy is reading it now");
     await expect.poll(async () => ((await api<{ policies: { original_filename: string; processing_status: string }[] }>(page, "/api/policies")).body.policies ?? [])
       .find((p) => p.original_filename === file)?.processing_status, { timeout: 240_000, intervals: [1500] }).toBe("ready");
     await page.reload();
     await expect(page.locator(".document-card").filter({ hasText: file.replace(/\.pdf$/, "") }).or(page.locator(".document-card").first())).toContainText("Ready");
     await expectNoHorizontalScroll(page, "documents with a card");
 
-    // Bottom navigation by touch. The bar holds Portfolio, Documents, Ask, Payments and More;
+    // Bottom navigation by touch. The bar holds Home, Documents, Ask, Payments and More;
     // Learn and Account settings sit in the sheet that More opens, and Account settings opens on People.
     const bar = page.locator(".sidebar .nav");
     await expect(bar.locator('a[href="/chat"]')).toBeVisible();

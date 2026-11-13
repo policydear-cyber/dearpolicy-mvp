@@ -28,7 +28,7 @@ export default function ResetPasswordPage() {
     <div className="page" style={{ maxWidth: 420, paddingTop: 96 }}>
       <h1>Reset your password</h1>
       {sent ? (
-        <p className="lead">If that email has an account, a reset link has been sent. It expires soon, so use it promptly.</p>
+        <p className="lead">If there is an account for that email, we have sent it a link to reset your password. The link expires soon, so use it today.</p>
       ) : (
         <form onSubmit={submit} className="field">
           <label htmlFor="rp-email">Email</label>

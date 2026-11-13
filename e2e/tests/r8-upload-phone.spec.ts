@@ -60,7 +60,7 @@ test("first upload: choose, send, then reading", async ({ page }) => {
   await shot(page, "3-sending");
   uploaded = true;
   release();
-  await expect(page.getByText(/Upload received/)).toBeVisible();
+  await expect(page.getByText(/DearPolicy is reading it now/)).toBeVisible();
   await shot(page, "4-reading");
 });
 

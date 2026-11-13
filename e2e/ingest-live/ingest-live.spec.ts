@@ -75,9 +75,9 @@ test("live ingestion journey", async ({ page }) => {
     await page.locator("#up-profile").selectOption("").catch(() => undefined);
     await page.locator(".upload-form input[type=file]").setInputFiles(path.join(FIXTURE, "source", file));
     const t0 = Date.now();
-    await page.getByRole("button", { name: "Upload & analyse" }).click();
-    const received = await expect(page.locator(".upload-panel .upload-status")).toContainText(/received/i, { timeout: 120_000 }).then(() => true, () => false);
-    soft(received, `upload ${file}: no "Upload received" confirmation`);
+    await page.getByRole("button", { name: "Upload and read" }).click();
+    const received = await expect(page.locator(".upload-panel .upload-status")).toContainText(/DearPolicy is reading it now/i, { timeout: 120_000 }).then(() => true, () => false);
+    soft(received, `upload ${file}: no "Uploaded. DearPolicy is reading it now" confirmation`);
     const rec: any = { file, uploadedAt: new Date(t0).toISOString(), screenshots: [await shot(page, `upload-${i + 1}-received`)], states: [] as { at: number; state: string; message: string | null }[] };
     let p: Policy | undefined, processingShot = false;
     for (;;) {
