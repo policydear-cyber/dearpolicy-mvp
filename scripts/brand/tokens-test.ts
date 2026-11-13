@@ -63,7 +63,7 @@ test("1. no colour literal outside the token blocks", () => {
     for (const name of readdirSync(dir)) {
       const p = join(dir, name);
       if (statSync(p).isDirectory()) { if (p !== join("app", "api")) walk(p); }
-      else if (/\.tsx$/.test(name)) files.push(p);
+      else if (/\.tsx?$/.test(name)) files.push(p);
     }
   };
   walk("app"); walk("components");
@@ -108,6 +108,9 @@ const PAIRS: Array<[string, string, number, string]> = [
   ["--good-text", "--surface", 4.5, "confirmed text"],
   ["--unresolved-text", "--unresolved-tint", 4.5, "a to-confirm chip"],
   ["--unresolved-text", "--surface", 4.5, "not-settled text on a card"],
+  ["--unresolved-text", "--surface-2", 4.5, "not-settled text in a quiet block"],
+  ["--unresolved-line", "--surface", 3, "the dashed edge of a not-settled item"],
+  ["--unresolved-line", "--unresolved-tint", 3, "the dashed edge on its own tint"],
   ["--warn-text", "--warn-tint", 4.5, "a warning box"],
   ["--warn-text", "--surface", 4.5, "warning text on a card"],
   ["--critical", "--critical-tint", 4.5, "an error box"],
@@ -135,4 +138,28 @@ test("4. the four status roles are told apart by more than hue", () => {
     assert.equal(seen.size, roles.length, "each status role has its own colour");
   }
   assert.match(css, /\.to-confirm \{[^}]*dashed/, "a to-confirm item has a dashed edge, not only a colour");
+});
+
+// Which meaning gets which role. A failure the household can retry is never
+// drawn as calm uncertainty; uncertainty is never drawn as a failure.
+const ROLE_OF: Array<[RegExp, string, string]> = [
+  [/\.unread-documents\.stalled \{[^}]*/, "--critical", "a read that failed, with Try again, is an error"],
+  [/\.status\.failed \{[^}]*/, "--critical", "a document that couldn't be read is an error"],
+  [/\.accuracy-warning\.danger \{[^}]*/, "--critical", "a file refused by the scan is an error"],
+  [/\.alert\.error \{[^}]*/, "--critical", "an error box"],
+  [/\.document-found\.warn \{[^}]*/, "--warn", "benefits that failed to read need the household"],
+  [/\.usage-warnings \{[^}]*/, "--warn", "a limit close to running out"],
+  [/\.status\.ready\.partial \{[^}]*/, "--unresolved", "Read in part is not settled"],
+  [/\.to-confirm \{[^}]*/, "--unresolved", "an amount to confirm is not settled"],
+  [/\.coverage-unconfirmed \{[^}]*/, "--unresolved", "a printed amount whose wording isn't read"],
+  [/\.estimate-basis\.indicative \{[^}]*/, "--unresolved", "an illustration is not a settled amount"],
+  [/\.unread-documents \{[^}]*/, "--info", "still being read is neutral news"],
+  [/\.status\.ready \{[^}]*/, "--good", "a read document is confirmed"],
+];
+test("5. each meaning keeps its role", () => {
+  const wrong = ROLE_OF.flatMap(([rule, role, why]) => {
+    const body = rule.exec(rest)?.[0] ?? "";
+    return body.includes(`var(${role}`) ? [] : [`${why}: expected ${role} in "${body.slice(0, 90)}"`];
+  });
+  assert.deepEqual(wrong, []);
 });
