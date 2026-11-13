@@ -401,6 +401,16 @@ test("control: a row whose line prints another share for a kind of life gives no
   }
 });
 
+test("a note that repeats the row's own cap keeps the figure; one with another amount refuses it", () => {
+  const row = "Broken bones\t4% of the Sum Insured per fracture, maximum RM 3,000 per accident (note a)";
+  for (const [note, want] of [["Note (a): a compound fracture is paid at double, still subject to the RM 3,000 maximum per accident.", ["Up to RM3,000"]],
+    ["Note (a): no more than RM 1,000 is paid for any one fracture.", []]] as const) {
+    const h = schedule({ people: [MYR.people[0]], page2: `TABLE OF BENEFITS\n${row}\n${note}`,
+      benefits: [ben({ benefit: "Broken bones", pays: "percent", value: 4, percentOf: "sum_insured", quote: row, cap: 3000, capQuote: "maximum RM 3,000 per accident", conditions: [note.replace(/^Note \(a\): /, "")] })] });
+    assert.deepEqual(ask(h, "Ahmad Bin Ali", /Broken bones/).amounts, [...want], note);
+  }
+});
+
 console.log(`claim-amounts-test: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
 if (failures.length) process.exit(1);

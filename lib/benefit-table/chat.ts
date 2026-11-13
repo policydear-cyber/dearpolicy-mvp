@@ -1481,9 +1481,6 @@ const sumInsuredShare = (row: ChatRow) => row.figure.kind === "worked_out" && ro
  * be read as one figure. */
 export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, household: Household): ServerFigure | null {
   if (!sumInsuredShare(row) || row.figure.kind !== "worked_out" || typeof st.quote !== "string") return null;
-  // A row whose own conditions print money or a limit ("No more than S$1,000 is paid for any one fracture") is never given
-  // this way: the worked-out share could be more than it pays.
-  if (row.conditions.some((c) => statesMoney(c) || CAP_WORDS.test(c) || /\b(?:no\s+more\s+than|not\s+more\s+than|at\s+most|limit)/i.test(c))) return null;
   const currency = row.figure.currency!;
   let cap: ServerFigure["cap"] = null;
   if (row.capSource) {
@@ -1492,6 +1489,14 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
     const value = row.figure.capped ? row.figure.amount : values.length === 1 ? values[0] : null;
     if (capDoc < 0 || value == null) return null;
     cap = { value, docIndex: capDoc, page: row.capSource.page, quote: row.capSource.excerpt };
+  }
+  // A row whose own conditions print money other than its own cap, or limit words with no figure ("No more than S$1,000 is
+  // paid for any one fracture"; "a reduced amount applies") is never given this way: the worked-out share could be more
+  // than it pays. A note that repeats the row's own cap ("still subject to the GBP 1,500 maximum") is the same limit.
+  for (const c of row.conditions) {
+    const figs = moneyFiguresIn(c);
+    if (figs.some((f) => !cap || f.currency !== currency || Math.abs(f.value - cap.value) >= 0.005)) return null;
+    if (!figs.length && (statesMoney(c) || CAP_WORDS.test(c) || /\b(?:no\s+more\s+than|not\s+more\s+than|at\s+most|limit|reduc)/i.test(c))) return null;
   }
   return { text: String(st.text), person: baseName(row.person), quote: st.quote, percent: row.percent!, currency, value: row.figure.amount,
     row: { docIndex: row.docIndex, page: row.source.page, quote: row.source.excerpt },
