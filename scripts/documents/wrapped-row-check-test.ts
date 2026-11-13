@@ -155,6 +155,38 @@ async function main() {
     "Benefit\tLimit\nOutpatient\t80% up to\nS$1,000\tper year\nDeath\tS$300,000",
     "Benefit\tLimit\nOutpatient per year\t80% up to S$1,000\nDeath\tS$300,000", "1,000", [[84, 303], [84, 303], [303, 310], [84, 303]]));
 
+  // Critic #446: a held row holds every line joined into it, and two complete rows are never joined.
+  const masked = (text: string, image: string, g: Geo | undefined, rows: string[]) => {
+    const r = checkLines(text, image, 2, g);
+    assert.equal(r.agree, false, `expected a refusal:\n${r.text}`);
+    for (const row of rows) {
+      const line = r.text?.split("\n").find((l) => l.startsWith(row));
+      assert.ok(r.text === null || (line !== undefined && !/\d/.test(line.split(NOT_CHECKED).join(""))), `"${row}" shows no figure:\n${r.text}`);
+    }
+  };
+  await test("N10 a joined continuation whose row's own figure differs is held with it (no geometry)", () => masked(
+    "Benefit\tLimit\nSurgery\tRM 5,000 per operation\nor for day surgery\nup to RM 50,000\na year\nDeath\tRM 100,000",
+    "Benefit\tLimit\nSurgery\tRM 6,000 per operation\nor for day surgery up to RM 50,000 a year\nDeath\tRM 100,000",
+    undefined, ["Surgery", "or for day surgery"]));
+  await test("N11 a joined row whose held continuation follows it is held too (with and without geometry)", () => {
+    const text = "Benefit\tLimit\nSurgery\tRM 5,000 per operation, up to\nRM 20,000 a year\nor RM 30,000 for day surgery\nDeath\tRM 100,000";
+    const image = "Benefit\tLimit\nSurgery\tRM 5,000 per operation, up to RM 20,000 a year\nor RM 3,000 for day surgery\nDeath\tRM 100,000";
+    masked(text, image, [[84, 303], [84, 303], [303], [303], [84, 303]], ["Surgery", "or RM"]);
+    masked(text, image, undefined, ["Surgery", "or RM"]);
+  });
+  await test("N12 two complete rows an image reader ran together are not stored as one (by column and in reading order)", () => {
+    held("Benefit\tAmount\nDeath\tRM 200,000\nTPD\tRM 100,000\nICU\tRM 300", "Benefit\tAmount\nDeath TPD\tRM 200,000 RM 100,000\nICU\tRM 300",
+      "100,000", [[84, 303], [84, 303], [84, 303], [84, 303]]);
+    held("Benefits\nDeath RM 200,000\nTPD RM 100,000\nICU RM 300", "Benefits\nDeath RM 200,000 TPD RM 100,000\nICU RM 300", "100,000");
+    held("Leistungen\nTod EUR 20.000,00\nInvalidität EUR 50.000,00", "Leistungen\nTod EUR 20.000,00 Invalidität EUR 50.000,00", "50.000");
+  });
+  await test("P6 a word hyphenated across the wrap ('peri-' / 'od') and a real hyphen ('early-' / 'stage')", () => {
+    agreed("Benefit\tLimit\nPre-existing conditions\tRM 5,000 after a 12-month waiting peri-\nod, up to RM 10,000\nDeath\tRM 100,000",
+      "Benefit\tLimit\nPre-existing conditions\tRM 5,000 after a 12-month waiting period, up to RM 10,000\nDeath\tRM 100,000");
+    agreed("Benefit\tLimit\nCancer\t25% of the sum, for an early-\nstage cancer up to A$50,000\nDeath\tA$100,000",
+      "Benefit\tLimit\nCancer\t25% of the sum, for an early-stage cancer up to A$50,000\nDeath\tA$100,000");
+  });
+
   if (failures.length) { console.error(failures.join("\n\n")); console.error(`\n${failures.length} failed, ${passed} passed`); process.exit(1); }
   console.log(`wrapped-row-check: ${passed} passed`);
 }

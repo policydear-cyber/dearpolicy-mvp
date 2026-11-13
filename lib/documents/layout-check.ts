@@ -569,6 +569,8 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
   // that could be made two ways at the same size is no evidence. The joined row is stored on its first line, the other
   // lines emptied (the line count kept), as a wrapped label is.
   const joinedAway = new Set<number>();
+  // Every line of a joined row, by each of its lines: a row held back later takes all of its lines with it.
+  const groupOf = new Map<number, number[]>();
   const sharedHeading = (j: number) => { const h = textHeads[j]; return !!h && shared.has(h); };
   const alone = (j: number) => { const t = lineTokens(lines[j]); return figureLine(t) && pool.some((o) => sameLine(t, o.t) && o.h === textUnder[j]); };
   const free = (j: number | undefined): j is number => j !== undefined && !skipText.has(j) && !lent.has(j) && !joinedAway.has(j) && !rebuilt.has(j)
@@ -592,6 +594,19 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     return columns.map((parts) => parts.join(" ")).join("\t").replace(/\t+$/, "");
   };
   const inOrder = (group: number[]) => (group.filter((j) => lines[j].includes("\t")).length <= 1 ? group.map((j) => lines[j].trim()).join(" ") : null);
+  // A line below that starts with a capitalised word and prints a figure ("TPD\tRM 100,000", "Death RM 200,000") is a row of
+  // its own, not a wrapped part: two complete rows an image reader ran together are never stored as one (Critic #446 F3).
+  // A wrapped part starts lower case, with a figure or a currency ("RM 50,000, once per lifetime", "$1,000"), or is words
+  // only. A capitalised wrapped part with a figure stays held, as before.
+  const ownRow = (j: number) => {
+    if (!figureLine(lineTokens(lines[j]))) return false;
+    const word = lines[j].trim().replace(CURRENCY_MARK, " ").trim().match(/^\p{L}[\p{L}.]*/u)?.[0];
+    if (!word) return false;
+    const w = word.replace(/\.$/, "");
+    return !ISO_CURRENCIES.has(w) && !LOCAL_CURRENCY_FORMS.has(w) && /^\p{Lu}/u.test(word);
+  };
+  // A word hyphenated across the wrap ("peri-" over "od") is tried whole and with its hyphen, as well as with a space.
+  const variants = (text: string) => [text, text.replace(/(\p{L})- (?=\p{Ll})/gu, "$1"), text.replace(/(\p{L})- (?=\p{Ll})/gu, "$1-")];
   const joinedRow = (i: number): { group: number[]; text: string; at: number } | null => {
     const k = filledText.indexOf(i);
     const above: number[] = [];
@@ -603,7 +618,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     const below: number[] = [];
     for (let u = k + 1; u < filledText.length && below.length < 5; u++) {
       const j = filledText[u];
-      if (!free(j) || alone(j)) break;
+      if (!free(j) || alone(j) || ownRow(j)) break;
       below.push(j);
     }
     for (let size = 2; size <= above.length + 1 + below.length; size++) {
@@ -612,9 +627,10 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
         const down = size - 1 - up;
         if (down > below.length) continue;
         const group = [...above.slice(above.length - up), i, ...below.slice(0, down)];
-        for (const text of new Set([byColumn(group), inOrder(group)].filter((x): x is string => x !== null))) {
+        // One group is one way, however many of its spellings match.
+        for (const text of new Set([byColumn(group), inOrder(group)].filter((x): x is string => x !== null).flatMap(variants))) {
           const at = pool.findIndex((o) => sameLine(lineTokens(text), o.t) && o.h === textUnder[i]);
-          if (at >= 0) { ways++; found ??= { group, text, at }; }
+          if (at >= 0) { ways++; found ??= { group, text, at }; break; }
         }
       }
       if (found) return ways === 1 ? found : null;
@@ -640,6 +656,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
       const [head, ...rest] = joined.group;
       rebuilt.set(head, joined.text);
       for (const j of rest) joinedAway.add(j);
+      for (const j of joined.group) groupOf.set(j, joined.group);
       if (head !== i) joinedAway.add(i);
       pool.splice(joined.at, 1); return;
     }
@@ -700,14 +717,20 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     kind = !sameFigures(a, b) ? "figures differ" : "pairing differs";
     why = "the lines that print a date or a number alone do not print the same ones in the same order";
   }
-  const confirmed = figureLines - [...spread].filter((i) => !skipText.has(i)).length;
+  // A held line that is part of a joined row holds the whole row: the row is stored on its first line, so holding only
+  // the emptied part would leave the row shown beside a held continuation, or a continuation shown beside its held row
+  // (Critic #446 F1, F2; the same rule as R211-1).
+  for (const i of [...spread]) for (const j of groupOf.get(i) ?? []) spread.add(j);
+  const confirmed = figureLines - [...spread].filter((i) => !skipText.has(i) && isFig(i)).length;
+  // A joined row's words-only first line is held with its row, but is not a figure line of its own.
+  const heldCount = [...spread].filter((i) => skipText.has(i) || isFig(i)).length;
   const seenText = seenFigures(textReading), seenImage = seenFigures(imageReading);
   const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${confirmed} confirmed; figures ${seenText.length} in text, ${seenImage.length} in image; `
     + `only in text ${described(only(seenText, seenImage))}; only in image ${described(only(seenImage, seenText))}`;
-  if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log, held: spread.size, heldLines: spread };
+  if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log, held: heldCount, heldLines: spread };
   const handed = lines.map((l, i) => rebuilt.get(i) ?? (lent.has(i) || joinedAway.has(i) ? "" : l));
   const text = !spread.size ? handed.join("\n") : confirmed ? handed.map((l, i) => (spread.has(i) ? notChecked(l) : l)).join("\n") : null;
-  return { agree: kind === null, kind, why, text, log, held: spread.size, heldLines: spread };
+  return { agree: kind === null, kind, why, text, log, held: heldCount, heldLines: spread };
 }
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
   : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !/\d/.test(l.replace(LABELLED, " ")))].join("\n");
