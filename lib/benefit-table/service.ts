@@ -325,8 +325,11 @@ export function holdReason(file: Pick<DocumentFile, "quarantine" | "scan_detail"
 
 /** A stored reading checked against today's pages, with its page re-reads added. */
 export function checkStored(doc: SourceDoc, stored: Pick<StoredReading, "document" | "pages">): CheckedReading {
-  let reading = checkReading(doc, stored.document);
-  for (const p of stored.pages ?? []) reading = mergeReadings(reading, checkReading(doc, p.json));
+  // A reading that lists covers but no benefit row in any part: each cover's own printed line is its row (check.ts).
+  const rowsOf = (j: unknown) => { const b = (j as { benefits?: unknown } | null)?.benefits; return Array.isArray(b) ? b.length : 0; };
+  const coverLineRows = rowsOf(stored.document) + (stored.pages ?? []).reduce((n, p) => n + rowsOf(p.json), 0) === 0;
+  let reading = checkReading(doc, stored.document, { coverLineRows });
+  for (const p of stored.pages ?? []) reading = mergeReadings(reading, checkReading(doc, p.json, { coverLineRows }));
   return reading;
 }
 

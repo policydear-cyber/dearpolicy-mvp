@@ -220,7 +220,10 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   /** The whole printed line or lines the row's quote is on, and the line after them, as the page prints them (assemble.ts
    * perPersonRow: a row whose own line or the next prints another figure, such as an age or a child's rate, is not every
    * named insured's). Unset when the quote was not placed on its page. */
-  rowText?: string; nextLine?: string; prevLine?: string };
+  rowText?: string; nextLine?: string; prevLine?: string;
+  /** The row is a cover's own printed schedule line, made when the stored reading gave no benefit rows at all (checkStored):
+   * it belongs to no heading, so it is placed only by that line (assemble.ts ownLineCovers), never by a section link. */
+  coverLine?: boolean };
 export type Dropped = { what: string; why: string };
 /** periodFrom and periodTo: the document's own period of cover, each kept only when the document prints it. */
 export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
@@ -760,7 +763,9 @@ function unescaped(v: unknown): unknown {
   return v;
 }
 
-export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
+/** coverLineRows: the stored reading, all its parts together, lists no benefit rows at all (service.ts checkStored); then a
+ * cover's own printed line is its row (below). */
+export function checkReading(doc: SourceDoc, raw: unknown, opts: { coverLineRows?: boolean } = {}): CheckedReading {
   const r = (unescaped(raw) ?? {}) as Partial<Reading>;
   const d = (r.document ?? {}) as Partial<Reading["document"]>;
   const kind = (DOCUMENT_KINDS as readonly string[]).includes(d.kind as string) ? d.kind! : "other";
@@ -973,13 +978,29 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   // A document printed for one life: every cover and every named person is the same person.
   const lives = new Set([...out.covers.map((c) => c.person), ...out.namedPeople].map((n) => normalizePersonName(n)).filter(Boolean));
   const oneLife = lives.size === 1;
-  for (const b of Array.isArray(r.benefits) ? r.benefits : []) {
+  // A cover read from its own printed line with its sum on it ("Accelerated Disability  In Force  13,500.00 ..."), when the
+  // whole stored reading gives no benefit rows at all (opts.coverLineRows), gets the line as its row: the sum it pays, through every check below. So
+  // a schedule's covers never vanish from Benefits because a reading listed them only as covers (live 13 Nov: EJ7, read
+  // again, gave five covers and no rows, and Benefits showed none of them). A line whose figures the page check held back
+  // ("[amount not checked]") is kept as a row with no figure, as its cover is. Read at read time: stored readings too.
+  const fromCoverLine = new WeakSet<object>();
+  const readRows = Array.isArray(r.benefits) ? r.benefits : [];
+  const coverLineRows: ReadBenefit[] = readRows.length || !opts.coverLineRows ? [] : out.covers.filter((c) => !c.source.excerpt.includes("\n") && (c.sumInsured != null || c.source.excerpt.includes(NOT_CHECKED_MARK)))
+    .map((c) => {
+      const row: ReadBenefit = { section: null, column: null, benefit: c.cover, pays: c.sumInsured != null ? "amount" : "words", value: c.sumInsured ?? null, period: null, basis: null,
+        asOf: null, percentOf: null, baseAmount: null, baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: c.source.page, quote: c.source.excerpt };
+      fromCoverLine.add(row);
+      return row;
+    });
+  const flatLine = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
+  for (const b of [...readRows, ...coverLineRows]) {
     const label = `benefit "${b?.benefit}"${b?.column ? ` [${b.column}]` : ""}`;
     const benefit = str(b?.benefit), quote = str(b?.quote);
     let pays = (PAYS as readonly string[]).includes(b?.pays as string) ? b.pays : null;
     if (!benefit || !quote || !pays) { out.dropped.push({ what: label, why: "incomplete row" }); continue; }
     const source = find(quote, int(b.page));
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
+    if (fromCoverLine.has(b) && out.benefits.some((x) => x.source.page === source.page && flatLine(x.source.excerpt).includes(flatLine(source.excerpt)))) continue;
     let value = num(b.value);
     if (value != null && !printedIn(source, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
     // A row whose line prints a figure for each plan ("Emergency evacuation S$50,000 S$150,000 S$300,000", "Trip
@@ -1046,7 +1067,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       out.dropped.push({ what: label, why: "quote holds more than one percentage; kept the row with no figure" });
       out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays: "words", value: null, period: null, basis, asOf: null, percentOf: null, baseAmount: null,
         baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions, page: source.page, quote, source, currency: null, baseSource: null, capSource: null,
-        capUnread: false, droppedConditions, combinedLimit: false, limitsHeading: LIMITS_HEADING.test(str(b.section) ?? "") });
+        capUnread: false, droppedConditions, combinedLimit: false, limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
       continue;
     }
     if (pays === "percent") {
@@ -1115,7 +1136,8 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}),
       ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}),
-      ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}) });
+      ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}),
+      ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
   }
   return out;
 }
