@@ -118,10 +118,20 @@ async function main() {
       ["The limits cited here are reduced by any amount paid under section 6.", "These benefits are reduced by any amount paid under section 6."],
       ["The amounts quoted below are paid in addition to the death benefit.", "These benefits are paid in addition to the death benefit."],
       ["Physiotherapy is covered, with the limit quoted in full below.", "Physiotherapy is covered."],
+      // A benefit's rate is its amount too (gate round 2 on #473, M1).
+      ["The daily rate quoted below applies only from the 3rd day of hospitalisation.", "The daily benefit applies only from the 3rd day of hospitalisation."],
+      ["The daily rate quoted below is paid from the 3rd day, up to 30 days.", "The daily benefit is paid from the 3rd day, up to 30 days."],
+      ["The daily rates quoted here apply per accident.", "The daily benefits apply per accident."],
+      // As the object of what is said, it is a kind of figure (L1); what the figure is said to do stays (L2).
+      ["Medical expenses are covered up to the limit quoted below, after an excess of GBP 100.", "Medical expenses are covered up to a limit, after an excess of GBP 100."],
+      ["Hospital cash is paid as the figure quoted below for each day after the second.", "Hospital cash is paid as a set amount for each day after the second."],
+      ["Hospital cash is paid at the daily rate quoted below.", "Hospital cash is paid at a daily rate."],
+      ["The figure is quoted below and paid from day 3.", "This benefit is paid from day 3."],
     ];
     for (const [s, want] of said) assert.equal(withoutPointers(s), want, s);
     // Words said to be quoted are a point about words, and a premium or exchange rate is no benefit amount: kept whole.
-    for (const s of ["The daily rate quoted below applies only from the 3rd day of hospitalisation.", "Your premium rates quoted below are guaranteed for 5 years.",
+    for (const s of ["Your premium rates quoted below are guaranteed for 5 years.", "The premium rate quoted here is for a non-smoker.", "The interest rate quoted below is not guaranteed.",
+      "The tax rate quoted here is set by law.", "The rate quoted below is the one on the day of the claim.",
       "The exchange rate quoted here is the one on the day of the claim.", "The claims rule quoted below requires notice within 30 days.", "See the wording below for the daily amount.", "The insurer quoted a premium at renewal.", "Hospital cash is paid as quoted in your schedule.", "A stay below three days is not paid."]) assert.equal(withoutPointers(s), s);
   });
   await test("with an amount shown and none left out, a promise of a quote below stays: the card is below", () => {
