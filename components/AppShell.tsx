@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { clearHouseholdDeviceMemory } from "@/components/device-memory";
 import { Icon, type IconName } from "@/components/icons";
+import PublicShell from "@/components/public/PublicShell";
 
 
 function NavIcon({ name }: { name: IconName }) {
@@ -78,8 +79,17 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
   );
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+/** Pages a signed-out visitor may open (middleware.ts isPublicPage): the landing page ("/", served from /welcome)
+ * and the Learn library. Signed out, they get PublicShell's sign-in header instead of the household menu. */
+function isPublicView(pathname: string): boolean {
+  return pathname === "/" || pathname === "/welcome" || pathname === "/learn" || pathname.startsWith("/learn/");
+}
+
+/** `signedIn` comes from app/layout.tsx, which reads middleware.ts's per-request session hint. It only picks which
+ * frame to draw; it authorizes nothing. */
+export default function AppShell({ children, signedIn = true }: { children: React.ReactNode; signedIn?: boolean }) {
   const pathname = usePathname();
+  const publicView = !signedIn && isPublicView(pathname);
   // Light is the brand default. The person's choice is kept in this browser
   // and applied before first paint by the small script in layout.tsx.
   const [theme, setTheme] = useState<Theme>("light");
@@ -98,6 +108,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [unreachable, setUnreachable] = useState(false);
   const [hosted, setHosted] = useState(true);
   useEffect(() => {
+    if (publicView) return;
     let cancelled = false;
     const check = async () => {
       try {
@@ -111,7 +122,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     void check();
     const timer = setInterval(() => void check(), 60_000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, []);
+  }, [publicView]);
   // The internal reviewer area is a DearPolicy staff tool, not part of any
   // household: it gets its own single-item navigation, never the household's.
   const reviewerArea = pathname.startsWith("/reviewer");
@@ -149,6 +160,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [moreOpen]);
+  // A public page names itself through its own metadata (title and description for search results), so no <title> here.
+  if (publicView) return <PublicShell onLearn={pathname.startsWith("/learn")}>{children}</PublicShell>;
   return (
     <div className={`app-shell${noNav ? " no-nav" : ""}`}>
       <title>{pageTitle}</title>
