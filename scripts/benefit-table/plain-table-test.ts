@@ -413,37 +413,6 @@ for (const line of ["Cancellation: you may cancel within 14 days for a full refu
   test(`R3-LOW (kept): "${line}" still withholds the fixed rows (an allow-list's cost)`, () => noneFixed(schedule({ post: [line] }).table, line));
 }
 
-// ---------------------------------------------------------------- paid reader check ppr-plain-20261113-01, N24
-/** Two certificates of different products, each with a "Benefit | <heading>" table; the reader leaves the first one's
- * column out (as it did in the paid run), so its rows are read under the heading the page prints over them. */
-function twoCertificates(heading1: string, column1: string | null, extraRow = false) {
-  const mk = (id: string, product: string, lives: string[], heading: string, column: string | null, figure: string, value: number, extra: boolean) => {
-    const text = [`${product.toUpperCase()} - CERTIFICATE OF INSURANCE`, `Certificate C-7\tInsured persons: ${lives.join(", ")}`, "Insured person\tCover", ...lives.map((n) => `${n}\t${product}`),
-      extra ? `Benefit\t${heading}\tChild limit` : `Benefit\t${heading}`, extra ? `Medical expenses\t${figure}\tGBP 1,000,000` : `Medical expenses\t${figure}`, "Terms and conditions apply."].join("\n");
-    const { r, links } = build({ id, product, lives, text, rows: [{ benefit: "Medical expenses", value, quote: extra ? `Medical expenses\t${figure}\tGBP 1,000,000` : `Medical expenses\t${figure}`, column }] });
-    for (const b of r.benefits) b.forWhom = "each_named_insured";
-    return { r, links };
-  };
-  const one = mk("eeeeeeee-0000-4000-8000-0000000000e1", "Globe Travel Annual", ["Asha Rao", "Ben Rao"], heading1, column1, "GBP 5,000,000", 5000000, extraRow);
-  const two = mk("eeeeeeee-0000-4000-8000-0000000000e2", "Sun Travel Single Trip", ["Chen Rao", "Devi Rao"], "Limit per insured person", "Limit per insured person", "GBP 2,000,000", 2000000, false);
-  const t = assembleTable([one.r, two.r], BASE_FAMILY, [...one.links, ...two.links], [], NOW);
-  return Object.fromEntries(["a", "b", "k", "c", "d"].map((id) => [id, t.people.find((p) => p.id === id)!.rows.filter((x) => x.figure.kind !== "none").map((x) => figureText(x.figure))]));
-}
-test("N24: a certificate whose column the reader left out is read under the heading the page prints ('Limit per insured person')", () => {
-  assert.deepEqual(twoCertificates("Limit per insured person", null), { a: ["up to GBP 5,000,000"], b: ["up to GBP 5,000,000"], k: [], c: ["up to GBP 2,000,000"], d: ["up to GBP 2,000,000"] });
-});
-for (const heading of ["Sum insured", "Limit per insured child", "Limit per insured person aged 18-69", "Limit per family"]) {
-  test(`N24 shape: a printed heading that is not every person's ("${heading}") gives the first certificate's row to no one`, () => {
-    const got = twoCertificates(heading, null);
-    assert.deepEqual([got.a, got.b], [[], []]);
-    assert.deepEqual([got.c, got.d], [["up to GBP 2,000,000"], ["up to GBP 2,000,000"]]);
-  });
-}
-test("N24 shape: a three-cell table (a child column beside it) is not read under its first heading", () => {
-  const got = twoCertificates("Limit per insured person", null, true);
-  assert.deepEqual([got.a, got.b], [[], []]);
-});
-
 // ---------------------------------------------------------------- the chat: a withheld row's amount is printed, and where
 /** The chat's row step on the schedule, as the app's chat turn runs it (lib/simple-chat/hook.ts): an amount statement from
  * the model, its rows, then the left-out note. */

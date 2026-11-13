@@ -810,19 +810,14 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
     // (a child's, an adult's, a senior's row; "half for children"): words no layout rule can read (Critic and TE on this rule).
     if (b.forWhom !== "each_named_insured") return false;
     if (b.value == null || b.pays === "percent" || b.pays === "not_covered") return false;
-    // A column that says "per (insured) person", or a family schedule's one plain table (plainTable). A column the reader
-    // left out is the heading the page prints over the row's two-cell table, when every row of the document has none and
-    // all print the same heading (check.ts headingAbove; paid run ppr-plain-20261113-01, N24).
-    const printedHeading = !norm(b.column) && b.headingAbove && r.benefits.every((x) => !norm(x.column) && x.headingAbove === b.headingAbove) ? b.headingAbove : null;
-    const heading = norm(b.column) ? b.column : printedHeading;
-    const perPersonColumn = PER_PERSON_HEADING.test(heading ?? "");
-    const plain = !perPersonColumn && plainTable(r, b, coverKey);
-    if (!plain && !perPersonColumn) return false;
+    // A column that says "per (insured) person", or a family schedule's one plain table (plainTable).
+    const plain = !PER_PERSON_HEADING.test(b.column ?? "") && plainTable(r, b, coverKey);
+    if (!plain && !PER_PERSON_HEADING.test(b.column ?? "")) return false;
     // A note anywhere on the document, off every row's own line, that names a kind of life or an age ("Note: for insured
     // children the limits are 50% of those shown") may change any row for some of the lives (check.ts lifeNotes).
     if ((r.lifeNotes ?? []).length) return false;
-    if (KIND_OF_LIFE.test(`${b.benefit} ${b.section ?? ""} ${heading ?? ""} ${b.rowText ?? b.source.excerpt} ${b.nextLine ?? ""}`)) return false;
-    if ((!plain && !figureOnlyHeading(heading, printedHeading ? (columnsOn.get(r.documentId)?.size ?? 0) === 0 : (columnsOn.get(r.documentId)?.size ?? 0) === 1)) || !ownProof(r.documentId, coverKey)) return false;
+    if (KIND_OF_LIFE.test(`${b.benefit} ${b.section ?? ""} ${b.column ?? ""} ${b.rowText ?? b.source.excerpt} ${b.nextLine ?? ""}`)) return false;
+    if ((!plain && !figureOnlyHeading(b.column, (columnsOn.get(r.documentId)?.size ?? 0) === 1)) || !ownProof(r.documentId, coverKey)) return false;
     const others = r.benefits.filter((x) => x !== b);
     // A document that tells its lives apart in its row names prints its rows per life: none of them is every person's.
     if (r.benefits.some((x) => namesALife(x.benefit, [...r.namedPeople, ...r.covers.map((c) => c.person)])) || contrastsTiers(r.benefits)) return false;
@@ -854,7 +849,7 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
     // In a plain table, the excess the row prints for itself ("after an excess of GBP 100 per claim") is its own too.
     if (plain) for (const m of [b.rowText ?? b.source.excerpt, next, ...b.conditions].join("\n").matchAll(/\b(?:an?\s+)?(?:excess|deductible)\s+(?:of\s+)?(?:\p{Lu}{1,3}\s?)?\p{Sc}?\s?(\d[\d,]*(?:\.\d+)?)/giu)) own.push(Number(m[1].replace(/,/g, "")));
     const owned = new Set(own);
-    for (const n of numbersIn([b.section, heading, b.benefit, b.rowText ?? b.source.excerpt, next].filter(Boolean).join("\n"))) {
+    for (const n of numbersIn([b.section, b.column, b.benefit, b.rowText ?? b.source.excerpt, next].filter(Boolean).join("\n"))) {
       const i = own.indexOf(n);
       if (i < 0) return false;
       own.splice(i, 1);
