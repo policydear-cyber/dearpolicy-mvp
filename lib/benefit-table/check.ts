@@ -221,7 +221,10 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
   /** The document's own field lines that say what kind of plan or insured it is ("Coverage type: Family", "Plan: Elite
    * (Family plan)", "Insured: Child"): a field label, then a value naming a family, child, individual or age group. Read by
    * assemble.ts tierProblem; never a benefit row's label. */
-  tierLines?: string };
+  tierLines?: string;
+  /** Every person the reading gave a cover to whose name the document prints, kept or dropped: the document's insured lives
+   * (assemble.ts lifeLostCover). */
+  coverPeople?: string[] };
 
 // The same lists as evidence.ts's printedFigures (#260): a currency printed right beside a figure, and words before a
 // figure that make it a number other than money.
@@ -796,15 +799,21 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const sameLife = readCovers.filter((x) => str(x?.person) && normalizePersonName(str(x.person)!) === normalizePersonName(person)
       && (int(x.page) == null || int(x.page) === page));
     if (sameLife.length !== 1 || otherLife(text, person, doc.people ?? [])) return null;
+    // A line labelled as a sum insured, with no word before the label but the policy's own ("Sum Insured", "Basic Sum
+    // Assured (RM)"): never a total, a rider's or a benefit's (Critic #454 H1).
     const lines = text.split("\n").filter((l) => {
       const label = l.trim().split(/\t|:/)[0].trim();
       const m = SUM_INSURED_WORDS.exec(label);
-      return !!m && /^\s*(?:\([^)\n]*\))?\s*$/.test(label.slice(m[0].length)) && numbersIn(cellsApart(l)).length > 0;
+      return !!m && !/\b(?:total|aggregate|combined|overall|rider|benefit|plan)\b/i.test(m[0].replace(/\b(?:sum|insured|assured|amount|coverage)\b/gi, ""))
+        && /^\s*(?:\([^)\n]*\))?\s*$/.test(label.slice(m[0].length)) && numbersIn(cellsApart(l)).length > 0;
     });
-    if (lines.length !== 1 || !printsNumber(cellsApart(lines[0]), value)) return null;
+    // One line, printing one figure: a line with a figure for each column is the table's, not this cover's (Critic H2).
+    if (lines.length !== 1 || numbersIn(cellsApart(lines[0])).length !== 1 || !printsNumber(cellsApart(lines[0]), value)) return null;
     const at = find(lines[0].trim(), page);
     return at && at.page === page && !at.excerpt.includes("\n") ? at : null;
   };
+  const allText = doc.pages.map((p) => p.text).join("\n");
+  out.coverPeople = [...new Set(readCovers.map((c) => str(c?.person)).filter((n): n is string => !!n && nameOnPage(n, allText)))];
   for (const c of readCovers) {
     const label = `cover "${c?.cover}" for ${c?.person}`;
     const person = str(c?.person), product = str(c?.product), cover = str(c?.cover), quote = str(c?.quote);
@@ -825,8 +834,16 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // on its own line: the page is about this life only, and the reading gives this person no other cover there. Else the
     // cover is kept without the sum, on the same footing as a cover read with no sum: an unproved sum never costs the
     // person their cover, whose rows would then go to nobody or to another holder of the cover type (#449 repro).
+    const quoted = source;
+    // Only a quote that prints no money figure of its own (the name line): a quote printing another figure says the sum is
+    // not this one (Critic #454 H1).
     if (sumInsured != null && !printedIn(source, sumInsured)) {
-      const sumLine = ownSumLine(source.page, person, sumInsured);
+      // A figure the quote prints as the reading's premium says nothing about the sum (Critic #454 L1).
+      const readPremium = num(c.premium);
+      const notPremium = (v: number) => readPremium == null || Math.abs(v - readPremium) >= 0.005;
+      const ownFigure = anyMoneyFigures(source.excerpt).some((f) => notPremium(f.value))
+        || [...source.excerpt.matchAll(/\d{1,3}(?:,\d{3})+(?:\.\d+)?/g)].some((m) => notPremium(Number(m[0].replace(/,/g, ""))));
+      const sumLine = ownFigure ? null : ownSumLine(source.page, person, sumInsured);
       if (sumLine) source = sumLine;
       else { out.dropped.push({ what: label, why: `sum insured ${sumInsured} not printed in the quote or on the page's one sum insured line for this life only; kept the cover without it` }); sumInsured = null; }
     }
@@ -835,7 +852,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     let premiumSource: Source | null = null, premiumLabel: string | null = null;
     // A premium equal to the cover's sum insured is not proved by the quote that prints the sum insured: it needs its own
     // premium line (TE pr161 R1), and a stacked figure equal to the sum insured is not one (TE pr162 S1).
-    if (premium != null && (!printedIn(source, premium) || (sumInsured != null && Math.abs(premium - sumInsured) < 0.005))) {
+    if (premium != null && (!(printedIn(source, premium) || printedIn(quoted, premium)) || (sumInsured != null && Math.abs(premium - sumInsured) < 0.005))) {
       const at = find(str(c.premiumQuote), source.page);
       const stacked = at && at.page === source.page ? stackedPremiumLines(pageText(source.page)).find((x) => x.figureLine.trim() === at.excerpt.trim() && Math.abs(x.amount - premium!) < 0.005 && (sumInsured == null || Math.abs(x.amount - sumInsured) >= 0.005)) : undefined;
       const said = stacked ? stacked.label : at && !at.excerpt.includes("\n") ? premiumLineLabel(at.excerpt, premium) : null;

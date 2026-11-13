@@ -266,6 +266,19 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
       covers.push(c);
     }
   }
+  // A copy that proves no sum (a pack's name line, a page with two sum lines) beside the same person's one copy of the cover
+  // type that proves a sum is that cover printed again, not a second cover: it is kept as a copy of it, so its rows are
+  // not shown twice, once with no amount (Critic #454 M2). A copy with a printed policy number, or beside two or more
+  // proved copies, stays as read.
+  for (const c of [...covers]) {
+    if (c.sumInsured != null || c.notionalSum != null || numberOf.has(c)) continue;
+    const proved = covers.filter((x) => x !== c && x.personId === c.personId && x.coverKey === c.coverKey && (x.sumInsured != null || x.notionalSum != null));
+    if (proved.length !== 1) continue;
+    const kept = proved[0];
+    const docs = (x: PersonCover) => x.copyDocuments ?? [{ documentId: x.source.documentId, kind: x.documentKind ?? null }];
+    kept.copyDocuments = [...docs(kept), ...docs(c).filter((d) => !docs(kept).some((k) => k.documentId === d.documentId))];
+    covers.splice(covers.indexOf(c), 1);
+  }
   // One person's covers of one cover type that print different policy numbers are separate holdings: each is its own part
   // on a Home tile. The cover type (and its stored links and confirmations) stays shared, so a scheme's wording still links
   // once for everyone who holds it. A cover with no printed number, or the only number, has no holding.
@@ -531,8 +544,13 @@ const printedNotCovered = (b: CheckedBenefit, keys: string[]) => { const head = 
  * (holdings), a section printed on one policy's own document belongs to that policy only, never to the other; a section
  * on a document that holds none of them (a wording, a product summary) belongs to each. */
 function ownCovers(list: PersonCover[], documentId: string): PersonCover[] {
-  if (!list.some((c) => c.holding)) return list;
-  const own = list.filter((c) => c.source.documentId === documentId);
+  // A person's own document's rows are worked out on the cover read from that document, never on another copy of the
+  // cover type from another document (TE #454 3a: a renewal's two certificates, each worked out on both years' sums).
+  if (list.some((c) => c.holding)) {
+    const read = list.filter((c) => c.source.documentId === documentId);
+    return read.length ? read : list;
+  }
+  const own = list.filter((c) => c.source.documentId === documentId || (c.copyDocuments ?? []).some((d) => d.documentId === documentId));
   return own.length ? own : list;
 }
 
@@ -605,28 +623,37 @@ export function ownLineCovers(readings: CheckedReading[], held: ReadonlySet<stri
   }
   return out;
 }
-/** Why a personal document's rows are shown for no one (documentPeople). */
-export const NOT_THEIR_DOCUMENT_WHY = "printed on a personal document of someone who holds no cover this part is linked to: not shown for anyone else";
-/** The people a personal document (a schedule, a certificate: kind personal_proof) is about: those whose cover was read
- * from it, those it names (as the covers are matched, the household's own word first), and those the household linked to
- * it; never one the household took off it. A row printed on such a document is shown only for these people, whatever
- * section link places it (#449 repro, 13 Nov: a certificate whose own cover was not read gave its "1% of the Sum Insured"
- * row to another member holding a cover of the same name, worked out on that member's own sum). A wording, a product
- * summary or a scheme's terms is for every holder, as before. Fixed for any document: it reads only who the document is
- * about, never a product, cover or benefit name. */
-function documentPeople(r: CheckedReading, covers: PersonCover[], family: FamilyMember[]): Set<string> {
-  const ids = new Set<string>();
-  for (const c of covers) if (c.source.documentId === r.documentId || (c.copyDocuments ?? []).some((d) => d.documentId === r.documentId)) ids.add(c.personId);
-  for (const m of family) if ((m.documents ?? []).includes(r.documentId)) ids.add(m.id);
-  for (const name of [...r.namedPeople, ...r.covers.map((c) => c.person)]) {
+/** Why a section's rows are shown for no one (documentLives). */
+export const NOT_THEIR_DOCUMENT_WHY = "printed on the own document of people who hold no cover this part is linked to: not shown for anyone else";
+/** Why a holder is not shown a row printed on another person's own document (documentLives). */
+export const OTHER_PERSONS_DOCUMENT_WHY = "printed on another person's own document, not on one of this person's";
+/** Kinds of document that are for every holder of a cover type (a wording, a summary, a scheme's terms, an illustration). */
+const FOR_EVERY_HOLDER = new Set(["policy_wording", "product_summary", "scheme_terms", "illustration"]);
+/** The lives a person's own document (a schedule, a certificate, a pack: any kind but a wording, a summary, a scheme's
+ * terms or an illustration) is about. A row printed on it is shown only for these lives, never for another holder of the
+ * cover type (#449 repro, 13 Nov: a certificate whose own cover was not read gave its "1% of the Sum Insured" row to another
+ * member holding a cover of the same name, worked out on that member's own sum; Critic/TE #454: the same row is not that
+ * member's even when both covers were read, as their own document may print other terms). The lives are the people whose
+ * cover was read from it, the people the reading gave a cover to whose name the document prints (checkReading coverPeople;
+ * a name outside the family counts too, as a life that is no one here), and the people the household linked to it; never
+ * one the household took off it. A document with no such life (an attachment naming no one) is shared as before. Fixed
+ * for any document: it reads who the document is about, never a product, cover or benefit name. */
+function documentLives(r: CheckedReading, covers: PersonCover[], family: FamilyMember[]): Set<string> | null {
+  if (FOR_EVERY_HOLDER.has(r.kind)) return null;
+  const onDoc = (c: PersonCover) => c.source.documentId === r.documentId || (c.copyDocuments ?? []).some((d) => d.documentId === r.documentId);
+  const lives = new Set<string>();
+  let outsider = false;
+  for (const c of covers) if (onDoc(c)) lives.add(c.personId);
+  for (const m of family) if ((m.documents ?? []).includes(r.documentId)) lives.add(m.id);
+  for (const name of r.coverPeople ?? []) {
     const record = householdRecord(name, r.documentId, family);
-    if (record === "nobody") continue;
+    if (record === "nobody") { outsider = true; continue; }
     const shared = record ? null : sharedNameMatch(name, r.documentId, family);
     const member = record?.member ?? findFamilyMatchWithKind(name, family)?.member ?? (shared && "member" in shared ? shared.member : null);
-    if (member) ids.add(member.id);
+    if (member) lives.add(member.id); else if (!shared) outsider = true;
   }
-  for (const m of family) if ((m.excludedFrom ?? []).includes(r.documentId)) ids.delete(m.id);
-  return ids;
+  for (const id of [...lives]) if ((family.find((m) => m.id === id)?.excludedFrom ?? []).includes(r.documentId)) lives.delete(id);
+  return lives.size || outsider ? lives : null;
 }
 /** A printed line's place: its page and words, spacing aside. */
 export const ownLineKey = (s: Source) => `${s.page}\u0000${s.excerpt.toLowerCase().replace(/\s+/g, " ").trim()}`;
@@ -688,18 +715,21 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const isAgeTier = ageAlternatives(readings);
   const notTold = new Set<string>();
   const notTheirs = new Set<string>();
-  const aboutOf = new Map(readings.filter((r) => r.kind === "personal_proof").map((r) => [r.documentId, documentPeople(r, covers, family)] as const));
+  const livesOf = new Map(readings.map((r) => [r.documentId, documentLives(r, covers, family)] as const));
   for (const r of readings) for (const b of r.benefits) {
     const l = placedOf(sectionKeyOf(r.documentId, b), b);
     if (!l) continue;
     // A row placed by its section's link is shown only for the people its own document says it is for (whoseRows).
     const who = l.line ? undefined : whoseRows(r.documentId, b, l.cover, covers, family);
     if (who && !who.size) { notTold.add(sectionKeyOf(r.documentId, b)); continue; }
-    // A row on a personal document is only ever for the people that document is about (documentPeople).
-    const about = aboutOf.get(r.documentId);
+    // A row on a person's own document is only for that document's own lives (documentLives).
+    const about = livesOf.get(r.documentId) ?? null;
+    const holders = people.filter((x) => (!who || who.has(x.id)) && x.covers.some((c) => c.coverKey === l.cover));
     const shownFor = people.filter((x) => (!who || who.has(x.id)) && (!about || about.has(x.id)));
-    if (about && !shownFor.some((p) => p.covers.some((c) => c.coverKey === l.cover))
-      && people.some((x) => (!who || who.has(x.id)) && x.covers.some((c) => c.coverKey === l.cover))) notTheirs.add(sectionKeyOf(r.documentId, b));
+    if (about) {
+      for (const p of holders) if (!about.has(p.id)) notForPerson.push({ personId: p.id, benefit: b.benefit, section: b.section, column: b.column, why: OTHER_PERSONS_DOCUMENT_WHY, source: b.source });
+      if (holders.length && !holders.some((p) => about.has(p.id))) notTheirs.add(sectionKeyOf(r.documentId, b));
+    }
     // A row placed by its own line is shown only for the people whose cover was read from that line.
     for (const p of shownFor) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover && (!l.line || (x.source.documentId === r.documentId && ownLineKey(x.source) === l.line))), r.documentId)) {
       // A row on the person's own schedule or certificate is theirs as printed ("Total Permanent Disability (below 65 years
