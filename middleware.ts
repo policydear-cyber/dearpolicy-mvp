@@ -4,6 +4,7 @@ import { isProduction } from "@/lib/launch/guards";
 import { checkRequestOrigin } from "@/lib/http/csrf";
 import { CORRELATION_ID_HEADER, resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { isWarmPing } from "@/lib/http/warm-ping";
+import { inviteReturnPath } from "@/lib/auth/invite-return";
 
 /** Routes reachable before a visitor has a session: the sign-in/sign-up
  * pages and their APIs, the invitation-acceptance and password-reset/
@@ -128,7 +129,10 @@ export async function middleware(request: NextRequest) {
   if (isApi) return withCorrelationId(NextResponse.json({ error: "Not authenticated" }, { status: 401 }));
   const url = request.nextUrl.clone();
   url.pathname = "/login";
-  url.searchParams.set("next", pathname);
+  // The sign-in page gets only where to return to. An invitation link keeps its token in that return address (and
+  // only there, never as a query of its own on /login), so the invited person lands on the join page ready to join.
+  url.search = "";
+  url.searchParams.set("next", (pathname === "/invite" && inviteReturnPath(request.nextUrl.searchParams.get("token"))) || pathname);
   return withCorrelationId(NextResponse.redirect(url));
 }
 

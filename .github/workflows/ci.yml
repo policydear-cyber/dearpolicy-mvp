@@ -352,6 +352,9 @@ jobs:
       - name: CSRF protection regression suite
         run: npm run security:csrf-test
 
+      - name: Invitation link survives sign-in and sign-up; pending invitations show their expiry
+        run: npm run auth:invite-return-test
+
       - name: Launch capability manifest regression suite
         run: npm run security:launch-check-test
 

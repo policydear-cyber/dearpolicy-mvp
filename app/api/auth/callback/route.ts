@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeInviteNext } from "@/lib/auth/invite-return";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
 import { secureFirstProof, signupMode, SignupClosedError } from "@/lib/auth/signup-gate";
@@ -55,6 +56,9 @@ export async function GET(request: Request) {
     throw e;
   }
 
-  if (made) return NextResponse.redirect(new URL("/update-password?first=1", url.origin));
+  // First proof of an invited address: they set their own password first, then go on to the invitation's join page
+  // when they came from one (lib/auth/invite-return.ts; any other `next` is not carried past the password step).
+  const inviteNext = safeInviteNext(url.searchParams.get("next"));
+  if (made) return NextResponse.redirect(new URL("/update-password?first=1" + (inviteNext ? `&next=${encodeURIComponent(inviteNext)}` : ""), url.origin));
   return NextResponse.redirect(new URL(next, url.origin));
 }

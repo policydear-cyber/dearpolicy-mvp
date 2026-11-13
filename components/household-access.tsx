@@ -4,7 +4,7 @@ import { customerMessage } from "@/components/customer-text";
 import { sgDate } from "@/components/format-date";
 
 type Member = { householdId: string; userId: string; role: "owner" | "member"; createdAt: string; email?: string | null; isSelf?: boolean };
-type Invitation = { id: string; household_id: string; email: string; role: "owner" | "member"; invited_by: string; created_at: string; expires_at: string };
+type Invitation = { id: string; householdId: string; email: string; role: "owner" | "member"; invitedBy: string; createdAt: string; expiresAt: string };
 
 /** Who can sign in to this household, and (for its owner) invitations. Lives on the People page next to the
  * family profiles, so "the people in my household" is one place, not a Family page and a Household > Members list. */
@@ -154,7 +154,7 @@ export function HouseholdAccess() {
                   <div className="profile-fields">
                     <div className="field"><label>Email</label><span>{invitation.email}</span></div>
                     <div className="field"><label>Role</label><span>{invitation.role}</span></div>
-                    <div className="field"><label>Expires</label><span>{sgDate(invitation.expires_at)}</span></div>
+                    <div className="field"><label>Expires</label><span>{sgDate(invitation.expiresAt)}</span></div>
                   </div>
                   <div className="profile-actions">
                     <button className="mini-button danger" onClick={() => revokeInvitation(invitation)}>

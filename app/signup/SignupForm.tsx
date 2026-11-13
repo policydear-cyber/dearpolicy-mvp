@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
+import { safeInviteNext } from "@/lib/auth/invite-return";
 
 /** Shown above the form while sign-up is invite-only (DEARPOLICY_SIGNUP_MODE=invite, read by app/signup/page.tsx). */
 export const INVITE_ONLY_NOTE = "DearPolicy is open by invitation only at the moment. Use the email address your invitation was sent to.";
@@ -12,6 +13,12 @@ export const INVITE_ONLY_NOTE = "DearPolicy is open by invitation only at the mo
  * React otherwise reports as a hydration mismatch on this page. Only these
  * attribute differences are silenced; the markup itself is identical. */
 export default function SignupForm({ inviteOnly = false, footer = null }: { inviteOnly?: boolean; footer?: React.ReactNode }) {
+  // Arrived from an invitation link (?next=/invite?token=..., checked by lib/auth/invite-return.ts): after the account
+  // is made, or after the confirmation link, the person goes to the join page instead of the home page.
+  const [inviteNext, setInviteNext] = useState<string | null>(null);
+  useEffect(() => {
+    try { setInviteNext(safeInviteNext(new URLSearchParams(window.location.search).get("next"))); } catch { /* none */ }
+  }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [householdName, setHouseholdName] = useState("");
@@ -32,7 +39,7 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, householdName }),
+        body: JSON.stringify({ email, password, householdName, ...(inviteNext ? { next: inviteNext } : {}) }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -44,7 +51,7 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
         return;
       }
       // One full-page navigation (as on sign-in): the app loads with the new session.
-      window.location.assign("/");
+      window.location.assign(inviteNext ?? "/");
     } catch {
       setError("Could not create your account. Please try again.");
     } finally {
@@ -94,7 +101,7 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
         {!busy && (!email.trim() || password.length < 8) ? <p id="su-ready-hint" className="field-hint">Enter your email and a password of at least 8 characters to continue.</p> : null}
       </form>
       <p style={{ marginTop: 16 }}>
-        Already have an account? <Link href="/login">Sign in</Link>
+        Already have an account? <Link href={inviteNext ? `/login?next=${encodeURIComponent(inviteNext)}` : "/login"}>Sign in</Link>
       </p>
       {footer}
     </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PRIVACY_NOTICE_FINAL } from "@/lib/privacy/notice-status";
 import { useSearchParams } from "next/navigation";
 import { customerMessage } from "@/components/customer-text";
+import { safeInviteNext } from "@/lib/auth/invite-return";
 
 const LINK_ERRORS: Record<string, string> = {
   missing_code: "That link is missing its confirmation code. Please request a new one.",
@@ -38,6 +39,8 @@ const LINK_ERRORS: Record<string, string> = {
  */
 function LoginForm() {
   const params = useSearchParams();
+  // Invited and new here: the sign-up page keeps the invitation, so they come back to join after creating an account.
+  const inviteNext = safeInviteNext(params.get("next"));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -110,7 +113,7 @@ function LoginForm() {
         <Link href="/reset-password">Forgot your password?</Link>
       </p>
       <p>
-        New here? <Link href="/signup">Create a household</Link>
+        New here? <Link href={inviteNext ? `/signup?next=${encodeURIComponent(inviteNext)}` : "/signup"}>Create a household</Link>
       </p>
       {PRIVACY_NOTICE_FINAL ? (
         <p className="field-hint">
