@@ -68,12 +68,12 @@ export function HomeAttention({ memberId, todo = 0 }: { memberId?: string; todo?
   const failed = all.filter((p) => p.processing_status === "failed");
   if (failed.length) items.push({ key: "failed", tone: "warn", href: failed.length === 1 ? `/policies#doc-${failed[0].id}` : "/policies", action: "Open",
     title: failed.length === 1 ? `“${docName(failed[0])}” couldn’t be read` : `${failed.length} documents couldn’t be read`,
-    detail: "Answers can’t use it until it is read. You can try again or upload a clearer copy." });
+    detail: failed.length === 1 ? "Answers can’t use it until it is read. You can try again or upload a clearer copy." : "Answers can’t use them until they are read. You can try again or upload clearer copies." });
   const names = all.filter((p) => p.personal_coverage_confirmed && p.processing_status === "ready")
     .flatMap((p) => p.detected_people.filter((n) => !n.matchedFamilyMemberId && !notFamily.includes(`${p.id}:${n.name}`)).map((n) => ({ policy: p, name: n.name })));
   if (names.length) items.push({ key: "names", tone: "info", href: `/policies#doc-${names[0].policy.id}`, action: "Confirm",
     title: names.length === 1 ? `Who is “${names[0].name}”?` : `${names.length} names to confirm`,
-    detail: names.length === 1 ? `Named in ${docName(names[0].policy)}. Nothing in it is used for that person until you say.` : "Named in your documents. Nothing is used for those people until you say who they are." });
+    detail: names.length === 1 ? `Named in ${docName(names[0].policy)}. DearPolicy won’t use this document for that person until you say who they are.` : "Named in your documents. DearPolicy won’t use those documents for these people until you say who they are." });
   for (const c of claims ?? []) {
     const tone = c.display?.tone;
     if (tone === "waiting" && c.display?.requestedDocuments.length) items.push({ key: `c-${c.id}`, tone: "info", href: `/claims/${c.id}`, action: "Send",

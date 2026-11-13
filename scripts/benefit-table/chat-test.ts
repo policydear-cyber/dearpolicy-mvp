@@ -1336,12 +1336,15 @@ test("a row the checks refuse is given as the same benefit's same figure from an
   const give = (id: string, r2 = rs) => {
     const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: id }] };
     const fromRows = amountsFromRows(raw, r2, H);
-    const a = verifyAnswer(H, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels)).answer;
+    // As the app's turn does (hook.ts): the server's worked-out figures go with the labels.
+    const a = verifyAnswer(H, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels), fromRows.report.figures ?? []).answer;
     return (a.statements ?? []).filter((x) => x.amount).map((x) => [x.amount!.text, x.source?.page]);
   };
-  // The prose row alone is refused (its percentage is wrapped onto the next line); named, the table row is given instead.
-  assert.deepEqual(give(twin.id, [twin]), []);
-  assert.deepEqual(give(twin.id), [["S$450,000", 2]]);
+  // The prose row's own quote cannot be matched (its percentage is wrapped onto the next line), but the server's worked-out
+  // figure is checked from the stored page and the person's own sum (PR #449), so it is given as the same S$450,000, from
+  // its own page; never another figure.
+  assert.deepEqual(give(twin.id, [twin]), [["S$450,000", 5]]);
+  assert.deepEqual(give(twin.id), [["S$450,000", 5]]);
   // Named itself, the table row is given, once.
   assert.deepEqual(give(hip.id), [["S$450,000", 2]]);
   // The named row's own condition, printed only on its page, goes with the stand-in as a point quoting that page; one that
@@ -1349,10 +1352,11 @@ test("a row the checks refuse is given as the same benefit's same figure from an
   const all = (r2: ChatRow[], H2 = H) => {
     const raw = { bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "amount", text: "x", person: "Lim Ah Kow", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: twin.id }] };
     const fromRows = amountsFromRows(raw, r2, H2);
-    return (verifyAnswer(H2, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels)).answer.statements ?? []).map((x) => [x.amount?.text ?? null, x.text, x.source?.page]);
+    return (verifyAnswer(H2, readModelAnswer(fromRows.json)!, ["q"], new Set(fromRows.report.labels), fromRows.report.figures ?? []).answer.statements ?? []).map((x) => [x.amount?.text ?? null, x.text, x.source?.page]);
   };
   const conditioned = { ...twin, conditions: ["In the event of a fracture"] };
-  assert.deepEqual(all([...rows, conditioned]).filter(([, t]) => /also depends on/.test(String(t))), [[null, "Hip also depends on this: In the event of a fracture", 5]]);
+  // Given itself through the server's checked figure (PR #449), the row is no stand-in, so its condition is its own card's.
+  assert.deepEqual(all([...rows, conditioned]).filter(([a]) => a).map(([a, , p]) => [a, p]), [["S$450,000", 5]]);
   const H3: Household = { ...H, documents: H.documents.map((d) => d.policyId !== PROSE ? d : { ...d, pages: [{ ...d.pages[0], text: d.pages[0].text + "\nNo more than S$1,000 is paid for any one fracture." }] }) };
   const moneyed = { ...twin, conditions: ["No more than S$1,000 is paid for any one fracture."] };
   assert.deepEqual(all([...rows, moneyed], H3).filter(([a]) => a), []);

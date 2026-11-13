@@ -36,7 +36,7 @@ export class SignupClosedError extends Error {
 }
 
 /** What an invited person sees while their email is not yet proven: a link has been (or will be) emailed to them. */
-export const CONFIRM_EMAIL_MESSAGE = "Check your email: we have sent you a link to confirm the address is yours. Open it to finish signing in.";
+export const CONFIRM_EMAIL_MESSAGE = "Check your email. We sent you a link to confirm your address. Opening it signs you in.";
 
 /** The auth calls secureFirstProof needs, on the session the emailed link just opened. */
 export type ProofAuth = {

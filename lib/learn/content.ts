@@ -10,6 +10,7 @@
  */
 
 import { SINGAPORE_GUIDES } from "./singapore";
+import { CLAIM_GUIDES } from "./claims";
 
 /** Pictograms drawn in components/learn/pictogram.tsx (self-made SVG, no external images). */
 export type LearnIcon =
@@ -78,6 +79,7 @@ export const LEARN_GROUPS = [
   { id: "start", title: "Start here", blurb: "What your documents are and the kinds of cover people hold." },
   { id: "singapore", title: "Singapore schemes", blurb: "National schemes for Singapore Citizens and Permanent Residents, from official sources." },
   { id: "amounts", title: "Amounts and claims", blurb: "How figures in a policy work, and the usual steps of a claim." },
+  { id: "claims", title: "Claims by type", blurb: "What to check and do for hospital, clinic, accident, illness, death, disability, travel, home and motor claims." },
   { id: "dearpolicy", title: "Using DearPolicy", blurb: "How to read DearPolicy's answers, and the words policies use." },
 ] as const;
 export type LearnGroupId = (typeof LEARN_GROUPS)[number]["id"];
@@ -201,6 +203,69 @@ export const TERMS: LearnTerm[] = [
   { id: "in-force", term: "In force",
     definition: "A policy that is active: premiums are paid and it has not ended. A document dated in the past shows what was true then, not that the policy is still in force today.",
     match: ["in force", "lapsed", "lapse"] },
+  { id: "waiver-of-premium", term: "Waiver of premium", alsoCalled: ["premium waiver", "payer benefit"],
+    definition: "A benefit, often a rider, under which future premiums of a policy stop being collected after a covered event, such as disability or a covered illness, so the cover carries on. It does not usually pay money to you directly.",
+    match: ["waiver of premium", "premium waiver", "payer benefit", "payor benefit"] },
+  { id: "inpatient", term: "Inpatient", alsoCalled: ["hospitalisation"],
+    definition: "Treatment while admitted to hospital, usually including an overnight stay. Many hospital plans pay mainly for inpatient treatment, and some count day surgery too.",
+    match: [] },
+  { id: "outpatient", term: "Outpatient",
+    definition: "Treatment without being admitted to hospital, such as a clinic visit, a scan or physiotherapy. It is often covered by a separate benefit with its own limits, if at all.",
+    match: [] },
+  { id: "day-surgery", term: "Day surgery", alsoCalled: ["day case"],
+    definition: "A procedure where you are admitted and go home the same day. Many hospital plans treat it like a hospital stay; check how yours does.",
+    match: ["day surgery", "day case", "day-case"] },
+  { id: "pre-post-hospital", term: "Pre- and post-hospital treatment", alsoCalled: ["before and after admission"],
+    definition: "Related visits, tests and medicines for a set time before an admission and after discharge, which some hospital plans count as part of the stay. The time allowed and the limits are in the policy.",
+    match: ["pre-hospitalisation", "post-hospitalisation", "pre-hospitalization", "post-hospitalization", "pre-hospital", "post-hospital"] },
+  { id: "panel-provider", term: "Panel provider", alsoCalled: ["network provider", "preferred provider", "panel doctor"],
+    definition: "A hospital, clinic or doctor on the insurer's list. Some plans pay more, or pay the provider directly, when you use one, and less when you do not.",
+    match: ["panel hospital", "panel clinic", "panel doctor", "panel provider", "panel providers", "network hospital", "network provider", "preferred provider"] },
+  { id: "reasonable-and-customary", term: "Reasonable and customary charges",
+    definition: "The usual cost of a treatment in that place, as the insurer assesses it. Some health policies pay only up to this level, so a charge well above it may be paid only in part.",
+    match: ["reasonable and customary", "usual and customary", "usual, reasonable and customary"] },
+  { id: "pro-ration", term: "Pro-ration", alsoCalled: ["pro-rata"],
+    definition: "Paying a proportion instead of the full amount. Some hospital plans pay a reduced share of the whole bill when you stay in a higher room or ward than the plan covers. The policy wording sets the share.",
+    match: ["pro-ration", "proration", "pro-rated", "prorated", "pro-rata", "pro rata"] },
+  { id: "no-claim-discount", term: "No-claim discount", alsoCalled: ["no-claim bonus"],
+    definition: "A lower premium at renewal for years without a claim, common in motor and some other policies. A claim can reduce it; the policy says how.",
+    match: ["no-claim discount", "no-claims discount", "no-claim bonus", "no-claims bonus"] },
+  { id: "duty-of-disclosure", term: "Duty of disclosure", alsoCalled: ["non-disclosure", "material fact"],
+    definition: "The duty to answer an insurer's questions fully and truthfully when applying, and sometimes when renewing. Facts not disclosed that would have changed the insurer's decision can affect claims, under the policy and local law.",
+    match: ["duty of disclosure", "non-disclosure", "material fact", "material facts", "misrepresentation"] },
+  { id: "guaranteed-renewable", term: "Guaranteed renewable",
+    definition: "Cover the insurer must renew while premiums are paid, usually up to a stated age, even if your health changes. The premium can still change unless the policy says it cannot.",
+    match: ["guaranteed renewable", "guaranteed renewal"] },
+  { id: "terminal-illness", term: "Terminal illness",
+    definition: "An illness expected to lead to death within a period the policy sets. Some life policies pay part or all of the death benefit early on a terminal illness diagnosis, which then reduces what is paid on death.",
+    match: ["terminal illness", "terminally ill"] },
+  { id: "early-stage", term: "Early-stage critical illness", alsoCalled: ["intermediate stage"],
+    definition: "A less severe stage of a listed illness that some critical illness policies pay for, usually a smaller share of the sum assured. A later claim for a severe stage may be reduced by what was paid.",
+    match: ["early-stage critical illness", "early stage critical illness", "early critical illness", "intermediate stage", "intermediate-stage"] },
+  { id: "accelerated-benefit", term: "Accelerated benefit",
+    definition: "A benefit that pays part of a policy's death cover early, for example on a critical illness. What is paid usually reduces the death cover that is left. A standalone benefit pays without reducing it.",
+    match: ["accelerated benefit", "accelerated benefits", "accelerated critical illness"] },
+  { id: "accidental-death", term: "Accidental death",
+    definition: "Death caused by an accident, as the policy defines it, often within a set time after the accident. Accident policies and some life riders pay a stated amount for it.",
+    match: ["accidental death"] },
+  { id: "activities-of-daily-living", term: "Activities of daily living", alsoCalled: ["ADLs"],
+    definition: "Everyday tasks, such as washing, dressing, feeding, toileting, moving around and transferring from a bed to a chair. Some disability and long-term care covers pay when a set number cannot be done, as the policy defines.",
+    match: ["activities of daily living", "activity of daily living", "adl", "adls"] },
+  { id: "deferred-period", term: "Deferred period", alsoCalled: ["elimination period"],
+    definition: "The time you must be unable to work, or disabled, before some covers start paying, such as income protection. It is different from a waiting period after cover starts.",
+    match: ["deferred period", "deferment period", "elimination period"] },
+  { id: "under-insurance", term: "Under-insurance", alsoCalled: ["average"],
+    definition: "Insuring property for less than its real value. Under some home and business policies, each claim, small or large, may then be paid only in the proportion that the amount insured bears to the real value. Some policies allow a margin before this applies.",
+    match: ["underinsurance", "underinsured", "average clause", "condition of average"] },
+  { id: "third-party", term: "Third-party cover",
+    definition: "Cover for harm you cause to other people or their property, common in motor insurance. Damage to your own vehicle is covered only at higher levels of cover.",
+    match: ["third-party liability", "third party liability", "third-party cover", "third party cover", "third party only"] },
+  { id: "term-life", term: "Term life cover", alsoCalled: ["term insurance"],
+    definition: "Life cover for a set period. It pays if the life insured dies within that period, and usually has no cash value.",
+    match: ["term life", "term life insurance", "term assurance"] },
+  { id: "whole-life", term: "Whole-life cover",
+    definition: "Life cover that lasts for life while premiums are paid as required. Many such policies build a cash value over time.",
+    match: ["whole life policy", "whole life plan", "whole life cover", "whole life insurance", "whole life assurance"] },
 ];
 
 /** The general, insurer-neutral guides. Country articles live in their own files and are added below. */
@@ -368,6 +433,7 @@ export const GENERAL_GUIDES: LearnGuide[] = [
   {
     slug: "making-a-claim",
     group: "amounts",
+    keywords: ["claim form", "how to claim", "file a claim", "submit a claim", "appeal", "rejected claim", "dispute"],
     icon: "tell",
     title: "Making a claim",
     summary: "General steps that apply to most claims, and where to find your own policy's rules.",
@@ -460,6 +526,7 @@ export const GENERAL_GUIDES: LearnGuide[] = [
       ] },
     ],
   },
+  ...CLAIM_GUIDES,
 ];
 
 export const GUIDES: LearnGuide[] = [...GENERAL_GUIDES, ...SINGAPORE_GUIDES];

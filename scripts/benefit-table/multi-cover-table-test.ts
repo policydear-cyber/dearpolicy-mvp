@@ -253,10 +253,10 @@ function familySchedule(hospitalLines: string[]) {
   return { r, links: [{ section: sectionKeyOf(DOC, { section: "TABLE OF BENEFITS", column: null }), cover: coverKeyOf({ product: "Family Accident", cover: "Family accident", plan: null }), why: "the family table of benefits" }] };
 }
 
-test("a daily rate a family schedule prints once is every insured person's; a lump sum that is no one's own sum stays no one's", () => {
+test("a daily rate a family schedule prints once, with no word saying it is each insured person's, stays no one's (main's rule from #449); so does a lump sum that is no one's own sum", () => {
   const { r, links } = familySchedule(["Hospital cash\tEUR 50 per day in hospital"]);
   const t = assembleTable([r], asha, links);
-  for (const i of [0, 1]) assert.deepEqual(shown(t, i), ["Family accident | Hospital cash | EUR 50 a day"], `person ${i}`);
+  for (const i of [0, 1]) assert.deepEqual(shown(t, i), [], `person ${i}`);
   assert.equal(t.unlinkedSections[0]?.why, NOT_TOLD_WHY, "the lump sum is still said to be no one's");
 });
 

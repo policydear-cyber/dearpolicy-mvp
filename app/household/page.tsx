@@ -101,7 +101,7 @@ export default function HouseholdPage() {
       </header>
       <AccountTabs />
 
-      {!householdName && <p className="lead">You don&apos;t belong to a household yet.</p>}
+      {!householdName && <p className="lead">You&apos;re not part of a household yet. If someone invited you, open the invitation link they sent you.</p>}
 
       {householdName !== null && (
         <>
@@ -111,7 +111,7 @@ export default function HouseholdPage() {
               <div className="field"><label htmlFor="hh-name">Name</label><input id="hh-name" value={nameInput} onChange={(e) => setNameInput(e.target.value)} maxLength={200} required disabled={!isOwner} /></div>
               {isOwner && <button className="button primary" type="submit" disabled={!nameInput.trim() || nameInput.trim() === householdName}>Save name</button>}
             </form>
-            {!isOwner && <p className="lead" style={{ marginTop: 8 }}>Only the household owner can rename it.</p>}
+            {!isOwner && <p className="lead" style={{ marginTop: 8 }}>Only an owner of this household can change its name.</p>}
             {status && <div className="upload-status">{status}</div>}
           </section>
 
@@ -121,16 +121,16 @@ export default function HouseholdPage() {
             <section className="section danger-zone">
               <div className="section-heading"><div><h2>Delete this household</h2></div></div>
               <p className="lead">
-                This permanently deletes every policy, claim, family member, and document this household owns. It cannot be undone.
+                This deletes every family member, document, claim and chat in this household. It can&apos;t be undone. You can download a copy first, above.
                 To confirm, type the household&apos;s exact name (<strong>{householdName}</strong>) below.
               </p>
               <div className="profile-add-grid">
                 <div className="field"><label htmlFor="hh-delete-confirm">Household name</label><input id="hh-delete-confirm" value={confirmName} onChange={(e) => setConfirmName(e.target.value)} placeholder={householdName ?? ""} /></div>
-                <button className="button secondary" style={{ borderColor: "var(--critical-line)", color: "var(--critical)" }} disabled={confirmName.trim() !== householdName || deleting} onClick={deleteHousehold}>
+                <button className="button secondary danger" disabled={confirmName.trim() !== householdName || deleting} onClick={deleteHousehold}>
                   {deleting ? "Deleting…" : "Permanently delete household"}
                 </button>
               </div>
-              {deleteError && <div className="document-warning" style={{ marginTop: 12 }}>{deleteError}</div>}
+              {deleteError && <div className="alert error" role="alert" style={{ marginTop: 12 }}>{deleteError}</div>}
               {needsReauth && (
                 <div className="document-warning" style={{ marginTop: 12 }}>
                   Please sign in again to confirm it&apos;s you before continuing. <Link href={`/login?next=${encodeURIComponent("/household")}`}>Sign in again</Link>
