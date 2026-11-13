@@ -24,7 +24,7 @@ for (const [line, want] of [
   // Critic and TE round 1: a full stop ends the figure; wider plan words; "#", "-", plurals; a letter-glued number.
   ["Plan 3 SGD 100,000.", [100000]], ["Plan 3 SGD 1,000.50.", [1000.5]], ["Plans 3 SGD 100,000", [100000]], ["Plan #3 SGD 100,000", [100000]],
   ["Plan - 3 SGD 100,000", [100000]], ["Plan\t3 SGD 100,000", [100000]], ["Plan C3 SGD 100,000", [100000]], ["Ward class B1 SGD 300", [300]],
-  ["Section 2 SGD 5,000", [5000]], ["Rider 1 USD 50,000", [50000]], ["Benefit 4 SGD 2,000", [2000]],
+  ["Section 2 SGD 5,000", [5000]], ["Schedule 1 USD 50,000", [50000]], ["Variant 4 SGD 2,000", [2000]],
 ] as [string, number[]][]) both(line, want);
 // Negative controls: main's reading stands.
 for (const [line, want] of [
@@ -34,6 +34,11 @@ for (const [line, want] of [
   // Critic and TE round 1 on #456: the figure after the code carries its own code, so both are amounts.
   ["Daily cash by ward class 80 SGD 150 SGD", [80, 150]], ["Deductible per level 50 SGD; 100 SGD for level 2", [50, 100]],
   ["Copay per class 20 SGD (30 SGD for class B)", [20, 30]], ["Each tier 25 USD: 40 USD in tier 2", [25, 40]],
+  // Critic round 2: words that name a thing carrying an amount are not plan labels, and a counted unit after the
+  // second figure means the first is the amount.
+  ["Hospital cash benefit 50 SGD 365", [50]], ["Hospital Cash Benefit 50 SGD 30 days", [50]], ["Max benefit 90 SGD 1,000", [90]],
+  ["Room 50 SGD 100", [50]], ["Ward 80 SGD 150", [80]], ["Cover 20 USD 5", [20]], ["Rider 20 SGD 5", [20]], ["Unit 10 SGD 25", [10]],
+  ["Items 5 USD 20", [5]], ["Class 30 SGD 300 per day", [30]], ["Level 50 SGD 30 days", [50]],
   // Known limit kept from main: a ":" or "(" between the code and its figure is not read past.
   ["Plan 3 SGD: 100,000", [3]], ["Plan 3 SGD (100,000)", [3]],
 ] as [string, number[]][]) both(line, want);
