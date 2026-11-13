@@ -70,6 +70,10 @@ test("sign-in, sign-up, the emailed link and the first password all keep the inv
   const api = read("app/api/auth/signup/route.ts");
   assert.match(api, /const inviteNext = safeInviteNext\(body\.next\);/);
   assert.equal((api.match(/emailRedirectTo: `\$\{origin\}\/api\/auth\/callback\$\{carry\}`/g) ?? []).length, 2, "both emailed links (sign-up and the proof link) carry it");
+  assert.match(login, /body: JSON\.stringify\(\{ email, password, \.\.\.\(inviteNext \? \{ next: inviteNext \} : \{\}\) \}\)/, "the scripted sign-in tells the route too");
+  const signin = read("app/api/auth/signin/route.ts");
+  assert.match(signin, /const inviteNext = safeInviteNext\(next\);/);
+  assert.match(signin, /emailRedirectTo: `\$\{origin\}\/api\/auth\/callback\$\{carry\}`, shouldCreateUser: false/, "an unproven invitee signing in is emailed a link back to the join page");
   const cb = read("app/api/auth/callback/route.ts");
   assert.match(cb, /const inviteNext = safeInviteNext\(url\.searchParams\.get\("next"\)\);/);
   assert.match(cb, /new URL\("\/update-password\?first=1" \+ \(inviteNext \? `&next=\$\{encodeURIComponent\(inviteNext\)\}` : ""\), url\.origin\)/);

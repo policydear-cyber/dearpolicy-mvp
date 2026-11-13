@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { safeInviteNext } from "@/lib/auth/invite-return";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
 import { CONFIRM_EMAIL_MESSAGE, SIGNUP_CLOSED_MESSAGE, SignupClosedError } from "@/lib/auth/signup-gate";
@@ -75,7 +76,10 @@ export async function POST(request: Request) {
     await supabase.auth.signOut().catch(() => {});
     if (e.reason === "unproven") {
       const origin = new URL(request.url).origin;
-      await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${origin}/api/auth/callback`, shouldCreateUser: false } }).catch(() => {});
+      // Signing in from an invitation link: the emailed link comes back to its join page (lib/auth/invite-return.ts).
+      const inviteNext = safeInviteNext(next);
+      const carry = inviteNext ? `?next=${encodeURIComponent(inviteNext)}` : "";
+      await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${origin}/api/auth/callback${carry}`, shouldCreateUser: false } }).catch(() => {});
       if (nativeForm) return backToLogin("confirm_email");
       return NextResponse.json({ error: CONFIRM_EMAIL_MESSAGE }, { status: 403 });
     }

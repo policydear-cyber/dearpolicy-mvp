@@ -62,7 +62,7 @@ function LoginForm() {
       const response = await fetch("/api/auth/signin", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, ...(inviteNext ? { next: inviteNext } : {}) }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
