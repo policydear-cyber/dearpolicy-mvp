@@ -786,11 +786,20 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   // How many rows each document prints for each benefit name (whoseRows: a rate printed once is every holder's).
   const labelCount = new Map<string, number>();
   for (const r of readings) for (const b of r.benefits) { const k = `${r.documentId}\u0000${headKey(b.benefit)}`; labelCount.set(k, (labelCount.get(k) ?? 0) + 1); }
+  // A benefit is printed once only when no other row of the document with a figure starts with the same words: "Daily
+  // hospital income Mum" and "... Dad", "... Life Assured 1" and "... 2", "Hospital cash" and "Hospital cash (child)" are
+  // one benefit printed for several lives, whatever word tells the lives apart (TE on #447, D1). The first two words (one
+  // for a one-word name) are compared, so this needs no list of names or roles.
+  const lead = (benefit: string) => headKey(benefit).split(" ").filter(Boolean).slice(0, 2).join(" ");
+  const leadCount = new Map<string, number>();
+  for (const r of readings) for (const b of r.benefits) if (b.value != null) { const k = `${r.documentId}\u0000${lead(b.benefit)}`; leadCount.set(k, (leadCount.get(k) ?? 0) + 1); }
+  const printedOnceOn = (documentId: string, b: CheckedBenefit) => (labelCount.get(`${documentId}\u0000${headKey(b.benefit)}`) ?? 0) === 1
+    && (leadCount.get(`${documentId}\u0000${lead(b.benefit)}`) ?? 0) <= 1;
   for (const r of readings) for (const b of r.benefits) {
     const l = placedOf(sectionKeyOf(r.documentId, b), b);
     if (!l) continue;
     // A row placed by its section's link is shown only for the people its own document says it is for (whoseRows).
-    const who = l.line ? undefined : whoseRows(r.documentId, b, l.cover, covers, family, (labelCount.get(`${r.documentId}\u0000${headKey(b.benefit)}`) ?? 0) === 1);
+    const who = l.line ? undefined : whoseRows(r.documentId, b, l.cover, covers, family, printedOnceOn(r.documentId, b));
     if (who && !who.size) { notTold.add(sectionKeyOf(r.documentId, b)); continue; }
     // A row placed by its own line is shown only for the people whose cover was read from that line.
     for (const p of people.filter((x) => !who || who.has(x.id))) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover && (!l.line || (x.source.documentId === r.documentId && ownLineKey(x.source) === l.line))), r.documentId)) {

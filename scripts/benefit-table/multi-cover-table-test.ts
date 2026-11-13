@@ -266,7 +266,9 @@ test("a daily rate printed once for each life (two rates, no heading saying whos
   assert.deepEqual([...shown(t, 0), ...shown(t, 1)], []);
 });
 
-for (const labels of [["Daily hospital income (Asha Rao)", "Daily hospital income (Ben Rao)"], ["Daily hospital income - Insured", "Daily hospital income - Spouse"], ["Daily hospital income (child)", null]] as [string, string | null][]) {
+for (const labels of [["Daily hospital income (Asha Rao)", "Daily hospital income (Ben Rao)"], ["Daily hospital income - Insured", "Daily hospital income - Spouse"], ["Daily hospital income (child)", null],
+  ["Daily hospital income Mum", "Daily hospital income Dad"], ["Daily hospital income Life Assured 1", "Daily hospital income Life Assured 2"], ["Daily hospital income Insured A", "Daily hospital income Insured B"],
+  ["Daily hospital income AR", "Daily hospital income BR"], ["Hospital cash", "Hospital cash for a child under 18"]] as [string, string | null][]) {
   test(`TE D1: a rate whose label names a life or role ("${labels[0]}") is never every insured person's`, () => {
     const lines = labels.filter((l): l is string => !!l).map((l, i) => `${l}\tPHP ${i ? 500 : 1000} per day, up to 90 days`);
     const text = `FAMILY PERSONAL ACCIDENT\nPolicy number: F-1\nAsha Rao\tPHP 1,000,000\nBen Rao\tPHP 500,000\nBENEFITS\n${lines.join("\n")}\nEnd.`;
