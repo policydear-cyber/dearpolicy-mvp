@@ -372,6 +372,18 @@ test("a code in its own table cell is the figure before it's when another cell f
     assert.deepEqual(anyMoneyFigures(line).map((x) => x.value), want, line);
   }
 });
+test("a code between two figures opens the later one only when it ends the cell (Critic #449 round 6, F1, F2)", () => {
+  const cases: [string, number[]][] = [["Hospital 25,000 EUR 80 %", [25000]], ["Deductible 500 EUR 20 % co-pay", [500]], ["1,000 SGD 2 / year", [1000]],
+    ["1,000 SGD 2 (visits)", [1000]], ["1,000 SGD 12 mths", [1000]], ["500 EUR 10 Tage", [500]], ["500 EUR 30 jours", [500]], ["5000 EUR 3 séances", [5000]],
+    ["150 SGD 365", [150]], ["Total 1,500 USD 2026", [1500]], ["Total 1,500 USD 15 Jan 2026", [1500]], ["Class 1 Marine 5,000 SGD", [5000]],
+    ["Plan 3 Junior 2,000 EUR", [2000]], ["Option 2 Separate 300 EUR", [300]], ["Plan 3 NZD 100000", [100000]], ["Plan 3 NZD 100,000.", [100000]],
+    ["42\tEUR 60,000", [60000]], ["born 2 Nov 1982 GBP 80,000", [80000]], ["250 EUR 25,000 EUR", [250, 25000]]];
+  for (const [line, want] of cases) {
+    assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
+    assert.deepEqual(anyMoneyFigures(line).map((x) => x.value), want, line);
+  }
+  assert.deepEqual(anyMoneyFigures("1000 € 80 %").map((x) => x.value), [1000]);
+});
 test("control: 'up to N%' by a scale is never shown as a fixed amount (Critic #449 F3)", () => {
   for (const quote of ["Fractures\tUp to 50% of the Sum Insured according to the Scale of Fractures", "Permanent partial disablement\tUp to 100% of the Sum Insured as per the Scale of Benefits"]) {
     const [benefit, words] = quote.split("\t"), value = Number(/(\d+)%/.exec(words)![1]);
