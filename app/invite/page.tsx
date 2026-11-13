@@ -45,12 +45,12 @@ function InviteForm() {
         <div>
           <div className="eyebrow">INVITATION</div>
           <h1>Join a household</h1>
-          <p className="lead">The easiest way to join is to open the invitation link you were sent. If that didn&apos;t work, paste the code from the end of the link (the part after &ldquo;token=&rdquo;) below.</p>
+          <p className="lead">Press Join household below. If the box is empty, paste the code from the end of your invitation link (the part after &ldquo;token=&rdquo;).</p>
         </div>
       </header>
       <section className="section">
         <form onSubmit={submit} className="profile-add-grid">
-          <div className="field"><label>Invitation code</label><input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Paste the code from your invitation link" required /></div>
+          <div className="field"><label htmlFor="invite-code">Invitation code</label><input id="invite-code" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Paste the code from your invitation link" required /></div>
           <button className="button primary" type="submit" disabled={!token.trim() || busy}>{busy ? "Joining…" : "Join household"}</button>
         </form>
         {error && <div className="document-warning" style={{ marginTop: 12 }}>{error}</div>}

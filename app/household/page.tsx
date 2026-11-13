@@ -101,7 +101,7 @@ export default function HouseholdPage() {
       </header>
       <AccountTabs />
 
-      {!householdName && <p className="lead">You&apos;re not part of a household yet. Open the invitation link you were sent, or create your own account.</p>}
+      {!householdName && <p className="lead">You&apos;re not part of a household yet. If someone invited you, open the invitation link they sent you.</p>}
 
       {householdName !== null && (
         <>
