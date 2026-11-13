@@ -246,6 +246,12 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
    * per family unless stated otherwise", "Aggregate limit for all insured persons GBP 10,000"; SHARED_LIMIT): assemble.ts
    * plainTable then gives no fixed row to each named person. */
   sharedNotes?: string[];
+  /** The document's printed lines, off every benefit row's and cover's own line, that tie a limit to the lives together
+   * ("Limits are per family", "One limit for everyone on this certificate", "For couple plans the limits apply to both
+   * insured persons jointly"; TIED_TO_LIVES): assemble.ts gives no row under a per-person column to each named person.
+   * Never a row's own "in total" or "combined with travel delay", an aggregate per event or conveyance, "all persons named
+   * above" or "total liability ... the limits shown" (per-person-shared gate round 1). */
+  tiedNotes?: string[];
   /** Each line starting with a footnote mark ("Note (a):", "(b)", "*"), with the line that continues it: a row printing that
    * mark is read with its note (assemble.ts plainTable). */
   footnotes?: { mark: string; text: string }[];
@@ -680,7 +686,17 @@ export function headingMarks(pageText: string, column: string): string[] {
   for (const m of pageText.matchAll(at)) for (const k of marksIn(` ${m[1]}`)) out.add(k);
   return [...out];
 }
-export type DocumentNotes = { lifeNotes: string[]; sharedNotes: string[]; footnotes: { mark: string; text: string }[]; plainBlockers: string[]; premiumFigures: number[] };
+/** Words that tie a limit to the insured lives together, not to each of them (per-person-shared gate round 1): per family,
+ * household, couple, party, group, booking, certificate or policy; shared or jointly; one limit for; for everyone, all of
+ * you, the group; however many; as a whole; regardless of the number; a family's or household's own limit. */
+export const TIED_TO_LIVES = new RegExp(String.raw`\b(?:per\s+(?:famil(?:y|ies)|households?|couples?|party|parties|group|booking|certificate|policy|schedule)`
+  + String.raw`|shared(?!\s+(?:rooms?|wards?|accommodation))|sharing|shares?\s+(?:one|a|the|this|their)\s+(?:limit|maximum|amount|sum)|jointly|joint\s+limits?`
+  + String.raw`|(?:one|single|a\s+single)\s+(?:limit|maximum|amount|sum)\s+(?:for|applies|covers)`
+  + String.raw`|for\s+(?:everyone|everybody|all\s+of\s+you|both\s+of\s+you|you\s+all|(?:the|your)\s+(?:whole\s+)?(?:group|party|family|household|couple))`
+  + String.raw`|however\s+many|as\s+a\s+whole|regardless\s+of\s+(?:the\s+)?numbers?|whole\s+(?:family|household|group|party)`
+  + String.raw`|between\s+(?:the\s+|all\s+)?(?:insured|you|both|them)|(?:famil(?:y|ies)|households?|couples?)(?:'s|’s|\s+(?:limits?|maximum|aggregate|total|sum))`
+  + String.raw`)\b`, "i");
+export type DocumentNotes = { tiedNotes: string[]; lifeNotes: string[]; sharedNotes: string[]; footnotes: { mark: string; text: string }[]; plainBlockers: string[]; premiumFigures: number[] };
 /** Words that change a figure for whoever a line names: a printed share, a cut or a rise (TE gate round 2, R2-M1: never "paid",
  * "only" or "limited", which ordinary lines about who may be insured print). */
 const STRICT_CHANGE = /\b(?:half|halved|halves|doubl\w*|reduc\w*|less|lower|instead|not\s+covered|exclud\w*|subsequent|benefits?|amounts?|limits?|rates?|maximum|pays?)\b|%|\bper\s*cent\b/i;
@@ -730,7 +746,7 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   };
   /** A footnote line and the line that continues it (one starting in lower case). */
   const noteText = (lines: string[], i: number) => /^\s*[a-z]/.test(lines[i + 1] ?? "") ? `${lines[i].trim()} ${lines[i + 1].trim()}` : lines[i].trim();
-  const out: DocumentNotes = { lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
+  const out: DocumentNotes = { tiedNotes: [], lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
   const add = (list: string[], line: string) => { if (!list.includes(line.trim()) && list.length < 20) list.push(line.trim()); };
   const money = (line: string) => anyMoneyFigures(line).map((f) => f.value);
   const named = (l: string) => { const t = ` ${l.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `; return people.filter((n) => t.includes(` ${n.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `)); };
@@ -799,6 +815,8 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
       const rowLine = own.has(l) || tableLine(line);
       // A shared or aggregate limit, on a row's own line or any other: every figure may be shared by all the lives.
       if (SHARED_LIMIT.test(line)) add(out.sharedNotes, line);
+      // A line off every row's own line that ties a limit to the lives together (a row's own words are read with that row).
+      if (!rowLine && TIED_TO_LIVES.test(line)) add(out.tiedNotes, line);
       // A note printed on a row's own line about every row ("All benefits for children are half the amounts shown").
       if (rowLine) {
         prev = null;

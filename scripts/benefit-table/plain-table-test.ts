@@ -336,6 +336,58 @@ test("R5-H2: 'Trip cancellation S$120' under a per-person column, the premium li
   const got = perPersonColumn({ extra: ["Premium paid: S$120"], rows: [["Overseas medical expenses", "S$500,000", 500000], ["Trip cancellation", "S$120", 120]] });
   for (const id of ["a", "b", "k"]) assert.ok(!got[id].includes("Trip cancellation"), `${id}: ${got[id]}`);
 });
+// Per-person-shared gate round 1: words are read by whose they are. Ordinary certificate wording that makes no limit shared
+// keeps every figure (lost figures were a regression against main); wording that ties a limit to the lives together
+// withholds it: a row's own words that row alone, a note off the rows every row.
+const SIX: [string, string, number][] = [["Overseas medical expenses", "S$500,000", 500000], ["Emergency medical evacuation", "S$1,000,000", 1000000],
+  ["Trip cancellation", "S$10,000", 10000], ["Travel delay", "S$1,000", 1000], ["Baggage delay", "S$500", 500], ["Personal liability", "S$1,000,000", 1000000]];
+const sixWith = (o: { rows?: [string, string, number][]; heading?: string; column?: string; extra?: string[] }) => perPersonColumn({ rows: SIX, ...o });
+const each = (names: string[]) => ({ a: names, b: names, k: names });
+const SIX_NAMES = SIX.map(([b]) => b);
+test("gate PPS-1 baseline: the six-row certificate gives each person all six limits", () => assert.deepEqual(sixWith({}), each(SIX_NAMES)));
+for (const [id, line] of [["R1", "Aggregate limit for any one conveyance: S$2,000,000"], ["R2", "Aggregate limit per event for all insured persons on this certificate: S$2,000,000"],
+  ["R3", "This certificate covers all persons named above."], ["R16", "Our total liability under this policy shall not exceed the limits shown."],
+  ["R17", "Emergency assistance: 24-hour helpline available to all insured persons."], ["R22 note", "Baggage: S$500 per article, S$3,000 in total per insured person."]] as const) {
+  test(`gate PPS-1 ${id}: '${line}' on the certificate keeps every per-person limit`, () => assert.deepEqual(sixWith({ extra: [line] }), each(SIX_NAMES)));
+}
+for (const [id, note] of [["R9", "* per insured person, per trip"], ["R10", "* Per trip."], ["R11", "* Limits apply per trip and are in Singapore dollars."]] as const) {
+  for (const column of ["Limit per insured person*", "Limit per insured person"]) {
+    test(`gate PPS-1 ${id}: heading 'Limit per insured person*' with '${note}' (reader's column '${column}') keeps every per-person limit`, () =>
+      assert.deepEqual(sixWith({ heading: "Benefit\tLimit per insured person*", column, extra: [note] }), each(SIX_NAMES)));
+  }
+}
+const withSix = (benefit: string, row: [string, string, number]) => SIX.map((x) => x[0] === benefit ? row : x);
+for (const [id, from, row] of [["R4", "Travel delay", ["Travel delay", "up to S$1,000 in total", 1000]], ["R5", "Travel delay", ["Hijack", "combined maximum S$2,000 with travel delay", 2000]],
+  ["R22 row", "Baggage delay", ["Baggage", "S$3,000 in total per insured person", 3000]], ["R6", "Baggage delay", ["Compassionate visit by a family member", "S$5,000", 5000]]] as const) {
+  test(`gate PPS-1 ${id}: a row '${row[0]}  ${row[1]}' keeps itself and every other per-person limit`, () => {
+    const rows = withSix(from, [...row] as [string, string, number]);
+    assert.deepEqual(sixWith({ rows }), each(rows.map(([b]) => b)));
+  });
+}
+for (const cell of ["S$500,000 for all of you", "S$500,000 however many are insured", "S$500,000 per trip for the group", "S$500,000 per party", "S$500,000 jointly",
+  "S$500,000 per booking", "S$500,000 per certificate", "S$500,000 per family", "S$500,000 shared between the insured persons"]) {
+  test(`gate PPS-1: a medical row printing '${cell}' is no one's own; the other rows stay each person's`, () => {
+    const got = sixWith({ rows: withSix("Overseas medical expenses", ["Overseas medical expenses", cell, 500000]) });
+    assert.deepEqual(got, each(SIX_NAMES.slice(1)));
+  });
+}
+test("gate PPS-1: a row labelled 'Overseas medical expenses (per policy)' is no one's own", () => {
+  const got = sixWith({ rows: withSix("Overseas medical expenses", ["Overseas medical expenses (per policy)", "S$500,000", 500000]) });
+  assert.deepEqual(got, each(SIX_NAMES.slice(1)));
+});
+for (const line of ["Medical expenses: one limit for everyone on this certificate.", "Limits apply to the certificate as a whole.",
+  "For couple plans the limits apply to both insured persons jointly.", "Couples: limits are shared.", "Limits are per family unless stated otherwise."]) {
+  test(`gate PPS-1: the note '${line}' withholds every per-person limit`, () => assert.deepEqual(sixWith({ extra: [line] }), noOne));
+}
+for (const line of ["Plan: Family", "Family plan: up to 2 adults and their children", "Pre-existing conditions are not covered.", "Policyholder: Asha Rao"]) {
+  test(`gate PPS-1 safe: '${line}' on the certificate keeps every per-person limit`, () => assert.deepEqual(sixWith({ extra: [line] }), each(SIX_NAMES)));
+}
+test("gate PPS-1 safe: the heading 'Limit per insured person (couple plan: combined)' gives no one a limit", () =>
+  assert.deepEqual(sixWith({ heading: "Benefit\tLimit per insured person (couple plan: combined)", column: "Limit per insured person (couple plan: combined)" }), noOne));
+for (const note of ["(a) Shared between the insured persons.", "(a) Payable once per event regardless of the number of insured.", "(a) For both of you."]) {
+  test(`gate PPS-1: heading 'Limit per insured person (a)' with '${note}' withholds every per-person limit`, () =>
+    assert.deepEqual(sixWith({ heading: "Benefit\tLimit per insured person (a)", extra: [note] }), noOne));
+}
 test("H4: 'Signed on behalf of the policyholder: N. Okafor' does not block the plain table", () => {
   const { table } = schedule({ post: ["Signed on behalf of the policyholder: N. Okafor"] });
   for (const id of NAMED) assert.equal(fixedShown(table, id).length, 2, id);

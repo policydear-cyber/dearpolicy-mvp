@@ -20,7 +20,7 @@ import { PREMIUM, SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
 import { anyMoneyFigures } from "@/lib/format/currency";
-import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, marksIn, noteMarkOf, numbersIn, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
+import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, marksIn, noteMarkOf, numbersIn, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 import { benefitWords } from "./cover-rows";
@@ -802,29 +802,41 @@ function anotherRowsNote(r: CheckedReading, b: CheckedBenefit, line: string | un
     : new RegExp(String.raw`\(\s*(?:note\s+)?${mark}\s*\)|\bnote\s+${mark}\b`, "i").test(t);
   return !marks(b.rowText ?? b.source.excerpt) && r.benefits.some((x) => x !== b && marks(x.rowText ?? x.source.excerpt));
 }
-/** Words that make a figure one for a family or household, beyond SHARED_LIMIT ("Family personal liability"). */
-const HOUSEHOLD = /\b(?:famil(?:y|ies)|households?|pool(?:ed|s)?)\b/i;
-/** A row under a per-person column ("Limit per insured person") is each named person's only when the plain path's own checks
- * pass for it too (plain-table gate round 5, R5-H2: "S$500,000 per family", "Family personal liability", "Personal liability
- * (shared)", a heading "Limit per insured person*" with "* One limit shared by the family.", "Annual premium S$120" under
- * "Premium | Per insured person" were each shown as every person's own):
- * - the document prints no line making a figure one limit for all the lives (sharedNotes);
+/** A row label that is a family's or household's own benefit ("Family personal liability", "Household contents"), never
+ * one that names who does something ("Compassionate visit by a family member"). */
+const HOUSEHOLD_LABEL = /^\s*(?:famil(?:y|ies)|households?)\b(?!\s+members?\b)/i;
+/** What a column heading's note may print besides a row's own shapes: per insured person, per trip, journey or period, and
+ * the currency the limits are in (per-person-shared gate round 1: "* per insured person, per trip", "* Per trip.",
+ * "* Limits apply per trip and are in Singapore dollars."). */
+const HEADING_NOTE_SHAPES = [
+  /\b(?:per|for\s+each|each)\s+(?:insured\s+)?(?:persons?|travell?ers?|insured|members?)\b/gi,
+  /\bper\s+(?:trip|journey|holiday|period(?:\s+of\s+(?:insurance|cover))?)\b/gi,
+  /\b(?:shown\s+|stated\s+|expressed\s+|are\s+)?in\s+(?:[a-z]+\s+)?(?:dollars?|pounds?(?:\s+sterling)?|euros?|ringgit|yen|francs?|rupees?|sgd|gbp|usd|eur|hkd|aud|myr|nzd|chf|jpy|inr)\b/gi,
+  /\b(?:all\s+)?(?:limits?|amounts?|figures?|benefits?)\b/gi, /\b(?:apply|applies|are|is|shown|stated)\b/gi,
+];
+/** A row under a per-person column ("Limit per insured person") is each named person's only when nothing ties it to the lives
+ * together (plain-table gate round 5, R5-H2; scoped by whose words they are in per-person-shared gate round 1):
+ * - no line on the document off every row's own line ties a limit to the lives together (check.ts tiedNotes: "Limits are
+ *   per family", "One limit for everyone on this certificate", "... jointly"); an aggregate per event or conveyance, "all
+ *   persons named above" or "total liability ... the limits shown" leave each person's own limit standing;
+ * - the row's own words (label, section, column, line, the note below it, conditions) tie nothing to the lives together and
+ *   name no premium or contribution; its own "in total" or "combined with travel delay" is that row's own condition, and a
+ *   family names the limit's owner only as one ("per family", "family limit", a "Family personal liability" row), never "by
+ *   a family member"; a row's own words withhold that row alone;
  * - the row's label is no payment and its figure no premium-line figure;
- * - its label, section, column, own line, the note below it and its conditions name no shared limit, family or household,
- *   premium or contribution;
  * - each footnote mark its line or its column heading prints points to a note found on the document that names no life, no
- *   other figure, no shared limit or sum insured, and prints nothing beyond the shapes a row's own cell may print
- *   (onlyRowShapes): an allow-list, as for a plain row's note. */
+ *   other figure, no shared limit or sum insured, and prints nothing beyond a row's own shapes, per insured person, per trip
+ *   or period, and the currency (an allow-list, as for a plain row's note). */
 function perPersonColumnRow(r: CheckedReading, b: CheckedBenefit, next: string): boolean {
-  if ((r.sharedNotes ?? []).length) return false;
+  if ((r.tiedNotes ?? []).length) return false;
   if (PAYMENT_LABEL.test(b.benefit) || (r.premiumFigures ?? []).some((v) => b.value != null && Math.abs(v - b.value) < 0.005)) return false;
   const words = [b.benefit, b.section ?? "", b.column ?? "", b.rowText ?? b.source.excerpt, next, ...b.conditions].join("\n");
-  if (SHARED_LIMIT.test(words) || HOUSEHOLD.test(words) || PREMIUM.test(words) || PAYMENT_LABEL.test(b.section ?? "")) return false;
+  if (TIED_TO_LIVES.test(words) || HOUSEHOLD_LABEL.test(b.benefit) || HOUSEHOLD_LABEL.test(b.section ?? "") || PREMIUM.test(words) || PAYMENT_LABEL.test(b.section ?? "")) return false;
   const people = [...r.namedPeople, ...r.covers.map((c) => c.person)];
   for (const mark of new Set([...marksIn(b.rowText ?? b.source.excerpt), ...(b.columnMarks ?? [])])) {
     const notes = plainFootnotes(r, mark);
-    if (!notes.length || notes.some((t) => KIND_OF_LIFE.test(t) || FIGURE_CHANGE.test(t) || SHARED_LIMIT.test(t) || HOUSEHOLD.test(t) || NAMES_SUM.test(t) || PREMIUM.test(t) || ageBand(t) || namesALife(t, people)
-      || !onlyRowShapes(t.replace(/^\s*(?:notes?\s*)?(?:\(\s*\w{1,2}\s*\)|\w{1,2}[.):]|\*{1,3}|†|‡)\s*:?/i, " ")))) return false;
+    if (!notes.length || notes.some((t) => KIND_OF_LIFE.test(t) || FIGURE_CHANGE.test(t) || SHARED_LIMIT.test(t) || TIED_TO_LIVES.test(t) || NAMES_SUM.test(t) || PREMIUM.test(t) || ageBand(t) || namesALife(t, people)
+      || !onlyRowShapes(HEADING_NOTE_SHAPES.reduce((x, re) => x.replace(re, " "), ` ${t.replace(/^\s*(?:notes?\s*)?(?:\(\s*\w{1,2}\s*\)|\w{1,2}[.):]|\*{1,3}|†|‡)\s*:?/i, " ")} `)))) return false;
   }
   return true;
 }
