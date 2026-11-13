@@ -27,13 +27,13 @@ function InviteForm() {
         return;
       }
       if (!response.ok) {
-        setError(customerMessage(payload.error, "Could not accept this invitation."));
+        setError(customerMessage(payload.error, "We couldn't accept this invitation. It may have expired or already been used. Ask the person who invited you for a new link."));
         return;
       }
       router.push("/household");
       router.refresh();
     } catch {
-      setError("Could not accept this invitation. Please try again.");
+      setError("We couldn't accept this invitation. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -45,12 +45,12 @@ function InviteForm() {
         <div>
           <div className="eyebrow">INVITATION</div>
           <h1>Join a household</h1>
-          <p className="lead">Paste the invitation link&apos;s token below, or use the link exactly as it was shared with you.</p>
+          <p className="lead">The easiest way to join is to open the invitation link you were sent. If that didn&apos;t work, paste the code from the end of the link (the part after &ldquo;token=&rdquo;) below.</p>
         </div>
       </header>
       <section className="section">
         <form onSubmit={submit} className="profile-add-grid">
-          <div className="field"><label>Invitation token</label><input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Paste the token from your invitation link" required /></div>
+          <div className="field"><label>Invitation code</label><input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Paste the code from your invitation link" required /></div>
           <button className="button primary" type="submit" disabled={!token.trim() || busy}>{busy ? "Joining…" : "Join household"}</button>
         </form>
         {error && <div className="document-warning" style={{ marginTop: 12 }}>{error}</div>}

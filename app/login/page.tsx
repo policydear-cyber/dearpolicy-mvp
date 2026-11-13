@@ -6,11 +6,11 @@ import { useSearchParams } from "next/navigation";
 import { customerMessage } from "@/components/customer-text";
 
 const LINK_ERRORS: Record<string, string> = {
-  missing_code: "That link is missing its confirmation code. Please request a new one.",
-  invalid_or_expired_link: "That link is invalid or has expired. Please request a new one.",
+  missing_code: "That link is incomplete. Please ask for a new one.",
+  invalid_or_expired_link: "That link has expired or has already been used. Please ask for a new one.",
   invalid_credentials: "Incorrect email or password.",
   missing_credentials: "Enter your email and password.",
-  confirm_email: "Check your email: we have sent you a link to confirm the address is yours. Open it to finish signing in.",
+  confirm_email: "Check your email. We sent you a link to confirm your address. Open it, then sign in.",
   invite_only: "DearPolicy is open by invitation only at the moment. If you were invited, use the email address the invitation was sent to.",
 };
 
@@ -110,7 +110,7 @@ function LoginForm() {
         <Link href="/reset-password">Forgot your password?</Link>
       </p>
       <p>
-        New here? <Link href="/signup">Create a household</Link>
+        New here? <Link href="/signup">Create an account</Link>
       </p>
       {PRIVACY_NOTICE_FINAL ? (
         <p className="field-hint">

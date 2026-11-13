@@ -156,7 +156,7 @@ export async function signUpThroughUi(page: Page, args: { email: string; passwor
   await page.getByLabel("Household name (optional)").fill(args.household);
   await page.getByLabel("Email").fill(args.email);
   await page.getByLabel("Password").fill(args.password);
-  await page.getByRole("button", { name: "Create household" }).click();
+  await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("status")).toContainText("Check your email for a confirmation link");
 }
 export async function signInThroughUi(page: Page, email: string, password: string, next?: string) {
