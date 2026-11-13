@@ -384,6 +384,16 @@ test("a code between two figures opens the later one only when it ends the cell 
   }
   assert.deepEqual(anyMoneyFigures("1000 € 80 %").map((x) => x.value), [1000]);
 });
+test("a figure before a code is a label only when the layout says so, never by its size (Critic #449 round 7)", () => {
+  const cases: [string, number[]][] = [["Hospital cash 50 SGD 365\tdays", [50]], ["Per visit 15 SGD 100\tvisits", [15]], ["Accident 20 MYR 10,000\tper year", [20]],
+    ["Renewal 30 EUR 2027.", [30]], ["Excess 50 SGD 100.", [50]], ["Hospital cash 50 SGD 365", [50]], ["Premium 15 USD 2026", [15]], ["Co-pay 20 EUR 100", [20]],
+    ["Copay 25 USD 1,000:", [25]], ["Room 300 SGD 1,000", [300]], ["Room\t300 SGD 1,000", [300]], ["Deductible 500 SGD 1,500", [500]], ["Outpatient 2000 SGD 1,500", [2000]],
+    ["Plan 3 NZD 100,000\tper year", [100000]], ["Plan 3 NZD 100,000\tPlan 4 NZD 200,000", [100000, 200000]], ["Liam Kelly\t42\tEUR 60,000\t01/02/1983", [60000]]];
+  for (const [line, want] of cases) {
+    assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
+    assert.deepEqual(anyMoneyFigures(line).map((x) => x.value), want, line);
+  }
+});
 test("control: 'up to N%' by a scale is never shown as a fixed amount (Critic #449 F3)", () => {
   for (const quote of ["Fractures\tUp to 50% of the Sum Insured according to the Scale of Fractures", "Permanent partial disablement\tUp to 100% of the Sum Insured as per the Scale of Benefits"]) {
     const [benefit, words] = quote.split("\t"), value = Number(/(\d+)%/.exec(words)![1]);
