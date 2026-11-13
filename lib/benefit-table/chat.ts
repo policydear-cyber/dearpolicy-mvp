@@ -1532,6 +1532,8 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
     if (!facts) return null;
     const worked = Math.round(row.base! * row.percent! * times.times) / 100;
     if ((cap && worked > cap.value + 0.005 && !times.keepsCap) || (!cap && row.figure.capped)) return null;
+    // A fraction of a share already above the maximum: of the share or of what is paid is not said (gate round 9).
+    if (times.times < 1 && (row.figure.capped || (cap && row.base! * row.percent! / 100 > cap.value + 0.005))) return null;
     const at = locateQuote(household, times.condition, row.docIndex);
     if (!at || at.docIndex !== row.docIndex) return null;
     multiple = { times: times.times, docIndex: at.docIndex, page: at.page, quote: times.condition, own: facts.own, section: facts.section, others: facts.others ?? "" };

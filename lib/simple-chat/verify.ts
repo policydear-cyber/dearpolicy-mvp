@@ -912,14 +912,18 @@ function timesLine(sf: ServerFigure, household: Household, cap: { value: number;
   if (!d || Math.abs(d.times - sf.times.times) > 1e-9) return "";
   const worked = Math.round(sf.base.value * sf.percent * d.times) / 100;
   if (cap && worked > cap.value + 0.005 && !keepsCapIn(sf.times.quote, cap.value)) return "";
+  // A fraction of a share already above the maximum: whether it is taken of the share or of what is paid is not said.
+  if (d.times < 1 && cap && Math.round(sf.base.value * sf.percent) / 100 > cap.value + 0.005) return "";
   const capped = !!cap && worked > cap.value;
   // The note by its own printed label when it has one ("Note (a) on page 2 says"), else by the page.
   const label = /^\s*(note\s*(?:\([a-z0-9]+\)|[a-z0-9]+\b)?)\s*[:.-]\s*/i.exec(sf.times.quote);
   const words = sf.times.quote.slice(label ? label[0].length : 0).trim().replace(/[.;]+$/, "");
   const says = label ? `${label[1].replace(/^note/i, "Note")} on page ${tf.page} says` : `The policy (page ${tf.page}) says`;
   const times = timesWords(d.times);
-  return `. ${says}: "${words}". If that applies, ${capped ? `${times} would be ${money(worked)}, but the most it pays is ${money(cap!.value)}`
-    : `this pays ${money(worked)} (${times})${cap ? `, within the ${money(cap.value)} maximum` : ""}`}`;
+  // The answer first: "this pays £1,500 (double would be £2,000, more than the £1,500 maximum)", "this pays £800
+  // (double)", "this pays half: £200".
+  return `. ${says}: "${words}". If that applies, ${capped ? `this pays ${money(cap!.value)} (${times} would be ${money(worked)}, more than the ${money(cap!.value)} maximum)`
+    : d.times < 1 ? `this pays ${times}: ${money(worked)}` : `this pays ${money(worked)} (${times})`}`;
 }
 /** The cover a row's percentage is of, by name ("20% of the Critical Illness sum assured" -> ["critical", "illness"]); empty
  * when the row says only "of (the) Sum Assured". */

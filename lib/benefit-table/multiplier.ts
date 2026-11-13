@@ -49,37 +49,52 @@ export function multipleIn(text: string): { times: number; rest: string; plain: 
 }
 
 /** Words that change what a multiple is paid on or take something off it ("less any amount already paid", "net of", "the
- * Sum Insured"): a note holding one is never said as a plain multiple of this row's amount (gate round 8). */
+ * Sum Insured"): a note holding one is never said as a plain multiple of this row's amount (gate round 8). Kept as a second
+ * net under the shape below. */
 const ARITHMETIC = /\b(?:less|minus|deduct\w*|net\s+of|offset\w*|reduc\w*|plus|additional|in\s+addition)\b/i;
 const OTHER_BASE = /\bsums?\s+(?:insured|assured)\b|\binsured\s+amount\b|\bcover(?:age)?\s+amount\b|\bpremiums?\b|\bsalar(?:y|ies)\b|\bearnings\b|\bincome\b/i;
-/** What a multiple may be of: "the amount", "the Section 3 amount", "the benefit", "its rate", "the fracture benefit". */
-const OBJECT = /^(?:the|its|this|that)\s+((?:[\w-]+\s+){0,3}?)(?:amount|benefit|rate|sum\s+payable|figure)\b/i;
-/** The only words a note may have after its multiple (gate round 8, an allow-list on the note's shape): "is paid", a case
- * ("if the accident happens at work", "for a fracture of a finger"), the row's maximum kept ("still subject to the GBP
- * 1,500 maximum per accident", "subject to the same limit") and "per accident". */
-const AFTER: RegExp[] = [
-  /^(?:is|are|will\s+be|shall\s+be)\s+(?:paid|payable)\b/i,
-  /^(?:if|when|while|where|for|during|in|on|at)\b[^,;.]*/i,
-  /^(?:(?:still|but|and|always)\s+)?subject\s+to\s+(?:the\s+|a\s+)?(?:(?:same|overall|(?:[A-Z]{3}|[£$€]|S\$|RM)\s?\d[\d,]*(?:\.\d+)?)\s+)*(?:maximum|limit|cap)\b(?:\s+(?:per|for\s+each|for\s+any\s+one|of)\s+(?:accident|claim|event|fracture|injury|person|insured\s+person|day))?/i,
-  /^per\s+(?:accident|claim|event|fracture|injury|person|day)\b/i,
-];
-/** Whether a note's words are only a case, its one multiple of this row's own amount, and the row's maximum kept: no other
- * base ("double the Sum Insured"), no deduction ("less any amount already paid") and nothing else after the multiple. */
+/** This row's own amount, as a note names it: "the amount", "this benefit", "the Section 3 amount", "its rate", "the
+ * fracture benefit" (the words between only "section" and the row's own number, or the row's own benefit name's). */
+const OWN_OBJECT = String.raw`(?:the|its|this|that)\s+((?:[\w-]+\s+){0,3}?)(?:amount|benefit|rate|sum\s+payable|figure)`;
+/** The multiple as a shape-A note prints it after "paid at": "double", "twice", "half", "3 times", "150% of". */
+const A_MULTIPLE = String.raw`(?:double|twice|treble|triple|half|(?:\d+(?:\.\d+)?|two|three|four|five)\s+times|\d+(?:\.\d+)?\s?(?:%|per\s?cent)\s+of)`;
+/** The row's maximum kept ("still subject to the GBP 1,500 maximum per accident", "subject to the same limit") and "per
+ * accident": the only words a note may end with. */
+const TAIL = String.raw`(?:\s*[,;]?\s*(?:(?:(?:still|but|and|always)\s+)?subject\s+to\s+(?:the\s+|a\s+)?(?:(?:same|overall|(?:[A-Z]{3}|[£$€]|S\$|RM)\s?\d[\d,]*(?:\.\d+)?)\s+)*(?:maximum|limit|cap)(?:\s+(?:per|for\s+each|for\s+any\s+one)\s+(?:accident|claim|event|fracture|injury|person|insured\s+person|day))?|per\s+(?:accident|claim|event|fracture|injury|person|day)))*\s*[.;]?\s*`;
+const CASE_TEXT = String.raw`([^,;:.]+?)`;
+/** The two shapes a note may have (gate round 9, an allow-list on the whole note, front included):
+ * A) "[a/an/the] CASE is/are paid/payable at <multiple> [this row's own amount] [maximum kept] [per accident]"
+ *    ("a compound fracture is paid at double the Section 3 amount, still subject to the GBP 1,500 maximum per accident");
+ * B) "[this row's own amount] is doubled/halved/trebled, or is paid at <multiple>, for/if/when/where/while CASE [maximum
+ *    kept] [per accident]" ("the amount is halved for a fracture of a finger or toe"; "payable twice if both arms are
+ *    fractured", where the row's own amount is understood). */
+const SHAPE_A = new RegExp(String.raw`^(?:(?:a|an|the)\s+)?${CASE_TEXT}\s+(?:is|are)\s+(?:paid|payable)\s+(?:at\s+)?${A_MULTIPLE}(?:\s+${OWN_OBJECT})?${TAIL}$`, "i");
+const SHAPE_B = new RegExp(String.raw`^(?:(?:${OWN_OBJECT}|(.+?))\s+(?:is|are)\s+)?(?:(?:paid|payable)\s+(?:at\s+)?(?:double|twice|treble|triple|half)|doubled|halved|trebled|tripled)\s+(?:for|if|when|where|while)\s+${CASE_TEXT}${TAIL}$`, "i");
+/** Words a case never holds: money and benefit nouns, quantities and order words ("after any earlier payment", "the
+ * remaining limit", "pro rata", "for all fractures", "in total"). A case holding one is a base, a deduction or a limit,
+ * never only the event the multiple is paid in. */
+const NOT_A_CASE = new Set(("benefit benefits amount amounts sum sums allowance allowances lump payment payments paid excess balance remaining limit limits " +
+  "maximum total all any each pro rata proportion proportional share shared co-pay copay co-payment copayment insurance claim claims earlier previous prior " +
+  "already after before instead except unless").split(" "));
+/** A case: at most 6 words besides a/an/the, none of NOT_A_CASE. */
+const caseOk = (c: string) => { const w = c.toLowerCase().replace(/[<>"'’()]/g, " ").split(/\s+/).filter((x) => x && !["a", "an", "the"].includes(x));
+  return w.length > 0 && w.length <= 6 && w.every((x) => !NOT_A_CASE.has(x)); };
+/** Whether a note is one of the two shapes, its multiple of this row's own amount and its case plain, with nothing else:
+ * no other base ("double the Sum Insured", "the death benefit is doubled"), no deduction or limit before or after it. */
 function plainShape(note: string, m: { at: RegExpMatchArray; count: number }, row: RowFacts): boolean {
   if (m.count !== 1 || ARITHMETIC.test(note) || OTHER_BASE.test(note)) return false;
   const ownSection = row.section ? sectionKey(row.section) : "";
-  const mine = new Set(tokens(row.own.split("\n")[0] ?? "").map(stem));
-  const ofMine = (mid: string) => tokens(mid).every((w) => (w === "section" && !!ownSection) || w === ownSection || ["benefit", "basic", "daily", "this", "that", "its"].includes(w) || mine.has(stem(w)));
-  const said = m.at[0], i = said.search(/\b(?:the|its|this|that)\s/i);
-  let rest = note.slice(m.at.index! + said.length);
-  if (i >= 0) { const o = OBJECT.exec(said.slice(i)); if (!o || !ofMine(o[1])) return false; }
-  else { const o = OBJECT.exec(rest.trimStart()); if (o) { if (!ofMine(o[1])) return false; rest = rest.trimStart().slice(o[0].length); } }
-  for (let moved = true; moved;) {
-    moved = false;
-    rest = rest.replace(/^[\s,;]+/, "");
-    for (const p of AFTER) { const x = p.exec(rest); if (x && x[0].length) { rest = rest.slice(x[0].length); moved = true; break; } }
-  }
-  return /^[\s.;:)]*$/.test(rest);
+  const name = (row.own.split("\n")[0] ?? "").trim().toLowerCase();
+  const mine = new Set(tokens(name).map(stem));
+  const ofMine = (mid: string | undefined) => tokens(mid ?? "").every((w) => (w === "section" && !!ownSection) || w === ownSection || ["benefit", "basic", "daily", "this", "that", "its"].includes(w) || mine.has(stem(w)));
+  const text = note.replace(/^\s*note\s*(?:\([a-z0-9]+\)|[a-z0-9]+\b)?\s*[:.-]\s*/i, "").trim();
+  const a = SHAPE_A.exec(text);
+  if (a) return caseOk(a[1]) && ofMine(a[2]);
+  const b = SHAPE_B.exec(text);
+  if (!b) return false;
+  // Shape B's subject: this row's own amount ("the amount", "the Section 3 amount"), its own benefit name, or none.
+  const subjectOk = b[2] != null ? b[2].trim().toLowerCase().replace(/^the\s+/, "") === name : ofMine(b[1]);
+  return subjectOk && caseOk(b[3]);
 }
 
 /** A condition that keeps the row's printed maximum on the multiplied amount: it prints only that maximum's figure, or says

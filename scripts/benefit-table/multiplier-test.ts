@@ -3,7 +3,7 @@
  * compound fracture." still showed the single 2% of Grace's sum (GBP 400) beside prose saying it is doubled.
  * The model names the note in an amount statement's "multiplierNote" (here its reply is scripted). The card keeps the row's
  * single amount and adds the multiple as a condition in the note's own printed words, with its figure within the printed
- * maximum ('Note (a) on page 2 says: "...". If that applies, this pays GBP 800 (double), within the GBP 1,500 maximum'); the chat's checks
+ * maximum ('Note (a) on page 2 says: "...". If that applies, this pays GBP 800 (double)'); the chat's checks
  * read the note again. The line is true whoever the case is, so the household's words are never read for it (PR #472 round
  * 7: seven rounds of a hand-written reader of who and when kept leaking). Only the note's structure is checked: one of the
  * row's own conditions, one plain multiple (no negation, "up to", other section, other row's case, trait). The gate's
@@ -93,7 +93,7 @@ const TURNS = ["Daniel broke his arm playing football. What can we claim?", "Act
 /** Grace's fracture card for the household's question, with the scripted model naming `named` (or no note). */
 const G = (note: string, q: string, named?: string, earlier: string[] = [], pct = 2, people = [DANIEL, GRACE]) => ask(fractureSchedule(note, pct, people), "Grace Okafor", /Fracture/, q, named, earlier);
 /** The conditional line the card adds for a named note: 'Note (a) on page 2 says: "<note>". If that applies, this pays £800
- * (double), within the £1,500 maximum' (the note's own label, else "The policy (page 2) says"). */
+ * (double)' (the note's own label, else "The policy (page 2) says"). */
 const IF = / on page 2 says: "| \(page 2\) says: "/;
 const ifLine = (note: string, rest: string) => {
   const label = /^(Note(?: \([a-z]\))?): /.exec(note);
@@ -162,12 +162,12 @@ test("the model's copy of a note matches the printed one without its mark, case,
 });
 
 // ---------- Note named: the single amount, and the multiple as a condition in the note's words ----------
-test("note named on Grace's card: GBP 400, and 'if that applies, this pays GBP 800 (double), within the GBP 1,500 maximum'", () => {
+test("note named on Grace's card: GBP 400, and 'if that applies, this pays GBP 800 (double)'", () => {
   const a = G(KEEPS, "It was a compound fracture.", KEEPS, TURNS);
   assert.deepEqual(a.amounts, ["£400"]);
   assert.ok(!a.leftOut);
   assert.match(a.basis, /^2% of Grace Okafor's sum insured of £20,000 \(.*, page 1\), within its maximum of £1,500\. Note \(a\) on page 2 says: "a compound fracture/);
-  assert.ok(a.basis.endsWith(ifLine(KEEPS, "this pays £800 (double), within the £1,500 maximum")), a.basis);
+  assert.ok(a.basis.endsWith(ifLine(KEEPS, "this pays £800 (double)")), a.basis);
   // The condition is the row's own printed words, never the household's.
   assert.doesNotMatch(a.basis, /It was a compound fracture|Actually/);
   // The model's copy without the note mark is the same note.
@@ -176,16 +176,16 @@ test("note named on Grace's card: GBP 400, and 'if that applies, this pays GBP 8
 test("a multiple above the maximum shows the maximum: 5% of GBP 20,000 doubled is up to GBP 1,500; a capped card stays capped", () => {
   const a = G(KEEPS, "Grace has a compound fracture of the leg.", KEEPS, [], 5);
   assert.deepEqual(a.amounts, ["£1,000"]);
-  assert.ok(a.basis.endsWith(ifLine(KEEPS, "double would be £2,000, but the most it pays is £1,500")), a.basis);
+  assert.ok(a.basis.endsWith(ifLine(KEEPS, "this pays £1,500 (double would be £2,000, more than the £1,500 maximum)")), a.basis);
   const d = ask(fractureSchedule(KEEPS, 5), "Daniel Okafor", /Fracture/, "Daniel has a compound fracture of the leg.", KEEPS);
   assert.deepEqual(d.amounts, ["Up to £1,500"]);
-  assert.ok(d.basis.endsWith(ifLine(KEEPS, "double would be £8,000, but the most it pays is £1,500")), d.basis);
+  assert.ok(d.basis.endsWith(ifLine(KEEPS, "this pays £1,500 (double would be £8,000, more than the £1,500 maximum)")), d.basis);
 });
 test("a note silent on the maximum: doubled within it is said; doubled above it is not (whether the maximum doubles is not printed)", () => {
   const silent = "Note (a): a compound fracture is paid at double the Section 3 amount.";
   const a = G(silent, "It was a compound fracture.", silent, TURNS);
   assert.deepEqual(a.amounts, ["£400"]);
-  assert.ok(a.basis.endsWith(ifLine(silent, "this pays £800 (double), within the £1,500 maximum")), a.basis);
+  assert.ok(a.basis.endsWith(ifLine(silent, "this pays £800 (double)")), a.basis);
   const b = G(silent, "It was a compound fracture.", silent, TURNS, 5);
   assert.deepEqual(b.amounts, ["£1,000"]);
   assert.doesNotMatch(b.basis, IF);
@@ -211,10 +211,10 @@ test("no conditional line for a note that is not the row's, an 'up to' or negate
 });
 test("the note's shape: only a multiple of this row's own amount, a case, the maximum kept and 'per accident' get a line (round 8)", () => {
   const lined: [string, string][] = [
-    ["Note (a): a compound fracture is paid at double the Section 3 amount, subject to the same limit.", "this pays £800 (double), within the £1,500 maximum"],
-    ["Note (a): a compound fracture is paid at double the amount per fracture.", "this pays £800 (double), within the £1,500 maximum"],
-    [FINGER, "this pays £200 (half), within the £1,500 maximum"],
-    ["A compound fracture is paid at double the fracture benefit.", "this pays £800 (double), within the £1,500 maximum"],
+    ["Note (a): a compound fracture is paid at double the Section 3 amount, subject to the same limit.", "this pays £800 (double)"],
+    ["Note (a): a compound fracture is paid at double the amount per fracture.", "this pays £800 (double)"],
+    [FINGER, "this pays half: £200"],
+    ["A compound fracture is paid at double the fracture benefit.", "this pays £800 (double)"],
   ];
   for (const [note, rest] of lined) {
     const a = G(note, "Grace has a compound fracture.", note);
@@ -245,6 +245,61 @@ test("the note's shape: only a multiple of this row's own amount, a case, the ma
   const b = ask(fractureSchedule(face, 2, [DANIEL, GRACE], face), "Grace Okafor", /Burns/, "Grace has burns to the face.", face);
   assert.deepEqual(b.amounts, ["£2,000"]);
   assert.ok(b.basis.endsWith(ifLine(face, "this pays £4,000 (double)")), b.basis);
+});
+test("round 9: the whole note is an allow-list (front included): a base, deduction or limit anywhere gives no line, main's card", () => {
+  const refused = [
+    "Note (a): a compound fracture is paid at double the Sum Insured.",
+    "Note (a): a compound fracture is paid at double the amount, less any amount already paid for that fracture.",
+    "Note (a): where the benefit is first reduced for age, a compound fracture is paid at double the amount.",
+    "Note (a): after any earlier payment for the same accident, a compound fracture is paid at double the amount.",
+    "Note (a): out of the remaining limit, a compound fracture is paid at double the amount.",
+    "Note (a): a compound fracture is paid at double the amount of the remaining limit.",
+    "Note (a): after the excess, a compound fracture is paid at double the amount.",
+    "Note (a): subject to the excess, a compound fracture is paid at double the amount.",
+    "Note (a): from the balance left after other claims, a compound fracture is paid at double the amount.",
+    "Note (a): pro rata to the days in hospital, a compound fracture is paid at double the amount.",
+    "Note (a): with a 20% co-payment, a compound fracture is paid at double the amount.",
+    "Note (a): the daily hospital allowance is doubled for a compound fracture.",
+    "Note (a): the death benefit is doubled for a compound fracture.",
+    "Note (a): the lump sum is doubled for a compound fracture.",
+    "Note (a): once only, a compound fracture is paid at double the amount.",
+    "Note (a): for the first claim only, a compound fracture is paid at double the amount, the second at the normal amount.",
+    "Note (a): a compound fracture is paid at double the amount instead of the burns benefit.",
+    "Note (a): a compound fracture is paid at double the amount, shared between all injured persons.",
+    "Note (a): a compound fracture is paid at double the amount, split equally between both arms.",
+    "Note (a): a compound fracture is paid at double the amount in total for all fractures.",
+    "Note (a): a compound fracture is paid at double the annual amount.",
+    "Note (a): a compound fracture is paid at twice the child rate.",
+    "Note (a): each further fracture in the same accident is paid at half the Section 3 amount.",
+    "Note (a): the amount is doubled for any compound fracture.",
+    "Note (a): the amount is doubled if a compound fracture happens after an earlier claim.",
+    "Note (a): a compound open displaced fracture of the upper left arm bone is paid at double the amount.",
+  ];
+  for (const note of refused) for (const pct of [2, 5]) for (const [who, q] of [["Grace Okafor", "Grace has a compound fracture."], ["Daniel Okafor", "Daniel has a compound fracture."]]) {
+    const h = fractureSchedule(note, pct);
+    const a = ask(h, who, /Fracture/, q, note), main = ask(h, who, /Fracture/, q, "");
+    assert.equal(JSON.stringify(a.kept), JSON.stringify(main.kept), `${note} ${pct}% ${who}`);
+    assert.doesNotMatch(a.basis, IF, `${note} ${pct}% ${who}`);
+  }
+  const lined: [string, string][] = [
+    [KEEPS, "this pays £800 (double)"], ["Note (a): a compound fracture is paid at double the Section 3 amount, subject to the same limit.", "this pays £800 (double)"],
+    ["Note (a): a compound fracture is paid at double the Section 3 amount.", "this pays £800 (double)"], [FINGER, "this pays half: £200"],
+    [WORK, "this pays £800 (double)"], [BOTH, "this pays £800 (double)"], ["Note (a): the Section 3 amount is doubled while travelling on public transport.", "this pays £800 (double)"],
+    ["Note (a): fracture of arm, wrist or leg is doubled if the accident occurs abroad.", "this pays £800 (double)"],
+  ];
+  for (const [note, rest] of lined) {
+    const a = G(note, "Grace has a compound fracture.", note);
+    assert.deepEqual(a.amounts, ["£400"], note);
+    assert.ok(a.basis.endsWith(ifLine(note, rest)), `${note}: ${a.basis}`);
+  }
+});
+test("round 9: half of a share already above the maximum gets no line (of the share or of what is paid is not said)", () => {
+  // Daniel: 2% of GBP 80,000 is GBP 1,600, above the GBP 1,500 maximum: his card is up to GBP 1,500.
+  const a = ask(fractureSchedule(FINGER, 2), "Daniel Okafor", /Fracture/, "Daniel broke a finger.", FINGER);
+  assert.deepEqual(a.amounts, ["Up to £1,500"]);
+  assert.doesNotMatch(a.basis, IF);
+  // Grace's share is below it: half is said.
+  assert.ok(G(FINGER, "Grace broke a finger.", FINGER).basis.endsWith(ifLine(FINGER, "this pays half: £200")));
 });
 test("W4: a note with no section number copied onto Burns names the fracture row's case: no line on Burns; the fracture row has it", () => {
   const note = "Note (a): a compound fracture is paid at double the amount.";
@@ -377,11 +432,11 @@ test("the note set on the wrong person's card: still that person's single amount
   // W1: Daniel's card, 1% of GBP 80,000 is GBP 800; doubled is GBP 1,600, above the maximum: up to GBP 1,500, said as the condition.
   const a = ask(fractureSchedule(KEEPS, 1), "Daniel Okafor", /Fracture/, "Grace has a compound fracture. Daniel broke his wrist too.", KEEPS);
   assert.deepEqual(a.amounts, ["£800"]);
-  assert.ok(a.basis.endsWith(ifLine(KEEPS, "double would be £1,600, but the most it pays is £1,500")), a.basis);
+  assert.ok(a.basis.endsWith(ifLine(KEEPS, "this pays £1,500 (double would be £1,600, more than the £1,500 maximum)")), a.basis);
   // Grace's card with Daniel's case.
   const g = G(KEEPS, "Grace broke her wrist. Daniel has a compound fracture.", KEEPS);
   assert.deepEqual(g.amounts, ["£400"]);
-  assert.ok(g.basis.endsWith(ifLine(KEEPS, "this pays £800 (double), within the £1,500 maximum")));
+  assert.ok(g.basis.endsWith(ifLine(KEEPS, "this pays £800 (double)")));
 });
 test("W10/X6: a card spread to another member for a chat about no one never carries the named card's line", () => {
   const a = ask(fractureSchedule(KEEPS, 1), "Grace Okafor", /Fracture/, "What does a compound fracture pay?", KEEPS, [], { forNobody: true });
@@ -406,7 +461,7 @@ test("L1-L21: plain statements of the case for Grace show GBP 400 and the condit
   for (const [note, q, earlier] of cases) {
     const a = G(note, q, note, earlier);
     assert.deepEqual(a.amounts, ["£400"], q);
-    assert.ok(a.basis.endsWith(ifLine(note, "this pays £800 (double), within the £1,500 maximum")), `${q}: ${a.basis}`);
+    assert.ok(a.basis.endsWith(ifLine(note, "this pays £800 (double)")), `${q}: ${a.basis}`);
   }
 });
 
