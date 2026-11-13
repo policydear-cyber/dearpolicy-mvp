@@ -153,6 +153,8 @@ const ROLE_OF: Array<[RegExp, string, string]> = [
   [/\.to-confirm \{[^}]*/, "--unresolved", "an amount to confirm is not settled"],
   [/\.coverage-unconfirmed \{[^}]*/, "--unresolved", "a printed amount whose wording isn't read"],
   [/\.estimate-basis\.indicative \{[^}]*/, "--unresolved", "an illustration is not a settled amount"],
+  [/\.unread-documents\.partial \{[^}]*/, "--unresolved", "a document read only in part is not settled"],
+  [/\.accuracy-warning\.partial \{[^}]*/, "--unresolved", "the read-in-part note matches its chip"],
   [/\.unread-documents \{[^}]*/, "--info", "still being read is neutral news"],
   [/\.status\.ready \{[^}]*/, "--good", "a read document is confirmed"],
 ];
