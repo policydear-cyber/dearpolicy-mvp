@@ -147,7 +147,12 @@ export type ModelAnswer = { bottomLine: string; statements: ModelStatement[]; ne
 export const TABLE_ANSWER_SCHEMA = (() => {
   const st = SIMPLE_ANSWER_SCHEMA.properties.statements.items;
   return { ...SIMPLE_ANSWER_SCHEMA, properties: { ...SIMPLE_ANSWER_SCHEMA.properties, statements: { ...SIMPLE_ANSWER_SCHEMA.properties.statements,
-    items: { ...st, required: [...st.required, "row", "rowBenefit", "eventFit", "waiting", "period"], properties: { ...st.properties, row: nullable("string"),
+    items: { ...st, required: [...st.required, "row", "rowBenefit", "eventFit", "waiting", "period", "multiplierNote"], properties: { ...st.properties, row: nullable("string"),
+      // One of the row's own printed conditions that pays a multiple of its amount ("paid at double"), copied exactly, only
+      // when the household said its case applies to this person in this event; "" otherwise. The model judges who and when;
+      // the server checks the note and works the amount out (lib/benefit-table/multiplier.ts). A plain string, not
+      // nullable: the API allows at most 16 nullable or union parameters. Old answers without it parse as "".
+      multiplierNote: { type: "string" },
       // The row's benefit name, copied: a name that is not the row's means the id slipped (lib/benefit-table/chat.ts).
       rowBenefit: { type: "string" },
       // Whether the event asked about is one the row pays for: decided for each card, enforced by lib/benefit-table/chat.ts.

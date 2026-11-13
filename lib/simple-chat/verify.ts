@@ -25,7 +25,7 @@ import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
-import { decideMultiple, keepsCapIn, timesWords } from "@/lib/benefit-table/multiplier";
+import { keepsCapIn, noteMultiple, timesWords } from "@/lib/benefit-table/multiplier";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
@@ -815,10 +815,10 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
   /** The row's own printed words (a capped row's statement quotes its cap instead). */
   row: { docIndex: number; page: number; quote: string };
   base: { value: number; docIndex: number; quote: string }; cap: { value: number; docIndex: number; page: number; quote: string } | null;
-  /** The row's own printed condition that pays a multiple of its amount in a case the household stated ("a compound
-   * fracture is paid at double", lib/benefit-table/multiplier.ts): read again here from its stored page. When it is set and
-   * the figure cannot be worked out again, the card is left out, never shown as the single amount. `own` (the row's benefit
-   * and quote) and `section` let the checks decide the case again from the household's own words (decideMultiple). */
+  /** The row's own printed condition the model said pays a multiple of its amount in this person's event ("a compound
+   * fracture is paid at double", lib/benefit-table/multiplier.ts noteMultiple): read again here from its stored page, with
+   * the row's own words (`own`) and `section`, and checked again against the household's own words. When it is set and the
+   * figure cannot be worked out again, the card is left out, never shown as the single amount. */
   times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null } | null };
 /** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
  * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
@@ -892,12 +892,11 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   if (sf.times) {
     const tf = locateQuote(household, sf.times.quote, sf.times.docIndex);
     if (!tf || tf.docIndex !== sf.row.docIndex || tf.page !== sf.times.page) return null;
-    // Decided again from the condition's words and the household's own (written: the current message first), never
-    // trusted from the row step: the same one plain multiple, stated plainly for this person.
-    const d = decideMultiple([sf.times.quote], { own: sf.times.own, section: sf.times.section, cap: cap?.value ?? null },
-      { current: written[0] ?? "", earlier: written.slice(1), person, namedIn: (t) => membersNamedIn(household, t) });
-    if (d?.kind !== "apply" || Math.abs(d.m.times - sf.times.times) > 1e-9) return null;
-    times = d.m.times; timesFound = tf;
+    // Checked again from the condition's stored words and the household's own (written), never trusted from the row step:
+    // the same one plain multiple, of this row's section, with its case words in the household's messages.
+    const d = noteMultiple(sf.times.quote, { own: sf.times.own, section: sf.times.section, cap: cap?.value ?? null }, written);
+    if (!d || Math.abs(d.times - sf.times.times) > 1e-9) return null;
+    times = d.times; timesFound = tf;
     if (cap && Math.round(sf.base.value * sf.percent * times) / 100 > cap.value + 0.005 && !keepsCapIn(sf.times.quote, cap.value)) return null;
   }
   const share = Math.round(sf.base.value * sf.percent) / 100;

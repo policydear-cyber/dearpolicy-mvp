@@ -13,7 +13,7 @@ import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
-import { decideMultiple, type Multiplier, type RowFacts } from "./multiplier";
+import { noteMultiple, sameNote, type Multiplier, type RowFacts } from "./multiplier";
 import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN, anyMoneyFigures, statedCurrencyCode } from "@/lib/format/currency";
@@ -620,6 +620,7 @@ export function renderTable(rows: ChatRow[]): string {
   return `\n<benefit_table>
 Each person's benefit table, as their Coverage page shows it. One row per line: id | person | cover | benefit | qualifier | figure | conditions | where printed.
 For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list and pays on the event itself; "not_described" when the row pays only if a further thing happened that the household has not said happened, even one that often follows such an event (an ambulance was used, a hospital or intensive care stay, equipment bought, a death: that card is never shown either, so say in a fact what it needs); "no_event" when the question names no event (asking what a benefit is, or what a person has, is no event). For an event, give every row that pays on it, also one paid for a family member (per child, for a spouse), saying its condition. For a statement about an event ("on_list" or "any_event"), set "waiting" when a waiting period printed for the row's cover could apply to it: {"applies": "yes", "unsure" or "no" (whether it covers this event), "days": its length in days as printed (3 months is 90), "from": the date it runs from as printed for this person (the policy's issue, start or cover date, as DD/MM/YYYY)}; null when the cover prints no waiting period. The app compares those dates with today and never shows a card inside a waiting period that applies or may apply, so say why in a fact. Set "period" for every statement; for an amount whose cover prints its own period of cover (a trip's dates, a policy's start and end): {"from": its first day, "to": its last day, as printed (DD/MM/YYYY, "" when not printed), "eventOn": the date the event happened as the household said it (DD/MM/YYYY; today's date when they say it is happening now; "" when they did not say when)}; all three "" when no period is printed for the cover. Every policy on file is treated as in force: never say a cover has ended, expired, lapsed or not started because of a printed date or period, and never leave an amount out for that reason. Set "row" to the id of the row it gives and "rowBenefit" to that row's benefit name, copied exactly from the table ("" for a statement with no row; the app leaves out a card whose name is not its row's), and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here, always with its id, also when you read the figure in another document (a premium on a tax invoice is the premium row); an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
+Set "multiplierNote" to "" unless one of the row's own conditions pays a multiple of its amount in one case (paid at double, doubled, twice, treble, N times, 150% of the amount) and the household has said that case applies to this row's person in the event asked about now; then copy that condition exactly as the row's conditions print it. Example: the row prints "Note (a): a compound fracture is paid at double the Section 3 amount" and the household says of Grace's broken arm "It was a compound fracture": set it to that note on Grace's card. Leave it "" when the case is someone else's, from an earlier event, asked about, possible, ruled out or not yet known, or only quoted from the policy; the app then shows the row's single amount and you say in a fact that the note may apply.
 ${rows.map((r) => escapeText(line(r))).join("\n")}
 </benefit_table>`;
 }
@@ -937,6 +938,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       && !o.qualifier && !row.qualifier && sameBenefit(o.benefit, row.benefit) && !o.premium && !row.premium
       && !rows.some((x) => x.personId === o.personId && given.has(x.id) && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))
       && !modelRows.some((x) => x.personId === o.personId && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))) : [];
+    // The row condition the model says pays its multiple in this person's event ("" or missing: none; old answers parse).
+    const noteSaid = typeof raw.multiplierNote === "string" ? raw.multiplierNote.trim() : "";
     for (const r of [row, ...companions, ...firstYear, ...others]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
@@ -952,26 +955,27 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // The row's own printed conditions ride with it, so a total is never worked out past a cap the model left out
       // (Critic R275 M1).
       if (st) st.rowConditions = r.conditions;
-      // A row whose own printed conditions pay a multiple of its amount in a case the household's words state ("paid at
-      // double" for "compound", lib/benefit-table/multiplier.ts decideMultiple) is shown only worked out with that multiple,
-      // within its printed maximum, by the server figure the checks decide and work out again. When the case is named but
-      // not plainly stated for this person, or the amount cannot be worked out with it, the card is left out, its note is
-      // said as its condition and the household hears an amount was left out; otherwise the card is as before (Harbourline
-      // test, 13 Nov; PR #472 gate).
-      const facts = st ? multipleFacts(r, rows) : null;
-      const decided = st && facts ? decideMultiple(r.conditions, facts, { current: question, earlier, person: baseName(r.person), namedIn: (t) => membersNamedIn(household, t) }) : null;
-      const times = decided?.kind === "apply" ? decided.m : null;
-      if (st && decided && (decided.kind === "unsure" || !serverFigureOf(r, st, household, times, facts))) {
-        const note = decided.kind === "unsure" ? decided.condition : decided.m.condition;
-        report.dropped.push({ why: `${names(r)} is paid at a different amount in a case the household named, which could not be worked out`, text: String(st.text) });
-        const said = `${names(r)} also depends on this: ${note}`;
-        if (!points.some((p) => p.text === said && p.person === baseName(r.person)))
-          points.push({ kind: "fact", text: said, person: baseName(r.person), document: documentId(r.docIndex), quote: note, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
+      // A row condition paying a multiple of the amount in one case ("a compound fracture is paid at double the Section 3
+      // amount"): the model names it in "multiplierNote" only when the household said its case applies to this person in
+      // this event (it judges who and when); the server applies it (lib/benefit-table/multiplier.ts noteMultiple) only when
+      // it is one of the row's own conditions, pays one plain multiple, and its case words are in the household's messages,
+      // and works it out within the printed maximum as a server figure the checks work out again. A named note failing any
+      // of that, or a row it cannot be worked out on, gives no amount: the note is said as its condition and the household
+      // hears an amount was left out, never the single amount. No note named: the card as before (Harbourline test, 13 Nov;
+      // PR #472 gates 1-2). Only for the named row's person: a spread card for another member is never multiplied.
+      const facts = st && noteSaid && r.personId === row.personId ? multipleFacts(r) : null;
+      const printed = facts ? r.conditions.find((c) => sameNote(c, noteSaid)) : undefined;
+      const times = facts && printed ? noteMultiple(printed, facts, [question, ...earlier]) : null;
+      if (st && facts && (r === row || printed) && (!times || !serverFigureOf(r, st, household, times, facts))) {
+        report.dropped.push({ why: `${names(r)} pays a multiple in the case described, which could not be checked or worked out`, text: String(st.text) });
+        const said = printed ? `${names(r)} also depends on this: ${printed}` : null;
+        if (said && !points.some((p) => p.text === said && p.person === baseName(r.person)))
+          points.push({ kind: "fact", text: said, person: baseName(r.person), document: documentId(r.docIndex), quote: printed, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
         continue;
       }
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
-        const sf = serverFigureOf(r, st, household, times, facts);
+        const sf = serverFigureOf(r, st, household, times, times ? facts : null);
         if (sf) (report.figures ??= []).push(sf);
         report.cards![r.id] = { text: String(st.text), person: baseName(r.person) };
         if (r.combinedLimit && (raw.eventFit === "on_list" || raw.eventFit === "any_event")) limitsOnEvent.push({ row: r, st });
@@ -1490,15 +1494,12 @@ export function noteLeftOutAmounts<T extends { id: string; kind: string; text: s
   return [...statements.filter((s) => !(s.id === "left-out-fact" && s.text === LEFT_OUT_FACT)), make("left-out-amount", LEFT_OUT_AMOUNT)];
 }
 
-/** What decides a row's printed multiple (lib/benefit-table/multiplier.ts): its own words (benefit and quote), section and
- * printed maximum. An intensive-care note is skipped for a row of intensive care, or when the person's rows already give
- * an intensive-care row for the cover (intensiveCareRows): that row is the case, and the ward rate stays (PR #472 H6). */
-export function multipleFacts(row: ChatRow, rows: readonly ChatRow[]): RowFacts {
+/** What a row brings to a multiple the model names (lib/benefit-table/multiplier.ts noteMultiple): its own words (benefit
+ * and quote), its section and its printed maximum. */
+function multipleFacts(row: ChatRow): RowFacts {
   const cap = row.figure.kind === "worked_out" && row.figure.capped ? row.figure.amount
     : row.capSource ? (moneyFiguresIn(row.capSource.excerpt).find((m) => row.base == null || Math.abs(m.value - row.base) >= 0.005)?.value ?? null) : null;
-  const icu = INTENSIVE_CARE.test(`${row.benefit} ${row.qualifier ?? ""}`) || rows.some((o) => o !== row && o.personId === row.personId && o.coverKey === row.coverKey
-    && INTENSIVE_CARE.test(`${o.benefit} ${o.qualifier ?? ""}`));
-  return { own: `${row.benefit}\n${row.source.excerpt}`, section: row.section ?? null, cap, skip: (c) => icu && INTENSIVE_CARE.test(c) };
+  return { own: `${row.benefit}\n${row.source.excerpt}`, section: row.section ?? null, cap };
 }
 
 /** A percentage row worked out on the person's own printed sum insured (not a corrected one), with where that sum is. */
