@@ -5,7 +5,7 @@ import { structuredCompletion } from "@/lib/ai/llm";
 import { query } from "@/lib/db/client";
 import { canonicalProduct } from "@/lib/coverage/facts";
 import { productIdentity,type PolicyContract } from "@/lib/policies/inventory";
-import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
+import { currencyOfAmount,formatMoney } from "@/lib/format/currency";
 import type { ChatCitation,ClaimItem,PolicyStatedLimit,PotentialPayoutTotal } from "@/types";
 import { isValidPolicyStatedLimit,POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE } from "./monetary-boundary";
 import { hasQuote,knownValue,normalText } from "./facts";
@@ -282,7 +282,7 @@ export function calculatePolicyFormula(args:{benefit:PolicyBenefit;contract:Poli
   if(value==null||!Number.isFinite(value)||value<0)return null;
   // Missing stays missing: with no currency stated by the formula or the
   // cover, no currency is inferred -- SGD is never assumed.
-  const currency=formula.currency?normalizeCurrencyCode(formula.currency)||null:coverage.currency;
+  const currency=formula.currency?currencyOfAmount(formula.currency,coverage.currency,explicitCurrency(formula.evidence.quote)):coverage.currency;
   if(!currency)return null;
   const quotedCurrency=explicitCurrency(formula.evidence.quote);
   if(quotedCurrency&&quotedCurrency!==currency)return null;
