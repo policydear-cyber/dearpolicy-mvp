@@ -790,8 +790,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   // hospital income Mum" and "... Dad", "... Life Assured 1" and "... 2", "Hospital cash" and "Hospital cash (child)" are
   // one benefit printed for several lives, whatever word tells the lives apart (TE on #447, D1). The first two words (one
   // for a one-word name) are compared, so this needs no list of names or roles.
-  // A row may be one life's when another row of the document prints the same kind of figure (daily, periodic, limit or
-  // lump sum) at a different amount under a name that shares any word with it, linking words such as "of" aside: "Hospital
+  // A row may be one life's when another row of the document prints a different figure, of any kind (a reading may type
+  // one life's "up to GBP 3,000" and another's "GBP 5,000" differently, Critic S on #447), under a name that shares any word with it, linking words such as "of" aside: "Hospital
   // cash Mum" and "... Dad", "Mum hospital cash", "Accident Mum", "Hospital cash Main Insured" and "... Joint Life",
   // "Hospital cash" and "Daily hospital income Dad". Then neither is given to every holder by the "each insured" or the
   // unlabelled-rate rule: whatever words tell the lives apart, in any place and of any length, with no list of names or
@@ -804,8 +804,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const related = (x: Set<string>, y: Set<string>) => [...x].some((w) => y.has(w));
   const perLife = new Set<CheckedBenefit>();
   for (const r of readings) {
-    const rows = r.benefits.filter((x) => x.value != null).map((x) => ({ x, w: wordsOf(x.benefit), f: figureKey(x), kind: `${x.pays}|${x.period ?? ""}` }));
-    for (const one of rows) if (rows.some((o) => o !== one && o.kind === one.kind && o.f !== one.f && related(one.w, o.w))) perLife.add(one.x);
+    const rows = r.benefits.filter((x) => x.value != null).map((x) => ({ x, w: wordsOf(x.benefit), f: figureKey(x) }));
+    for (const one of rows) if (rows.some((o) => o !== one && o.f !== one.f && related(one.w, o.w))) perLife.add(one.x);
   }
   // And a rate given to everyone with no word saying so is the only rate of its kind under its heading: two daily (or
   // periodic) rates with different figures in one table whose rows do not say whose they are may be one per life

@@ -365,6 +365,18 @@ test("Critic Q, R: a tag of any length before or after a one-word or two-word be
   }
 });
 
+test("Critic S: two lives' figures read as different kinds ('up to GBP 3,000' and 'GBP 5,000') are still one benefit per life", () => {
+  const lines = ["Medical expenses Main Insured\tup to GBP 3,000 per insured person", "Medical expenses Joint Life\tGBP 5,000 per insured person"];
+  const text = `JOINT SCHEDULE\nPolicy number: F-1\nAsha Rao\tGBP 100,000\nBen Rao\tGBP 80,000\nBENEFITS\n${lines.join("\n")}\nEnd.`;
+  const c = (person: string, sum: number) => cover({ person, product: "Family PA", cover: "Personal accident", policyNumber: "F-1", sumInsured: sum, quote: `${person}\tGBP ${sum.toLocaleString("en-US")}` });
+  const r = checkReading(page(DOC, text), reading("Family PA", ["Asha Rao", "Ben Rao"], [c("Asha Rao", 100000), c("Ben Rao", 80000)], [
+    row({ section: "BENEFITS", benefit: "Medical expenses Main Insured", pays: "up_to", value: 3000, quote: lines[0] }),
+    row({ section: "BENEFITS", benefit: "Medical expenses Joint Life", pays: "amount", value: 5000, quote: lines[1] }),
+  ]));
+  const t = assembleTable([r], asha, [{ section: sectionKeyOf(DOC, { section: "BENEFITS", column: null }), cover: coverKeyOf({ product: "Family PA", cover: "Personal accident", plan: null }), why: "x" }]);
+  assert.deepEqual([...shown(t, 0), ...shown(t, 1)], []);
+});
+
 test("Critic M (documented, fails closed): one figure column under two benefit headings is not the sole column, so the link is refused", () => {
   const text = "ACME TRAVEL - CERTIFICATE\nCertificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)\nMEDICAL\nOverseas medical expenses\t$500,000\nTRAVEL\nTrip cancellation\t$5,000\nEnd.";
   const c = (person: string) => cover({ person, product: "Acme Travel", cover: "Travel", plan: "couple plan", policyNumber: "T-5", quote: "Certificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)" });
