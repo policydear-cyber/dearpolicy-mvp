@@ -99,7 +99,7 @@ async function main() {
   await test("P2 EUR comma decimals, a value wrapping over three lines", () => agreed(
     "Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem\n3. Tag, höchstens 30 Tage,\ninsgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00",
     "Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem 3. Tag, höchstens 30 Tage, insgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00",
-    geo("Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem\n3. Tag, höchstens 30 Tage,\ninsgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00", [78, 78, 78, 303, 303])));
+    geo("Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem\n3. Tag, höchstens 30 Tage,\ninsgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00", [78, 78, 303, 303, 78])));
   await test("P3 IDR three-column table, middle column wraps with a figure on each line (by column)", () => {
     const text = "Manfaat\tBatas\tKeterangan\nRawat inap\tRp 1.000.000 per hari,\tmaks. 60 hari\nmaksimal Rp 60.000.000\tper tahun\nPembedahan\tRp 25.000.000\tper tindakan";
     const out = agreed(text,
@@ -142,9 +142,22 @@ async function main() {
     "Benefit\tLimit\nHospital cash\tGBP 50 per day from the third day,\nup to 30 days\nDeath\tGBP 10,000",
     "Benefit\tLimit\nHospital cash\tGBP 50 per day from the third day, up to 30 days, maximum GBP 1,500\nDeath\tGBP 10,000",
     "50 per day", [[84, 303], [84, 303], [303], [84, 303]]));
-  await test("N7 a label and amount both wrapping, with no page geometry: not joined in reading order (held)", () => held(
+  await test("P7 a label and amount both wrapping, no page geometry: the TAB slots place each part", () => agreed(
     "Benefit\tLimit\nAngioplasty and other\t10% of the Sum Covered, up to\ninvasive treatment\tRM 25,000\nICU\tRM 300",
-    "Benefit\tLimit\nAngioplasty and other invasive treatment\t10% of the Sum Covered, up to RM 25,000\nICU\tRM 300", "25,000"));
+    "Benefit\tLimit\nAngioplasty and other invasive treatment\t10% of the Sum Covered, up to RM 25,000\nICU\tRM 300"));
+  await test("P8 three columns, no geometry, a value part in a blank first slot ('\\t250' under 'up to AUD')", () => agreed(
+    "Service\tBenefit\tAnnual limit\nOptical\t65% of the fee, up to AUD\tAUD 250 per person\n\t250\nDental\t60%\tAUD 800",
+    "Service\tBenefit\tAnnual limit\nOptical\t65% of the fee, up to AUD 250\tAUD 250 per person\nDental\t60%\tAUD 800"));
+  await test("N7 no page geometry, the image puts the label part in the amount's slot: held", () => held(
+    "Benefit\tLimit\nAngioplasty and other\t10% of the Sum Covered, up to\ninvasive treatment\tRM 25,000\nICU\tRM 300",
+    "Benefit\tLimit\nAngioplasty and other\t10% of the Sum Covered, up to invasive treatment RM 25,000\nICU\tRM 300", "25,000"));
+  await test("N13 a label centred beside a value's second line joins once: a second label line below is its own row", () => {
+    agreed("Rider\tBenefit\nPremiums waived after 6 months of\nWaiver\ttotal disability, up to 24 months,\nmaximum $2,400 a month\nChild\t$10,000",
+      "Rider\tBenefit\nWaiver\tPremiums waived after 6 months of total disability, up to 24 months, maximum $2,400 a month\nChild\t$10,000",
+      [[84, 204], [204], [84, 204], [204], [84, 204]]);
+    held("Rider\tBenefit\nPremiums waived after 6 months\nWaiver\t$2,400 a month\nChild\t$10,000",
+      "Rider\tBenefit\nWaiver Child\tPremiums waived after 6 months $2,400 a month $10,000", "10,000", [[84, 204], [204], [84, 204], [84, 204]]);
+  });
   await test("N8 one image row confirms one joined row: a second copy of the row in the text stays held", () => {
     const r = checkLines("Benefit\tLimit\nCover\tRM 100\nRM 100\nCover\tRM 100\nICU\tRM 300",
       "Benefit\tLimit\nCover RM 100 RM 100\nICU\tRM 300", 2, [[84, 303], [84, 303], [303], [84, 303], [84, 303]]);
@@ -179,6 +192,9 @@ async function main() {
       "100,000", [[84, 303], [84, 303], [84, 303], [84, 303]]);
     held("Benefits\nDeath RM 200,000\nTPD RM 100,000\nICU RM 300", "Benefits\nDeath RM 200,000 TPD RM 100,000\nICU RM 300", "100,000");
     held("Leistungen\nTod EUR 20.000,00\nInvalidität EUR 50.000,00", "Leistungen\nTod EUR 20.000,00 Invalidität EUR 50.000,00", "50.000");
+    held("Benefit\tAmount\nDeath\tRM 200,000\ne-hailing accident\tRM 10,000\nICU\tRM 300", "Benefit\tAmount\nDeath e-hailing accident\tRM 200,000 RM 10,000\nICU\tRM 300",
+      "10,000", [[84, 303], [84, 303], [84, 303], [84, 303]]);
+    held("Benefit\tAmount\nDeath\tRM 200,000\ne-hailing accident\tRM 10,000\nICU\tRM 300", "Benefit\tAmount\nDeath e-hailing accident\tRM 200,000 RM 10,000\nICU\tRM 300", "10,000");
   });
   await test("P6 a word hyphenated across the wrap ('peri-' / 'od') and a real hyphen ('early-' / 'stage')", () => {
     agreed("Benefit\tLimit\nPre-existing conditions\tRM 5,000 after a 12-month waiting peri-\nod, up to RM 10,000\nDeath\tRM 100,000",

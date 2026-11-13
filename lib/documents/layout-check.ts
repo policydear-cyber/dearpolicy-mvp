@@ -578,9 +578,13 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
   const byColumn = (group: number[]): string | null => {
     if (!geometry) return null;
     const rows = group.map((j) => { const cs = lines[j].split("\t"), xs = geometry[j]; return xs && xs.length === cs.length ? cs.map((c, n) => ({ c: c.trim(), x: xs[n] })) : null; });
-    if (rows.some((r) => !r) || rows.every((r) => r!.length === 1)) return null;
-    // The columns are where the widest line's cells start; every other cell goes to the nearest, left to right.
-    const anchors = rows.reduce((w, r) => (r!.length > w!.length ? r : w))!.map((c) => c.x);
+    if (rows.some((r) => !r)) return null;
+    // The columns are where the widest line's cells start; every other cell goes to the nearest, left to right. Where every
+    // line is one cell (a label centred between its value's lines), the columns are the distinct places the lines start.
+    const widest = rows.reduce((w, r) => (r!.length > w!.length ? r : w))!;
+    const anchors = widest.length > 1 ? widest.map((c) => c.x)
+      : rows.map((r) => r![0].x).sort((p, q) => p - q).filter((x, n, xs) => n === 0 || x > xs[n - 1] + 1);
+    if (anchors.length < 2) return null;
     const columns: string[][] = anchors.map(() => []);
     for (const r of rows) {
       let last = -1;
@@ -593,17 +597,48 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     }
     return columns.map((parts) => parts.join(" ")).join("\t").replace(/\t+$/, "");
   };
+  // No geometry for these lines, but every line keeps its TAB slots, blank ones too ("Dental\t80%\tup to", "\t\tAUD 500 a year"): the slots
+  // are the columns.
+  const bySlot = (group: number[]): string | null => {
+    // A line's slots always start at the first column; blank slots at its end are not printed ("\t250" under three columns).
+    const raw = group.map((j) => lines[j].split("\t").map((c) => c.trim()));
+    const width = Math.max(...raw.map((r) => r.length));
+    if (width < 2) return null;
+    const slots = raw.map((r) => [...r, ...Array<string>(width - r.length).fill("")]);
+    return slots[0].map((_, n) => slots.map((r) => r[n]).filter(Boolean).join(" ")).join("\t").replace(/\t+$/, "");
+  };
   const inOrder = (group: number[]) => (group.filter((j) => lines[j].includes("\t")).length <= 1 ? group.map((j) => lines[j].trim()).join(" ") : null);
-  // A line below that starts with a capitalised word and prints a figure ("TPD\tRM 100,000", "Death RM 200,000") is a row of
-  // its own, not a wrapped part: two complete rows an image reader ran together are never stored as one (Critic #446 F3).
-  // A wrapped part starts lower case, with a figure or a currency ("RM 50,000, once per lifetime", "$1,000"), or is words
-  // only. A capitalised wrapped part with a figure stays held, as before.
-  const ownRow = (j: number) => {
+  // A line below that prints a figure joins the row only when it reads as a wrapped part, never as a row of its own
+  // (Critic #446 F3, R1: two complete rows an image reader ran together are never stored as one):
+  // - where the page geometry puts its first cell in a value column (right of the row's label column), it is a part of
+  //   that column ("RM 50,000, once per lifetime", "Maximum S$1,500 a year");
+  // - otherwise it must start lower case in a cased script, with a figure, or with a currency ("coronary artery\tRM
+  //   25,000", "2025)", "$1,000"). A row marker ("(a)", "1.", "ii)"), a capital, or a letter of a script with no case
+  //   ("身故", "เสียชีวิต") starts a row: that line stays held, as before.
+  // Words-only lines below are wrapped label parts and always join.
+  const firstX = (j: number) => { const xs = geometry?.[j]; return xs && xs.length === lines[j].split("\t").length ? xs[0] : undefined; };
+  const partStart = (l: string) => {
+    const t = l.trim();
+    if (/^\(?(?:\d{1,3}|[a-z]|[ivxlc]{1,5})[.)]\s/i.test(t)) return false;
+    const code = t.match(/^\p{L}+/u)?.[0];
+    if (code && (ISO_CURRENCIES.has(code) || LOCAL_CURRENCY_FORMS.has(code))) return true;
+    return /^(?:\d|\p{Ll})/u.test(t) || t.replace(CURRENCY_MARK, "") !== t && /^\S{0,3}\p{Sc}/u.test(t);
+  };
+  // `left` is where the row's lines so far start furthest left. A line that starts further left still is the row's label
+  // cell, when no line of the row has one yet (a label centred beside its value's second line): it joins, once.
+  // A line with a label cell of its own under a line that ends on a figure is a row of its own whatever its first letter
+  // ("Death\tRM 200,000" over "e-hailing accident\tRM 10,000"): a wrapped label continues a row whose value wraps too.
+  const endsOnFigure = (j: number) => { const t = lineTokens(lines[j]).at(-1); return t !== undefined && (typeof t === "number" || isDate(t)); };
+  const ownRow = (j: number, left: number | undefined, prev: number) => {
     if (!figureLine(lineTokens(lines[j]))) return false;
-    const word = lines[j].trim().replace(CURRENCY_MARK, " ").trim().match(/^\p{L}[\p{L}.]*/u)?.[0];
-    if (!word) return false;
-    const w = word.replace(/\.$/, "");
-    return !ISO_CURRENCIES.has(w) && !LOCAL_CURRENCY_FORMS.has(w) && /^\p{Lu}/u.test(word);
+    const xj0 = firstX(j);
+    const labelCell = left !== undefined && xj0 !== undefined ? Math.abs(xj0 - left) <= 1 : !!lines[j].split("\t")[0].trim() && lines[j].includes("\t");
+    if (labelCell && endsOnFigure(prev)) return true;
+    const xj = firstX(j);
+    if (left !== undefined && xj !== undefined && (xj > left + 1 || xj < left - 1)) return false;
+    // A blank first slot: the line starts in a value column.
+    if (/^[ \t]*\t/.test(lines[j]) && !lines[j].split("\t")[0].trim()) return false;
+    return !partStart(lines[j]);
   };
   // A word hyphenated across the wrap ("peri-" over "od") is tried whole and with its hyphen, as well as with a space.
   const variants = (text: string) => [text, text.replace(/(\p{L})- (?=\p{Ll})/gu, "$1"), text.replace(/(\p{L})- (?=\p{Ll})/gu, "$1-")];
@@ -616,10 +651,14 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
       above.unshift(j);
     }
     const below: number[] = [];
+    const xsSoFar = [...above, i].map(firstX);
+    let left = xsSoFar.every((x) => x !== undefined) ? Math.min(...(xsSoFar as number[])) : undefined;
     for (let u = k + 1; u < filledText.length && below.length < 5; u++) {
       const j = filledText[u];
-      if (!free(j) || alone(j) || ownRow(j)) break;
+      if (!free(j) || alone(j) || ownRow(j, left, below.at(-1) ?? i)) break;
       below.push(j);
+      const xj = firstX(j);
+      left = left === undefined || xj === undefined ? undefined : Math.min(left, xj);
     }
     for (let size = 2; size <= above.length + 1 + below.length; size++) {
       let found: { group: number[]; text: string; at: number } | null = null, ways = 0;
@@ -628,7 +667,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
         if (down > below.length) continue;
         const group = [...above.slice(above.length - up), i, ...below.slice(0, down)];
         // One group is one way, however many of its spellings match.
-        for (const text of new Set([byColumn(group), inOrder(group)].filter((x): x is string => x !== null).flatMap(variants))) {
+        for (const text of new Set([byColumn(group) ?? bySlot(group), inOrder(group)].filter((x): x is string => x !== null).flatMap(variants))) {
           const at = pool.findIndex((o) => sameLine(lineTokens(text), o.t) && o.h === textUnder[i]);
           if (at >= 0) { ways++; found ??= { group, text, at }; break; }
         }
