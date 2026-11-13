@@ -198,6 +198,17 @@ function withoutPlainDollarWording(t: string): string {
 }
 /** "SGD" when a document's pages name Singapore dollars ("S$", "SGD", "Singapore dollars") and nothing in them may be
  * another currency; otherwise null. A bare "$" in such a document is a Singapore dollar. */
+const noCurrencyDocs = new WeakMap<HouseholdDocument, boolean>();
+/** Whether no page of a document prints any currency: no sign or code beside a figure, no currency's name, no SGD and no
+ * currency field. A bare "$" counts as printed (its currency is unresolved, not absent). */
+export function printsNoCurrency(doc: HouseholdDocument): boolean {
+  if (noCurrencyDocs.has(doc)) return noCurrencyDocs.get(doc)!;
+  const t = doc.pages.map((p) => p.text ?? "").join("\n").normalize("NFKC");
+  const none = !/\$|\bSGD\b|Singapore\s+dollars?|\bcurrency\b/i.test(t) && !OTHER_CODE.test(t) && !OTHER_WORDS.test(withoutPlainDollarWording(t))
+    && moneyFiguresIn(t).length === 0 && doc.pages.every((p) => pageCurrency(p.text ?? "") == null);
+  noCurrencyDocs.set(doc, none);
+  return none;
+}
 export function documentCurrency(doc: HouseholdDocument): string | null {
   if (docCurrencies.has(doc)) return docCurrencies.get(doc)!;
   const t = doc.pages.map((p) => p.text ?? "").join("\n").normalize("NFKC");
@@ -1095,13 +1106,20 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
       return own.length === 1 || (columns > 1 && own.length === columns) ? own : [];
     }) : [];
     const inQuote = (v: number) => numbersIn(found.excerpt).some((n) => sameValue(n, v));
-    if (!declared || !(plainAmountsIn(found.excerpt).some((v) => sameValue(v, value)) || cells.some((v) => sameValue(v, value) && inQuote(v))) || (signed && signed !== "$" && signed !== declared)) return { ok: false, why: "the amount is not printed with its currency in the quoted words" };
+    // A document that prints no currency anywhere (a schedule of plain figures, no sign, code or currency field on any page):
+    // a printed amount is still the document's amount, shown as printed with its currency said to be not stated, never
+    // given a currency and never dropped as "not printed" (live 13 Nov: a TPD answer left out two printed sums, S$100,000
+    // and S$13,500 by Coverage's reading, as amounts it "couldn't find printed"). Any currency printed anywhere in the
+    // document leaves the figure unresolved as before: it may be that currency or another.
+    const noCurrencyAnywhere = !declared && printsNoCurrency(doc);
+    if (!(declared || noCurrencyAnywhere) || !(plainAmountsIn(found.excerpt).some((v) => sameValue(v, value)) || cells.some((v) => sameValue(v, value) && inQuote(v))) || (declared && signed && signed !== "$" && signed !== declared)) return { ok: false, why: "the amount is not printed with its currency in the quoted words" };
     const at = [...found.excerpt.matchAll(PLAIN_AMOUNT)].find((m) => sameValue(Number(m[1].replace(/,/g, "")), value)) ?? [...found.excerpt.matchAll(/(?<![\d.,])\d[\d,]*(?:\.\d+)?(?![\d.,]*\d)/g)].find((m) => sameValue(Number(m[0].replace(/,/g, "")), value));
     // A figure whose row names a count or a rate is not money, whatever the page's currency (R59-6).
     const label = at ? found.excerpt.slice(Math.max(0, found.excerpt.lastIndexOf("\n", at.index) + 1), at.index) : "";
     // "Per visit" and "per (policy) year" say how often a sum applies, not what is counted; "limit" never makes a count money (R68-1).
     const counted = label.replace(/\bper\s+(?:policy\s+)?(?:year|visit|annum)\b/gi, " ");
     if (/\b(?:units?|rates?|age|ages|years?|points?|factors?|percent(?:age)?|days?|months?|weeks?|times|ratio|count|number|no\.?|plans?|co-?insurance|sessions?|visits?|claims|stays?|admissions?|nights?|period|term|survival|waiting)\b/i.test(counted) && !/\b(?:premium|instalment|benefit|sum|amount|fee|cost|charge|payable|assured|insured|co-?payment|deductible|excess)\b/i.test(counted)) return { ok: false, why: "the figure's row names a count or a rate, not money" };
+    if (!declared) return { ok: true, amount: { value, text: upTo(found.excerpt, at?.index ?? -1) + formatMoney("", value), currencyResolved: false, illustration: false } };
     return { ok: true, amount: { value, text: upTo(found.excerpt, at?.index ?? -1) + formatMoney(SIGN[declared] ?? declared + " ", value), currencyResolved: true, illustration: false } };
   }
   // The sign is the one the quoted words print with the figure ("$10,000" stays "$10,000" whatever the model wrote, R-H1).

@@ -134,11 +134,29 @@ const isDate = (t: Token) => typeof t === "string" && t.startsWith("date ");
  * within one line, or "Plan A" and "Plan B" swapped, do not agree (TE U-F1). Currency marks and "%" are left out: the two
  * readings may print them differently. */
 function lineTokens(line: string): Token[] {
-  const tokens = unglue(codesAsWords(line)).replace(/US\$|S\$|\$|\b(?:SGD|USD)\b/gi, " ").toLowerCase().match(new RegExp(DATE + String.raw`|\d[\d,]*(?:\.\d+)?|[a-z]+`, "gi")) ?? [];
+  const tokens = unglue(codesAsWords(line.normalize("NFKC"))).replace(/US\$|S\$|\$|\b(?:SGD|USD)\b/gi, " ").toLowerCase().match(new RegExp(DATE + String.raw`|\d[\d,]*(?:\.\d+)?|[a-z]+`, "gi")) ?? [];
   return tokens.map((t): Token => (WHOLE_DATE.test(t) ? dateToken(t) : /^\d/.test(t) ? Number(t.replace(/,/g, "")) : t));
 }
 const figureLine = (l: Token[]) => l.some((t) => (typeof t === "number" ? t > 0 : isDate(t)));
-const sameLine = (a: Token[], b: Token[]) => a.length === b.length && a.every((t, i) => (typeof t === "number" ? typeof b[i] === "number" && Math.abs(t - (b[i] as number)) < 0.005 : t === b[i]));
+/** A line's tokens as two readings of one printed line can be compared: the words between two figures (or dates) as one
+ * run of letters, so a name the text layer prints glued ("AccidentDeath&DismembermentIII") and an image reader prints
+ * spaced ("Accident Death & Dismemberment III"), or the reverse, is the same label; and a lower-case "l" read as "i", the
+ * letters image readers swap in a capital I or a Roman numeral ("Medical Reimbursement Ill" for "III"). Both readings are
+ * folded alike, so equal words stay equal; the same letters must still stand in the same order, and every figure must
+ * still match in place, so no figure is ever paired with another label (live 13 Nov: a schedule's two "... III" rider
+ * lines were held back as "[amount not checked]" on a re-read whose image reading printed every one of their figures). */
+function folded(line: Token[]): Token[] {
+  const out: Token[] = [];
+  for (const t of line) {
+    const word = typeof t === "string" && !isDate(t);
+    const prev = out[out.length - 1];
+    if (word && typeof prev === "string" && !isDate(prev)) out[out.length - 1] = prev + t.replace(/l/g, "i");
+    else out.push(word ? (t as string).replace(/l/g, "i") : t);
+  }
+  return out;
+}
+const sameTokens = (a: Token[], b: Token[]) => a.length === b.length && a.every((t, i) => (typeof t === "number" ? typeof b[i] === "number" && Math.abs(t - (b[i] as number)) < 0.005 : t === b[i]));
+const sameLine = (a: Token[], b: Token[]) => sameTokens(a, b) || sameTokens(folded(a), folded(b));
 const sameFigures = (a: number[], b: number[]) => a.length === b.length && a.every((n, i) => Math.abs(n - b[i]) < 0.005);
 const figuresOf = (l: Token[]) => l.filter((t): t is number => typeof t === "number");
 const labelOf = (l: Token[]) => l.filter((t) => typeof t === "string" && !isDate(t)).join(" ");
