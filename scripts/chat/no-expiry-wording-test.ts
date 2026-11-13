@@ -51,7 +51,7 @@ async function main() {
   });
   t("control: a future end date still counts the days, and today is said as today", () => {
     assert.equal(countdownLine("Harbour Shield", { state: "in_force", date: "2026-11-30", printed: "30 November 2026" }, today), "Harbour Shield ends on 30 November 2026 — 30 days from today.");
-    assert.equal(countdownLine("Harbour Shield", { state: "in_force", date: today, printed: "31 October 2026" }, today), "Harbour Shield ends today, 31 October 2026.");
+    assert.equal(countdownLine("Harbour Shield", { state: "in_force", date: today, printed: "31 October 2026" }, today), "Harbour Shield ends today, 31 October 2026 (0 days left).");
   });
   t("no chat module or source list writes a date- or age-based 'expired on', 'no longer covers anyone', 'not confirmed current' or 'may not reflect the current terms'", () => {
     const dir = "lib/chat";
