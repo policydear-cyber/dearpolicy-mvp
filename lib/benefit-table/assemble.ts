@@ -19,7 +19,6 @@ import { printedDay, singaporeDay } from "./dates";
 import { SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
-import { anyMoneyFigures } from "@/lib/format/currency";
 import { CAP_WORDS, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
@@ -28,9 +27,6 @@ export type FamilyMember = { id: string; display_name: string; preferred_name?: 
   /** The date of birth the household entered on the Family page (YYYY-MM-DD), when it did: tells which age group's row of a
    * wording is the person's (tierProblem). */
   date_of_birth?: string | null;
-  /** The relationship the household entered on the Family page ("Me", "Spouse", "Child"): tells whether a family
-   * schedule's row printed for an insured child or an adult is the person's (lifeKindProblem). */
-  relationship?: string | null;
   /** The documents this person is linked to by their own record (policy_members: chosen at upload, ticked in the "who does
    * this cover" picker, or matched when read), and the printed names on a document the household matched to them
    * (policy_detected_people). Used only to tell apart people whose names are the same. */
@@ -345,7 +341,7 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
     : b.pays === "words" && /\d\s*%/.test(b.source.excerpt) ? "paid as a share printed in the row's words, with no amount worked out: see the document" : "no figure printed" };
   // A row whose words say it is capped, with no cap read and checked (or a reading from before caps were read), is never
   // worked out: the uncapped figure could be more than it pays.
-  if (b.cap == null && (b.capUnread || CAP_WORDS.test(anyMoneyFigures(b.source.excerpt).length ? b.source.excerpt : withoutOwnShareCap(b.source.excerpt, b.value)))) {
+  if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.ownShareNamed ? withoutOwnShareCap(b.source.excerpt, b.value) : b.source.excerpt))) {
     const of = shareWords(b);
     return { kind: "none", why: `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that was not captured: see the document`,
       ...(of ? { share: { percent: b.value!, of, capWords: null, capPage: null, capMissing: true } } : {}) };
@@ -442,76 +438,7 @@ function columnProblem(column: string | null, cover: CoverType, plans: Set<strin
  * a family plan's S$12,500 baggage limit was shown on a single traveller's plan). A label that only names a child as the
  * subject of the benefit ("Child companion", "child care") is not a tier. */
 const FAMILY_TIER = /\b(?:family\s+(?:plan|cover|policy|limit|option)s?|per\s+family|for\s+(?:a|the|each)\s+family|family\s+overall)\b/i;
-/** A row printed for a child who is the insured person ("For an insured child under 18, limited to 25%"). */
-const INSURED_CHILD = /\binsured\s+child(?:ren)?\b/i;
 const CHILD_TIER = /\b(?:child(?:ren)?\s+(?:covered|insured|below|under|aged|up\s+to)|(?:each|per|every|insured)\s+child|for\s+(?:a|each|every)\s+child|dependent\s+child(?:ren)?)\b/i;
-/** Words that name one kind of life among several: a row with them on a family schedule is for some of its people only. */
-
-/** Words that name one kind of life among several: a row with them on a family schedule is for some of its people only. */
-const KIND_WORDS = /\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?)\b/i;
-/** A column that is only a kind of life, with or without its age group ("Adult", "Child", "Children (under 18)"). */
-const KIND_COLUMN = /^\s*(?:insured\s+)?(adults?|child(?:ren)?)\b[^A-Za-z]*(?:(?:aged?|below|under|over|above|up\s+to|and|or|years?|yrs?|old|of|age)[^A-Za-z]*)*$/i;
-/** The person's relationship on the Family page as a kind of life: "child" for a son or daughter (not an in-law), "adult"
- * for self, a spouse, a parent or another adult relation, null when it cannot be told. */
-function relationKind(relationship: string | null | undefined): "child" | "adult" | null {
-  const r = (relationship ?? "").toLowerCase().replace(/[_-]+/g, " ");
-  if (/\bin\s*law\b/.test(r) || /\b(?:self|me|myself|spouse|wife|husband|partner|parent|mother|father|step\s*(?:mother|father)|sibling|brother|sister|grand\s*(?:parent|mother|father)|helper)\b/.test(r)) return "adult";
-  if (/\b(?:child|son|daughter|step\s*(?:child|son|daughter)|grand\s*(?:child|son|daughter))\b/.test(r)) return "child";
-  return null;
-}
-/** The clause of a row's words that prints its own figure ("100% of the Sum Insured; for an insured child under 18,
- * limited to 25%": the 25% row's clause is the second), or null when no one clause holds it. */
-function ownClause(b: Pick<CheckedBenefit, "value" | "source">): string | null {
-  if (b.value == null) return null;
-  const v = String(b.value);
-  const hits = b.source.excerpt.split(/[;\n]|\.(?=\s|$)/).filter((c) => (c.replace(/,/g, "").match(/\d+(?:\.\d+)?/g) ?? [] as string[]).includes(v));
-  return hits.length === 1 ? hits[0] : null;
-}
-/** Whether a row names a kind of life or an age group in its label, column or own clause. */
-function namesKind(b: CheckedBenefit): boolean {
-  const text = `${b.benefit} ${b.column ?? ""} ${ownClause(b) ?? ""}`;
-  return KIND_WORDS.test(text) || !!ageBand(text);
-}
-/** On a document that prints the cover for two or more people (a family or joint schedule), a row that names a kind of life
- * or an age group is for some of its people only. Settled per person only when the row says plainly whose it is:
- * - a column that is only "Adult" or "Child" (with or without its age group), or words for an insured child ("For an
- *   insured child under 18, limited to 25%") in its label, column or own clause;
- * - an age group alone ("aged 65 and above"), by the date of birth.
- * The person's kind is their age by the date of birth on the Family page against the row's own age group (else under 18
- * is a child); only with no date of birth, their relationship ("Son", "Spouse"; an in-law is an adult). An adult son
- * recorded as "child" is not a child for an under-18 row (Critic #449 round 2). Never the product's or document's name
- * ("Parent and Child Accident Plan", Critic #449 F7). Any other row that names a kind ("Child hospital cash", "Education
- * grant for children under 21", "RM 50 for a child") cannot be told and shows no amount for anyone. */
-function lifeKindProblem(b: CheckedBenefit, member: FamilyMember | undefined, today: number, unknownIsProblem = true): string | null {
-  if (!namesKind(b)) return null;
-  const clause = ownClause(b) ?? "";
-  const label = `${b.benefit} ${b.column ?? ""}`;
-  const col = KIND_COLUMN.exec(b.column ?? "");
-  // "For each insured child" pays per child (a parent's death can bring it): not the child's own row (Critic #449 round 3).
-  const perChild = /\b(?:each|per|every|all|any)\s+insured\s+child/i.test(`${label} ${clause}`);
-  const kind: "child" | "adult" | null = col ? (/^adult/i.test(col[1]) ? "adult" : "child")
-    : INSURED_CHILD.test(`${label} ${clause}`) && !perChild && !/\badults?\b/i.test(`${label} ${clause}`) ? "child" : null;
-  // An age beside a kind of life needs no "years" ("child under 16", "children aged 2 to 18").
-  const kindAge = /\b(?:under|below|younger\s+than|less\s+than)\s+(?:the\s+age\s+of\s+)?(\d{1,2})\b|\b(?:over|above|older\s+than)\s+(?:the\s+age\s+of\s+)?(\d{1,2})\b|\b(?:aged?|up\s+to)\s+\d{1,2}\b/i.exec(`${label} ${clause}`);
-  const band = ageBand(`${label} ${clause}`) ?? (kindAge ? (kindAge[1] ? `<${kindAge[1]}` : kindAge[2] ? `>${kindAge[2]}` : "?") : null);
-  const age = ageOn(member?.date_of_birth, today);
-  if (!kind) {
-    if (band && !KIND_WORDS.test(`${label} ${clause}`)) {
-      if (age == null) return "printed for one age group; add this person's date of birth on the Family page to see whether it is theirs";
-      return inBand(age, band) ? null : "printed for an age group the person is not in (by the date of birth on the Family page)";
-    }
-    return "printed for some of the people on this schedule, and which ones cannot be told from the row: see the document";
-  }
-  // A printed age group is settled only by the date of birth; the relationship alone settles only a bare "Adult" or
-  // "Child" column ("son" is no proof of "under 16": Critic #449 round 3).
-  const isChild = band === "?" ? null : age != null ? (band ? (kind === "child" ? inBand(age, band) : !inBand(age, band)) : age < 18)
-    : band || relationKind(member?.relationship) === null ? null : relationKind(member?.relationship) === "child";
-  if (isChild == null && !unknownIsProblem) return null;
-  if (isChild == null) return `printed for ${kind === "child" ? "an insured child" : "an adult"}; add this person's date of birth (or who they are) on the Family page to see whether it is theirs`;
-  if (kind === "child" && !isChild) return "printed for an insured child; this person is not one by the Family page";
-  if (kind === "adult" && isChild) return "printed for an adult; this person is a child by the Family page";
-  return null;
-}
 /** An age group as "<n" / ">=n" / "a-b", the same for every wording of it. A number counts as an age only with "years",
  * "yrs" or "age(d)" beside it, so "over 3 days" or "S$500 and above" is never an age group. */
 const YEARS = String.raw`\s*(?:years?|yrs?)(?:\s+old)?(?:\s+of\s+age)?`;
@@ -641,23 +568,8 @@ function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, cove
   // No one life is the heading: the people whose own sum printed on this document is the row's figure (DC, 10 Nov). Never
   // anyone else: no one is shown an amount that is not theirs.
   const own = (c: PersonCover) => c.confirmation ? c.confirmation.printed : c.sumInsured;
-  const theirs = new Set([...ids].filter((id) => printed.some((c) => c.personId === id && own(c) != null && own(c) === b.value
+  return new Set([...ids].filter((id) => printed.some((c) => c.personId === id && own(c) != null && own(c) === b.value
     && (!c.currency || !b.currency || c.currency === b.currency))));
-  if (theirs.size) return theirs;
-  // A family schedule's own table of benefits, printed on a page that prints none of the insured people's lines (their
-  // names and sums on one page, "GBP 50 per day in hospital" on the benefits page): nothing ties the row to one life, and
-  // the document prints it once for the cover everyone on it holds, so it is every one of their rows (TE-ACC-20261113:
-  // hospital cash and medical expenses were shown for no one). Rows on a page that prints any holder's own line stay
-  // no one's, so one life's block is never shown for another.
-  // Only a row with no column, or a column that is only "Adult" or "Child" (lifeKindProblem then settles whose): a plan
-  // column ("Plan A", "Gold") is never given to everyone.
-  const ownLines = printed.filter((c) => c.source.documentId === documentId);
-  if (b.column && !KIND_COLUMN.test(b.column)) return theirs;
-  // A row with no column only when nothing printed with it ties it to one life, kind or plan (CheckedBenefit.sharable:
-  // per-person blocks, "ADULT BENEFITS" / "Plan B" headings, "AUD 50 a day for a child" on its line: Critic #449 round 3).
-  if (!b.column && !b.sharable) return theirs;
-  if ([...ids].every((id) => ownLines.some((c) => c.personId === id)) && ownLines.every((c) => c.source.page !== b.source.page)) return ids;
-  return theirs;
 }
 /** `now` decides which short-term covers have ended (coverEnded), in Singapore time like the chat's date checks. */
 /** Why a row is under the cover whose own printed line it is (ownLineCovers). */
@@ -750,8 +662,6 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     if (!l?.cover && unplaced.has(s.key)) unlinkedSections.push({ section: s, why: l ? l.why : refused ? `not shown: ${refused.why}` : "not linked to any cover", source: firstSource.get(s.key) ?? null });
   }
   const notForPerson: NonNullable<BenefitTable["notForPerson"]> = [];
-  /** How many people a document prints a cover for. */
-  const livesOn = (documentId: string) => new Set(covers.filter((c) => c.source.documentId === documentId || (c.copyDocuments ?? []).some((d) => d.documentId === documentId)).map((c) => c.personId)).size;
   const isAgeTier = ageAlternatives(readings);
   const notTold = new Set<string>();
   for (const r of readings) for (const b of r.benefits) {
@@ -764,16 +674,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     for (const p of people.filter((x) => !who || who.has(x.id))) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover && (!l.line || (x.source.documentId === r.documentId && ownLineKey(x.source) === l.line))), r.documentId)) {
       // A row on the person's own schedule or certificate is theirs as printed ("Total Permanent Disability (below 65 years
       // of age)" is a condition of their own cover, not another tier's row): the rule is for wordings, summaries and terms.
-      // A document that prints the cover for two or more people (a family schedule) is not one person's own: a row it prints
-      // for an insured child ("For an insured child under 18, limited to 25%", a column headed "Insured child under 18") is
-      // a child's, and an "Adult" column an adult's, by the Family page (lifeKindProblem; TE-ACC-20261113: the child's 25%
-      // was worked out for both parents).
-      const tier = r.documentId === c.source.documentId
-        ? (livesOn(r.documentId) >= 2 ? lifeKindProblem(b, family.find((m) => m.id === p.id), singaporeDay(now)) : null)
-        : tierProblem(b, ownTierWords(c, readings), ageOn(family.find((m) => m.id === p.id)?.date_of_birth, singaporeDay(now)), isAgeTier(r, b))
-          // A wording's "Adult" or "Child" column is never shown for a person the Family page says is the other kind (TE #449
-          // H5a); when it cannot tell, the row stays as before, shown with its column ("for child").
-          ?? (KIND_COLUMN.test(b.column ?? "") ? lifeKindProblem(b, family.find((m) => m.id === p.id), singaporeDay(now), false) : null);
+      const tier = r.documentId === c.source.documentId ? null
+        : tierProblem(b, ownTierWords(c, readings), ageOn(family.find((m) => m.id === p.id)?.date_of_birth, singaporeDay(now)), isAgeTier(r, b));
       // A row for another tier stays on the table with no amount and the reason, so nothing is lost without a word.
       if (tier) notForPerson.push({ personId: p.id, benefit: b.benefit, section: b.section, column: b.column, why: tier, source: b.source });
       // A cover the person's own schedule prints as not covered shows no amount from another document (a wording's figure

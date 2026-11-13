@@ -6,9 +6,11 @@
  * 2. A percentage row worked out on the person's own sum insured is shown in the chat as the server worked it out, after the
  *    chat's checks find the row, the person's own sum line and any maximum in the stored pages and work it out again.
  *    Two sums for the person, a line with two figures, or a bare "$" give no figure.
- * 3. "Limited to 25% of the Sum Insured" states the share, not a money cap; on a family schedule such a row for an insured
- *    child is the child's only.
- * 4. A family schedule's table of benefits on a page that prints none of the insured people's lines is every holder's.
+ * 3. "Limited to 25% of the Sum Insured" states the share, not a money cap, on a document printed for one life; on a family
+ *    schedule, or with money or another life's sum beside it, the row stays capped.
+ * 4. Stay totals read a first paid day in words ("from the third consecutive day") and "up to N days" only as a day limit.
+ * Family schedules' shared tables and child/adult rows are left as main has them (no amount): four Critic rounds showed
+ * no layout rule that proves whose they are (see PR #449).
  * No model, database or network.
  *   npm run benefit-table:claim-amounts-test */
 import assert from "node:assert/strict";
@@ -226,47 +228,42 @@ test("control: the server figure is never taken from the model's JSON", () => {
 });
 
 // ---------- 3b. Insured-child rows on a family schedule ----------
-test("a child-only share on a family schedule is the child's alone, and is worked out (no 'maximum not captured')", () => {
+test("on a one-life certificate, 'limited to 25% of the Sum Insured' is the share, worked out (no 'maximum not captured')", () => {
   for (const spec of [MYR, EUR]) {
-    const h = family(spec);
     const child = spec.people.find((p) => p.relationship === "child")!;
-    const childRow = h.table.people.find((p) => p.name === child.name)!.rows.find((r) => r.column === "Insured child under 18")!;
-    assert.equal(childRow.figure.kind, "worked_out", JSON.stringify(childRow.figure));
-    for (const p of spec.people.filter((x) => x.relationship !== "child")) {
-      const r = h.table.people.find((x) => x.name === p.name)!.rows.find((x) => x.column === "Insured child under 18")!;
-      assert.equal(r.figure.kind, "none", `${p.name}: ${JSON.stringify(r.figure)}`);
-      assert.match((r.figure as { why: string }).why, /printed for an insured child/);
-    }
+    const h = family({ ...spec, people: [child] });
+    const r = h.table.people[0].rows.find((x) => x.column === "Insured child under 18")!;
+    assert.ok(r.figure.kind === "worked_out" && r.figure.amount === child.sum / 2, JSON.stringify(r.figure));
   }
 });
-test("control: a money cap on the child row still holds it back when not read", () => {
-  const h = family({ ...MYR, childLine: "For an insured child under 18, limited to 50% of the Sum Insured, maximum RM 30,000." });
-  const r = h.table.people.find((x) => x.name === "Adam Bin Ahmad")!.rows.find((x) => x.column === "Insured child under 18")!;
-  assert.equal(r.figure.kind, "none");
+test("control: on a family schedule the share's life is not settled by the row, so no one gets an amount for it", () => {
+  for (const spec of [MYR, EUR]) {
+    const h = family(spec);
+    for (const p of spec.people) assert.notEqual(h.table.people.find((x) => x.name === p.name)!.rows.find((x) => x.column === "Insured child under 18")?.figure.kind, "worked_out", p.name);
+  }
+});
+test("control: 'limited to N%' of another life's sum, or with money beside it, stays capped on a one-life certificate", () => {
+  const child = MYR.people[2];
+  for (const childLine of ["For an insured child under 18, limited to 50% of the Sum Insured, maximum RM 30,000.", "For an insured child under 18, limited to 50% of the Sum Insured of the Principal Insured.",
+    "For an insured child under 18, limited to 50% of the Sum Insured applicable to the Insured Parent."]) {
+    const h = family({ ...MYR, people: [child], childLine });
+    assert.notEqual(h.table.people[0].rows.find((x) => x.column === "Insured child under 18")?.figure.kind, "worked_out", childLine);
+  }
 });
 
-// ---------- 4. Shared table of benefits on a family schedule ----------
-test("a daily amount in the family schedule's own table of benefits is every holder's, as printed", () => {
-  for (const spec of [MYR, EUR]) {
-    const h = family(spec);
-    for (const p of spec.people) {
-      const r = h.table.people.find((x) => x.name === p.name)!.rows.find((x) => x.benefit === "Hospital allowance");
-      assert.ok(r && r.figure.kind === "printed" && r.figure.amount === 80 && r.fromDay === 2 && r.maxDays === 60, `${p.name}: ${JSON.stringify(r?.figure)} from ${r?.fromDay} max ${r?.maxDays}`);
-    }
-    assert.ok(!h.table.unlinkedSections.some((u) => u.why === NOT_TOLD_WHY));
-  }
-});
+// ---------- 4. Daily amounts ----------
+const SITI = MYR.people[1], MARIE = EUR.people[0];
 test("a stay the household describes is worked out from a first paid day printed in words, and 'up to N days'", () => {
-  const h = family(MYR);
+  const h = family({ ...MYR, people: [SITI] });
   const a = ask(h, "Siti Binti Omar", /Hospital allowance/, "Siti was in hospital for 6 days. How much hospital allowance?", { perDay: { stayDays: 6 } });
   assert.ok(a.amounts.includes("RM80"), JSON.stringify(a.amounts));
   assert.ok(a.amounts.includes("RM400"), `6 days, paid from day 2: 5 x RM80. Got ${JSON.stringify(a.amounts)}`);
-  const g = family({ ...EUR, hospitalRule: "payable from the third consecutive day, up to 30 days per accident" });
+  const g = family({ ...EUR, people: [MARIE], hospitalRule: "payable from the third consecutive day, up to 30 days per accident" });
   const b = ask(g, "Marie Dupont", /Hospital allowance/, "Marie was in hospital for 5 days. How much?", { perDay: { stayDays: 5 } });
   assert.ok(b.amounts.includes("€240"), `5 days, paid from day 3: 3 x €80. Got ${JSON.stringify(b.amounts)}`);
 });
 test("control: a stay rule with another day rule beside it gives no total", () => {
-  const h = family({ ...MYR, hospitalRule: "payable from the second day, up to 60 days per accident, and 20 days for a stay abroad" });
+  const h = family({ ...MYR, people: [SITI], hospitalRule: "payable from the second day, up to 60 days per accident, and 20 days for a stay abroad" });
   const a = ask(h, "Siti Binti Omar", /Hospital allowance/, "Siti was in hospital for 6 days. How much hospital allowance?", { perDay: { stayDays: 6 } });
   assert.ok(!a.amounts.includes("RM400"), JSON.stringify(a.amounts));
 });
@@ -292,64 +289,16 @@ const ADULT_CHILD_PAGE = "TABLE OF BENEFITS\nBenefit\tAdult\tChild\nHospital cas
 const adultChildRows = [
   ben({ benefit: "Hospital cash per day", column: "Adult", pays: "per_day", value: 100, quote: "Hospital cash per day\tRM 100\tRM 50" }),
   ben({ benefit: "Hospital cash per day", column: "Child", pays: "per_day", value: 50, quote: "Hospital cash per day\tRM 100\tRM 50" })];
-test("Adult and Child columns of a shared table: each life gets its own column only, by the Family page (Critic #449 F1)", () => {
-  const h = schedule({ people: MYR.people, page2: ADULT_CHILD_PAGE, benefits: adultChildRows });
-  for (const p of MYR.people) {
-    const adult = rowOf(h, p.name, (r) => r.column === "Adult"), child = rowOf(h, p.name, (r) => r.column === "Child");
-    const isChild = p.relationship === "child";
-    assert.equal((isChild ? child : adult)?.figure.kind, "printed", `${p.name}: own column`);
-    assert.equal((isChild ? adult : child)?.figure.kind ?? "none", "none", `${p.name}: other column ${JSON.stringify((isChild ? adult : child)?.figure)}`);
+test("control: a family schedule's shared table (no person's line on its page) stays no one's in this change, whatever its layout", () => {
+  for (const [page2, benefits] of [[ADULT_CHILD_PAGE, adultChildRows], [`TABLE OF BENEFITS\nBenefit\tAmount payable\nMedical expenses\tUp to RM 2,500 per accident`, [ben({ benefit: "Medical expenses", value: 2500, quote: "Medical expenses\tUp to RM 2,500 per accident" })]]] as const) {
+    const h = schedule({ people: MYR.people, page2, benefits: [...benefits] });
+    for (const p of MYR.people) assert.deepEqual(h.table.people.find((x) => x.name === p.name)!.rows.filter((r) => r.figure.kind !== "none").map((r) => r.benefit), [], p.name);
   }
-});
-test("control: with no relationship or date of birth on the Family page, neither column is shown for anyone", () => {
-  const people = MYR.people.map((p) => ({ ...p, relationship: "other", dob: undefined }));
-  const h = schedule({ people, page2: ADULT_CHILD_PAGE, benefits: adultChildRows });
-  for (const p of people) for (const c of ["Adult", "Child"]) assert.equal(rowOf(h, p.name, (r) => r.column === c)?.figure.kind ?? "none", "none", `${p.name} ${c}`);
 });
 test("control: a plan column of a shared table is never given to everyone", () => {
   const h = schedule({ people: MYR.people, page2: "TABLE OF BENEFITS\nBenefit\tPlan A\tPlan B\nHospital cash per day\tRM 100\tRM 200",
     benefits: [ben({ benefit: "Hospital cash per day", column: "Plan A", pays: "per_day", value: 100, quote: "Hospital cash per day\tRM 100\tRM 200" })] });
   for (const p of MYR.people) assert.equal(rowOf(h, p.name, (r) => r.column === "Plan A"), undefined, p.name);
-});
-test("a child's share printed only in the row's words is the child's alone, whatever the product is called (Critic #449 F2, F7)", () => {
-  for (const product of ["Household Accident Plan", "Parent and Child Accident Plan"]) {
-    const quote = "For an insured child under 18, limited to 50% of the Sum Insured.";
-    const h = schedule({ product, people: MYR.people, page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\nAccidental death\t${quote}`,
-      benefits: [ben({ benefit: "Accidental death", pays: "percent", value: 50, percentOf: "sum_insured", quote })] });
-    for (const p of MYR.people) {
-      const r = rowOf(h, p.name, (x) => x.benefit === "Accidental death");
-      if (p.relationship === "child") assert.ok(r?.figure.kind === "worked_out" && r.figure.amount === 20000, `${product} ${p.name}: ${JSON.stringify(r?.figure)}`);
-      else assert.equal(r?.figure.kind ?? "none", "none", `${product} ${p.name}: ${JSON.stringify(r?.figure)}`);
-    }
-  }
-});
-test("a row that names a kind of life without saying whose it is shows no amount for anyone (Critic #449 F6, round 2)", () => {
-  for (const benefit of ["Education fund for each child under 21", "Education grant for children aged under 21", "Education support for each dependent child under 21", "Child hospital cash", "Hospital cash (children)"]) {
-    const quote = `${benefit}\t10% of the Sum Insured`;
-    const h = schedule({ people: MYR.people, page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\n${quote}`,
-      benefits: [ben({ benefit, pays: "percent", value: 10, percentOf: "sum_insured", quote })] });
-    for (const p of MYR.people) {
-      assert.equal(rowOf(h, p.name, (x) => x.benefit === benefit)?.figure.kind ?? "none", "none", `${benefit}: ${p.name}`);
-      assert.deepEqual(ask(h, p.name, new RegExp(benefit.replace(/[()]/g, "\\$&"))).amounts, [], `${benefit}: ${p.name}`);
-    }
-  }
-});
-test("the date of birth decides an under-18 row before the relationship; an in-law is an adult (Critic #449 round 2)", () => {
-  const quote = "For an insured child under 18, limited to 50% of the Sum Insured.";
-  const people: Person[] = [
-    { name: "Ahmad Bin Ali", relationship: "self", line: "Ahmad Bin Ali\tPolicyholder\t01/01/1988\tRM 150,000", sum: 150000 },
-    { name: "Imran Bin Ahmad", relationship: "child", dob: "1998-09-09", line: "Imran Bin Ahmad\tChild\t09/09/1998\tRM 40,000", sum: 40000 },
-    { name: "Nur Binti Ahmad", relationship: "child", dob: "2016-09-09", line: "Nur Binti Ahmad\tChild\t09/09/2016\tRM 30,000", sum: 30000 },
-    { name: "Hafiz Bin Yusof", relationship: "son-in-law", line: "Hafiz Bin Yusof\tSon-in-law\t01/02/1992\tRM 60,000", sum: 60000 }];
-  const h = schedule({ people, page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\nAccidental death\t${quote}`,
-    benefits: [ben({ benefit: "Accidental death", pays: "percent", value: 50, percentOf: "sum_insured", quote })] });
-  const fig = (n: string) => rowOf(h, n, (x) => x.benefit === "Accidental death")?.figure;
-  assert.equal(fig("Imran Bin Ahmad")?.kind ?? "none", "none", "a son aged 28 is not under 18");
-  assert.ok(fig("Nur Binti Ahmad")?.kind === "worked_out", JSON.stringify(fig("Nur Binti Ahmad")));
-  assert.equal(fig("Hafiz Bin Yusof")?.kind ?? "none", "none", "son-in-law");
-  const cols = schedule({ people, page2: ADULT_CHILD_PAGE, benefits: adultChildRows });
-  assert.equal(rowOf(cols, "Hafiz Bin Yusof", (r) => r.column === "Adult")?.figure.kind, "printed");
-  assert.equal(rowOf(cols, "Hafiz Bin Yusof", (r) => r.column === "Child")?.figure.kind ?? "none", "none");
 });
 test("control: a shared-table row printed for an age group is no one's (it cannot be told from the shared page)", () => {
   const benefit = "Hospital cash for insured persons aged 65 and above", quote = `${benefit}\tRM 50 per day`;
@@ -386,10 +335,6 @@ test("a shared table's rows tied to one life, kind or plan by its page or line a
     const h = auSchedule(page2, benefits);
     for (const p of AU) assert.deepEqual(h.table.people.find((x) => x.name === p.name)!.rows.filter((r) => r.figure.kind !== "none").map((r) => r.benefit), [], `${what}: ${p.name}`);
   }
-});
-test("control: a plain shared-table row is still every holder's", () => {
-  const h = auSchedule("TABLE OF BENEFITS\nBenefit\tAmount payable\nMedical expenses\tUp to AUD 2,500 per accident", [ben({ benefit: "Medical expenses", value: 2500, quote: "Medical expenses\tUp to AUD 2,500 per accident" })]);
-  for (const p of AU) assert.ok(h.table.people.find((x) => x.name === p.name)!.rows.some((r) => r.benefit === "Medical expenses" && r.figure.kind === "printed"), p.name);
 });
 test("a printed age group is settled only by a date of birth, never by the relationship alone (Critic #449 round 3, F3)", () => {
   for (const column of ["Insured child under 16", "Child (under 16)"]) {
@@ -432,11 +377,11 @@ test("control: 'up to N%' by a scale is never shown as a fixed amount (Critic #4
 });
 test("control: a time window ('a stay that begins up to 30 days after the accident') is not a day limit (Critic #449 F5)", () => {
   for (const rule of ["payable from the second day, for a stay that begins up to 30 days after the accident", "payable from the second day, for a stay that begins up to 30 days post accident", "payable from the second day, for a stay starting up to 30 days later"]) {
-    const h = family({ ...MYR, hospitalRule: rule });
+    const h = family({ ...MYR, people: [SITI], hospitalRule: rule });
     const a = ask(h, "Siti Binti Omar", /Hospital allowance/, "Siti was in hospital for 45 days. How much hospital allowance?", { perDay: { stayDays: 45 } });
     assert.ok(!a.amounts.includes("RM2,400"), `${rule}: ${JSON.stringify(a.amounts)}`);
   }
-  const h = family({ ...MYR, hospitalRule: "payable from the second day, up to 60 days of hospitalisation" });
+  const h = family({ ...MYR, people: [SITI], hospitalRule: "payable from the second day, up to 60 days of hospitalisation" });
   const a = ask(h, "Siti Binti Omar", /Hospital allowance/, "Siti was in hospital for 45 days. How much hospital allowance?", { perDay: { stayDays: 45 } });
   assert.ok(a.amounts.includes("RM3,520"), `44 x RM80: ${JSON.stringify(a.amounts)}`);
 });
@@ -447,6 +392,13 @@ test("a person whose name is part of another member's name still gets their own 
   const h = family({ ...MYR, people });
   assert.deepEqual(ask(h, "Wei Tan", /Burns/).amounts, ["RM20,000"]);
   assert.deepEqual(ask(h, "Wei Ling Tan", /Burns/).amounts, ["RM10,000"]);
+});
+
+test("control: a row whose line prints another share for a kind of life gives no chat amount (Critic #449 round 4, F6)", () => {
+  for (const line of ["Burns\t10% of the Sum Insured. For an insured child, 5% of the Sum Insured.", "Burns\t10% of the Sum Insured. Children: 5%."]) {
+    const h = schedule({ people: MYR.people, page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\n${line}`, benefits: [ben({ benefit: "Burns", pays: "percent", value: 10, percentOf: "sum_insured", quote: "Burns\t10% of the Sum Insured" })] });
+    for (const p of MYR.people) assert.deepEqual(ask(h, p.name, /Burns/).amounts, [], `${line}: ${p.name}`);
+  }
 });
 
 console.log(`claim-amounts-test: ${passed} passed, ${failures.length} failed`);

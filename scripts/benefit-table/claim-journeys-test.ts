@@ -110,7 +110,7 @@ const AU: P[] = [
 const CHILD_AU = "If the insured person is an insured child under 16, limited to 25% of the Sum Insured.";
 const HOSP_AU = "Hospital cash\tAUD 150 per day in hospital, payable from the fourth day, up to 90 days per accident";
 const BURN_AU = "Severe burns\t15% of the Sum Insured";
-const auFamily = (hospitalLast = false) => schedule({ insurer: "Southern Cross Assurance Pty Ltd", product: "Family Active Accident", policyNumber: "SCA-55190", people: AU, trailer: "",
+const auFamily = (hospitalLast = false, people = AU) => schedule({ insurer: "Southern Cross Assurance Pty Ltd", product: "Family Active Accident", policyNumber: "SCA-55190", people, trailer: "",
   benefitLines: [`1\tAccidental death\t100% of the Sum Insured. ${CHILD_AU}`, `2\t${BURN_AU}`, `3\t${HOSP_AU}`, ...(hospitalLast ? [] : ["4\tEmergency ambulance\tAUD 500 per accident"])],
   benefits: [bn({ benefit: "Accidental death", column: "Insured child under 16", pays: "percent", value: 25, percentOf: "sum_insured", quote: CHILD_AU }),
     bn({ benefit: "Severe burns", pays: "percent", value: 15, percentOf: "sum_insured", quote: BURN_AU }),
@@ -162,23 +162,25 @@ test("P5 AUD family: 15% of each person's own sum (60,000 / 37,500 / 12,000)", (
   assert.deepEqual(vals(ask(h, "Grace Kelly", /burns/i).amounts), [37500]);
   assert.deepEqual(vals(ask(h, "Noah Kelly", /burns/i).amounts), [12000]);
 });
-test("P6 AUD family: the child's 'limited to 25%' share is worked out for the child (AUD 20,000)", () => {
-  const h = auFamily();
-  const r = tableRow(h, "Noah Kelly", (x) => x.column === "Insured child under 16");
+test("P6 AUD: the child's 'limited to 25%' share is worked out on a certificate for the child alone (AUD 20,000); on the family schedule no one gets it", () => {
+  const solo = auFamily(false, [AU[2]]);
+  const r = tableRow(solo, "Noah Kelly", (x) => x.column === "Insured child under 16");
   assert.ok(r && r.figure.kind === "worked_out" && (r.figure as { amount: number }).amount === 20000, JSON.stringify(r?.figure));
-  assert.deepEqual(vals(ask(h, "Noah Kelly", /Accidental death/).amounts), [20000]);
-});
-test("P7 AUD family: daily amount from the shared table is each holder's", () => {
+  // The chat gives no amount: the row's printed line holds two shares (100% and 25%), so which is the person's is not
+  // settled from the line itself (Critic #449 round 4). Never a wrong one.
+  assert.ok(!vals(ask(solo, "Noah Kelly", /Accidental death/).amounts).some((v) => v !== 20000));
   const h = auFamily();
-  for (const p of AU) {
-    const r = tableRow(h, p.name, (x) => x.benefit === "Hospital cash");
-    assert.ok(r && r.figure.kind === "printed" && (r.figure as { amount: number }).amount === 150, `${p.name}: ${JSON.stringify(r?.figure)}`);
-  }
+  for (const p of AU) assert.notEqual(tableRow(h, p.name, (x) => x.column === "Insured child under 16")?.figure.kind, "worked_out", p.name);
+});
+test("P7 AUD: a daily amount on a one-life schedule is the person's; a family schedule's shared table is out of this change's scope (no one)", () => {
+  const r = tableRow(auFamily(false, [AU[1]]), "Grace Kelly", (x) => x.benefit === "Hospital cash");
+  assert.ok(r && r.figure.kind === "printed" && (r.figure as { amount: number }).amount === 150, JSON.stringify(r?.figure));
+  for (const p of AU) assert.equal(tableRow(auFamily(), p.name, (x) => x.benefit === "Hospital cash")?.figure.kind ?? "none", "none", p.name);
 });
 // P8: with more rows below the daily row, stayBlock cannot yet tell a later benefit's money from a limit on this one, so no
 // stay total is given (fail-closed, as on main); the daily amount is still shown. Known limitation of PR #449.
-for (const [label, last] of [["P8 AUD family (hospital row followed by another table row)", false], ["P8b AUD family (hospital row is the table's last line)", true]] as const) test(`${label}: a 7-day stay paid from 'the fourth day' shows AUD 150 a day${last ? " and 4 x AUD 150 = AUD 600" : ", and never a wrong total"}`, () => {
-  const h = auFamily(last);
+for (const [label, last] of [["P8 AUD one-life schedule (hospital row followed by another table row)", false], ["P8b AUD one-life schedule (hospital row is the table's last line)", true]] as const) test(`${label}: a 7-day stay paid from 'the fourth day' shows AUD 150 a day${last ? " and 4 x AUD 150 = AUD 600" : ", and never a wrong total"}`, () => {
+  const h = auFamily(last, [AU[1]]);
   const a = ask(h, "Grace Kelly", /Hospital cash/, ["Grace was in hospital for 7 days after a fall. How much hospital cash?"], { perDay: { stayDays: 7 } });
   assert.ok(vals(a.amounts).includes(150), JSON.stringify(a.amounts));
   if (last) assert.ok(vals(a.amounts).includes(600), JSON.stringify(a.amounts));

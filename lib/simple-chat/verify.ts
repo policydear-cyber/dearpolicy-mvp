@@ -797,7 +797,12 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const rf = locateQuote(household, sf.row.quote, sf.row.docIndex);
   if (!rf || rf.docIndex !== sf.row.docIndex || rf.page !== sf.row.page) return null;
   const rowText = rowWithContinuation(household.documents[rf.docIndex].pages.find((p) => p.page === rf.page)!.text, rf.offset);
-  if (![...rowText.matchAll(PCTS)].some((m) => Number(m[1]) === sf.percent)) return null;
+  const pcts = new Set([...rowText.matchAll(PCTS)].map((m) => Number(m[1])));
+  if (!pcts.has(sf.percent)) return null;
+  // One share only: a row whose line or what continues it prints another percentage ("10% ... For an insured child, 5%"),
+  // or names a kind of life on a document for two or more people, is for someone it cannot settle (Critic #449 round 4).
+  if (pcts.size > 1) return null;
+  if (household.documents[rf.docIndex].linkedPeople.length !== 1 && /\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?)\b/i.test(rowText)) return null;
   // The base: the person's own line, in a document linked to them.
   const bdoc = household.documents[sf.base.docIndex];
   if (!bdoc || unreadable(bdoc) || !bdoc.linkedPeople.some((p) => baseName(p) === person)) return null;
