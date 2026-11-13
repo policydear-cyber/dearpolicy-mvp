@@ -78,7 +78,7 @@ async function uploadThroughPage(page: Page, file: { name: string; mimeType: str
   await page.goto("/policies");
   await page.getByLabel(/Insurance document/).setInputFiles(file);
   if (password !== undefined) await page.getByLabel(/^PDF password/).fill(password);
-  await page.getByRole("button", { name: /upload & analyse/i }).click();
+  await page.getByRole("button", { name: /upload and read/i }).click();
   await expect(page.locator(".upload-panel .upload-status")).toContainText(/DearPolicy is reading it now/i, { timeout: 240_000 });
 }
 

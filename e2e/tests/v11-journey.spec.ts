@@ -172,7 +172,7 @@ async function uploadDoc(page: Page, d: RenderedDoc, profileLabel: string, super
     await page.locator(".upload-form select").selectOption({ label: profileLabel }).catch(() => soft(false, `profile hint "${profileLabel}" not offered`));
     await page.locator(".upload-form input[type=file]").setInputFiles({ name: d.fileName, mimeType: d.mimeType, buffer: d.buffer });
     await page.getByRole("button", { name: "Upload and read" }).click();
-    await expect(page.locator(".upload-panel .upload-status")).toContainText(/received/i, { timeout: 120_000 });
+    await expect(page.locator(".upload-panel .upload-status")).toContainText(/DearPolicy is reading it now/i, { timeout: 120_000 });
   }
   const states: string[] = [];
   let p: Policy | undefined;
