@@ -65,7 +65,7 @@ test.describe.serial("keyboard-only critical path", () => {
     await page.keyboard.press("Home");
     await tabTo(page, (f) => f.text === "+ Add person", "the Add person button");
     await page.keyboard.press("Enter");
-    await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Profile added.");
+    await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
 
     // Two-step delete, both steps by keyboard; focus stays on the control.
     await tabTo(page, (f) => f.label === `Delete ${person}`, "the person's Delete button");
@@ -83,7 +83,7 @@ test.describe.serial("keyboard-only critical path", () => {
     await page.keyboard.press("Home");
     await tabTo(page, (f) => f.text === "+ Add person", "the Add person button");
     await page.keyboard.press("Enter");
-    await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Profile added.");
+    await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
     await page.goto("/policies");
     await tabTo(page, (f) => f.tag === "input" && f.type === "file", "the document file field");
     const chooser = page.waitForEvent("filechooser");

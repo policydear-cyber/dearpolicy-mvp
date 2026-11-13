@@ -179,7 +179,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
       await owner.getByLabel("Full name").first().fill(who);
       await owner.locator("#fm-new-relationship").selectOption(relationship);
       await owner.getByRole("button", { name: "+ Add person" }).click();
-      await expect(owner.locator(".profile-add-panel [role=status]")).toHaveText("Profile added.");
+      await expect(owner.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
     }
     const family = (await api<{ family: { id: string; display_name: string }[] }>(owner, "/api/family")).body.family;
     for (const who of [self, child]) ids[who] = family.find((f) => f.display_name === who)!.id;

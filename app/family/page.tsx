@@ -68,8 +68,8 @@ export default function FamilyPage() {
     if (dob && dob > todayIso()) return setStatus("A date of birth can't be in the future.");
     const response = await fetch("/api/family", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: name, relationship, dateOfBirth: dob || null, preferredName: preferred || null }) });
     const payload = await response.json();
-    if (!response.ok) return setStatus(customerMessage(payload.error, "Could not add this profile. Please try again in a moment."));
-    setName(""); setDob(""); setPreferred(""); setStatus("Profile added."); await refresh();
+    if (!response.ok) return setStatus(customerMessage(payload.error, "This family member couldn't be added. Try again in a moment."));
+    setName(""); setDob(""); setPreferred(""); setStatus("Family member added."); await refresh();
   }
 
   async function save(member: Member) {
@@ -79,7 +79,7 @@ export default function FamilyPage() {
     setStatusFor(member.id);
     setStatusIsError(!response.ok);
     if (response.ok) setEditing(null);
-    setStatus(response.ok ? `Saved ${member.display_name}.` : (customerMessage(payload.error, "Could not save this profile. Please try again in a moment.")));
+    setStatus(response.ok ? `Saved ${member.display_name}.` : (customerMessage(payload.error, "Your changes couldn't be saved. Try again in a moment.")));
     if (response.ok) await refresh();
   }
 
@@ -104,7 +104,7 @@ export default function FamilyPage() {
     const response = await fetch(`/api/family/${member.id}`, { method: "DELETE" });
     const payload = await response.json().catch(() => ({}));
     setStatusIsError(!response.ok);
-    setStatus(response.ok ? `Removed ${member.display_name}.` : (customerMessage(payload.error, "Could not remove this profile. Please try again in a moment.")));
+    setStatus(response.ok ? `Removed ${member.display_name}.` : (customerMessage(payload.error, "This family member couldn't be removed. Try again in a moment.")));
     if (response.ok) await refresh();
   }
 
@@ -114,7 +114,7 @@ export default function FamilyPage() {
     <div className="page">
       <header className="page-header compact"><div><h1>Account settings</h1></div></header>
       <AccountTabs />
-      <div className="section-heading"><div><h2>Your family</h2><p>The people your policies cover. Use full legal names: DearPolicy uses them to link a certificate to everyone it covers.</p></div></div>
+      <div className="section-heading"><div><h2>Your family</h2><p>The people your policies cover. Use each person&rsquo;s full name as their documents print it. DearPolicy uses it to match each document to the people it covers.</p></div></div>
 
       <section className="section">
         <div className="profile-list">
@@ -134,7 +134,7 @@ export default function FamilyPage() {
                   return named.length ? <p data-testid="family-covered-for"><b>Covered for</b> {named.join(" · ")}. {see}</p>
                     : unknownOnly ? <p data-testid="family-covered-for"><b>Found</b> cover for {name}, but not yet what kind of cover it is. {see}</p>
                     : unknownToConfirm ? <p data-testid="family-covered-for"><b>Possible cover</b> for {name}, still to confirm: not yet what kind of cover it is. {see}</p>
-                    : null; })() ?? (member.policy_count ? <p>Nothing found in your uploaded documents for them yet. <a className="text-link" href={`/ledger?member=${member.id}`}>See cover →</a></p> : null)}
+                    : null; })() ?? (member.policy_count ? <p>No cover found for them in your documents yet. <a className="text-link" href={`/ledger?member=${member.id}`}>See cover →</a></p> : null)}
               </div>
               <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>
                 <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name</label><input id={`fm-${member.id}-name`} value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} /></div>
@@ -165,13 +165,13 @@ export default function FamilyPage() {
       </section>
 
       {/* The people come first: a returning household opens this page to see or change them, and adds someone rarely. */}
-      <section className="profile-add-panel" aria-label="Add a person">
-        {family.length ? <h3>Add someone</h3> : null}
+      <section className="profile-add-panel" aria-label="Add a family member">
+        {family.length ? <h3>Add a family member</h3> : null}
         <form onSubmit={add} className="profile-add-grid">
-          <div className="field"><label htmlFor="fm-new-name">Full name</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Alex Chen" required /></div>
+          <div className="field"><label htmlFor="fm-new-name">Full name</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen" required /></div>
           <div className="field"><label htmlFor="fm-new-relationship">Relationship</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
           <div className="field"><label htmlFor="fm-new-dob">Date of birth (optional)</label><input id="fm-new-dob" type="date" max={today} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
-          <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="e.g. Alex" /></div>
+          <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="For example, Alex" /></div>
           <button className="button primary" type="submit" disabled={!name.trim() || !relationship}>+ Add person</button>
         </form>
         {status && <div className="upload-status" role="status">{status}</div>}

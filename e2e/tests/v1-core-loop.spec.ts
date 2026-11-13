@@ -110,7 +110,7 @@ async function addPerson(page: Page, fullName: string, preferred: string, relati
   await page.locator("#fm-new-relationship").selectOption(relationship);
   if (preferred && preferred !== fullName) await page.locator("#fm-new-preferred").fill(preferred);
   await page.getByRole("button", { name: "+ Add person" }).click();
-  await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Profile added.", { timeout: 60_000 });
+  await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Family member added.", { timeout: 60_000 });
   const family = (await api<{ family: { id: string; display_name: string }[] }>(page, "/api/family")).body.family ?? [];
   const m = family.find((x) => x.display_name === fullName || x.display_name === preferred);
   soft(m, `family: ${preferred} was not created through the Family page`);
