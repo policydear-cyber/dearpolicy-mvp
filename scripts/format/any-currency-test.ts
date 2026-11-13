@@ -1,7 +1,8 @@
 /** Any ISO 4217 code can be stated for an amount a person reads from their own document; a bare "$" or an unknown code
  * states none, and nothing is ever chosen for them (coordinator 13 Nov: THB or JPY could not be entered). */
 import assert from "node:assert/strict";
-import { COMMON_CURRENCIES, typedCurrency } from "@/components/currency-picker";
+import { COMMON_CURRENCIES, storedCurrency, typedCurrency } from "@/components/currency-picker";
+import { validateBillReviewFields } from "@/lib/claims/evidence/bill-review-validation";
 import { reviewedBenefitFormula } from "@/lib/policies/benefit-catalog";
 
 let passed = 0;
@@ -22,5 +23,14 @@ t("server: any ISO code is saved as stated", () => {
 });
 t("server: a bare $, an unknown code or nothing is refused, never taken as SGD", () => {
   for (const c of ["$", "XYZ", null, ""]) { const r = save(c); assert.equal(r.ok, false, String(c)); }
+});
+t("a stored value opens as its code: S$ is SGD, a bare $ or an unknown code is none (TE #459)", () => {
+  for (const [stored, want] of [["S$", "SGD"], ["KWD", "KWD"], ["THB", "THB"], ["$", ""], ["XYZ", ""], ["", ""]]) assert.equal(storedCurrency(stored), want, stored);
+  assert.ok(!COMMON_CURRENCIES.includes("KWD"), "KWD tests the Other path");
+});
+t("claims bill review: any real ISO code, never an unknown one (TE #459)", () => {
+  const bill = (currency: string | null) => validateBillReviewFields({ billLineItems: [{ category: "Ward", description: "", amountText: "100", currency }] });
+  for (const c of ["THB", "kwd", "SGD", null]) assert.equal(bill(c).ok, true, String(c));
+  for (const c of ["XYZ", "TPD", "$"]) assert.equal(bill(c).ok, false, c);
 });
 console.log(`any-currency: ${passed} passed`);
