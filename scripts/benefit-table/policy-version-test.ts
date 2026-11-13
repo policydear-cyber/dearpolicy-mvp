@@ -146,6 +146,41 @@ test("another person's cover on the other copy is never taken as this document's
   assert.ok(rows(t, "p1").some((x) => x.startsWith("Fracture") && x.endsWith(`@${oldKey}`)), JSON.stringify(rows(t, "p1")));
 });
 
+// Critic #445 round 2: a one-word name is no evidence when the document prints several covers for the person; the person is
+// the family member each cover was matched to, whatever name is printed.
+test("P6 last year's base read as 'Plan', the renewal printing 'Shield' and 'Waiver Plan': the link is left, never moved onto the waiver", () => {
+  const last = read(id(13), "personal_proof", HL, ["2025\nPolicy number HL-300\nJane Doe\tS$300,000"], [{ product: HL, cover: "Plan", policyNumber: "HL-300", person: "Jane Doe", sum: 300000, quote: "Jane Doe\tS$300,000" }], []);
+  const now = read(id(14), "personal_proof", HL, ["2026\nPolicy number HL-300\nJane Doe\tS$500,000\nWaiver Plan\tS$2,000\nDeath\t100% of sum insured"],
+    [{ product: HL, cover: "Shield", policyNumber: "HL-300", person: "Jane Doe", sum: 500000, quote: "Jane Doe\tS$500,000" }, { product: HL, cover: "Waiver Plan", policyNumber: "HL-300", person: "Jane Doe", sum: 2000, quote: "Waiver Plan\tS$2,000" }],
+    [{ section: "Benefits", benefit: "Death", percent: 100, quote: "Death\t100% of sum insured" }]);
+  const got = rows(assembleTable([last, now], fam("Jane Doe"), linkTo(now, coverKeyOf({ product: HL, cover: "Plan", plan: null }))), "p1");
+  assert.ok(!got.some((x) => x.includes("of 2000")), JSON.stringify(got));
+});
+test("P7 'Accident' against the renewal's 'Term Life' and 'Accident Rider': never moved onto the rider", () => {
+  const last = read(id(15), "personal_proof", HL, ["2025\nPolicy number HL-400\nJane Doe\tS$200,000"], [{ product: HL, cover: "Accident", policyNumber: "HL-400", person: "Jane Doe", sum: 200000, quote: "Jane Doe\tS$200,000" }], []);
+  const now = read(id(16), "personal_proof", HL, ["2026\nPolicy number HL-400\nJane Doe\tS$400,000\nAccident Rider\tS$50,000\nTerminal illness\t100% of sum insured"],
+    [{ product: HL, cover: "Term Life", policyNumber: "HL-400", person: "Jane Doe", sum: 400000, quote: "Jane Doe\tS$400,000" }, { product: HL, cover: "Accident Rider", policyNumber: "HL-400", person: "Jane Doe", sum: 50000, quote: "Accident Rider\tS$50,000" }],
+    [{ section: "Benefits", benefit: "Terminal illness", percent: 100, quote: "Terminal illness\t100% of sum insured" }]);
+  const got = rows(assembleTable([last, now], fam("Jane Doe"), linkTo(now, coverKeyOf({ product: HL, cover: "Accident", plan: null }))), "p1");
+  assert.ok(!got.some((x) => x.includes("of 50000")), JSON.stringify(got));
+});
+test("P9 the renewal prints the person with a title ('Mrs Ngozi Okafor'): still her own copy", () => {
+  const o = CASES[0];
+  const { oldR, oldKey } = versions(o);
+  const newR = read(id(17), "personal_proof", o.product, [`RENEWAL\nPolicy number ${o.number}\nMrs Ngozi Okafor\tGBP 100,000\nSection 2 Fracture\t2% of sum insured`],
+    [{ product: o.product, cover: o.newName, policyNumber: o.number, person: "Mrs Ngozi Okafor", sum: 100000, quote: "Mrs Ngozi Okafor\tGBP 100,000" }],
+    [{ section: "Section 2", benefit: "Fracture", percent: 2, quote: "Section 2 Fracture\t2% of sum insured" }]);
+  const got = rows(assembleTable([oldR, newR], fam("Ngozi Okafor"), [...linkTo(oldR, oldKey), ...linkTo(newR, oldKey)]), "p1");
+  assert.ok(got.some((x) => x.startsWith("Fracture") && x.includes("of 100000")), JSON.stringify(got));
+});
+
+test("control: a schedule of a different policy number, linked to another policy's cover of the same name, keeps that link", () => {
+  const o = { ...CASES[0], numberNew: "ZZ-999" };
+  const { oldR, newR, oldKey } = versions(o);
+  const got = rows(assembleTable([oldR, newR], fam(o.person), [...linkTo(oldR, oldKey), ...linkTo(newR, oldKey)]), "p1");
+  assert.ok(got.filter((x) => x.startsWith("Fracture") && x.endsWith(`@${oldKey}`)).length === 2, JSON.stringify(got));
+});
+
 console.log(`policy versions: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error(" - " + f); process.exit(1); }
 export {};
