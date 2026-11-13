@@ -612,14 +612,23 @@ function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, cove
   // person", "each insured person"), or when it is a daily or periodic rate, never anyone's sum, that the document prints
   // once for this benefit (a family schedule's "Hospital cash GBP 50 per day"). A benefit printed twice or more (one rate
   // for each life) stays no one's.
+  // Either way only when the document prints this benefit once (one row, one figure), and the row's label names no person
+  // or role ("Daily hospital income (Priya Nair)", "- Spouse", "(child)"): it may be one life's figure whose other lives'
+  // figures are printed beside it (TE D1 and Critic 1-3 on #447).
+  const label = `${b.benefit} ${b.column ?? ""} ${b.section ?? ""}`;
+  const people = [...covers.filter((c) => onDoc(c)).map((c) => c.person), ...family.flatMap((m) => [m.display_name, m.preferred_name ?? ""])];
+  const namesSomeone = people.some((n) => norm(n).split(" ").some((w) => w.length >= 3 && ` ${norm(label)} `.includes(` ${w} `)));
+  if (!printedOnce || ROLE_WORDS.test(label) || namesSomeone) return bySum;
   if (EACH_INSURED.test(`${b.column ?? ""} ${b.benefit} ${b.source.excerpt}`)) return ids;
-  if ((b.pays === "per_day" || b.pays === "per_period") && printedOnce) return ids;
+  if (b.pays === "per_day" || b.pays === "per_period") return ids;
   return bySum;
 }
 /** A benefit's name before any ":", spacing and case aside (the same benefit's rows printed for several lives). */
-const headKey = (benefit: string) => benefit.split(/[:：]/u)[0].toLowerCase().replace(/\s+/g, " ").trim();
+const headKey = (benefit: string) => benefit.split(/[:：]/u)[0].replace(/[(\[][^)\]]*[)\]]/g, " ").split(/\s[-–—]\s/u)[0].toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+/** Words that say a row is one kind of insured person's (a role or tier), so a rate printed under it is not everyone's. */
+const ROLE_WORDS = /\b(?:child(?:ren)?|spouse|husband|wife|partner|policy\s*holder|proposer|adults?|parents?|dependants?|dependents?|employee|principal|son|daughter|life\s*[12]|insured\s*[12]|first\s+life|second\s+life)\b/i;
 /** Words that say a row's figure is for each insured person. A closed list. */
-const EACH_INSURED = /\b(?:per|each|every|for\s+each)\s+(?:insured\s+(?:person|member|traveller|traveler)s?|insured|person|traveller|traveler|member|life\s+(?:assured|insured))\b/i;
+const EACH_INSURED = /\b(?:per|each|every|for\s+each)\s+(?:insured\s+)?(?:persons?|members?|travell?ers?|life\s+(?:assured|insured))\b|\bper\s+insured\b(?!\s+(?:event|accident|claim|period|item|loss|incident|trip|journey)s?\b)/i;
 /** `now` decides which short-term covers have ended (coverEnded), in Singapore time like the chat's date checks. */
 /** Why a row is under the cover whose own printed line it is (ownLineCovers). */
 export const OWN_LINE_WHY = "printed on this cover's own line";
@@ -662,7 +671,7 @@ export function ownLineCovers(readings: CheckedReading[], held: ReadonlySet<stri
       for (const [k, cs] of labels) {
         const label = spaced(cs[0].source.excerpt);
         if (cs[0].source.page !== b.source.page || !first.toLowerCase().startsWith(label.toLowerCase())) continue;
-        if (FIGURE_CELL.test(first.slice(label.length))) return { k, cs };
+        if (figureAt(first.slice(label.length))) return { k, cs };
       }
       return null;
     };
@@ -693,11 +702,22 @@ const firstLine = (excerpt: string) => excerpt.trim().split("\n")[0].toLowerCase
  * days per" / "policy year"). A block of several rows ("Death S$300,000" / "Total and permanent disability ...") is not. */
 function oneRow(s: Source, starts: ReadonlySet<string>): boolean {
   const lines = s.excerpt.trim().split("\n").map((l) => l.toLowerCase().replace(/\s+/g, " ").trim()).filter(Boolean);
-  return lines.slice(1).every((l) => !starts.has(`${s.page}\u0000${l}`));
+  // A later line that is words and then a figure ("Ben Rao Critical illness S$250,000", "ICU benefit S$300 a day") is a
+  // row of its own, quoted elsewhere or not; a wrap is words only ("policy year") or starts with its figure ("$1,000",
+  // "RM 50,000, once per lifetime") (Critic 4 on #447).
+  return lines.slice(1).every((l) => !starts.has(`${s.page}\u0000${l}`) && (!numbersIn(l).length || startsWithFigure(l)));
 }
+const startsWithFigure = (line: string) => figureAt(` ${line.trim()}`);
 /** What follows a label cell in its row: a figure cell, with an optional currency code or sign before it ("S$100", "RM 250",
  * "$5,000", "GBP 50", "100%"). */
-const FIGURE_CELL = /^\s+(?:\p{Lu}{1,3}\s?)?\p{Sc}?\s?\d/u;
+const FIGURE_CELL = /^\s+(?:(\p{Lu}{1,3})\s?)?(\p{Sc})?\s?\d/u;
+const CURRENCY_CODES = new Set([...(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : []), "RM", "RP"]);
+/** A figure at the start (after the leading space): a digit, a currency sign, or a currency code; "TPD 50,000" is not. */
+function figureAt(text: string): boolean {
+  const m = FIGURE_CELL.exec(text);
+  if (!m) return false;
+  return !m[1] || !!m[2] || CURRENCY_CODES.has(m[1].toUpperCase());
+}
 /** A printed line's place: its page and words, spacing aside. */
 export const ownLineKey = (s: Source) => `${s.page}\u0000${s.excerpt.toLowerCase().replace(/\s+/g, " ").trim()}`;
 export function assembleTable(readings: CheckedReading[], family: FamilyMember[], links: SectionLink[], confirmations: Confirmation[] = [], now: Date = new Date()): BenefitTable {
@@ -718,7 +738,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const plansOf = planLists(readings, types);
   const docOf = new Map(readings.flatMap((r) => r.benefits.map((b) => [sectionKeyOf(r.documentId, b), r.documentId] as const)));
   // The different column headings each document prints (figureOnlyHeading).
-  const columnsOn = new Map(readings.map((r) => [r.documentId, new Set(r.benefits.map((b) => norm(b.column)).filter(Boolean))] as const));
+  // Counted per heading and column, so one column printed under two headings ("ADULT", "CHILD") is not the sole one.
+  const columnsOn = new Map(readings.map((r) => [r.documentId, new Set(r.benefits.filter((b) => norm(b.column)).map((b) => `${norm(b.section)}|${norm(b.column)}`))] as const));
   const proofs = new Set(readings.filter((r) => r.kind === "personal_proof").map((r) => r.documentId));
   const ownProof = (documentId: string, coverKey: string) => proofs.has(documentId) && covers.some((c) => c.coverKey === coverKey && c.source.documentId === documentId);
   const refusedLinks: BenefitTable["refusedLinks"] = [];
