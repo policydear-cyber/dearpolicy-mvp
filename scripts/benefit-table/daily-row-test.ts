@@ -127,6 +127,15 @@ async function main() {
       ["Hospital cash is paid as the figure quoted below for each day after the second.", "Hospital cash is paid as a set amount for each day after the second."],
       ["Hospital cash is paid at the daily rate quoted below.", "Hospital cash is paid at a daily rate."],
       ["The figure is quoted below and paid from day 3.", "This benefit is paid from day 3."],
+      // Gate round 3 on #473: a limit keeps its period (N1), "is" stays only before what is done to it (N2), and "benefit"
+      // before the noun is never said twice (N3).
+      ["Medical expenses are paid up to the monthly limit quoted here.", "Medical expenses are paid up to a monthly limit."],
+      ["Hospital cash is paid up to the daily limit quoted below, for at most 30 days.", "Hospital cash is paid up to a daily limit, for at most 30 days."],
+      ["The cash rate is quoted below and does not apply to day surgery.", "The cash benefit does not apply to day surgery."],
+      ["The daily amount is quoted below and is halved for a child.", "The daily benefit is halved for a child."],
+      ["The benefit rate quoted below is paid from day 3.", "This benefit is paid from day 3."],
+      ["The benefit amount quoted below is reduced by any earlier claim.", "This benefit is reduced by any earlier claim."],
+      ["Hospital cash is paid at the benefit rate quoted below.", "Hospital cash is paid at a rate."],
     ];
     for (const [s, want] of said) assert.equal(withoutPointers(s), want, s);
     // Words said to be quoted are a point about words, and a premium or exchange rate is no benefit amount: kept whole.

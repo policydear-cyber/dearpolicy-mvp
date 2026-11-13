@@ -1008,13 +1008,19 @@ const AS_OBJECT = /\b(?:up\s+to|as|at|of|to|within|above|beyond|under|over|by|fr
 function benefitFor(det: string | undefined, adj: string | undefined, noun: string, plural: string, before: string): string | null {
   const n = noun.toLowerCase();
   if (n === "rate" && !adj) return null;
+  // "Benefit" before the noun names nothing more: "the benefit rate quoted below" is the benefit, never "benefit benefit".
+  const word = adj && !/^benefit$/i.test(adj) ? adj.toLowerCase() : null;
   if (AS_OBJECT.test(before)) {
-    const kind = n === "limit" ? "limit" : n === "rate" ? `${adj!.toLowerCase()} rate` : adj ? `${adj.toLowerCase()} amount` : "set amount";
+    // A period stays with its limit or rate ("up to a monthly limit", "at a daily rate").
+    const kind = n === "limit" ? (word ? `${word} limit` : "limit") : n === "rate" ? (word ? `${word} rate` : "rate") : word ? `${word} amount` : "set amount";
     return plural ? `${kind}s` : `${/^[aeiou]/.test(kind) ? "an" : "a"} ${kind}`;
   }
-  if (adj) return `${det ? `${det} ` : ""}${adj.toLowerCase()} benefit${plural}`;
+  if (word) return `${det ? `${det} ` : ""}${word} benefit${plural}`;
   return det ? (plural ? "these benefits" : "this benefit") : plural ? "benefits" : "benefit";
 }
+/** Words after "is" or "are" that keep it ("is paid", "are payable", "is halved"): anything else ("does not apply") is
+ * said of the benefit without it. */
+const KEEPS_VERB = /^(?:[\p{L}-]+ed|paid|payable|made|given|shown|set|held|borne|kept|met|applicable|subject|limited|capped|not)\b/iu;
 /** A clause that does nothing but promise the quote ("so the daily amount is quoted here from the policy, not given as a
  * card"): it goes whole. */
 const ONLY_QUOTE_PROMISE = new RegExp(String.raw`^(?:(?:and|but|so|while|although|though)\s+)?(?:[\p{L}'’-]+\s+){0,4}${QUOTED_NOUN}\s+(?:is|are)\s+${QUOTED_WORDS}(?:\s+(?:from|in|as)\b[^,;.]*)?(?:,\s*(?:and\s+)?not\s+(?:given|shown)\s+(?:as|on)\s+(?:a\s+)?cards?)?\s*[.!?]?$`, "iu");
@@ -1069,7 +1075,8 @@ function withoutQuotePointer(sentence: string): string | null {
     .map((c) => c
       .replace(QUOTED_AND, (m, det: string | undefined, adj: string | undefined, noun: string, pl: string, verb: string, at: number, all: string) => {
         const said = benefitFor(det, adj, noun, pl, all.slice(0, at));
-        return said ? `${said} ${said.endsWith("benefits") ? "are" : verb} ` : m;
+        if (!said) return m;
+        return KEEPS_VERB.test(all.slice(at + m.length)) ? `${said} ${said.endsWith("benefits") ? "are" : verb} ` : `${said} `;
       })
       .replace(QUOTED_AS_NAME, (m, det: string | undefined, adj: string | undefined, noun: string, pl: string, at: number, all: string) => benefitFor(det, adj, noun, pl, all.slice(0, at)) ?? m))
     // A promise left inside a clause that says more ("the figure is quoted below and paid from day 3") cannot be said of
