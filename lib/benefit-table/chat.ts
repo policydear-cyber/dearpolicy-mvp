@@ -13,6 +13,7 @@ import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
+import { multiplierFor, type Multiplier } from "./multiplier";
 import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN, anyMoneyFigures, statedCurrencyCode } from "@/lib/format/currency";
@@ -785,6 +786,9 @@ const POLICY_ONLY_WORDS = new Set(("what what's whats how much many is are does 
  * 637c547: a group scheme's hospital cash named one of the two insured people). Each card is that person's own row. */
 export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = [], forNobody = false): { json: unknown; report: RowReport } {
   const report: RowReport = { dropped: [], labels: [], days: {}, conditionPoints: [], cards: {} };
+  // The household's own words in this conversation: a multiple a row's condition pays in one case applies only when these
+  // state that case (multiplied).
+  const heard = [question, ...earlier].join("\n");
   // A condition said as a point of its own, for the rows whose cards it belongs to (dropConditionsOnCards).
   const pointFor = (text: string, condition: string, row: ChatRow) => {
     const seen = report.conditionPoints!.find((p) => p.text === text && p.condition === condition);
@@ -951,9 +955,18 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // The row's own printed conditions ride with it, so a total is never worked out past a cap the model left out
       // (Critic R275 M1).
       if (st) st.rowConditions = r.conditions;
+      // A row whose own printed conditions pay a multiple of its amount in a case the household's words state ("paid at
+      // double" for "compound", lib/benefit-table/multiplier.ts) is shown only worked out with that multiple, within its
+      // printed maximum, by the server figure the checks work out again; when that cannot be done, it is left out and the
+      // household hears an amount was left out: never the single amount for a doubled case (Harbourline test, 13 Nov).
+      const times = st ? multiplied(r, heard) : null;
+      if (st && times && (times === "unsure" || !serverFigureOf(r, st, household, times))) {
+        report.dropped.push({ why: `${names(r)} is paid at a different amount in the case described, which could not be worked out`, text: String(st.text) });
+        continue;
+      }
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
-        const sf = serverFigureOf(r, st, household);
+        const sf = serverFigureOf(r, st, household, times === "unsure" ? null : times);
         if (sf) (report.figures ??= []).push(sf);
         report.cards![r.id] = { text: String(st.text), person: baseName(r.person) };
         if (r.combinedLimit && (raw.eventFit === "on_list" || raw.eventFit === "any_event")) limitsOnEvent.push({ row: r, st });
@@ -1472,6 +1485,14 @@ export function noteLeftOutAmounts<T extends { id: string; kind: string; text: s
   return [...statements.filter((s) => !(s.id === "left-out-fact" && s.text === LEFT_OUT_FACT)), make("left-out-amount", LEFT_OUT_AMOUNT)];
 }
 
+/** The multiple a row's own printed conditions pay in a case the household's words state (lib/benefit-table/multiplier.ts),
+ * with the row's printed maximum the condition may keep. */
+function multiplied(row: ChatRow, heard: string): Multiplier | "unsure" | null {
+  const cap = row.figure.kind === "worked_out" && row.figure.capped ? row.figure.amount
+    : row.capSource ? (moneyFiguresIn(row.capSource.excerpt).find((m) => row.base == null || Math.abs(m.value - row.base) >= 0.005)?.value ?? null) : null;
+  return multiplierFor(row.conditions, `${row.benefit}\n${row.source.excerpt}`, heard, cap);
+}
+
 /** A percentage row worked out on the person's own printed sum insured (not a corrected one), with where that sum is. */
 const sumInsuredShare = (row: ChatRow) => row.figure.kind === "worked_out" && row.percentOf === "sum_insured" && row.percent != null && row.percent > 0
   && row.base != null && !row.baseCorrected && !!row.baseSource && row.baseDocIndex != null && !!row.figure.currency;
@@ -1479,7 +1500,7 @@ const sumInsuredShare = (row: ChatRow) => row.figure.kind === "worked_out" && ro
  * row's percentage, the person's own sum insured line and the row's printed maximum. The checks find each in the stored pages
  * and work the amount out again; nothing here is shown as it is. Null for any other row, or when the row's maximum cannot
  * be read as one figure. */
-export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, household: Household): ServerFigure | null {
+export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, household: Household, times: Multiplier | null = null): ServerFigure | null {
   if (!sumInsuredShare(row) || row.figure.kind !== "worked_out" || typeof st.quote !== "string") return null;
   const currency = row.figure.currency!;
   let cap: ServerFigure["cap"] = null;
@@ -1496,11 +1517,26 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
   for (const c of row.conditions) {
     const figs = moneyFiguresIn(c);
     if (figs.some((f) => !cap || f.currency !== currency || Math.abs(f.value - cap.value) >= 0.005)) return null;
+    // The multiple's own condition saying the same maximum still applies ("subject to the same limit") is that cap.
+    if (!figs.length && times && c === times.condition && times.keepsCap) continue;
     if (!figs.length && (statesMoney(c) || CAP_WORDS.test(c) || /\b(?:no\s+more\s+than|not\s+more\s+than|at\s+most|limit|reduc)/i.test(c))) return null;
   }
-  return { text: String(st.text), person: baseName(row.person), quote: st.quote, percent: row.percent!, currency, value: row.figure.amount,
+  // A stated case's multiple: the share of the sum times the multiple, never past the printed maximum; above it only when
+  // the condition keeps that maximum (otherwise whether the maximum is multiplied too is not said: no figure). The
+  // condition must be printed in the row's own document, where the checks read the multiple again.
+  let value = row.figure.amount;
+  let multiple: ServerFigure["times"] = null;
+  if (times) {
+    const worked = Math.round(row.base! * row.percent! * times.times) / 100;
+    if ((cap && worked > cap.value + 0.005 && !times.keepsCap) || (!cap && row.figure.capped)) return null;
+    value = cap ? Math.min(worked, cap.value) : worked;
+    const at = locateQuote(household, times.condition, row.docIndex);
+    if (!at || at.docIndex !== row.docIndex) return null;
+    multiple = { times: times.times, docIndex: at.docIndex, page: at.page, quote: times.condition };
+  }
+  return { text: String(st.text), person: baseName(row.person), quote: st.quote, percent: row.percent!, currency, value,
     row: { docIndex: row.docIndex, page: row.source.page, quote: row.source.excerpt },
-    base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap };
+    base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap, times: multiple };
 }
 
 /** One row as a statement the simple chat's checks understand: the figure as printed with the row's own words, or the

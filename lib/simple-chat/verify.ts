@@ -25,6 +25,7 @@ import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
+import { keepsCapIn, multipleIn, timesWords } from "@/lib/benefit-table/multiplier";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
@@ -813,7 +814,11 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
   value: number;
   /** The row's own printed words (a capped row's statement quotes its cap instead). */
   row: { docIndex: number; page: number; quote: string };
-  base: { value: number; docIndex: number; quote: string }; cap: { value: number; docIndex: number; page: number; quote: string } | null };
+  base: { value: number; docIndex: number; quote: string }; cap: { value: number; docIndex: number; page: number; quote: string } | null;
+  /** The row's own printed condition that pays a multiple of its amount in a case the household stated ("a compound
+   * fracture is paid at double", lib/benefit-table/multiplier.ts): read again here from its stored page. When it is set and
+   * the figure cannot be worked out again, the card is left out, never shown as the single amount. */
+  times?: { times: number; docIndex: number; page: number; quote: string } | null };
 /** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
  * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
  * sum under a cover heading or on a page that names one life; the benefit table had already tied each row to the person's
@@ -880,14 +885,27 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
     if (i < 0 || !CAP_BEFORE.test(cf.excerpt.slice(Math.max(0, i - 40), i))) return null;
     cap = { value: fig.value, found: cf };
   } else if (CAP_WORD.test(rowText) && moneyFiguresIn(rowText).some((f) => !sameValue(f.value, sf.base.value))) return null;
-  const worked = Math.round(sf.base.value * sf.percent) / 100;
+  // A stated case's multiple, read again from its condition's own stored words in the row's document: the same one multiple,
+  // and the maximum kept by the condition when the multiplied share is above it (keepsCapIn).
+  let times = 1, timesFound: Found | null = null;
+  if (sf.times) {
+    const tf = locateQuote(household, sf.times.quote, sf.times.docIndex);
+    if (!tf || tf.docIndex !== sf.row.docIndex || tf.page !== sf.times.page) return null;
+    const m = multipleIn(sf.times.quote);
+    if (!m || m === "unsure" || Math.abs(m.times - sf.times.times) > 1e-9) return null;
+    times = m.times; timesFound = tf;
+    if (cap && Math.round(sf.base.value * sf.percent * times) / 100 > cap.value + 0.005 && !keepsCapIn(sf.times.quote, cap.value)) return null;
+  }
+  const share = Math.round(sf.base.value * sf.percent) / 100;
+  const worked = Math.round(sf.base.value * sf.percent * times) / 100;
   const capped = !!cap && worked > cap.value;
   const value = capped ? cap!.value : worked;
   if (!sameValue(value, sf.value)) return null;
   const cur = currencyOf(onLine[0].raw, line, bdoc, bf.page);
   const money = (v: number) => formatMoney(cur.sign, v);
   const where = `${docLabel(household, bdoc)}, page ${bf.page}`;
-  const basis = `${sf.percent}% of ${person}'s sum insured of ${money(sf.base.value)} (${where})${capped ? ` is ${money(worked)}, more than the most it pays, so up to ${money(cap!.value)} (page ${cap!.found.page})` : cap ? `, within its maximum of ${money(cap.value)}` : ""}`;
+  const multiplied = timesFound ? ` is ${money(share)}, paid at ${timesWords(times)} in the case you described as printed on page ${timesFound.page} ("${sf.times!.quote.trim().replace(/[.;]$/, "")}")` : "";
+  const basis = `${sf.percent}% of ${person}'s sum insured of ${money(sf.base.value)} (${where})${multiplied}${capped ? `${multiplied ? ", which" : ""} is ${money(worked)}, more than the most it pays, so up to ${money(cap!.value)} (page ${cap!.found.page})` : `${multiplied ? `: ${money(worked)}` : ""}${cap ? `, within its maximum of ${money(cap.value)}` : ""}`}`;
   return { s: { ...st, kind: "amount", percentOf: null, alternativeGroup: st.alternativeGroup }, found, person, note: null, whole: basis,
     amount: { value, text: (capped ? "Up to " : "") + money(value), currencyResolved: cur.resolved, illustration: true } };
 }
@@ -2147,6 +2165,8 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       const sf = new Set(sfs.map((f) => `${f.base.value}|${f.base.docIndex}|${f.cap?.value ?? ""}`)).size === 1 ? sfs[0] : undefined;
       const served = sf ? serverFigureChecked(sf, st, found, household, person!) : null;
       if (served) { checked.push(served); continue; }
+      // A row paying a multiple in a case the household stated is never checked as its single amount: no figure.
+      if (sfs.some((f) => f.times)) { report.dropped.push({ kind: st.kind, why: "the amount in the case described could not be worked out again", text: st.text }); continue; }
       let r = checkAmount(st, found, household, person);
       // 100% of the sum insured is the sum insured: when the percentage cannot be tied to a table row ("100% of the Sum
       // Assured will be payable in one lump sum"), the amount is the person's sum insured as their own schedule prints it
