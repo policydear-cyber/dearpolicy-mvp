@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   startup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 75
     env:
       SIM: --remote-env CODESPACES=true --remote-env CODESPACE_NAME=ci-sim-codespace --remote-env GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN=app.github.dev
