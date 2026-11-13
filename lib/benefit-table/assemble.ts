@@ -602,10 +602,11 @@ const PER_PERSON_HEADING = /\b(?:per|each|every)\s+(?:insured\s+)?(?:persons?|in
  * reader mark it for every named person (TE on #464). */
 const KIND_OF_LIFE = /\b(?:child(?:ren)?(?:'s)?|kids?|infants?|bab(?:y|ies)|juvenile|junior|minors?|adults?|seniors?|elderly|aged|students?|spouses?|wife|husband|partner|policy\s*holder|parents?|principal|dependants?|dependents?)\b/i;
 /** Words that tell one insured life from another in a row's own name ("Hospital cash Mum", "Medical expenses - Insured 1",
- * "Hospital cash Joint Life", "Accident Dad"). A document any of whose row names holds one prints its rows per life, so none
+ * "Hospital cash Joint Life", "Accident Dad", "Hospital cash Mrs"). A role word counts only with a role before it or a tag
+ * after it ("Joint Life", "Insured 1"), so "Sum insured" is not a life. A document any of whose row names holds one prints its rows per life, so none
  * of its rows is every named person's: withhold-only, like KIND_OF_LIFE, and checked after the "per insured person" phrase
  * is taken out of the name. */
-const LIFE_TAG = /\b(?:mum|mom|mummy|mommy|mother|dad|daddy|father|grand(?:ma|pa|mother|father|parent|child)|granny|nana|son|daughter|brother|sister|sibling|toddler|teen(?:ager)?|youth|pensioner|retiree|self|insured|assured|holder|applicant|proposer|(?:joint|main|first|second|third|primary|secondary|other)\s+lives?)s?\b/i;
+const LIFE_TAG = /\b(?:mum|mom|mummy|mommy|mother|dad|daddy|father|grand(?:ma|pa|mother|father|parent|child)|granny|nana|son|daughter|brother|sister|sibling|toddler|teen(?:ager)?|youth|pensioner|retiree|mr|mrs|ms|miss|male|female|man|woman|men|women)s?\b|\b(?:main|joint|first|second|third|primary|secondary|other|co|additional|named|account|life)\s+(?:insured|assured|lives?|holder|applicant|proposer)\b|\b(?:insured|assured|lives?|holder|applicant|proposer)\s+(?:[a-z]|\d+|[ivx]+)\b/i;
 /** A row of a certificate's one column of per-person limits that is for every insured person the certificate names. All
  * must hold, and any doubt gives no one (a figure for one life is never shown for another):
  * - the reader says the row is for each insured person the document names and nothing on it limits the row to some of
@@ -639,12 +640,23 @@ function namesALife(benefit: string, people: string[]): boolean {
   }
   return ws.some((w) => own.has(w));
 }
-/** Whether two row names are one benefit printed once per life, by the whole name: equal but for a tag of letters or
- * numbers ("Insured A" / "Insured B", "Plan 1" / "Plan 2"), equal before a separator ("Medical expenses - X",
- * "Medical expenses (X)"), equal but for a kind of life ("Adult" / "Junior medical expenses"), or one name the whole start or
- * end of the other ("Hospital cash" / "Hospital cash Grandma").
- * Two names that differ in a word of their own ("Travel delay" / "Baggage delay", "Personal accident" / "Personal
- * liability") are two benefits. */
+/** Words that name a kind of benefit, event or thing insured. An allow-list: two rows whose names share the rest and differ
+ * only in these ("Travel delay" / "Baggage delay", "Loss of baggage" / "Loss of passport") are two benefits; a word not here
+ * keeps them one benefit, withheld when the figures differ (Critic 1 on #466: "Gold" / "Silver", "Mr" / "Mrs", "male" /
+ * "female", "individual" / "couple"). Only ever lets a row be shown that the rest of the rule already allows. */
+const BENEFIT_KIND = new Set(("travel trip journey flight flights baggage luggage belongings personal effects passport passports document documents money " +
+  "delay delayed cancellation curtailment interruption postponement abandonment missed connection departure diversion overbooking " +
+  "accident accidental death disablement disability dismemberment injury liability legal expenses costs cost medical dental optical " +
+  "hospital hospitalisation hospitalization inpatient outpatient surgical surgery ambulance emergency evacuation repatriation rescue search " +
+  "burial funeral cremation remains mortal compassionate visit follow up treatment care nursing assistance overseas domestic abroad home " +
+  "loss lost theft stolen damage damaged property contents vehicle car rental excess golf ski winter sports equipment gadget mobile phone " +
+  "hijack hijacking kidnap terrorism riot strike weather natural disaster fraud card credit booking hotel accommodation refund deposit " +
+  "illness sickness critical cancer maternity mental health recovery convalescence quarantine pet").split(" "));
+/** Whether two row names are one benefit printed once per life, by the whole name: equal before a separator ("Medical
+ * expenses - X", "Medical expenses (X)"), one name the whole start or end of the other ("Hospital cash" / "Hospital cash
+ * Grandma"), or equal but for words not all naming a kind of benefit (BENEFIT_KIND: a tag, a tier, a kind of life).
+ * Two names that share part and differ only in benefit words ("Travel delay" / "Baggage delay", "Personal accident" /
+ * "Personal liability") are two benefits, as are names that share no start or end. */
 function sameBenefitPerLife(a: string, b: string): boolean {
   const head = (s: string) => norm(s.split(/\s[-–—:\/]\s?|[(\[,;]/)[0]);
   if (head(a) && head(a) === head(b) && (head(a) !== norm(a) || head(b) !== norm(b))) return true;
@@ -657,9 +669,10 @@ function sameBenefitPerLife(a: string, b: string): boolean {
   const dx = x.slice(i, x.length - j), dy = y.slice(i, y.length - j);
   if (!dx.length || !dy.length) return true;
   if (!i && !j) return false;
-  // What tells the two apart is a letter or number, or a kind of life ("Adult" / "Junior"), with the rest of the name shared.
-  const tag = (w: string) => /^(?:[a-z]|\d+|[ivx]+)$/.test(w);
-  return (dx.every(tag) && dy.every(tag)) || KIND_OF_LIFE.test(dx.join(" ")) || KIND_OF_LIFE.test(dy.join(" "));
+  // With the rest of the name shared, they are two benefits only when what tells them apart is, on both sides, words that
+  // name a kind of benefit ("Travel" / "Baggage" delay). Anything else, a plan tier ("Gold" / "Silver"), a sex, a title, a
+  // plan size ("individual" / "couple"), a letter or number, may be one benefit at two figures for different people.
+  return !(dx.every((w) => BENEFIT_KIND.has(w)) && dy.every((w) => BENEFIT_KIND.has(w)));
 }
 function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<string>>, ownProof: (documentId: string, coverKey: string) => boolean) {
   const figure = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
