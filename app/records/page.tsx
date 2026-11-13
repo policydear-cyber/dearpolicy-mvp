@@ -24,7 +24,7 @@ function PersonPremiums({ person }: { person: Person }) {
   const p=person.premiums;
   return <section className="section premium-breakdown-panel">
     <div className="section-heading"><div><h2>{person.display_name}</h2>
-      <p className="note premium-cost-line">{p.totals.length?<>{perCurrency(p.totals,"monthly")}/month, about {perCurrency(p.totals,"annual")} a year {premiumSourceCaption(p.items.map(i=>i.source))}. Portfolio shows the same cost.</>:p.items.length?"These premiums are not added up: none of them says which currency it is in.":p.countedElsewhere?.length&&!p.missing.length?"No separate premium: "+person.display_name+"’s cover is paid under another family member’s policy (see the note below).":"No premium found yet."}</p></div></div>
+      <p className="note premium-cost-line">{p.totals.length?<>{perCurrency(p.totals,"monthly")}/month, about {perCurrency(p.totals,"annual")} a year {premiumSourceCaption(p.items.map(i=>i.source))}. Home shows the same cost.</>:p.items.length?"These premiums are not added up: none of them says which currency it is in.":p.countedElsewhere?.length&&!p.missing.length?"No separate premium: "+person.display_name+"’s cover is paid under another family member’s policy (see the note below).":"No premium found yet."}</p></div></div>
     <div className="premium-breakdown-list">
       {p.items.map(i=><PremiumRow item={i} key={i.id}/>)}
       {p.oneOff.map(i=><PremiumRow item={i} once key={i.id}/>)}

@@ -52,7 +52,7 @@ test.describe.serial("mobile critical path", () => {
     await expect(page.locator(".document-card").filter({ hasText: file.replace(/\.pdf$/, "") }).or(page.locator(".document-card").first())).toContainText("Ready");
     await expectNoHorizontalScroll(page, "documents with a card");
 
-    // Bottom navigation by touch. The bar holds Portfolio, Documents, Ask, Payments and More;
+    // Bottom navigation by touch. The bar holds Home, Documents, Ask, Payments and More;
     // Learn and Account settings sit in the sheet that More opens, and Account settings opens on People.
     const bar = page.locator(".sidebar .nav");
     await expect(bar.locator('a[href="/chat"]')).toBeVisible();
