@@ -435,7 +435,7 @@ export type LineCheck = { agree: boolean; kind: DisagreeKind | null; why: string
   /** How many of the page's figure lines are held back (shown as not checked). */
   held: number };
 export function checkLines(textReading: string, imageReading: string, pageNumber?: number, geometry?: (number[] | undefined)[]): LineCheck {
-  const first = checkLinesOnce(textReading, imageReading, pageNumber);
+  const first = checkLinesOnce(textReading, imageReading, pageNumber, undefined, geometry);
   if (first.agree || !geometry || !first.heldLines.size) return first;
   // Lines held back on a page whose text layer gives each table column as one run: confirmed column by column (columnRows).
   const zipped = columnRows(textReading, imageReading, geometry, first.heldLines);
@@ -443,8 +443,8 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   const second = checkLinesOnce(zipped.text, imageReading, pageNumber, zipped);
   return second.agree || second.held < first.held ? second : first;
 }
-function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: number, pre?: { confirmed: Set<number>; image: Set<number> }):
-  LineCheck & { heldLines: Set<number> } {
+function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: number, pre?: { confirmed: Set<number>; image: Set<number> },
+  geometry?: (number[] | undefined)[]): LineCheck & { heldLines: Set<number> } {
   const lines = textReading.split("\n"), skipText = pairingNothing(textReading, pageNumber), skipImage = pairingNothing(imageReading, pageNumber);
   const imageLinesAll = imageReading.split("\n");
   // A line is confirmed only under the same heading in both readings: the nearest label-only line above it that both
@@ -483,7 +483,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     return image;
   };
   const isWord = (t: Token | undefined) => typeof t === "string" && !isDate(t);
-  const wordsOnly = (j: number) => { if (j < 0 || skipText.has(j) || lent.has(j)) return null; const t = lineTokens(lines[j]); return t.length && t.every(isWord) ? t : null; };
+  const wordsOnly = (j: number) => { if (j < 0 || skipText.has(j) || lent.has(j) || joinedAway.has(j)) return null; const t = lineTokens(lines[j]); return t.length && t.every(isWord) ? t : null; };
   const wrapped = (i: number, tokens: Token[]): { at: number; j: number; joined: Token[] } | null => {
     const k = filledText.indexOf(i);
     for (const j of [filledText[k + 1] ?? -1, filledText[k - 1] ?? -1]) {
@@ -550,19 +550,98 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
       k += run.length;
     }
   }
+  // A row whose cells wrap onto two or more lines in the text layer, figures on more than one of them, while the image
+  // reading prints the row on one line: "Early-stage critical illness\t25% of the Sum Covered, up to a maximum of" over
+  // "RM 50,000, once per lifetime", or a label and its amount both wrapping ("Angioplasty and other invasive treatment
+  // for\t10% of the Sum Covered, up to a maximum of" over "coronary artery\tRM 25,000"), or a sentence that runs onto the
+  // next line mid-date ("... dated 18 February" over "2025)"). Any table, any market: a wrapped cell is how every
+  // schedule prints a long benefit. Before, each part was compared alone, matched nothing, and every figure on the page
+  // was held back although both readings print the same figures (TE-ACC-20261113 H2-A: an RM 50,000 early-stage benefit
+  // hidden).
+  // The lines are joined back into one row in the only two ways the page itself supports, and the row is confirmed when
+  // the image prints one line with exactly its words and figures in the same order, under the same heading:
+  // - column by column, where the page geometry says which column each cell stands in (each column's parts in line order,
+  //   the columns left to right), so a label and its amount that both wrap are read as the row the page prints;
+  // - in reading order, where every line but one is a single cell (a value or a sentence running on).
+  // Nothing is paired differently from how the image reads it: every figure must match in order, a figure the image prints
+  // in another row or not at all matches nothing, and the joined lines stay held back as before. A line that matches an
+  // image line on its own is never joined to another, so two rows the image prints apart are never merged, and a join
+  // that could be made two ways at the same size is no evidence. The joined row is stored on its first line, the other
+  // lines emptied (the line count kept), as a wrapped label is.
+  const joinedAway = new Set<number>();
+  const sharedHeading = (j: number) => { const h = textHeads[j]; return !!h && shared.has(h); };
+  const alone = (j: number) => { const t = lineTokens(lines[j]); return figureLine(t) && pool.some((o) => sameLine(t, o.t) && o.h === textUnder[j]); };
+  const free = (j: number | undefined): j is number => j !== undefined && !skipText.has(j) && !lent.has(j) && !joinedAway.has(j) && !rebuilt.has(j)
+    && !tableRows.has(j) && !pre?.confirmed.has(j) && !sharedHeading(j);
+  const byColumn = (group: number[]): string | null => {
+    if (!geometry) return null;
+    const rows = group.map((j) => { const cs = lines[j].split("\t"), xs = geometry[j]; return xs && xs.length === cs.length ? cs.map((c, n) => ({ c: c.trim(), x: xs[n] })) : null; });
+    if (rows.some((r) => !r) || rows.every((r) => r!.length === 1)) return null;
+    // The columns are where the widest line's cells start; every other cell goes to the nearest, left to right.
+    const anchors = rows.reduce((w, r) => (r!.length > w!.length ? r : w))!.map((c) => c.x);
+    const columns: string[][] = anchors.map(() => []);
+    for (const r of rows) {
+      let last = -1;
+      for (const { c, x } of r!) {
+        if (!c) continue;
+        const col = anchors.reduce((best, a, n) => (Math.abs(a - x) < Math.abs(anchors[best] - x) ? n : best), 0);
+        if (col <= last) return null;
+        columns[col].push(c); last = col;
+      }
+    }
+    return columns.map((parts) => parts.join(" ")).join("\t").replace(/\t+$/, "");
+  };
+  const inOrder = (group: number[]) => (group.filter((j) => lines[j].includes("\t")).length <= 1 ? group.map((j) => lines[j].trim()).join(" ") : null);
+  const joinedRow = (i: number): { group: number[]; text: string; at: number } | null => {
+    const k = filledText.indexOf(i);
+    const above: number[] = [];
+    for (let u = k - 1; u >= 0 && above.length < 3; u--) {
+      const j = filledText[u], t = lineTokens(lines[j]);
+      if (!free(j) || !t.length || !t.every(isWord) || lines[j].includes("\t")) break;
+      above.unshift(j);
+    }
+    const below: number[] = [];
+    for (let u = k + 1; u < filledText.length && below.length < 5; u++) {
+      const j = filledText[u];
+      if (!free(j) || alone(j)) break;
+      below.push(j);
+    }
+    for (let size = 2; size <= above.length + 1 + below.length; size++) {
+      let found: { group: number[]; text: string; at: number } | null = null, ways = 0;
+      for (let up = Math.min(above.length, size - 1); up >= 0; up--) {
+        const down = size - 1 - up;
+        if (down > below.length) continue;
+        const group = [...above.slice(above.length - up), i, ...below.slice(0, down)];
+        for (const text of new Set([byColumn(group), inOrder(group)].filter((x): x is string => x !== null))) {
+          const at = pool.findIndex((o) => sameLine(lineTokens(text), o.t) && o.h === textUnder[i]);
+          if (at >= 0) { ways++; found ??= { group, text, at }; }
+        }
+      }
+      if (found) return ways === 1 ? found : null;
+    }
+    return null;
+  };
   let figureLines = 0, noLabel = -1, why = "";
   lines.forEach((line, i) => {
     if (skipText.has(i)) return;
     const tokens = lineTokens(line);
     if (!figureLine(tokens)) return;
     figureLines++;
-    if (pre?.confirmed.has(i) || tableRows.has(i)) return;
+    if (pre?.confirmed.has(i) || tableRows.has(i) || joinedAway.has(i)) return;
     const at = labelOf(tokens) ? pool.findIndex((o) => sameLine(tokens, o.t) && o.h === textUnder[i]) : -1;
     if (at >= 0) { pool.splice(at, 1); return; }
     const wrap = labelOf(tokens) ? wrapped(i, tokens) : null;
     if (wrap) {
       rebuilt.set(i, rebuild(line, lines[wrap.j].trim().replace(/\s+/g, " "), wrap.joined, pool[wrap.at].l));
       pool.splice(wrap.at, 1); lent.add(wrap.j); return;
+    }
+    const joined = joinedRow(i);
+    if (joined) {
+      const [head, ...rest] = joined.group;
+      rebuilt.set(head, joined.text);
+      for (const j of rest) joinedAway.add(j);
+      if (head !== i) joinedAway.add(i);
+      pool.splice(joined.at, 1); return;
     }
     unconfirmed.push(i);
     if (!labelOf(tokens) && noLabel < 0) noLabel = i;
@@ -626,7 +705,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
   const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${confirmed} confirmed; figures ${seenText.length} in text, ${seenImage.length} in image; `
     + `only in text ${described(only(seenText, seenImage))}; only in image ${described(only(seenImage, seenText))}`;
   if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log, held: spread.size, heldLines: spread };
-  const handed = lines.map((l, i) => rebuilt.get(i) ?? (lent.has(i) ? "" : l));
+  const handed = lines.map((l, i) => rebuilt.get(i) ?? (lent.has(i) || joinedAway.has(i) ? "" : l));
   const text = !spread.size ? handed.join("\n") : confirmed ? handed.map((l, i) => (spread.has(i) ? notChecked(l) : l)).join("\n") : null;
   return { agree: kind === null, kind, why, text, log, held: spread.size, heldLines: spread };
 }
