@@ -363,6 +363,41 @@ test("L21's any-order reading needs two case words in one clause: one word keeps
   assert.deepEqual(G(WORK, "Grace broke her wrist on her way to work.", WORK).amounts, []);
 });
 
+// ---------- Round 5: non-members, reported talk, scattered words (the note set wrongly on Grace's card) ----------
+test("Y1-Y10: a case that is a non-member's, reported, or said of nothing gives no amount, never a multiplied figure", () => {
+  const BOTH = "Note (a): payable twice if both arms are fractured.";
+  // [note, current message, earlier messages, chat person, household]
+  const cases: [string, string, string[], string | null, Person[]][] = [
+    [KEEPS, "Daniel, not Grace, has a compound fracture.", [], null, [DANIEL, GRACE]],                                       // Y1
+    [KEEPS, "Grace is fine, Daniel has a compound fracture.", [], null, [DANIEL, GRACE]],                                    // Y2
+    [KEEPS, "As for Daniel: compound fracture.", ["Grace broke her wrist."], null, [DANIEL, GRACE]],                         // Y3
+    [KEEPS, "Grace broke her wrist. As for Daniel: compound fracture.", [], null, [DANIEL, GRACE]],                         // Y3b
+    [KEEPS, "Grace's doctor said the policy pays double for compound fractures.", [], null, [DANIEL, GRACE]],                // Y4
+    [KEEPS, "Grace's doctor said the policy covers compound fractures better than simple ones.", [], null, [DANIEL, GRACE]], // Y4b
+    [KEEPS, "Grace read online that compound fractures get more from insurers.", [], null, [DANIEL, GRACE]],                 // Y4c
+    [BOTH, "Grace's arms both fine, fractured nothing.", [], null, [DANIEL, GRACE]],                                          // Y5
+    [BOTH, "Both of Grace's arms are fine and nothing is fractured.", [], null, [DANIEL, GRACE]],                             // Y5b
+    [BOTH, "Grace fractured her leg and both arms are bruised.", [], null, [DANIEL, GRACE]],                                  // Y5c
+    [KEEPS, "Her colleague fell at work. He has a compound fracture.", [], "Grace Okafor", [DANIEL, GRACE]],                 // Y6
+    [KEEPS, "Grace's colleague has a compound fracture.", [], "Grace Okafor", [DANIEL, GRACE]],                              // Y6b
+    [KEEPS, "Grace's friend has a compound fracture.", [], null, [DANIEL, GRACE]],                                           // Y6c
+    [KEEPS, "The other driver has a compound fracture.", [], "Grace Okafor", [DANIEL, GRACE]],                               // Y6d
+    [KEEPS, "He has a compound fracture.", ["Daniel fell."], "Grace Okafor", [DANIEL, GRACE]],                               // Y6e
+    [KEEPS, "My colleague has a compound fracture.", [], null, [GRACE]],                                                     // Y7
+    [KEEPS, "A colleague has a compound fracture.", [], null, [GRACE]],                                                      // Y7b
+    [KEEPS, "The cyclist who hit Grace has a compound fracture.", [], null, [GRACE]],                                        // Y7c
+    [KEEPS, "Daniel - compound fracture; Grace - sprain.", [], null, [DANIEL, GRACE]],                                       // Y10
+  ];
+  for (const [note, q, earlier, chat, people] of cases) {
+    const a = ask(fractureSchedule(note, 2, people), "Grace Okafor", /Fracture/, q, note, earlier, undefined, chat);
+    assert.deepEqual(a.amounts, [], q);
+    assert.ok(a.leftOut, q);
+  }
+});
+// Known, not covered (gate round 5, Y8): the note's case words in the injury's own clause but not as its circumstance
+// ("Grace fractured her wrist at home and was travelling on public transport to the hospital") still read as the case when
+// the model sets the note; no cheap word rule tells the two apart.
+
 console.log(`multiplier-test: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
 if (failures.length) process.exit(1);
