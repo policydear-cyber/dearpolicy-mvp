@@ -204,6 +204,7 @@
     "security:household-export-worker-test": "node --import tsx scripts/household-export-worker-regressions.ts",
     "security:env-contract-test": "node --import tsx scripts/env-contract-regressions.ts",
     "household-export:cleanup": "node --import tsx scripts/household-export-cleanup.ts",
+    "auth:invite-return-test": "node --import tsx --test scripts/auth/invite-return-test.ts",
     "auth:signup-gate-test": "node --import tsx scripts/auth/signup-gate-test.ts",
     "auth:signup-invite-note-test": "node --import tsx scripts/auth/signup-invite-note-test.ts",
     "security:lifecycle-test": "node --import tsx scripts/lifecycle-regressions.ts",
@@ -420,8 +421,7 @@
     "benefit-table:percent-base-test": "tsx scripts/benefit-table/percent-base-test.ts",
     "documents:image-currency-test": "node --import tsx scripts/documents/image-currency-test.ts",
     "documents:code-in-word-test": "node --import tsx scripts/documents/code-in-word-test.ts",
-    "policies:catalog-whole-read-test": "node --import tsx scripts/policies/catalog-whole-read-test.ts",
-    "auth:invite-return-test": "node --import tsx --test scripts/auth/invite-return-test.ts"
+    "policies:catalog-whole-read-test": "node --import tsx scripts/policies/catalog-whole-read-test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
