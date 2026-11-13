@@ -627,14 +627,31 @@ const LIFE_TAG = /\b(?:mum|mom|mummy|mommy|mother|dad|daddy|father|grand(?:ma|pa
  * not name (whoseRows, documentLives). */
 /** The words of a row name, possessives and the "per (insured) person" phrase taken out. */
 const labelWords = (s: string) => norm(s.replace(/['’]s\b/gi, "").replace(/\b(?:per|each|every|for\s+(?:each|every))\s+(?:insured\s+)?(?:persons?|insured|lives?|members?)\b/gi, " ")).split(" ").filter(Boolean);
-/** A plan or tier in a row's own name ("Gold Plan medical", "Option B dental"): the row is for whoever holds that plan, so
- * the document's rows are not every named person's (Critic 1 on #466). Withhold-only. */
-const PLAN_TIER = /\b(?:plan|plans|tier|tiers|option|options|package|packages|class|gold|silver|platinum|bronze|basic|standard|premier|classic|deluxe|elite|superior|executive|essential|essentials)\b/i;
-/** Whether a row's name names an insured life, or a plan or tier (PLAN_TIER): a role or relation word (LIFE_TAG), a word of a person the
+/** The plan or tier markers in a row's own name: a tier word ("Gold", "Basic") or the word on either side of plan, tier,
+ * option, package or class ("Plan 1", "Option B", "Class A"), never a travel class ("economy class"). */
+const TIER_WORD = /^(?:gold|silver|platinum|bronze|basic|standard|premier|classic|deluxe|elite|superior|executive|essential|essentials)$/;
+const TIER_HEAD = /^(?:plan|plans|tier|tiers|option|options|package|packages|class)$/;
+const TRAVEL_CLASS = /^(?:economy|business|first|premium|coach|travel)$/;
+function tierMarkers(benefit: string): string[] {
+  const ws = labelWords(benefit), out: string[] = [];
+  ws.forEach((w, k) => {
+    if (TIER_WORD.test(w)) out.push(w);
+    if (!TIER_HEAD.test(w)) return;
+    for (const n of [ws[k - 1], ws[k + 1]]) if (n && !TIER_HEAD.test(n) && !(w === "class" && TRAVEL_CLASS.test(n))) out.push(`${w.replace(/s$/, "")}:${n}`);
+  });
+  return out;
+}
+/** Whether a document's row names contrast plans or tiers: two or more different markers across them ("Gold" and "Silver",
+ * "Option A" and "Option B"). Then its rows are for whoever holds each plan, never every named person's (Critic 1 on #466).
+ * One "Basic" or "Standard" alone is part of a benefit's name. Withhold-only. */
+function contrastsTiers(benefits: CheckedBenefit[]): boolean {
+  return new Set(benefits.flatMap((b) => tierMarkers(b.benefit))).size >= 2;
+}
+/** Whether a row's name names an insured life: a role or relation word (LIFE_TAG), a word of a person the
  * document names, or their initials ("AR" for Asha Rao). */
 function namesALife(benefit: string, people: string[]): boolean {
   const ws = labelWords(benefit), text = ws.join(" ");
-  if (LIFE_TAG.test(text) || PLAN_TIER.test(text)) return true;
+  if (LIFE_TAG.test(text)) return true;
   const own = new Set<string>();
   for (const p of people) {
     const pw = norm(p).split(" ").filter(Boolean);
@@ -689,7 +706,7 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
     if (!figureOnlyHeading(b.column, (columnsOn.get(r.documentId)?.size ?? 0) === 1) || !ownProof(r.documentId, coverKey)) return false;
     const others = r.benefits.filter((x) => x !== b);
     // A document that tells its lives apart in its row names prints its rows per life: none of them is every person's.
-    if (r.benefits.some((x) => namesALife(x.benefit, [...r.namedPeople, ...r.covers.map((c) => c.person)]))) return false;
+    if (r.benefits.some((x) => namesALife(x.benefit, [...r.namedPeople, ...r.covers.map((c) => c.person)])) || contrastsTiers(r.benefits)) return false;
     // The same benefit printed again, or printed once per life with a tag ("Medical expenses - Insured 1"), is no one's;
     // distinct benefits whose names share a word ("Travel delay", "Baggage delay") are each their own row.
     if (others.some((x) => norm(x.benefit) === norm(b.benefit) || (x.value != null && figure(x) !== figure(b) && sameBenefitPerLife(x.benefit, b.benefit)))) return false;

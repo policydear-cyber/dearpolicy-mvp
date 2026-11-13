@@ -178,7 +178,7 @@ for (const [a, b] of [["Mum hospital cash", "Dad hospital cash"], ["Hospital cas
   ["Toddler medical expenses", "Medical expenses"], ["Pensioner hospital cash", "Hospital cash"],
   // Critic 1 on #466: a tier, a title, a sex or a plan size is not a kind of benefit.
   ["Gold medical expenses", "Silver medical expenses"], ["Hospital cash Mr", "Hospital cash Mrs"], ["Accidental death male", "Accidental death female"],
-  ["Medical expenses individual", "Medical expenses couple"], ["Standard trip cancellation", "Premier trip cancellation"], ["Hospital cash Rao A", "Hospital cash Rao B"], ["Gold Plan medical", "Silver Plan dental"], ["Option A hospital cash", "Option B medical expenses"]]) {
+  ["Medical expenses individual", "Medical expenses couple"], ["Standard trip cancellation", "Premier trip cancellation"], ["Hospital cash Rao A", "Hospital cash Rao B"], ["Gold Plan medical", "Silver Plan dental"], ["Option A hospital cash", "Option B medical expenses"], ["Plan 1 medical", "Plan 2 dental"], ["Class A accident", "Class B hospital cash"]]) {
   test(`one benefit printed per life ("${a}", "${b}") is no one's, even marked for every named person`, () => {
     const t = run({ lives: ["Asha Rao", "Ben Rao"], column: "Limit per insured person",
       rows: [{ benefit: a, cell: "USD 100,000", value: 100000 }, { benefit: b, cell: "USD 50,000", value: 50000 }, { benefit: "Personal liability", cell: "USD 1,000,000", value: 1000000 }] });
@@ -192,6 +192,12 @@ test("a row named 'Sum insured' does not name a life: the certificate's rows are
   const t = run({ lives: ["Asha Rao", "Ben Rao"], column: "Limit per insured person", rows: [{ benefit: "Sum insured", cell: "S$100,000", value: 100000 }, { benefit: "Trip cancellation", cell: "S$5,000", value: 5000 }] });
   for (const id of ["a", "b"]) assert.deepEqual(shownFor(t, id).map((x) => x.split(" | ")[0]), ["Sum insured", "Trip cancellation"], id);
 });
+for (const first of ["Return journey home (economy class)", "Basic medical expenses", "Standard baggage cover"]) {
+  test(`one tier-like word alone ("${first}") is part of a benefit's name: the rows are still every named person's (Critic 1 on #466)`, () => {
+    const t = run({ lives: ["Asha Rao", "Ben Rao"], column: "Limit per insured person", rows: [{ benefit: first, cell: "S$5,000", value: 5000 }, { benefit: "Trip cancellation", cell: "S$5,000", value: 5000 }] });
+    for (const id of ["a", "b"]) assert.deepEqual(shownFor(t, id).map((x) => x.split(" | ")[0]), [first, "Trip cancellation"], id);
+  });
+}
 test("'per insured person' in a row's own name does not count as naming a life", () => {
   const t = run({ lives: ["Asha Rao", "Ben Rao"], column: "Limit per insured person", rows: [{ benefit: "Medical expenses per insured person", cell: "USD 100,000", value: 100000 }] });
   for (const id of ["a", "b"]) assert.deepEqual(shownFor(t, id).map((x) => x.split(" | ")[0]), ["Medical expenses per insured person"], id);
