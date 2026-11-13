@@ -31,7 +31,15 @@ async function main() {
     const [body, mac] = token.split(".");
     const forged = Buffer.from(JSON.stringify({ ...intent, householdId: "99999999-9999-4999-8999-999999999999" })).toString("base64url");
     assert.equal(verifyUploadIntent(`${forged}.${mac}`), null, "another household");
-    assert.equal(verifyUploadIntent(`${body}.${mac.slice(0, -2)}AA`), null, "bad signature");
+    // Change the signature's bytes, not its text: two base64url tails can
+    // decode to the same bytes (the last character's low bits are unused),
+    // so a text edit was occasionally no forgery at all.
+    const macBytes = Buffer.from(mac, "base64url");
+    for (const at of [0, macBytes.length - 1]) {
+      const bad = Buffer.from(macBytes); bad[at] ^= 0x01;
+      assert.equal(verifyUploadIntent(`${body}.${bad.toString("base64url")}`), null, `bad signature (byte ${at})`);
+    }
+    assert.equal(verifyUploadIntent(`${body}.${macBytes.subarray(0, -1).toString("base64url")}`), null, "short signature");
     assert.equal(verifyUploadIntent(signUploadIntent({ ...intent, expiresAt: Date.now() - 1 })), null, "expired");
     for (const junk of [null, "", "abc", "a.b.c", 42, "x".repeat(9000)]) assert.equal(verifyUploadIntent(junk), null);
   });
