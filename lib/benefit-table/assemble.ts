@@ -16,10 +16,10 @@
 import { familyNameCandidates, findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { nameKey } from "@/lib/policies/name-dismissals";
 import { printedDay, singaporeDay } from "./dates";
-import { SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
+import { PREMIUM, SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
-import { CAP_WORDS, numbersIn, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
+import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, marksIn, numbersIn, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 import { benefitWords } from "./cover-rows";
@@ -700,7 +700,7 @@ function sameBenefitPerLife(a: string, b: string): boolean {
   return !(dx.every((w) => BENEFIT_KIND.has(w)) && dy.every((w) => BENEFIT_KIND.has(w)));
 }
 /** Words in a plain table's section headings or a row's own words that tell a plan, tier, family or premium apart (plainTable). */
-const PLAIN_TABLE_STOP = /\b(?:plans?|tiers?|options?|packages?|class(?:es)?|famil(?:y|ies)|premiums?|individual|couple|single|per\s+(?:person|insured))\b/i;
+const PLAIN_TABLE_STOP = /\b(?:plans?|tiers?|options?|packages?|class(?:es)?|famil(?:y|ies)|premiums?|individual|couple|single|per\s+(?:person|insured)|contributions?|cost\s+of\s+cover|waiv\w*|instal?l?ments?|direct\s+debit|payable\s+by)\b/i;
 /** A row whose own words print a share of a sum, or name a sum insured or assured: what it pays may be each person's own. */
 const NAMES_SUM = /\bsum\s+(?:insured|assured|covered)\b|%|\bper\s*cent\b/i;
 /** A family schedule's one plain table of benefits, with one figure per row for every life it names (TE-ACC-20261113 family
@@ -711,8 +711,13 @@ const NAMES_SUM = /\bsum\s+(?:insured|assured|covered)\b|%|\bper\s*cent\b/i;
  *   linked to (no other cover, plan or product printed for any of them on it);
  * - no row of the document has a column (no plan, tier, life or person columns: one figure for everyone), and no section
  *   heading names a kind of life, a person, an age, a plan, tier or family;
- * - the row's own words, line and conditions name no kind of life, person, age, plan, tier, family or premium, and no sum
- *   insured or share of one;
+ * - the document prints no line making a figure one limit shared by all the lives (sharedNotes: "Limits are per family",
+ *   "Aggregate limit for all insured persons", "in total under this policy");
+ * - the row's own words, line and conditions name no kind of life, person, age, plan, tier, family, premium or contribution
+ *   (PREMIUM too), no shared limit, no sum insured or share of one, and no words giving some lives another figure ("half",
+ *   "reduced", "second and subsequent", "for those ..."; FIGURE_CHANGE); every figure in its conditions and footnotes is
+ *   one of its own; each footnote mark it prints ("*", "(note b)") points to a note found on the document that is clean
+ *   by the same tests (TE gate on 4a8af1a5, H1-H3);
  * - the document prints no note, anywhere outside a row's own line, that names a kind of life or an age (lifeNotes: "all
  *   benefits for a child are halved"); a note on another row's own line (row 1's "For an insured child under 18, limited to
  *   25% of the Sum Insured") is that row's (checked in perPersonRows, for a per-person column too).
@@ -720,18 +725,29 @@ const NAMES_SUM = /\bsum\s+(?:insured|assured|covered)\b|%|\bper\s*cent\b/i;
  * person's own sum to that person alone. */
 function plainTable(r: CheckedReading, b: CheckedBenefit, coverKey: string): boolean {
   if (r.kind !== "personal_proof" || b.column != null && norm(b.column)) return false;
+  // A line anywhere that makes a figure one limit for all the lives ("Limits are per family unless stated otherwise").
+  if ((r.sharedNotes ?? []).length) return false;
   const lives = new Set(r.covers.map((c) => norm(c.person)));
   if (lives.size < 2 || r.covers.some((c) => coverKeyOf(c) !== coverKey) || r.covers.length !== lives.size) return false;
   if (r.benefits.some((x) => norm(x.column))) return false;
   const people = [...r.namedPeople, ...r.covers.map((c) => c.person)];
   for (const x of r.benefits) {
     const h = x.section ?? "";
-    if (h && (KIND_OF_LIFE.test(h) || PLAIN_TABLE_STOP.test(h) || ageBand(h) || tierMarkers(h).length || namesALife(h, people))) return false;
+    if (h && (KIND_OF_LIFE.test(h) || PLAIN_TABLE_STOP.test(h) || SHARED_LIMIT.test(h) || ageBand(h) || tierMarkers(h).length || namesALife(h, people))) return false;
   }
   const own = [b.benefit, b.rowText ?? b.source.excerpt, anotherRowsNote(r, b, b.nextLine) ? "" : b.nextLine ?? "", ...b.conditions].join("\n");
-  if (KIND_OF_LIFE.test(own) || PLAIN_TABLE_STOP.test(own) || NAMES_SUM.test(own) || ageBand(own) || tierMarkers(b.benefit).length || namesALife(own, people)) return false;
+  if (KIND_OF_LIFE.test(own) || PLAIN_TABLE_STOP.test(own) || SHARED_LIMIT.test(own) || FIGURE_CHANGE.test(own) || NAMES_SUM.test(own) || PREMIUM.test(own)
+    || ageBand(own) || tierMarkers(b.benefit).length || namesALife(own, people)) return false;
+  // A footnote mark the row prints ("GBP 50*", "(note b)") is read with its note: a mark with no note found, or a note that
+  // names a life, gives another figure or a shared limit, keeps the row from each person (its figures: perPersonRows).
+  for (const mark of marksIn(b.rowText ?? b.source.excerpt)) {
+    const notes = plainFootnotes(r, mark);
+    if (!notes.length || notes.some((t) => KIND_OF_LIFE.test(t) || FIGURE_CHANGE.test(t) || SHARED_LIMIT.test(t) || NAMES_SUM.test(t) || ageBand(t) || namesALife(t, people))) return false;
+  }
   return true;
 }
+/** The notes a footnote mark points to on the document. */
+const plainFootnotes = (r: CheckedReading, mark: string) => (r.footnotes ?? []).filter((f) => f.mark === mark).map((f) => f.text);
 /** The number a row's section heading gives it ("5", "Section 5", "SECTION 2 - MEDICAL BENEFITS"), or null. */
 function sectionNumber(section: string | null): number | null {
   const m = /^\s*(\d{1,3})[.)]?\s*$/.exec(section ?? "") ?? /^\s*(?:section|part|item|benefit)\s+(\d{1,3})\b(?!\s*(?:years?|yrs?|%|[.,]\d))/i.exec(section ?? "");
@@ -788,11 +804,20 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
       if (new RegExp(String.raw`^\s*${num}[.)]?\t`).test(b.rowText ?? b.source.excerpt)) own.push(num);
     }
     // In a plain table, the excess the row prints for itself ("after an excess of GBP 100 per claim") is its own too.
-    if (plain) for (const m of `${b.rowText ?? b.source.excerpt}\n${next}`.matchAll(/\b(?:an?\s+)?(?:excess|deductible)\s+(?:of\s+)?(?:\p{Lu}{1,3}\s?)?\p{Sc}?\s?(\d[\d,]*(?:\.\d+)?)/giu)) own.push(Number(m[1].replace(/,/g, "")));
+    if (plain) for (const m of [b.rowText ?? b.source.excerpt, next, ...b.conditions].join("\n").matchAll(/\b(?:an?\s+)?(?:excess|deductible)\s+(?:of\s+)?(?:\p{Lu}{1,3}\s?)?\p{Sc}?\s?(\d[\d,]*(?:\.\d+)?)/giu)) own.push(Number(m[1].replace(/,/g, "")));
+    const owned = new Set(own);
     for (const n of numbersIn([b.section, b.column, b.benefit, b.rowText ?? b.source.excerpt, next].filter(Boolean).join("\n"))) {
       const i = own.indexOf(n);
       if (i < 0) return false;
       own.splice(i, 1);
+    }
+    // In a plain table the row's conditions and footnotes are its words too: a figure in them that is none of the row's own
+    // ("* GBP 25 per day for those in full-time education") is another life's (TE gate H2). A condition that repeats the
+    // row's own line was counted with it.
+    if (plain) {
+      const line = norm(b.rowText ?? b.source.excerpt);
+      const more = [...b.conditions.filter((c) => !line.includes(norm(c))), ...marksIn(b.rowText ?? b.source.excerpt).flatMap((m) => plainFootnotes(r, m))];
+      if (numbersIn(more.join("\n")).some((n) => !owned.has(n))) return false;
     }
     return true;
   };

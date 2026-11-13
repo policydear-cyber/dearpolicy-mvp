@@ -5,7 +5,8 @@
  * negative controls: a document-wide child note, a table with a column per plan, a row naming a child or a person, a row
  * printing an age, a premium, a figure equal to one person's sum insured, a reader that does not mark the row, a different
  * cover for one life, and the per-person adversarial matrix of #464/#466 with every row marked for every named person by a
- * careless reader (with and without its column heading). And the chat: an amount the model gives for a row withheld that
+ * careless reader (with and without its column heading), and every repro of the TE gate on 4a8af1a5 (plain-table-gate.md:
+ * shared limits, footnotes, premium-like rows, benign lines on a per-person certificate). And the chat: an amount the model gives for a row withheld that
  * way is said to be printed, with its document and page, never "I left out an amount I couldn't find printed".
  * No model, database or network: the readings are written by hand
  * from each page's own text.
@@ -62,10 +63,10 @@ const TAIL = ["Exclusions: injury while taking part in motor racing or professio
 
 /** The schedule, read by hand: page 1 the insured persons, page 2 the table. `rows` replace the table's rows; `header` its
  * header line; `notes` lines printed after the table (before note (a)); `covers` the cover each life holds. */
-function schedule(o: { rows?: Row[]; header?: string; notes?: string[]; pre?: string[]; lives?: [string, string, string, string][]; coverOf?: (person: string) => string } = {}) {
+function schedule(o: { rows?: Row[]; header?: string; notes?: string[]; pre?: string[]; post?: string[]; lives?: [string, string, string, string][]; coverOf?: (person: string) => string } = {}) {
   const rows = o.rows ?? ROWS, lives = o.lives ?? LIVES;
   const lines = rows.map((r) => `${r.n}\t${r.benefit}\t${r.cell}`);
-  const page2 = ["TABLE OF BENEFITS (all amounts in GBP)", ...(o.pre ?? []), o.header ?? "Section\tBenefit\tAmount payable", ...lines, ...(o.notes ?? []), ...NOTE_A, ...TAIL].join("\n");
+  const page2 = ["TABLE OF BENEFITS (all amounts in GBP)", ...(o.pre ?? []), o.header ?? "Section\tBenefit\tAmount payable", ...lines, ...(o.notes ?? []), ...NOTE_A, ...TAIL, ...(o.post ?? [])].join("\n");
   const doc: SourceDoc = { id: DOC, name: "Harbourline-Family-PA-Schedule-2026.pdf", readable: true, pages: [{ page: 1, text: PAGE1(lives) }, { page: 2, text: page2 }] };
   const coverOf = o.coverOf ?? (() => "Personal accident");
   const reading = {
@@ -203,6 +204,96 @@ test("a scheme's terms (not a personal schedule) never gives the rows by this ru
   const t = assembleTable([terms], FAMILY, [...new Set(r.benefits.map((b) => sectionKeyOf(DOC, b)))].map((section) => ({ section, cover: coverKeyOf({ product: PRODUCT, cover: "Personal accident", plan: null }), why: "x" })), [], NOW);
   for (const id of [...NAMED, "o"]) assert.deepEqual(fixedShown(t, id), [], id);
 });
+
+// ---------------------------------------------------------------- the TE gate on 4a8af1a5 (plain-table-gate.md), each repro
+// H1: a limit shared by all the lives is never each person's.
+for (const words of ["Up to GBP 2,500 per accident for all insured persons together", "Up to GBP 2,500 in aggregate per period of insurance", "Up to GBP 2,500 per policy",
+  "Up to GBP 2,500 per accident, all insured persons combined", "Up to GBP 2,500 in total under this policy"]) {
+  test(`H1: a shared limit in the row ("${words}") is withheld from every named person`, () => {
+    const { table } = schedule({ rows: withRow("6", { cell: `${words}, after an excess of GBP 100 per claim` }) });
+    for (const id of [...NAMED, "o"]) assert.deepEqual(shown(table, id, "Medical expenses"), [], id);
+  });
+}
+for (const [benefit, cell] of [["Aggregate limit for all insured persons", "GBP 10,000 per period"], ["Maximum payable under this policy", "GBP 10,000"]]) {
+  test(`H1: a row of its own for a shared limit ("${benefit}") is no one's benefit, and blocks the plain rows`, () => {
+    const { table } = schedule({ rows: [...ROWS, { n: "7", benefit, cell, pays: "up_to", value: 10000, forWhom: "each_named_insured" }] });
+    for (const id of [...NAMED, "o"]) assert.deepEqual([...shown(table, id, benefit), ...fixedShown(table, id)], [], id);
+  });
+}
+for (const line of ["The limits shown apply to all insured persons combined.", "Limits are per family unless stated otherwise.", "Limits are shared between all insured persons.",
+  "Amounts shown are per policy, not per person.", "The most we pay for all insured persons together under Section 6 is GBP 5,000 per period."]) {
+  for (const where of ["notes", "post"] as const) test(`H1: a document line "${line}" (${where === "notes" ? "under the table" : "at the end"}) blocks every fixed row`, () => {
+    noneFixed(schedule({ [where]: [line] }).table, line);
+  });
+}
+// H2: a row's footnote, or a condition giving another figure, is read with the row.
+test("H2 F7: 'GBP 50* per day' with '* GBP 25 per day for those in full-time education' (as its condition and printed) is withheld", () => {
+  const note = "* GBP 25 per day for those in full-time education";
+  for (const where of ["notes", "post"] as const) {
+    const { table } = schedule({ rows: withRow("5", { cell: "GBP 50* per day in hospital, payable from the third consecutive day, up to 30 days per accident", conditions: [note] }), [where]: [note] });
+    for (const id of NAMED) assert.deepEqual(shown(table, id, "Hospital cash"), [], `${where} ${id}`);
+  }
+});
+test("H2 F6: '(note b)' with 'Note (b): halved for the second and subsequent insured persons' is withheld, wherever the note is printed", () => {
+  const note = "Note (b): halved for the second and subsequent insured persons.";
+  for (const where of ["notes", "pre", "post"] as const) {
+    const { table } = schedule({ rows: withRow("5", { cell: "GBP 50 per day in hospital (note b), payable from the third consecutive day, up to 30 days per accident", conditions: [note] }), [where]: [note] });
+    for (const id of NAMED) assert.deepEqual(shown(table, id, "Hospital cash"), [], `${where} ${id}`);
+  }
+});
+test("H2: a footnote mark with no note found on the document withholds the row", () => {
+  const { table } = schedule({ rows: withRow("5", { cell: "GBP 50* per day in hospital, payable from the third consecutive day, up to 30 days per accident" }) });
+  for (const id of NAMED) assert.deepEqual(shown(table, id, "Hospital cash"), [], id);
+});
+test("H2: a condition copied from elsewhere that prints another figure withholds the row", () => {
+  const { table } = schedule({ rows: withRow("6", { conditions: ["after an excess of GBP 100 per claim", "GBP 1,000 for dental treatment"] }), post: ["GBP 1,000 for dental treatment"] });
+  for (const id of NAMED) assert.deepEqual(shown(table, id, "Medical expenses"), [], id);
+});
+test("H2: a footnote that is found and clean ('* A day means a night spent in hospital.') keeps the row for each person", () => {
+  const { table } = schedule({ rows: withRow("5", { cell: "GBP 50* per day in hospital, payable from the third consecutive day, up to 30 days per accident" }), post: ["* A day means a night spent in hospital."] });
+  for (const id of NAMED) assert.deepEqual(shown(table, id, "Hospital cash"), ["Hospital cash | GBP 50 a day"], id);
+});
+// H3: premium-like rows.
+for (const [benefit, cell, value, pays] of [["Monthly contribution", "GBP 26.00", 26, "amount"], ["Cost of cover", "GBP 312.00 a year", 312, "amount"],
+  ["Waiver of contributions", "up to GBP 26 per month", 26, "up_to"], ["Instalment", "GBP 26.00 by direct debit", 26, "amount"]] as const) {
+  test(`H3: "${benefit} ${cell}" marked for every named person is never shown as each person's benefit`, () => {
+    const { table } = schedule({ rows: [...ROWS, { n: "7", benefit, cell, pays, value, forWhom: "each_named_insured" }] });
+    for (const id of [...NAMED, "o"]) assert.deepEqual(shown(table, id, benefit), [], id);
+  });
+}
+// H4: a line that says nothing about an amount does not hide a per-person column's figures (base shows them).
+const TRAVEL = "eeeeeeee-0000-4000-8000-0000000000f2";
+function travel(extra: string[]) {
+  const lives = ["Asha Rao", "Ben Rao", "Kiran Rao"];
+  const rows = [["Overseas medical expenses", "S$500,000", 500000], ["Trip cancellation", "S$10,000", 10000]] as const;
+  const text = ["GLOBE TRAVEL ANNUAL - CERTIFICATE OF INSURANCE", `Certificate C-7\tInsured persons: ${lives.join(", ")}`, "Insured person\tCover", ...lives.map((n) => `${n}\tGlobe Travel Annual`),
+    "Benefit\tLimit per insured person", ...rows.map(([b, c]) => `${b}\t${c}`), "Terms and conditions apply.", ...extra].join("\n");
+  const { r, links } = build({ id: TRAVEL, lives, text, rows: rows.map(([benefit, cell, value]) => ({ benefit, value, quote: `${benefit}\t${cell}`, column: "Limit per insured person" })) });
+  for (const b of r.benefits) b.forWhom = "each_named_insured";
+  const t = assembleTable([r], BASE_FAMILY, links, [], NOW);
+  return ["a", "b", "k"].map((id) => t.people.find((p) => p.id === id)!.rows.filter((x) => x.figure.kind !== "none").length);
+}
+for (const line of ["The policyholder must tell us about any change in health.", "Signed on behalf of the policyholder", "Partner means your spouse or the person you live with.",
+  "Cover is available to persons aged 75 or under at the start of the trip.", "Assistance line for students abroad: +65 6000 0000", "Children under 18 travel free when travelling with a parent."]) {
+  test(`H4: "${line}" on a per-person certificate does not hide its limits`, () => assert.deepEqual(travel([line]), [2, 2, 2]));
+}
+test("H4: the base bug stays fixed: 'Benefits for children under 18 are 50% of the amounts shown' withholds the per-person limits", () => {
+  assert.deepEqual(travel(["Benefits for children under 18 are 50% of the amounts shown."]), [0, 0, 0]);
+});
+test("H4: 'Signed on behalf of the policyholder: N. Okafor' does not block the plain table", () => {
+  const { table } = schedule({ post: ["Signed on behalf of the policyholder: N. Okafor"] });
+  for (const id of NAMED) assert.equal(fixedShown(table, id).length, 2, id);
+});
+// Builder risks the gate confirmed.
+for (const n of ["1", "4"]) {
+  test(`a children's note on row ${n}'s own line about every benefit ("All benefits for children are half the amounts shown in this table") withholds the fixed rows`, () => {
+    const cell = n === "1" ? "100% of the Sum Insured. All benefits for children are half the amounts shown in this table." : "5% of the Sum Insured per accident. All benefits for children are half the amounts shown in this table.";
+    noneFixed(schedule({ rows: withRow(n, { cell, conditions: [], forWhom: "some_insured" }) }).table, `row ${n}`);
+  });
+}
+for (const line of ["Those still in full-time education receive half the amounts shown.", "Second insured person", "Third insured person: reduced cover"]) {
+  test(`a line with no kind-of-life word ("${line}") withholds the fixed rows`, () => noneFixed(schedule({ pre: [line] }).table, line));
+}
 
 // ---------------------------------------------------------------- the chat: a withheld row's amount is printed, and where
 /** The chat's row step on the schedule, as the app's chat turn runs it (lib/simple-chat/hook.ts): an amount statement from
