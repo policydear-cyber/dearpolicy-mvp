@@ -47,7 +47,7 @@ const OCR_MODELS = new Set(["PP-OCRv5", "PP-OCRv5-latin", "PP-OCRv6"]);
 // was submitted with (BAIDU_IDENTITY_EXCEPTION), so an alias is refused before anything is sent.
 const DOC_MODELS = new Set(["PP-StructureV3", "PaddleOCR-VL-1.5", "PaddleOCR-VL-1.6"]);
 /** Bumped whenever the way a Baidu result is turned into page text changes, so an older cached reading is not reused. */
-const TEXT_VERSION = "baidu-md-v3";
+const TEXT_VERSION = "baidu-md-v4"; // v4: headers, footers and footnotes kept (#441)
 
 type Env = NodeJS.ProcessEnv;
 const intEnv = (v: string | undefined, fallback: number, min: number, max: number) => {
