@@ -19,7 +19,7 @@ import { printedDay, singaporeDay } from "./dates";
 import { SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
-import { CAP_WORDS, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
+import { CAP_WORDS, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 
@@ -341,7 +341,7 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
     : b.pays === "words" && /\d\s*%/.test(b.source.excerpt) ? "paid as a share printed in the row's words, with no amount worked out: see the document" : "no figure printed" };
   // A row whose words say it is capped, with no cap read and checked (or a reading from before caps were read), is never
   // worked out: the uncapped figure could be more than it pays.
-  if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.source.excerpt))) {
+  if (b.cap == null && (b.capUnread || CAP_WORDS.test(withoutOwnShareCap(b.source.excerpt, b.value)))) {
     const of = shareWords(b);
     return { kind: "none", why: `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that was not captured: see the document`,
       ...(of ? { share: { percent: b.value!, of, capWords: null, capPage: null, capMissing: true } } : {}) };
@@ -438,6 +438,8 @@ function columnProblem(column: string | null, cover: CoverType, plans: Set<strin
  * a family plan's S$12,500 baggage limit was shown on a single traveller's plan). A label that only names a child as the
  * subject of the benefit ("Child companion", "child care") is not a tier. */
 const FAMILY_TIER = /\b(?:family\s+(?:plan|cover|policy|limit|option)s?|per\s+family|for\s+(?:a|the|each)\s+family|family\s+overall)\b/i;
+/** A row printed for a child who is the insured person, not a payment per child ("per child", "each child"). */
+const INSURED_CHILD = /\b(?:insured\s+child(?:ren)?|child(?:ren)?\s+(?:covered|insured|below|under|aged))\b/i;
 const CHILD_TIER = /\b(?:child(?:ren)?\s+(?:covered|insured|below|under|aged|up\s+to)|(?:each|per|every|insured)\s+child|for\s+(?:a|each|every)\s+child|dependent\s+child(?:ren)?)\b/i;
 /** An age group as "<n" / ">=n" / "a-b", the same for every wording of it. A number counts as an age only with "years",
  * "yrs" or "age(d)" beside it, so "over 3 days" or "S$500 and above" is never an age group. */
@@ -568,8 +570,17 @@ function whoseRows(documentId: string, b: CheckedBenefit, coverKey: string, cove
   // No one life is the heading: the people whose own sum printed on this document is the row's figure (DC, 10 Nov). Never
   // anyone else: no one is shown an amount that is not theirs.
   const own = (c: PersonCover) => c.confirmation ? c.confirmation.printed : c.sumInsured;
-  return new Set([...ids].filter((id) => printed.some((c) => c.personId === id && own(c) != null && own(c) === b.value
+  const theirs = new Set([...ids].filter((id) => printed.some((c) => c.personId === id && own(c) != null && own(c) === b.value
     && (!c.currency || !b.currency || c.currency === b.currency))));
+  if (theirs.size) return theirs;
+  // A family schedule's own table of benefits, printed on a page that prints none of the insured people's lines (their
+  // names and sums on one page, "GBP 50 per day in hospital" on the benefits page): nothing ties the row to one life, and
+  // the document prints it once for the cover everyone on it holds, so it is every one of their rows (TE-ACC-20261113:
+  // hospital cash and medical expenses were shown for no one). Rows on a page that prints any holder's own line stay
+  // no one's, so one life's block is never shown for another.
+  const ownLines = printed.filter((c) => c.source.documentId === documentId);
+  if ([...ids].every((id) => ownLines.some((c) => c.personId === id)) && ownLines.every((c) => c.source.page !== b.source.page)) return ids;
+  return theirs;
 }
 /** `now` decides which short-term covers have ended (coverEnded), in Singapore time like the chat's date checks. */
 /** Why a row is under the cover whose own printed line it is (ownLineCovers). */
@@ -662,6 +673,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     if (!l?.cover && unplaced.has(s.key)) unlinkedSections.push({ section: s, why: l ? l.why : refused ? `not shown: ${refused.why}` : "not linked to any cover", source: firstSource.get(s.key) ?? null });
   }
   const notForPerson: NonNullable<BenefitTable["notForPerson"]> = [];
+  /** How many people a document prints a cover for. */
+  const livesOn = (documentId: string) => new Set(covers.filter((c) => c.source.documentId === documentId || (c.copyDocuments ?? []).some((d) => d.documentId === documentId)).map((c) => c.personId)).size;
   const isAgeTier = ageAlternatives(readings);
   const notTold = new Set<string>();
   for (const r of readings) for (const b of r.benefits) {
@@ -674,7 +687,11 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     for (const p of people.filter((x) => !who || who.has(x.id))) for (const c of ownCovers(p.covers.filter((x) => x.coverKey === l.cover && (!l.line || (x.source.documentId === r.documentId && ownLineKey(x.source) === l.line))), r.documentId)) {
       // A row on the person's own schedule or certificate is theirs as printed ("Total Permanent Disability (below 65 years
       // of age)" is a condition of their own cover, not another tier's row): the rule is for wordings, summaries and terms.
-      const tier = r.documentId === c.source.documentId ? null
+      // A document that prints the cover for two or more people (a family schedule) is not one person's own: a row it prints
+      // for an insured child ("For an insured child under 18, limited to 25%", a column headed "Insured child under 18") is
+      // a child's, by what the person's own line prints (TE-ACC-20261113: the child's 25% was worked out for both parents).
+      const tier = r.documentId === c.source.documentId
+        ? (livesOn(r.documentId) >= 2 && INSURED_CHILD.test(`${b.benefit} ${b.column ?? ""}`) ? tierProblem(b, ownTierWords(c, readings), null, false) : null)
         : tierProblem(b, ownTierWords(c, readings), ageOn(family.find((m) => m.id === p.id)?.date_of_birth, singaporeDay(now)), isAgeTier(r, b));
       // A row for another tier stays on the table with no amount and the reason, so nothing is lost without a word.
       if (tier) notForPerson.push({ personId: p.id, benefit: b.benefit, section: b.section, column: b.column, why: tier, source: b.source });

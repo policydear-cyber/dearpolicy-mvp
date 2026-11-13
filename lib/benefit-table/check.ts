@@ -18,7 +18,7 @@ import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/curr
 import { printedDay } from "./dates";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
-import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
+import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
@@ -396,7 +396,9 @@ export function startDay(text: string): number | null | undefined {
     limit ||= no;
     return no;
   };
-  for (const m of text.matchAll(/\bfrom\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)\s+(?:(?:to|-|until)\s+(?:the\s+)?\d+(?:st|nd|rd|th)\s+)?day)\b/gi)) if (!negated(m.index)) days.add(Number(m[1] ?? m[2]));
+  for (const m of text.matchAll(/\bfrom\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)\s+(?:(?:to|-|until)\s+(?:the\s+)?\d+(?:st|nd|rd|th)\s+)?(?:consecutive\s+)?day)\b/gi)) if (!negated(m.index)) days.add(Number(m[1] ?? m[2]));
+  // The same day in words ("payable from the third consecutive day", TE-ACC-20261113): a closed list of ordinals.
+  for (const m of text.matchAll(new RegExp(String.raw`\bfrom\s+(?:the\s+)?(${Object.keys(ORDINAL_DAY).join("|")})\s+(?:consecutive\s+|full\s+)?day\b`, "gi"))) if (!negated(m.index)) days.add(ORDINAL_DAY[m[1].toLowerCase()]);
   // "After" counts only for a day of the stay ("after the 10th day", "after 10 days in hospital"), never a waiting period
   // ("payable after 30 days of continuous cover", Critic R149-1). "Beyond the 30th day" is as often a limit as a start,
   // so it never counts (TE #108 B6).
@@ -604,6 +606,16 @@ function percentBaseUnsettled(row: string, value: number): boolean {
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+/** The row's words without a cap word whose object is the row's own percentage: "For an insured child under 18, limited to
+ * 25% of the Sum Insured", "up to 50% of the sum assured", "a maximum of 10%". Such words state the share itself, not a money
+ * limit on it, so they never mark the row as capped (TE-ACC-20261113: "limited to 25%" left the child's accidental death
+ * with "a maximum applies, but it was not captured"). Only the row's own percentage: "100% ..., up to 25% for a child" or a
+ * cap word before any other figure still marks it. */
+export function withoutOwnShareCap(text: string, percent: number | null): string {
+  if (percent == null || !(percent > 0)) return text;
+  const own = String(percent).replace(".", "\\.");
+  return text.replace(new RegExp(String.raw`\b(?:up\s+to|(?:subject\s+to\s+)?(?:a\s+)?max(?:imum)?\.?(?:\s+of)?|limited\s+to|not\s+(?:to\s+)?exceed(?:ing)?|capped\s+at)\s+(?:a\s+maximum\s+of\s+)?(?<![\d.])${own}(?:\.0+)?\s*(?:%|per\s?cent)`, "gi"), " ");
+}
 /** The money figures of a row, in any currency (S$, RM, £, € or a code such as MYR or GBP, and a bare "$"), with where
  * each starts in flat(row). A row in ringgit or pounds is read as one in Singapore dollars is: its cap, and a second
  * limit beside it, count the same way (parity test, 25 Oct: "up to RM 200,000 or RM 100,000 after age 65" kept the
@@ -980,8 +992,9 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
         cap = capInRow(row); capSource = source;
       } else {
         if (claimed != null) out.dropped.push({ what: label, why: `cap ${claimed} not printed in the row; no amount is worked out for it` });
-        capUnread = claimed != null || CAP_WORDS.test(source.excerpt) || conditions.some((c) => CAP_WORDS.test(c))
-          || CAPPED.test(row) || NEAR_CAP.test(near);
+        const own = (t: string) => withoutOwnShareCap(t, value);
+        capUnread = claimed != null || CAP_WORDS.test(own(source.excerpt)) || conditions.some((c) => CAP_WORDS.test(own(c)))
+          || CAPPED.test(own(row)) || NEAR_CAP.test(own(near));
       }
     }
     // A share read as of the sum insured whose row names another base ("10% of the annual premium", "50% of the Death

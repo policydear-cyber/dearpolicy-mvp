@@ -284,7 +284,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     !context.conversation.family_member_id && asksForNobody([message, ...history.filter((t) => t.role === "user").map((t) => t.text)], household, rows)) : { json: reply.json, report: null };
   const parsed = readModelAnswer(fromRows.json);
   const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
-  const { answer, report } = parsed ? verifyAnswer(household, parsed, asked, new Set(fromRows.report?.labels ?? [])) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
+  const { answer, report } = parsed ? verifyAnswer(household, parsed, asked, new Set(fromRows.report?.labels ?? []), fromRows.report?.figures ?? []) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
   if (fromRows.report && answer.statements) {
     const { kept, refused } = keepLabelledAmounts(answer.statements, fromRows.report);
     // A condition point whose words its card already shows is said once, on the card.
