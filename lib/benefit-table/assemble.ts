@@ -20,7 +20,7 @@ import { PREMIUM, SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
 import { anyMoneyFigures } from "@/lib/format/currency";
-import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, marksIn, noteMarkOf, numbersIn, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
+import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, marksIn, noteMarkOf, numbersIn, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 import { benefitWords } from "./cover-rows";
@@ -831,7 +831,7 @@ function perPersonColumnRow(r: CheckedReading, b: CheckedBenefit, next: string):
   if ((r.tiedNotes ?? []).length) return false;
   if (PAYMENT_LABEL.test(b.benefit) || (r.premiumFigures ?? []).some((v) => b.value != null && Math.abs(v - b.value) < 0.005)) return false;
   const words = [b.benefit, b.section ?? "", b.column ?? "", b.rowText ?? b.source.excerpt, next, ...b.conditions].join("\n");
-  if (TIED_TO_LIVES.test(words) || HOUSEHOLD_LABEL.test(b.benefit) || HOUSEHOLD_LABEL.test(b.section ?? "") || PREMIUM.test(words) || PAYMENT_LABEL.test(b.section ?? "")) return false;
+  if (TIED_TO_LIVES.test(words) || livesTogether(words) || HOUSEHOLD_LABEL.test(b.benefit) || HOUSEHOLD_LABEL.test(b.section ?? "") || PREMIUM.test(words) || PAYMENT_LABEL.test(b.section ?? "")) return false;
   const people = [...r.namedPeople, ...r.covers.map((c) => c.person)];
   for (const mark of new Set([...marksIn(b.rowText ?? b.source.excerpt), ...(b.columnMarks ?? [])])) {
     const notes = plainFootnotes(r, mark);

@@ -248,7 +248,7 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
   sharedNotes?: string[];
   /** The document's printed lines, off every benefit row's and cover's own line, that tie a limit to the lives together
    * ("Limits are per family", "One limit for everyone on this certificate", "For couple plans the limits apply to both
-   * insured persons jointly"; TIED_TO_LIVES): assemble.ts gives no row under a per-person column to each named person.
+   * insured persons jointly"; tiesLimitToLives, by clause: a tie within a few words of a limit word): assemble.ts gives no row under a per-person column to each named person.
    * Never a row's own "in total" or "combined with travel delay", an aggregate per event or conveyance, "all persons named
    * above" or "total liability ... the limits shown" (per-person-shared gate round 1). */
   tiedNotes?: string[];
@@ -696,6 +696,50 @@ export const TIED_TO_LIVES = new RegExp(String.raw`\b(?:per\s+(?:famil(?:y|ies)|
   + String.raw`|however\s+many|as\s+a\s+whole|regardless\s+of\s+(?:the\s+)?numbers?|whole\s+(?:family|household|group|party)`
   + String.raw`|between\s+(?:the\s+|all\s+)?(?:insured|you|both|them)|(?:famil(?:y|ies)|households?|couples?)(?:'s|’s|\s+(?:limits?|maximum|aggregate|total|sum))`
   + String.raw`)\b`, "i");
+/** A limit word a note line's tie must sit near (per-person-shared gate round 2). */
+const LIMIT_WORD = /\b(?:limits?|maximum|amounts?|benefits?|sums?\s+insured|cover|most\s+we(?:\s+will)?\s+pay)\b/gi;
+/** The lives taken together: insured persons (plural), all insured, travellers, all or both or the two of you, everyone, a
+ * couple, family or household. Never one insured person. */
+const LIVES = /\b(?:(?:the\s+|all\s+(?:the\s+)?)?insured\s+(?:persons|people|lives|members)|all\s+(?:the\s+)?insured|travell?ers|all\s+of\s+you|both\s+of\s+you|the\s+two\s+of\s+you|everyone|everybody|couples?|famil(?:y|ies)|households?)\b/gi;
+/** Words that put the lives together when they sit next to them. */
+const TOGETHER = /\b(?:shared?|share|jointly|together|combined|in\s+total|total|in\s+aggregate|aggregate|collectively)\b/gi;
+/** Phrases that tie a limit to the lives together on their own. */
+const OWNER_TIE = new RegExp(String.raw`\b(?:per\s+(?:famil(?:y|ies)|households?|couples?|party|parties|group)`
+  + String.raw`|for\s+(?:the|your)\s+(?:whole\s+)?(?:family|household|group|party|couple)|whole\s+(?:family|household|group|party)`
+  + String.raw`|(?:famil(?:y|ies)|households?|couples?)(?:'s|’s|\s+(?:limits?|maximum|aggregate|total))`
+  + String.raw`|one\s+(?:limit|maximum|amount|sum)\s+(?:applies\s+)?(?:for|to)\s+(?:everyone|everybody|all\s+of\s+you|both\s+of\s+you|all\b)`
+  + String.raw`|(?:apply|applies)\s+(?:jointly\s+)?to\s+(?:the\s+two\s+of\s+you|both\s+of\s+you|all\s+of\s+you|everyone|everybody)`
+  + String.raw`|as\s+a\s+whole|not\s+per\s+(?:insured\s+)?(?:person|traveller)`
+  + String.raw`|(?:maximum|most|total|limits?)\s+(?:\w+\s+){0,3}for\s+(?:this|the)\s+(?:certificate|policy)(?!\s+(?:period|year|term))`
+  + String.raw`|for\s+all\s+(?:the\s+)?(?:insured\s+persons|travell?ers|insured)\s+on\s+(?:this|the)\s+(?:certificate|policy)`
+  + String.raw`|per\s+(?:certificate|policy|booking)(?!\s+(?:period|year|term|claim))`
+  + String.raw`|regardless\s+of\s+(?:the\s+)?numbers?\s+of\s+(?:insured|persons|people|travell?ers|lives))\b`, "gi");
+/** A clause about the premium or payment, a dispute between the lives and the insurer, or a cap per event or conveyance:
+ * never a limit shared by the lives (each person's own limit still applies). */
+const NOT_A_TIE_CLAUSE = /\b(?:premiums?|paying|payable\s+by|instal\w*|direct\s+debit|between\s+(?:you|the\s+insured|insured\s+persons?|the\s+insured\s+persons?)\s+and\s+us|per\s+(?:event|occurrence|incident|accident|conveyance)|any\s+one\s+(?:event|conveyance|occurrence|accident|incident))\b/i;
+const wordAt = (text: string, re: RegExp) => [...text.matchAll(re)].map((m) => text.slice(0, m.index).split(/\s+/).filter(Boolean).length);
+/** Whether the words name the lives taken together ("combined for all insured", "in total for the travellers", "insured
+ * persons share"): a lives word and a together word within six words. */
+export function livesTogether(text: string): boolean {
+  const lives = wordAt(text, LIVES);
+  return lives.length > 0 && wordAt(text, TOGETHER).some((t) => lives.some((l) => Math.abs(l - t) <= 6));
+}
+/** Whether a note line (one off every row) ties a limit to the lives together (per-person-shared gate round 2): in one clause,
+ * a tie (OWNER_TIE, or the lives with a together word) within eight words of a limit word, in a clause that is about no
+ * premium or payment, no dispute between the lives and the insurer and no cap per event or conveyance. "Limits apply per
+ * insured person per policy period", "Excess: S$100 per policy", "Any dispute between you and us", "regardless of the number
+ * of claims", "one limit applies for each insured person", rooms or rescue costs "shared" are none. */
+export function tiesLimitToLives(line: string): boolean {
+  for (const clause of line.split(/[.;!?](?=\s|$)/)) {
+    if (NOT_A_TIE_CLAUSE.test(clause)) continue;
+    const limits = wordAt(clause, LIMIT_WORD);
+    if (!limits.length) continue;
+    const lives = wordAt(clause, LIVES);
+    const ties = [...wordAt(clause, OWNER_TIE), ...wordAt(clause, TOGETHER).filter((t) => lives.some((l) => Math.abs(l - t) <= 6))];
+    if (ties.some((t) => limits.some((l) => Math.abs(l - t) <= 8))) return true;
+  }
+  return false;
+}
 export type DocumentNotes = { tiedNotes: string[]; lifeNotes: string[]; sharedNotes: string[]; footnotes: { mark: string; text: string }[]; plainBlockers: string[]; premiumFigures: number[] };
 /** Words that change a figure for whoever a line names: a printed share, a cut or a rise (TE gate round 2, R2-M1: never "paid",
  * "only" or "limited", which ordinary lines about who may be insured print). */
@@ -816,7 +860,7 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
       // A shared or aggregate limit, on a row's own line or any other: every figure may be shared by all the lives.
       if (SHARED_LIMIT.test(line)) add(out.sharedNotes, line);
       // A line off every row's own line that ties a limit to the lives together (a row's own words are read with that row).
-      if (!rowLine && TIED_TO_LIVES.test(line)) add(out.tiedNotes, line);
+      if (!rowLine && tiesLimitToLives(line)) add(out.tiedNotes, line);
       // A note printed on a row's own line about every row ("All benefits for children are half the amounts shown").
       if (rowLine) {
         prev = null;

@@ -388,6 +388,26 @@ for (const note of ["(a) Shared between the insured persons.", "(a) Payable once
   test(`gate PPS-1: heading 'Limit per insured person (a)' with '${note}' withholds every per-person limit`, () =>
     assert.deepEqual(sixWith({ heading: "Benefit\tLimit per insured person (a)", extra: [note] }), noOne));
 }
+// Per-person-shared gate round 2: a note line ties a limit to the lives together only when, in one clause, the tie sits a
+// few words from a limit word (check.ts tiesLimitToLives). Ordinary wording keeps every figure; shared wording withholds.
+for (const line of ["Limits apply per insured person per policy period.", "Cover is per policy year.", "Excess: S$100 per policy", "An excess of S$100 applies per policy per claim.",
+  "Premium is payable per policy.", "Your cover renews per certificate year.", "One certificate is issued per booking.", "Any dispute between you and us may be referred to FIDReC.",
+  "Any dispute between the insured and us may be referred to FIDReC.", "Benefits are payable per insured person regardless of the number of claims.",
+  "Medical: one limit applies for each insured person.", "Hotel rooms shared with a travel companion are covered.", "If you cancel, the refund of premium is shared pro-rata.",
+  "Search and rescue costs are shared with other rescued parties.", "The policyholder and insured persons are jointly responsible for paying the premium."]) {
+  test(`gate PPS-2: '${line}' on the certificate keeps every per-person limit`, () => assert.deepEqual(sixWith({ extra: [line] }), each(SIX_NAMES)));
+}
+for (const line of ["The limits are the most we pay for all insured persons together.", "Each limit is the most we will pay in total for all insured persons.",
+  "Limits apply to all insured persons combined.", "Limits are in aggregate for all insured.", "All insured persons share these limits.",
+  "Limits apply collectively to the insured persons.", "The insured persons together may claim up to the limits shown.", "Limits are not per person.",
+  "Limits shown are per trip for all travellers on this certificate.", "Limits apply to the two of you.", "Limits are the total for the insured persons named.",
+  "The amounts shown are the maximum for this certificate."]) {
+  test(`gate PPS-2: the note '${line}' withholds every per-person limit`, () => assert.deepEqual(sixWith({ extra: [line] }), noOne));
+}
+for (const cell of ["S$500,000 combined for all insured", "S$500,000 in total for the travellers"]) {
+  test(`gate PPS-2: a medical row printing '${cell}' is no one's own; the other rows stay each person's`, () =>
+    assert.deepEqual(sixWith({ rows: withSix("Overseas medical expenses", ["Overseas medical expenses", cell, 500000]) }), each(SIX_NAMES.slice(1))));
+}
 test("H4: 'Signed on behalf of the policyholder: N. Okafor' does not block the plain table", () => {
   const { table } = schedule({ post: ["Signed on behalf of the policyholder: N. Okafor"] });
   for (const id of NAMED) assert.equal(fixedShown(table, id).length, 2, id);
