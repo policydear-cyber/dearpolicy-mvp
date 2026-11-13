@@ -270,8 +270,11 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
   // type that proves a sum is that cover printed again, not a second cover: it is kept as a copy of it, so its rows are
   // not shown twice, once with no amount (Critic #454 M2). A copy with a printed policy number, or beside two or more
   // proved copies, stays as read.
+  // Only a copy whose document prints no benefit rows of its own: a document with rows keeps its own cover, so its rows are
+  // never worked out on another document's sum (Critic #454 round 2: a renewal whose new sum was not proved).
+  const printsRows = new Set(readings.filter((r) => r.benefits.length).map((r) => r.documentId));
   for (const c of [...covers]) {
-    if (c.sumInsured != null || c.notionalSum != null || numberOf.has(c)) continue;
+    if (c.sumInsured != null || c.notionalSum != null || numberOf.has(c) || printsRows.has(c.source.documentId)) continue;
     const proved = covers.filter((x) => x !== c && x.personId === c.personId && x.coverKey === c.coverKey && (x.sumInsured != null || x.notionalSum != null));
     if (proved.length !== 1) continue;
     const kept = proved[0];
@@ -644,7 +647,11 @@ function documentLives(r: CheckedReading, covers: PersonCover[], family: FamilyM
   const lives = new Set<string>();
   let outsider = false;
   for (const c of covers) if (onDoc(c)) lives.add(c.personId);
-  for (const m of family) if ((m.documents ?? []).includes(r.documentId)) lives.add(m.id);
+  // A household link makes a life only of a document that prints none, or one the household chose by hand on it: an upload
+  // to a parent's profile of a child's certificate never makes the parent a life of it (Critic #454 round 2).
+  const printsLives = (r.coverPeople ?? []).length > 0;
+  for (const m of family) if ((m.documents ?? []).includes(r.documentId)
+    && (!printsLives || (m.chosenAs ?? []).some((p) => p.documentId === r.documentId))) lives.add(m.id);
   for (const name of r.coverPeople ?? []) {
     const record = householdRecord(name, r.documentId, family);
     if (record === "nobody") { outsider = true; continue; }

@@ -218,5 +218,29 @@ test("R2: an attachment of the person's pack that names no one is still shared t
   const t = assembleTable([own, att], fam({ p2: { documents: [] } }), linkAll([att]));
   assert.equal((fromDoc(t, "p1", B)[0]?.figure as { amount?: number }).amount, 6000);
 });
+test("R3: a renewal whose new sum is not proved shows its rows with no amount, never on last year's sum", () => {
+  const pg = (sum: string, two = false) => `CERTIFICATE\nInsured Person: Chen Wei Ling\nSum Insured: ${sum}\n${two ? `Sum Insured (Accidental Death): ${sum}\n` : ""}Broken bones: 1% of the Sum Insured`;
+  const row = [{ benefit: "Broken bones", quote: "Broken bones: 1% of the Sum Insured" }];
+  const old = read(B, pg("S$100,000"), [{ person: "Chen Wei Ling", sum: 100000, quote: "Sum Insured: S$100,000" }], row);
+  const now = read(A, pg("S$250,000", true), [{ person: "Chen Wei Ling", sum: 250000, quote: "Insured Person: Chen Wei Ling" }], row);
+  assert.equal(now.covers[0].sumInsured, null);
+  const t = assembleTable([old, now], fam({ p1: { documents: [A, B] } }), linkAll([old, now]));
+  assert.deepEqual(fromDoc(t, "p1", B).map((r) => (r.figure as { amount?: number }).amount), [1000]);
+  for (const r of fromDoc(t, "p1", A)) assert.notEqual((r.figure as { amount?: number }).amount, 1000);
+});
+test("R4: a parent the child's certificate was uploaded to (a link, not a printed life) gets none of the child's rows", () => {
+  const kid = read(B, cert("Ho Ka Yan", "Sum Insured\tAUD 20,000"), [{ person: "Ho Ka Yan", sum: 20000, quote: "Sum Insured\tAUD 20,000" }], [rowsPA[0]]);
+  const own = read(A, cert("Chen Wei Ling", "Sum Insured\tAUD 100,000"), [{ person: "Chen Wei Ling", sum: 100000, quote: "Sum Insured\tAUD 100,000" }], []);
+  const t = assembleTable([own, kid], fam({ p1: { documents: [A, B] } }), linkAll([kid]));
+  assert.equal(fromDoc(t, "p1", B).length, 0);
+  assert.equal((fromDoc(t, "p2", B)[0]?.figure as { amount?: number }).amount, 200);
+  // Chosen by hand on that document: then a life of it.
+  const t2 = assembleTable([own, kid], fam({ p1: { documents: [A, B], chosenAs: [{ documentId: B, name: "Chen Wei Ling" }] } }), linkAll([kid]));
+  assert.equal(fromDoc(t2, "p1", B).length, 1);
+});
+test("R5: a pack printing two sum lines with the same figure gives no sum", () => {
+  const r = read(B, "WELCOME PACK\nInsured person: Ho Ka Yan\nSum Insured: HK$300,000\nSum Insured: HK$300,000", [{ person: "Ho Ka Yan", sum: 300000, quote: "Insured person: Ho Ka Yan" }], []);
+  assert.equal(r.covers[0].sumInsured, null);
+});
 
 console.log(`\n${passed} passed`);
