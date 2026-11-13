@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { currencyOfAmount, formatMoney } from "@/lib/format/currency";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
+import { describeCondition, type CoverCondition } from "@/lib/insurance/cover-conditions";
 
 let passed = 0;
 const t = (name: string, fn: () => void) => { fn(); passed++; console.log(`ok - ${name}`); };
@@ -28,5 +29,16 @@ t("a bare-$ benefit keeps its figure and says its currency is not stated", () =>
 t("formatMoney with no currency keeps the figure and says so", () => {
   assert.match(formatMoney(1500, null), /1,500 \(currency unknown\)/);
   assert.match(formatMoney(1500, "$"), /1,500 \(currency unknown\)/);
+});
+t("a bare $ takes the currency its own quoted clause prints first (Critic #465 F2)", () => {
+  assert.equal(currencyOfAmount("$", "USD", "SGD"), "SGD");
+  assert.equal(currencyOfAmount("$", null, "SGD"), "SGD");
+  assert.equal(currencyOfAmount("$", "EUR", null), null);
+});
+t("a cap's wording keeps the currency its quote prints (Critic #465 F1)", () => {
+  const cap = { kind: "aggregate_cap", amount: 10000, amountBasis: "fixed", quote: "The total amount payable shall not exceed S$10,000 for all claims.", productName: null } as unknown as CoverCondition;
+  const text = describeCondition(cap);
+  assert.match(text, /S\$10,000/, text);
+  assert.doesNotMatch(text, /currency unknown/);
 });
 console.log(`bare-dollar: ${passed} passed`);

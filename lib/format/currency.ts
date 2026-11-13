@@ -13,14 +13,16 @@ export function statedCurrencyCode(value: string | null | undefined): string | n
   return normalizeCurrencyCode(value, "") || null;
 }
 
-/** The currency an amount is in: the code its own text states, or -- for a bare "$" only -- the currency its document
- * establishes elsewhere (a verified cover currency, a policy-currency line), when that currency is itself written with
- * "$" (SGD, USD, AUD, HKD...). Anything else is null: a "$" in a euro policy, or with no established currency, names
- * none. Never a default. */
-export function currencyOfAmount(printed: string | null | undefined, established?: string | null): string | null {
+/** The currency an amount is in: the code its own text states; for a bare "$" only, the currency its quoted clause
+ * prints ("S$5,000"), else the currency its document establishes elsewhere (a verified cover currency, a policy-currency
+ * line) when that currency is itself written with "$" (SGD, USD, AUD, HKD...). Anything else is null: a "$" in a euro
+ * policy, or with nothing established, names none. Never a default. */
+export function currencyOfAmount(printed: string | null | undefined, established?: string | null, quoted?: string | null): string | null {
   const own = statedCurrencyCode(printed);
   if (own) return own;
   if (String(printed ?? "").trim() !== "$") return null;
+  const inQuote = statedCurrencyCode(quoted);
+  if (inQuote) return inQuote;
   const doc = statedCurrencyCode(established);
   return doc && writtenWithDollar(doc) ? doc : null;
 }

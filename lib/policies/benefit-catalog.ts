@@ -539,7 +539,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   // it. Never defaulted to SGD; without one there is no figure.
   // A bare "$" takes the cover's verified currency only when that currency is written with "$" (currencyOfAmount).
   const verifiedCoverCurrency=coverage?.currencyVerified===true?statedCurrency(coverage.currency):null;
-  const statedCurrencyCode=benefit.currency?currencyOfAmount(benefit.currency,verifiedCoverCurrency)
+  const statedCurrencyCode=benefit.currency?currencyOfAmount(benefit.currency,verifiedCoverCurrency,benefit.quote?explicitCurrency(benefit.quote):null)
     :benefit.formulaKind==="sum_insured"?verifiedCoverCurrency:null;
   const currency=statedCurrencyCode??"";
   const missing:string[]=[];
