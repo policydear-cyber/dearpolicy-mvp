@@ -77,8 +77,9 @@ test("1. no colour literal outside the token blocks", () => {
   const sheets: string[] = [];
   const walkCss = (dir: string) => { for (const n of readdirSync(dir)) { const p = join(dir, n); if (statSync(p).isDirectory()) walkCss(p); else if (n.endsWith(".css") && p !== join("app", "globals.css")) sheets.push(p); } };
   walkCss("app"); walkCss("components");
-  const sheetLiterals = sheets.flatMap((f) => readFileSync(f, "utf8").split("\n")
-    .filter((l) => COLOUR.test(l.replace(/\/\*.*?\*\//g, ""))).map((l) => `${f}: ${l.trim().slice(0, 120)}`));
+  // Comments (even across lines) and url(#fragment) references are not colours.
+  const sheetLiterals = sheets.flatMap((f) => readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").split("\n")
+    .filter((l) => COLOUR.test(l.replace(/url\([^)]*\)/g, ""))).map((l) => `${f}: ${l.trim().slice(0, 120)}`));
   assert.deepEqual(sheetLiterals, [], "every stylesheet uses var(--token), never a colour literal");
 
   const layout = readFileSync(join("app", "layout.tsx"), "utf8");
