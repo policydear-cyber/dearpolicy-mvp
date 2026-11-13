@@ -1,6 +1,6 @@
 import { FIGURE_END, PRINTED_FIGURE, SCALE_WORD, groupsInLakhs, printedNumber, scaleOf } from "@/lib/format/printed-number";
-import { formatMoney, statedCurrencyCode } from "@/lib/format/currency";
-import { statedCurrency } from "@/lib/claims/currency-evidence";
+import { currencyOfAmount, formatMoney, statedCurrencyCode } from "@/lib/format/currency";
+import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { knownValue } from "@/lib/chat/facts";
 import type { SubjectFacts } from "@/lib/chat/types";
 import type { ClaimItem } from "@/types";
@@ -708,6 +708,15 @@ function conditionsForItem(item:ClaimItem,conditions:CoverCondition[]){
   });
 }
 
+/** The currency a cap's clause is in: the one it prints; a bare "$" only as currencyOfAmount reads it against the items'
+ * currency; no sign at all, the items' own currency; more than one printed, none (Critic #465 R2-1). */
+function capCurrency(quote:string|null|undefined,itemCurrency:string|null|undefined){
+  const printed=currenciesStatedIn(quote);
+  if(printed.length===1)return printed[0];
+  if(printed.length>1)return null;
+  if(/\$/.test(quote??""))return currencyOfAmount("$",itemCurrency);
+  return statedCurrencyCode(itemCurrency);
+}
 /** The one currency every item states, or null. */
 function sharedCurrency(items:{currency?:string|null}[]){
   const codes=new Set(items.map(item=>statedCurrencyCode(item.currency)));
@@ -968,7 +977,7 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
       const said=kindsIn(head);
       const named=condition.productName||!said.size||AGGREGATE_SCOPE.test(head)?inCover
         :inCover.filter(item=>{const mine=kindsIn(benefitOf(item));return !separateFrom([...mine.values()].flat(),[...said.values()].flat());});
-      const text=(condition.productName??"this cover")+" states an overall limit"+(ceiling!=null?" of "+money(ceiling,statedCurrency(condition.quote)??sharedCurrency(named)):"")
+      const text=(condition.productName??"this cover")+" states an overall limit"+(ceiling!=null?" of "+money(ceiling,capCurrency(condition.quote,sharedCurrency(named))):"")
         +" that DearPolicy could not confirm against its page, so no amounts are shown for it.";
       for(const item of named)withhold(item,text);
       continue;
@@ -987,7 +996,7 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
       excess-=was-now;
       entry.calculatedAmount=now;
       entry.amountText=money(now,entry.currency);
-      say((condition.productName??"this cover")+" pays no more than "+money(ceiling,statedCurrency(condition.quote)??entry.currency)
+      say((condition.productName??"this cover")+" pays no more than "+money(ceiling,capCurrency(condition.quote,entry.currency))
         +" in total, so "+entry.title+" is shown at "+money(now,entry.currency)+" rather than "+money(was,entry.currency),8);
     }
   }
@@ -1025,7 +1034,7 @@ export function describeCondition(condition:CoverCondition){
       const read=capReading(condition);
       // A sentence that caps nothing (a minimum, a count), or one DearPolicy cannot place, is shown as the policy words it.
       if(read.kind!=="cap")return (condition.quote??"").trim()?cover+(condition.quote??"").trim().slice(0,160):cover+"a stated maximum";
-      const figure=condition.amountBasis==="sum_insured_fraction"?Math.round(read.amount*10000)/100+"% of the sum insured":money(read.amount,statedCurrency(condition.quote));
+      const figure=condition.amountBasis==="sum_insured_fraction"?Math.round(read.amount*10000)/100+"% of the sum insured":money(read.amount,capCurrency(condition.quote,null));
       return condition.kind==="aggregate_cap"?cover+"pays no more than "+figure+" in total":cover+"this benefit is capped at "+figure;
     }
     case "terminates_on_full_payment":

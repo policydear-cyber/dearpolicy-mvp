@@ -41,4 +41,10 @@ t("a cap's wording keeps the currency its quote prints (Critic #465 F1)", () => 
   assert.match(text, /S\$10,000/, text);
   assert.doesNotMatch(text, /currency unknown/);
 });
+t("a cap's currency: the one it prints; a bare $ only against a $ currency; several printed, none (Critic #465 R2-1)", () => {
+  const cap = (quote: string) => ({ kind: "aggregate_cap", amount: 10000, amountBasis: "fixed", quote, productName: null }) as unknown as CoverCondition;
+  assert.match(describeCondition(cap("The total shall not exceed $10,000.")), /10,000 \(currency unknown\)/);
+  assert.match(describeCondition(cap("Total payable shall not exceed S$10,000 or US$8,000.")), /currency unknown/);
+  assert.match(describeCondition(cap("The total shall not exceed EUR 10,000.")), /EUR\s?10,000/);
+});
 console.log(`bare-dollar: ${passed} passed`);
