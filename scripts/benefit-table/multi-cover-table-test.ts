@@ -326,6 +326,19 @@ test("Critic 5: a label followed by other words and a number ('Death TPD 50,000'
   assert.deepEqual(shown(assembleTable([r], asha, noLink(DOC))), []);
 });
 
+for (const where of ["row", "column"] as const) test(`TE D1-labelled: per-life rates that also say 'per insured person' (in the ${where}) are no one's`, () => {
+  for (const [a, b] of [["Mum", "Dad"], ["Life Assured 1", "Life Assured 2"], ["Insured A", "Insured B"], ["AR", "BR"], ["Mother", "Father"], ["First insured", "Second insured"]]) {
+    const col = where === "column" ? "Limit per insured person" : null, tail = where === "row" ? " per insured person" : "";
+    const lines = [[a, 1000], [b, 500]].map(([x, v]) => `Daily hospital income ${x}\tPHP ${Number(v).toLocaleString("en-US")} per day${tail}`);
+    const text = `FAMILY PA\nPolicy number: F-1\nAsha Rao\tPHP 1,000,000\nBen Rao\tPHP 500,000\nBENEFITS\n${lines.join("\n")}\nEnd.`;
+    const c = (person: string, sum: number) => cover({ person, product: "Family PA", cover: "Personal accident", policyNumber: "F-1", sumInsured: sum, quote: `${person}\tPHP ${sum.toLocaleString("en-US")}` });
+    const r = checkReading(page(DOC, text), reading("Family PA", ["Asha Rao", "Ben Rao"], [c("Asha Rao", 1000000), c("Ben Rao", 500000)],
+      lines.map((l, i) => row({ section: "BENEFITS", column: col, benefit: l.split("\t")[0], pays: "per_day", value: i ? 500 : 1000, quote: l }))));
+    const t = assembleTable([r], asha, [{ section: sectionKeyOf(DOC, { section: "BENEFITS", column: col }), cover: coverKeyOf({ product: "Family PA", cover: "Personal accident", plan: null }), why: "x" }]);
+    assert.deepEqual([...shown(t, 0), ...shown(t, 1)], [], `${a}/${b}`);
+  }
+});
+
 test("Critic O: a certificate's 'per insured person' list with shared first words ('Loss of baggage', 'Loss of passport') shows every row to both", () => {
   const lines = [["Loss of baggage", 3000], ["Loss of passport", 500], ["Personal accident death", 100000], ["Personal accident disablement", 100000], ["Overseas medical expenses", 500000]] as const;
   const text = `ACME TRAVEL - CERTIFICATE\nCertificate number T-5\tInsured: Asha Rao and Ben Rao (couple plan)\nBenefit\tLimit per insured person\n${lines.map(([l, v]) => `${l}\t$${v.toLocaleString("en-US")}`).join("\n")}\nEnd.`;
