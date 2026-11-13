@@ -6,7 +6,11 @@ import { Pictogram } from "@/components/learn/pictogram";
 import { LearnSearch } from "@/components/learn/search";
 
 /** The knowledge library's index: a search box, then the guides on their shelves. Static: no household data, no service calls. */
-export const metadata = { title: "Learn · DearPolicy" };
+export const metadata = {
+  title: "Learn the basics of insurance · DearPolicy",
+  description: "Short, plain-English guides to how insurance works: deductibles, co-insurance, riders, claims, and Singapore schemes such as MediShield Life. Facts cite official sources only.",
+  alternates: { canonical: "/learn" },
+};
 
 export default function LearnPage() {
   const pages: Array<{ slug: string; title: string; summary: string; icon: LearnIcon; group: string }> = [

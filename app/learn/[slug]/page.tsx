@@ -12,8 +12,16 @@ export const dynamicParams = false;
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const title = slug === TERMS_PAGE.slug ? TERMS_PAGE.title : guideBySlug(slug)?.title;
-  return { title: title ? `${title} · DearPolicy` : "Learn · DearPolicy" };
+  const page = slug === TERMS_PAGE.slug ? TERMS_PAGE : guideBySlug(slug);
+  if (!page) return { title: "Learn · DearPolicy" };
+  const title = `${page.title} · DearPolicy`;
+  // The page's own summary is its search-result description; the canonical address is the guide's own.
+  return {
+    title,
+    description: page.summary,
+    alternates: { canonical: `/learn/${page.slug}` },
+    openGraph: { title, description: page.summary, url: `/learn/${page.slug}`, siteName: "DearPolicy", type: "article" },
+  };
 }
 
 function Back() {

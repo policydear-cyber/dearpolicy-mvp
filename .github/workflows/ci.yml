@@ -352,6 +352,9 @@ jobs:
       - name: CSRF protection regression suite
         run: npm run security:csrf-test
 
+      - name: Public site auth boundary (landing page and Learn public, everything else signed in)
+        run: npm run public-site:auth-boundary-test
+
       - name: Launch capability manifest regression suite
         run: npm run security:launch-check-test
 

@@ -55,6 +55,23 @@ const INTERNAL_CALLBACK_PATHS = new Set([
   "/api/internal/jobs/run",
 ]);
 
+/** Public, read-only pages a signed-out visitor (or a search engine) may open: the landing page at "/", the Learn
+ * library ("/learn" and exactly one level of guide slug below it), and the crawler files. Every one is static text
+ * that reads no household, document, chat or session data (scripts/public-site/auth-boundary-test.ts checks their
+ * sources). Nothing under /api/ is ever public through this rule. */
+const PUBLIC_PAGE_PATHS = new Set(["/", "/learn", "/robots.txt", "/sitemap.xml"]);
+const LEARN_GUIDE_PATH = /^\/learn\/[a-z0-9-]{1,80}$/;
+export function isPublicPage(pathname: string): boolean {
+  return PUBLIC_PAGE_PATHS.has(pathname) || LEARN_GUIDE_PATH.test(pathname);
+}
+/** Where a signed-out visit to "/" is served from (the address bar keeps "/"); a signed-in visit to "/" is the
+ * household's Portfolio, unchanged. Opened directly, it sends the visitor to "/". */
+const LANDING_PATH = "/welcome";
+/** Tells the page layout whether this request has a session, so a public page shows the sign-in header or the app
+ * menu. Set here on every page request, overwriting anything a visitor sends; it only chooses which menu to draw and
+ * is never used to authorize anything (every protected page and API is decided above it, in this file). */
+export const SESSION_HINT_HEADER = "x-dearpolicy-signed-in";
+
 function devAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   if (isProduction(env)) return false;
   return /^(1|true|on|yes)$/i.test(env.DEV_AUTH_ENABLED?.trim() ?? "");
@@ -119,6 +136,23 @@ export async function middleware(request: NextRequest) {
   // session at all -- exempt from the session requirement below for the
   // same reason they are exempt from the CSRF check above.
   if (OPEN_PATHS.has(pathname) || isInternalCallback) return withCorrelationId(response);
+  const signedIn = Boolean(user) || devAuthEnabled();
+  if (!isApi && pathname === LANDING_PATH) {
+    const home = request.nextUrl.clone();
+    home.pathname = "/";
+    home.search = "";
+    return withCorrelationId(NextResponse.redirect(home, 308));
+  }
+  if (!isApi && isPublicPage(pathname)) {
+    const headers = new Headers(request.headers);
+    headers.set(SESSION_HINT_HEADER, signedIn ? "1" : "0");
+    let landing: URL | null = null;
+    if (pathname === "/" && !signedIn) { landing = request.nextUrl.clone(); landing.pathname = LANDING_PATH; }
+    const forwarded = landing ? NextResponse.rewrite(landing, { request: { headers } }) : NextResponse.next({ request: { headers } });
+    // Keep any session cookie the refresh above renewed.
+    for (const cookie of response.cookies.getAll()) forwarded.cookies.set(cookie);
+    return withCorrelationId(forwarded);
+  }
   // The Benefits keep-awake ping (lib/http/warm-ping.ts): exactly GET /api/benefits?warm=1. The route answers it with
   // an empty 204 before reading any session or household, so letting it through signed out exposes nothing.
   if (isWarmPing(request)) return withCorrelationId(response);

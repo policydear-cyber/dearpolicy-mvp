@@ -420,7 +420,8 @@
     "benefit-table:percent-base-test": "tsx scripts/benefit-table/percent-base-test.ts",
     "documents:image-currency-test": "node --import tsx scripts/documents/image-currency-test.ts",
     "documents:code-in-word-test": "node --import tsx scripts/documents/code-in-word-test.ts",
-    "policies:catalog-whole-read-test": "node --import tsx scripts/policies/catalog-whole-read-test.ts"
+    "policies:catalog-whole-read-test": "node --import tsx scripts/policies/catalog-whole-read-test.ts",
+    "public-site:auth-boundary-test": "node --import tsx --test scripts/public-site/auth-boundary-test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

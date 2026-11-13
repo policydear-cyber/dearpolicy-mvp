@@ -1,0 +1,72 @@
+/* Public pages (landing page and signed-out Learn). Uses the brand tokens defined in app/globals.css only: no colour
+   values of its own, so the brand pass's palette applies here unchanged. Kept out of globals.css on purpose. */
+.public-shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--ink); }
+.public-skip { position: absolute; left: -9999px; top: 8px; z-index: 100; background: var(--surface); color: var(--ink); padding: 8px 12px; border-radius: var(--r-sm); }
+.public-skip:focus { left: 16px; box-shadow: var(--focus); }
+.public-header { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 12px clamp(16px, 4vw, 56px); background: var(--bg); border-bottom: 1px solid var(--line); }
+.public-brand { display: inline-flex; align-items: center; min-height: 44px; }
+.public-brand .brand-logo { height: 30px; width: auto; display: block; }
+.public-nav { display: flex; align-items: center; gap: 4px; }
+.public-nav-link { white-space: nowrap; display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: var(--r-sm); color: var(--ink-2); font-weight: 600; text-decoration: none; }
+.public-nav-link:hover, .public-nav-link.active { color: var(--brand-ink); }
+.public-nav-link:focus-visible, .public-brand:focus-visible { outline: none; box-shadow: var(--focus); }
+.public-main { flex: 1; min-width: 0; }
+.public-footer { border-top: 1px solid var(--line); background: var(--bg-2); padding: 24px clamp(16px, 4vw, 56px) calc(24px + env(safe-area-inset-bottom, 0px)); color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.6; }
+.public-footer p { max-width: 72ch; margin: 0 0 8px; }
+.public-footer-links { margin: 0; }
+
+.landing { max-width: 1120px; margin: 0 auto; padding: clamp(28px, 5vw, 64px) clamp(16px, 4vw, 40px) 64px; }
+.landing h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.12; letter-spacing: -0.02em; color: var(--brand-ink); margin: 0 0 16px; max-width: 18ch; }
+.landing h2 { font-size: var(--fs-2xl); line-height: 1.2; margin: 0 0 16px; color: var(--ink); }
+.landing h3 { font-size: var(--fs-lg); margin: 0 0 6px; color: var(--ink); }
+.landing p { line-height: 1.6; }
+.landing-lead { color: var(--ink-2); font-size: var(--fs-lg); max-width: 60ch; margin: 0 0 20px; }
+.landing-small { color: var(--muted); font-size: var(--fs-sm); margin: 12px 0 0; }
+.landing-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.landing-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 56px); align-items: center; padding-bottom: 32px; }
+.landing-example { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-float); padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.landing-example figcaption { font-size: var(--fs-xs); color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.landing-bubble { border-radius: var(--r-md); padding: 12px 14px; margin: 0; font-size: var(--fs-md); }
+.landing-bubble p { margin: 0 0 8px; }
+.landing-bubble p:last-child { margin-bottom: 0; }
+.landing-bubble-you { align-self: flex-end; max-width: 85%; background: var(--brand-tint); color: var(--ink); }
+.landing-bubble-dp { background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); }
+.landing-cite { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--brand-ink); }
+.landing-cite .icon { width: 16px; height: 16px; flex: none; }
+.landing-section { padding: 40px 0 8px; border-top: 1px solid var(--line); margin-top: 24px; }
+.landing-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: none; border-radius: var(--r-md); background: var(--accent-tint); color: var(--money); }
+.landing-icon .icon { width: 22px; height: 22px; }
+.landing-steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.landing-steps li { display: flex; gap: 14px; align-items: flex-start; }
+.landing-steps p, .landing-grid p { margin: 0; color: var(--ink-2); }
+.landing-step-no { color: var(--muted); }
+.landing-grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.landing-grid li { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 20px; }
+.landing-grid .landing-icon { margin-bottom: 12px; }
+.landing-limits ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; max-width: 72ch; }
+.landing-limits li { display: flex; gap: 10px; align-items: flex-start; color: var(--ink-2); line-height: 1.6; }
+.landing-limits li .icon { width: 20px; height: 20px; flex: none; margin-top: 3px; color: var(--brand-ink); }
+.landing-guides { list-style: none; padding: 0; margin: 0 0 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.landing-guide { display: flex; flex-direction: column; gap: 4px; height: 100%; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--ink); text-decoration: none; transition: border-color var(--t-hover) var(--ease); }
+.landing-guide:hover { border-color: var(--brand-ink); }
+.landing-guide:focus-visible { outline: none; box-shadow: var(--focus); }
+.landing-guide span { color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.5; }
+.landing-section .text-link .icon { width: 16px; height: 16px; vertical-align: -3px; }
+.landing-cta { text-align: left; }
+
+@media (max-width: 860px) {
+  .landing-hero, .landing-steps { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .landing-grid, .landing-guides { grid-template-columns: 1fr; }
+  .public-header { padding: 8px 16px; gap: 8px; }
+  .public-brand .brand-logo { height: 24px; }
+  .public-nav-link { padding: 0 8px; }
+  .landing-actions .button { flex: 1 1 auto; }
+}
+/* On a phone the header keeps the way in (Sign in, Create account); Learn is in the page and the footer. */
+@media (max-width: 420px) {
+  .public-nav .public-nav-link:first-child { display: none; }
+  .public-header .button.compact { padding: 8px 12px; }
+}

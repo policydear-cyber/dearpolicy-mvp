@@ -210,8 +210,13 @@ async function main() {
     assert.equal((shell.match(/href: "\/learn"/g) ?? []).length, 1);
   });
 
-  await t("wiring: /learn still needs a signed-in session (not added to the public paths)", () => {
-    assert.doesNotMatch(readFileSync("middleware.ts", "utf8"), /"\/learn/);
+  // Changed 13 Nov 2026 (DC approved making Learn public for search and shared links): the library is now public and
+  // read-only. The full signed-out boundary is proven in scripts/public-site/auth-boundary-test.ts.
+  await t("wiring: /learn is public and read-only, and only Learn (no API) joined the public pages", () => {
+    const mw = readFileSync("middleware.ts", "utf8");
+    assert.match(mw, /PUBLIC_PAGE_PATHS = new Set\(\["\/", "\/learn", "\/robots\.txt", "\/sitemap\.xml"\]\)/);
+    assert.match(mw, /LEARN_GUIDE_PATH = \/\^\\\/learn\\\/\[a-z0-9-\]\{1,80\}\$\//);
+    assert.match(mw, /if \(!isApi && isPublicPage\(pathname\)\)/);
   });
 
   await t("pictures: every guide has at least one picture and one thing to tap or try", () => {
