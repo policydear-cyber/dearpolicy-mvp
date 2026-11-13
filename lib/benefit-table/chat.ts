@@ -785,8 +785,11 @@ const POLICY_ONLY_WORDS = new Set(("what what's whats how much many is are does 
  * card given for one person's row is given for every other member's own row of the same benefit and document: each
  * person the document is linked to and the table holds a row for is named, never only the one the model picked (live
  * 637c547: a group scheme's hospital cash named one of the two insured people). Each card is that person's own row. */
-export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = [], forNobody = false): { json: unknown; report: RowReport } {
+export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = [], forNobody = false, chatPerson: string | null = null): { json: unknown; report: RowReport } {
   const report: RowReport = { dropped: [], labels: [], days: {}, conditionPoints: [], cards: {} };
+  // Whom the conversation is for (its chosen member, or a household of one): a sentence naming no one is theirs when no
+  // member is named before it (lib/benefit-table/multiplier.ts heardIn, a veto on a row's multiple only).
+  const scope = (chatPerson ? matchMember(household, chatPerson) : null) ?? (household.members.length === 1 ? baseName(household.members[0].name) : null);
   // A condition said as a point of its own, for the rows whose cards it belongs to (dropConditionsOnCards).
   const pointFor = (text: string, condition: string, row: ChatRow) => {
     const seen = report.conditionPoints!.find((p) => p.text === text && p.condition === condition);
@@ -964,9 +967,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // hears an amount was left out, never the single amount. No note named: the card as before (Harbourline test, 13 Nov;
       // PR #472 gates 1-2). Only for the named row's person: a spread card for another member is never multiplied.
       // The server's own reading of the household's words is a veto on the model's note, never a trigger (round 3).
-      const facts = st && noteSaid && r.personId === row.personId ? multipleFacts(r, rows) : null;
+      const facts = st && noteSaid && r.personId === row.personId ? { ...multipleFacts(r, rows), scope } : null;
       const printed = facts ? r.conditions.find((c) => sameNote(noteSaid, c)) : undefined;
-      const times = facts && printed ? noteMultiple(printed, facts, { current: question, earlier, person: baseName(r.person), namedIn: (t) => membersNamedIn(household, t) }) : null;
+      const times = facts && printed ? noteMultiple(printed, facts, { current: question, earlier, person: baseName(r.person), namedIn: (t) => membersNamedIn(household, t), scope }) : null;
       if (st && facts && (r === row || printed) && (!times || !serverFigureOf(r, st, household, times, facts))) {
         report.dropped.push({ why: `${names(r)} pays a multiple in the case described, which could not be checked or worked out`, text: String(st.text) });
         const said = printed ? `${names(r)} also depends on this: ${printed}` : null;
@@ -1544,7 +1547,7 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
     value = cap ? Math.min(worked, cap.value) : worked;
     const at = locateQuote(household, times.condition, row.docIndex);
     if (!at || at.docIndex !== row.docIndex) return null;
-    multiple = { times: times.times, docIndex: at.docIndex, page: at.page, quote: times.condition, own: facts.own, section: facts.section, others: facts.others ?? "" };
+    multiple = { times: times.times, docIndex: at.docIndex, page: at.page, quote: times.condition, own: facts.own, section: facts.section, others: facts.others ?? "", scope: facts.scope ?? null };
   }
   return { text: String(st.text), person: baseName(row.person), quote: st.quote, percent: row.percent!, currency, value,
     row: { docIndex: row.docIndex, page: row.source.page, quote: row.source.excerpt },

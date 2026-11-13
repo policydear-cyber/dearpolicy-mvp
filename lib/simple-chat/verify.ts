@@ -820,7 +820,7 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
    * the row's own words (`own`) and `section`, and checked again against the household's own words. When it is set and the
    * figure cannot be worked out again, the card is left out, never shown as the single amount. `others`: the benefit names
    * of the person's other rows. */
-  times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null; others: string } | null };
+  times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null; others: string; scope: string | null } | null };
 /** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
  * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
  * sum under a cover heading or on a page that names one life; the benefit table had already tied each row to the person's
@@ -897,7 +897,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
     // the same one plain multiple, of this row's case, and the same veto reading of the household's words (written: the
     // current message first).
     const d = noteMultiple(sf.times.quote, { own: sf.times.own, section: sf.times.section, cap: cap?.value ?? null, others: sf.times.others },
-      { current: written[0] ?? "", earlier: written.slice(1), person, namedIn: (t) => membersNamedIn(household, t) });
+      { current: written[0] ?? "", earlier: written.slice(1), person, namedIn: (t) => membersNamedIn(household, t), scope: sf.times.scope });
     if (!d || Math.abs(d.times - sf.times.times) > 1e-9) return null;
     times = d.times; timesFound = tf;
     if (cap && Math.round(sf.base.value * sf.percent * times) / 100 > cap.value + 0.005 && !keepsCapIn(sf.times.quote, cap.value)) return null;

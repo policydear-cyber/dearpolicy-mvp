@@ -15,7 +15,7 @@ import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 export type Multiplier = { times: number; condition: string; keepsCap: boolean };
 /** What a row brings to its note: its own words (benefit and quote), its section, its printed maximum, and the benefit
  * names of the person's other rows (a note with no section number naming one of them is that row's, not this one's). */
-export type RowFacts = { own: string; section: string | null; cap: number | null; others?: string };
+export type RowFacts = { own: string; section: string | null; cap: number | null; others?: string; scope?: string | null };
 
 const TIMES: Record<string, number> = { double: 2, doubled: 2, twice: 2, treble: 3, trebled: 3, triple: 3, tripled: 3, half: 0.5, halved: 0.5,
   two: 2, three: 3, four: 4, five: 5 };
@@ -128,47 +128,76 @@ export const sameNote = (said: string, printed: string) => {
   return a.length > 0 && (a === n(printed) || (a.length >= 12 && printed.split(";").some((p) => n(p) === a)));
 };
 
-/** A sentence that does not plainly say the case happened: a negation, a contrast, a condition, a guess or a question
- * ("the doctor ruled out a compound fracture", "but it is a simple fracture", "would it pay more if ...?") (H2, W5). */
+/** A clause that does not plainly say the case happened: a negation, a contrast, a condition, a guess or a question ("the
+ * doctor ruled out a compound fracture", "but it is a simple fracture", "would it pay more if ...?") (H2, W5). Read on the
+ * clause holding the case words only (round 4, L10, L15: "a compound fracture, not a simple one"; "..., how much?"). */
 const HEDGE = /\b(?:not|no|never|none|nor|without|ruled?\s+out|ruling\s+out|exclud\w*|unlikely|whether|if|would|could|might|may|maybe|perhaps|possibl[ey]|probabl[ey]|suspect\w*|unsure|unclear|unknown|uncertain|but|however|although|though|instead|rather|unless|except|yet|suppos\w*|hypothetical\w*|cannot|wonder\w*|await\w*|pending)\b|n['’]t\b|\?/i;
 /** A sentence about an earlier event (R2-H2, W6): "last year", "in 2023", "previously", "it healed", "already claimed". */
-const PAST = /\b(?:last\s+(?:year|month|week|time|summer|winter|spring|autumn|fall)|previous(?:ly)?|before|ago|earlier|in\s+(?:19|20)\d\d|healed|already|again|used\s+to|had\s+(?:a|an)\b)/i;
+const PAST = /\b(?:last\s+(?:year|month|week|time|summer|winter|spring|autumn|fall)|previous(?:ly)?|before|ago|earlier|in\s+(?:19|20)\d\d|healed|already|again|used\s+to)\b/i;
 /** A sentence quoting or paraphrasing the policy, or saying the multiple itself (R2-H3, W7): "our policy says a compound
- * fracture is paid at double". */
-const QUOTING = /\b(?:polic(?:y|ies)|schedule|wording|documents?|notes?|says|said|states|stated|according|insurer|terms|brochure|double|doubled|twice|treble|trebled|triple|tripled|times|half|halved)\b|%/i;
+ * fracture is paid at double". "said", "confirmed" count only with the policy's words as their subject: a doctor's or a
+ * hospital's is a fact (round 4, L5). */
+const QUOTING = /\b(?:polic(?:y|ies)|schedule|wording|documents?|notes?|insurer|terms|brochure|cover|plan)\b[^.!?]{0,30}?\b(?:says?|said|states?|stated|confirm\w*|reads?|mentions?)\b|\baccording\s+to\b|\b(?:double|doubled|twice|treble|trebled|triple|tripled|times|half|halved)\b|%/i;
 /** First-person and family words: whom they mean cannot be told from the words (R2-H1: "I have a compound fracture", "my
- * husband has a compound fracture"). */
+ * husband has a compound fracture"), except a family word right before this person's name ("my wife Grace", round 4 L6). */
 const WHO_WORDS = /\b(?:i|im|me|my|mine|myself|we|us|our|ours|husband|wife|son|daughter|mum|mom|mother|dad|father|brother|sister|child|children|kids?|baby|grand\w+|partner|spouse|siblings?|parents?|aunt|uncle|cousin|nephew|niece)\b/i;
+const FAMILY = String.raw`(?:husband|wife|son|daughter|mum|mom|mother|dad|father|brother|sister|partner|spouse|child|kid|baby|grandson|granddaughter|grandchild)`;
 
-export type Heard = { current: string; earlier: readonly string[]; person: string; namedIn: (text: string) => string[] };
-/** The sentences of a message (lines and sentence ends). */
+/** The household's words for one note: the current message, the earlier ones latest first, the row's person, how members
+ * are named, and whom the conversation is for (its chosen member, or a household of one), if anyone. */
+export type Heard = { current: string; earlier: readonly string[]; person: string; namedIn: (text: string) => string[]; scope?: string | null };
+/** The sentences of a message (lines and sentence ends), and a sentence's clauses (commas, semicolons, colons, dashes). */
 const sentencesOf = (text: string) => text.split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+const clausesOf = (s: string) => s.split(/[,;:]|\s[-–—]\s/).map((c) => c.trim()).filter(Boolean);
 const holds = (seq: string[], phrase: string[]) => phrase.length > 0 && seq.some((_, i) => phrase.every((w, j) => seq[i + j] === w));
-/** How one household message speaks of a note's case, for this row's person: "absent" (no sentence has every word of one
- * of its cases); "other" (each sentence that does is about another member only); "stated" (one says the whole case phrase
- * plainly: it names this person or no one, the message names no other member when it names no one, and it has no hedge,
- * past-time, quoting or first-person/family words; `explicit` when it names them), with every other such sentence about
- * another member; else "unsure". */
-function heardIn(parts: CasePart[], text: string, h: Heard): { how: "absent" | "other" | "unsure" } | { how: "stated"; explicit: boolean } {
-  const naming = sentencesOf(text).filter((s) => { const have = new Set(tokens(s).map(stem)); return parts.some((p) => p.words.every((w) => have.has(w))); });
-  if (!naming.length) return { how: "absent" };
-  const others = h.namedIn(text).filter((p) => p !== h.person);
-  const read = naming.map((s) => {
-    const who = h.namedIn(s), seq = allTokens(s).map(stem);
-    const plain = !HEDGE.test(s) && !PAST.test(s) && !QUOTING.test(s) && !WHO_WORDS.test(s) && parts.some((p) => holds(seq, p.phrase));
-    return { other: who.length > 0 && !who.includes(h.person), explicit: who.includes(h.person),
-      ok: plain && ((who.length === 1 && who[0] === h.person) || (who.length === 0 && others.length === 0)) };
+/** The members a sentence names, leaving out a name said after "not", "instead of" or "rather than" ("Actually it was
+ * Grace, not Daniel." names Grace). */
+const namedSaying = (s: string, h: Heard) => h.namedIn(s.replace(/\b(?:not|instead\s+of|rather\s+than)\s+[A-Za-z'’-]+/gi, " "));
+
+/** How the household's words read a note's case, for this row's person (the server's veto on the model's note):
+ * - "absent": no clause holds every word of one of its cases;
+ * - "other": each clause that does is about another member only;
+ * - "stated": one says the case plainly for this person, and every other one is about another member;
+ * - else "unsure".
+ * A clause says it plainly when it holds the case (its whole phrase in order; or, for a case of two or more words, all of
+ * them in any order, round 4 L21) with no hedge and no first-person or family word but one right before this person's name;
+ * its sentence has no past-time or quoting words; and its sentence names this person only, or names no one and is about this person: the latest member named before
+ * it in the conversation (a name after "not" left out), else the conversation's own member (X1-X8, L1, L2, L9, L11, L18).
+ * `turn` is the index of the message in `all` (oldest first) whose clauses are read. */
+function heardIn(parts: CasePart[], all: string[], turn: number, h: Heard): "absent" | "other" | "unsure" | "stated" {
+  const flat = all.flatMap((t, i) => sentencesOf(t).map((s) => ({ s, i })));
+  const reads: { other: boolean; ok: boolean }[] = [];
+  flat.forEach(({ s, i }, k) => {
+    if (i !== turn) return;
+    const clauses = clausesOf(s).filter((c) => { const seq = allTokens(c).map(stem), have = new Set(seq);
+      return parts.some((p) => p.words.every((w) => have.has(w))); });
+    if (!clauses.length) return;
+    const own = namedSaying(s, h);
+    let about = own;
+    if (!about.length) for (let j = k - 1; j >= 0 && !about.length; j--) about = namedSaying(flat[j].s, h);
+    if (!about.length && h.scope) about = [h.scope];
+    const mine = about.length === 1 && about[0] === h.person;
+    const names = h.person.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3).join("|");
+    const unnamed = (c: string) => names ? c.replace(new RegExp(String.raw`\b(?:my|our)\s+${FAMILY}\s+(?:${names})\b`, "gi"), " ") : c;
+    const plainSentence = !PAST.test(s) && !QUOTING.test(s);
+    // Hedges and first-person or family words are read in the clause holding the case ("..., how much do we get?" is
+    // another clause, L15).
+    const said = clauses.some((c) => {
+      const seq = allTokens(c).map(stem);
+      return !HEDGE.test(c) && !WHO_WORDS.test(unnamed(c)) && parts.some((p) => holds(seq, p.phrase) || (p.words.length >= 2 && p.words.every((w) => seq.includes(w))));
+    });
+    reads.push({ other: about.length > 0 && !about.includes(h.person), ok: plainSentence && said && mine });
   });
-  if (read.every((r) => r.other)) return { how: "other" };
-  const stating = read.filter((r) => r.ok);
-  return stating.length && read.every((r) => r.ok || r.other) ? { how: "stated", explicit: stating.some((r) => r.explicit) } : { how: "unsure" };
+  if (!reads.length) return "absent";
+  if (reads.every((r) => r.other)) return "other";
+  return reads.some((r) => r.ok) && reads.every((r) => r.ok || r.other) ? "stated" : "unsure";
 }
 
 /** The multiple a note the model named pays for this row, or null (no amount is then shown). Only ever a veto on the model's
  * choice, never a trigger: the note pays one plain multiple; names no section but the row's own (a row with no section of
  * its own cannot be told apart) and, with no section number, no case word of another of the person's benefits (W4); is not
  * keyed on who the person is; and the household's own words state its case plainly for this person (heardIn) in the current
- * message, or in the latest earlier message that names it, naming this person. */
+ * message, or in the latest earlier message that speaks of it. */
 export function noteMultiple(note: string, row: RowFacts, h: Heard): Multiplier | null {
   const m = multipleIn(note);
   if (!m || m === "unsure" || !m.plain) return null;
@@ -181,18 +210,14 @@ export function noteMultiple(note: string, row: RowFacts, h: Heard): Multiplier 
     const theirs = new Set(tokens(row.others).map(stem).filter((w) => !NOT_CASE.has(w)));
     if (parts.some((p) => p.words.some((w) => theirs.has(w)))) return null;
   }
-  const now = heardIn(parts, h.current, h);
-  let heard = now;
-  if (now.how === "absent") for (const turn of h.earlier) {
-    const e = heardIn(parts, turn, h);
-    if (e.how === "absent") continue;
-    heard = e;
-    break;
+  // The conversation oldest first: the earlier messages (given latest first), then the current one.
+  const all = [...h.earlier].reverse().concat(h.current);
+  for (let t = all.length - 1; t >= 0; t--) {
+    const read = heardIn(parts, all, t, h);
+    if (read === "absent") continue;
+    return read === "stated" ? { times: m.times, condition: note, keepsCap: keepsCapIn(note, row.cap) } : null;
   }
-  if (heard.how !== "stated") return null;
-  // An earlier message counts only when it names this person (a fact carried from this claim).
-  if (now.how === "absent" && !heard.explicit) return null;
-  return { times: m.times, condition: note, keepsCap: keepsCapIn(note, row.cap) };
+  return null;
 }
 
 /** "double", "3 times", "150%": the multiple as the card's working says it. */

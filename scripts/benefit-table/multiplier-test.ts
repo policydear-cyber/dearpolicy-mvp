@@ -59,14 +59,14 @@ function schedule(people: Person[], tableLines: string[], benefits: Record<strin
  * answer), through the row step, the chat's checks and the label check, as the app's turn does. `earlier` is the
  * household's earlier messages in the order sent; the app passes them latest first. `checksHear` replaces what the checks
  * are given as the household's words (to test that they check again). */
-function ask(h: ReturnType<typeof schedule>, person: string, benefit: RegExp, question: string, note?: string, earlier: string[] = [], checksHear?: string[]) {
+function ask(h: ReturnType<typeof schedule>, person: string, benefit: RegExp, question: string, note?: string, earlier: string[] = [], checksHear?: string[], chatPerson: string | null = null) {
   const row = h.rows.find((r) => r.person === person && benefit.test(r.benefit) && r.figure.kind !== "none");
   assert.ok(row, `no row for ${person} ${benefit}`);
   const raw = { bottomLine: "The amounts are below.", nextSteps: [], question: null, statements: [{ kind: "amount", text: row.benefit, person, document: null, quote: null, amount: null, percentOf: null,
     conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, rowBenefit: row.benefit, eventFit: "any_event", waiting: null, period: { from: "", to: "", eventOn: "" },
     ...(note !== undefined ? { multiplierNote: note } : {}) }] };
   const before = [...earlier].reverse();
-  const fromRows = amountsFromRows(raw, h.rows, h.house, new Date("2026-11-13T04:00:00Z"), question, before);
+  const fromRows = amountsFromRows(raw, h.rows, h.house, new Date("2026-11-13T04:00:00Z"), question, before, false, chatPerson);
   const { answer, report } = verifyAnswer(h.house, readModelAnswer(fromRows.json)!, checksHear ?? [question, ...before], new Set(fromRows.report.labels), fromRows.report.figures ?? []);
   const { kept } = keepLabelledAmounts(answer.statements ?? [], fromRows.report);
   const cards = kept.filter((s) => s.amount && s.personName === person);
@@ -146,7 +146,7 @@ test("note named for Grace's compound fracture: 2% of GBP 20,000 doubled, GBP 80
   assert.deepEqual(a.amounts, ["£800"]);
   assert.match(a.basis, /2% of Grace Okafor's sum insured of £20,000 .* is £400, paid at double .*compound fracture.*: £800, within its maximum of £1,500/);
   // The model's copy without the note mark is the same note.
-  assert.deepEqual(G(KEEPS, "It was a compound fracture.", KEEPS.replace("Note (a): ", "")).amounts, ["£800"]);
+  assert.deepEqual(G(KEEPS, "It was a compound fracture.", KEEPS.replace("Note (a): ", ""), TURNS).amounts, ["£800"]);
 });
 test("the maximum is respected: 5% of GBP 80,000 doubled is up to GBP 1,500; 5% of GBP 20,000 doubled too", () => {
   assert.deepEqual(ask(fractureSchedule(KEEPS, 5), "Daniel Okafor", /Fracture/, "Daniel has a compound fracture of the leg.", KEEPS).amounts, ["Up to £1,500"]);
@@ -156,8 +156,8 @@ test("the maximum is respected: 5% of GBP 80,000 doubled is up to GBP 1,500; 5% 
 });
 test("a note silent on the maximum: doubled below it is shown, doubled above it gives no amount and says one was left out", () => {
   const silent = "Note (a): a compound fracture is paid at double the Section 3 amount.";
-  assert.deepEqual(G(silent, "It was a compound fracture.", silent).amounts, ["£800"]);
-  const a = G(silent, "It was a compound fracture.", silent, [], 5);
+  assert.deepEqual(G(silent, "It was a compound fracture.", silent, TURNS).amounts, ["£800"]);
+  const a = G(silent, "It was a compound fracture.", silent, TURNS, 5);
   assert.deepEqual(a.amounts, []);
   assert.ok(a.leftOut);
 });
@@ -300,9 +300,67 @@ test("W4: a note with no section number copied onto Burns names the fracture row
 });
 test("a note the table escapes or joins with ';' can still be copied", () => {
   const angled = "Note (a): fractures <compound> are paid at double the Section 3 amount.";
-  assert.deepEqual(G(angled, "It was a compound fracture.", "Note (a): fractures &lt;compound&gt; are paid at double the Section 3 amount.").amounts, ["£800"]);
+  assert.deepEqual(G(angled, "It was a compound fracture.", "Note (a): fractures &lt;compound&gt; are paid at double the Section 3 amount.", TURNS).amounts, ["£800"]);
   const joined = "Note (a): a compound fracture is paid at double the Section 3 amount; still subject to the GBP 1,500 maximum per accident.";
-  assert.deepEqual(G(joined, "It was a compound fracture.", "a compound fracture is paid at double the Section 3 amount").amounts, ["£800"]);
+  assert.deepEqual(G(joined, "It was a compound fracture.", "a compound fracture is paid at double the Section 3 amount", TURNS).amounts, ["£800"]);
+});
+
+// ---------- Round 4: whom a sentence naming no one is about; plain statements the veto must let through ----------
+test("X1-X8: a case said of no one, after another member was named, is not this person's: no amount", () => {
+  const AMARA: Person = { name: "Amara Okafor", relationship: "child", line: "Amara Okafor\tChild\tGBP 10,000", sum: 10000 };
+  const cases: [string, string[], Person[]][] = [
+    ["He has a compound fracture.", ["Daniel broke his arm."], [DANIEL, GRACE]],                                   // X1
+    ["It was a compound fracture.", ["Daniel broke his arm playing football."], [DANIEL, GRACE]],                 // X3
+    ["She has a compound fracture.", ["Amara broke her leg at the park."], [DANIEL, GRACE, AMARA]],               // X4
+    ["A compound fracture.", ["Grace broke her wrist.", "And Daniel? What did he break?"], [DANIEL, GRACE]],       // X7
+    ["The hospital confirmed a compound fracture.", ["Grace is fine.", "Daniel fell off his bike."], [DANIEL, GRACE]], // X8
+    ["It was a compound fracture.", [], [DANIEL, GRACE]],                                                         // no one named at all
+  ];
+  for (const [q, earlier, people] of cases) {
+    const a = ask(fractureSchedule(KEEPS, 2, people), "Grace Okafor", /Fracture/, q, KEEPS, earlier);
+    assert.deepEqual(a.amounts, [], q);
+    assert.ok(a.leftOut, q);
+  }
+});
+test("a conversation set to this person, or a household of one, makes a sentence naming no one theirs", () => {
+  assert.deepEqual(ask(fractureSchedule(), "Grace Okafor", /Fracture/, "It was a compound fracture.", KEEPS, [], undefined, "Grace Okafor").amounts, ["£800"]);
+  assert.deepEqual(ask(fractureSchedule(KEEPS, 2, [GRACE]), "Grace Okafor", /Fracture/, "It was a compound fracture.", KEEPS).amounts, ["£800"]);
+  // A member named before it still decides, whatever the conversation is set to.
+  assert.deepEqual(ask(fractureSchedule(), "Grace Okafor", /Fracture/, "He has a compound fracture.", KEEPS, ["Daniel broke his arm."], undefined, "Grace Okafor").amounts, []);
+});
+test("L1-L21: plain statements of the case for Grace give GBP 800 with the note set", () => {
+  const WORK = "Note (a): the amount is doubled if the accident happens at work.";
+  const BOTH = "Note (a): payable twice if both arms are fractured.";
+  const cases: [string, string, string[]][] = [
+    [KEEPS, "It was a compound fracture.", TURNS],                                                  // L1
+    [KEEPS, "She has a compound fracture.", ["Grace broke her arm."]],                              // L2
+    [KEEPS, "Grace's fracture is compound.", []],                                                   // L3
+    [KEEPS, "Grace has a compound fracture of the wrist.", []],                                     // L4
+    [KEEPS, "The doctor said Grace has a compound fracture.", []],                                  // L5
+    [KEEPS, "My wife Grace has a compound fracture.", []],                                          // L6
+    [KEEPS, "Grace had a compound fracture yesterday.", []],                                        // L7
+    [KEEPS, "Grace broke her arm yesterday and it is a compound fracture.", []],                    // L8
+    [KEEPS, "Grace broke her arm. It's a compound fracture.", []],                                  // L9
+    [KEEPS, "It's a compound fracture, not a simple one.", ["Grace broke her arm."]],               // L10
+    [KEEPS, "How much can we claim?", ["Grace broke her arm.", "It was a compound fracture."]],      // L11
+    [KEEPS, "How much for that?", ["Grace has a compound fracture."]],                              // L12
+    [KEEPS, "The X-ray shows Grace has a compound fracture.", []],                                  // L13
+    [KEEPS, "Grace broke her arm in a fall, a compound fracture.", []],                             // L14
+    [KEEPS, "Grace has a compound fracture, how much do we get?", []],                              // L15
+    [KEEPS, "Grace has a compound fracture. How much do we get?", []],                              // L16
+    [KEEPS, "Yes, it was compound.", ["Grace broke her arm."]],                                     // L17
+    [KEEPS, "It was a compound fracture. Daniel is fine.", ["Grace broke her arm."]],               // L18
+    [KEEPS, "Grace broke her leg; it's a compound fracture.", []],                                  // L19
+    [WORK, "Grace was hurt at work and broke her wrist.", []],                                      // L20
+    [BOTH, "Grace fractured both arms.", []],                                                       // L21
+  ];
+  for (const [note, q, earlier] of cases) assert.deepEqual(G(note, q, note, earlier).amounts, ["£800"], q);
+});
+test("L21's any-order reading needs two case words in one clause: one word keeps its phrase, a split clause is no amount", () => {
+  const BOTH = "Note (a): payable twice if both arms are fractured.";
+  assert.deepEqual(G(BOTH, "Grace fractured her arm; both children are fine.", BOTH).amounts, []);
+  const WORK = "Note (a): the amount is doubled if the accident happens at work.";
+  assert.deepEqual(G(WORK, "Grace broke her wrist on her way to work.", WORK).amounts, []);
 });
 
 console.log(`multiplier-test: ${passed} passed, ${failures.length} failed`);
