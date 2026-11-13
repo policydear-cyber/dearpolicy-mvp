@@ -434,8 +434,9 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
 export type LineCheck = { agree: boolean; kind: DisagreeKind | null; why: string; text: string | null; log: string;
   /** How many of the page's figure lines are held back (shown as not checked). */
   held: number };
-export function checkLines(textReading: string, imageReading: string, pageNumber?: number, geometry?: (number[] | undefined)[]): LineCheck {
-  const first = checkLinesOnce(textReading, imageReading, pageNumber, undefined, geometry);
+/** `ys`: where each text line stands down the page (lib/documents/layout.ts PageLine.y), when known. */
+export function checkLines(textReading: string, imageReading: string, pageNumber?: number, geometry?: (number[] | undefined)[], ys?: (number | undefined)[]): LineCheck {
+  const first = checkLinesOnce(textReading, imageReading, pageNumber, undefined, geometry, ys);
   if (first.agree || !geometry || !first.heldLines.size) return first;
   // Lines held back on a page whose text layer gives each table column as one run: confirmed column by column (columnRows).
   const zipped = columnRows(textReading, imageReading, geometry, first.heldLines);
@@ -444,7 +445,7 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   return second.agree || second.held < first.held ? second : first;
 }
 function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: number, pre?: { confirmed: Set<number>; image: Set<number> },
-  geometry?: (number[] | undefined)[]): LineCheck & { heldLines: Set<number> } {
+  geometry?: (number[] | undefined)[], ys?: (number | undefined)[]): LineCheck & { heldLines: Set<number> } {
   const lines = textReading.split("\n"), skipText = pairingNothing(textReading, pageNumber), skipImage = pairingNothing(imageReading, pageNumber);
   const imageLinesAll = imageReading.split("\n");
   // A line is confirmed only under the same heading in both readings: the nearest label-only line above it that both
@@ -659,22 +660,51 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
   //   heading, a title): under a row with figures, the first line could as well be the end of that row's value, and the
   //   image is not left to decide which (TE #446 F1: a cap printed at the start of the next row).
   // Words-only lines below are wrapped label parts and always join.
-  const ownRow = (j: number, edge: number | undefined, prev: number, labelled: boolean, i: number) => {
-    // A sentence running on (the row and the line both one cell) is told by how the line starts, not by a table's columns.
-    const where = !lines[i].includes("\t") && !lines[j].includes("\t") ? "unknown" : place(j, edge);
+  // How far apart two lines stand down the page, when both places are known.
+  const gap = (a: number | undefined, b: number | undefined) => {
+    const ya = a === undefined ? undefined : ys?.[a], yb = b === undefined ? undefined : ys?.[b];
+    return ya === undefined || yb === undefined ? undefined : Math.abs(ya - yb);
+  };
+  const filledBefore = (j: number) => filledText[filledText.indexOf(j) - 1];
+  const filledAfter = (j: number) => filledText[filledText.indexOf(j) + 1];
+  // Whether line j sits inside the row of the line above it (prev), by the page's own spacing: closer to it than the row
+  // stands to the line before the row (the row above, or the table's heading), and, for a value part that a row's label
+  // follows, than j stands to that line. A table that spaces its rows as it spaces a cell's lines says nothing, and the
+  // part is held (Critic #446 R4-1).
+  const inRow = (j: number, prev: number, first: number, toNext: boolean) => {
+    const g = gap(prev, j);
+    if (g === undefined) return false;
+    const before = gap(filledBefore(first), first), after = toNext ? gap(j, filledAfter(j)) : undefined;
+    if (before === undefined && after === undefined) return false;
+    return (before === undefined || g + 1 < before) && (after === undefined || g + 1 < after);
+  };
+  const ownRow = (j: number, edge: number | undefined, prev: number, labelled: boolean, i: number, first: number) => {
+    // A sentence running on (the row and the line both one cell, at the page's left margin or with no place) is told by
+    // how the line starts, not by a table's columns. Two cells of a value column are placed as such (Critic #446 X12).
+    const xi = firstX(i), xj = firstX(j);
+    const sentence = !lines[i].includes("\t") && !lines[j].includes("\t")
+      && (xi === undefined || xj === undefined || edge === undefined || (xi < edge - 1 && xj < edge - 1));
+    const where = sentence ? "unknown" : place(j, edge);
     if (!figureLine(lineTokens(lines[j]))) return false;
     if (where === "value") {
-      const next = filledText[filledText.indexOf(j) + 1];
-      if (next === undefined || place(next, edge) !== "label") return false;
-      const value = lines[next].split("\t").slice(1).find((c) => c.trim())?.trim() ?? "";
-      return /^\p{Ll}/u.test(value);
+      // A value part with a row of its own label right after it could as well open that row's value (a label centred
+      // beside its value's second line): only the page's spacing can say it is the row above's.
+      const next = filledAfter(j);
+      return next !== undefined && place(next, edge) === "label" && !inRow(j, prev, first, true);
     }
     if (where === "label" && !labelled) {
-      const p = filledText[filledText.indexOf(i) - 1];
-      return !(p === undefined || !figureLine(lineTokens(lines[p])));
+      // Above the row's run of value parts and words, the nearest other line must print no figure (a heading, a title):
+      // under a row with figures the run could as well end that row's value (Critic #446 R4-2, TE F1).
+      let u = filledText.indexOf(first) - 1;
+      while (u >= 0 && place(filledText[u], edge) === "value") u--;
+      return u >= 0 && figureLine(lineTokens(lines[filledText[u]]));
     }
-    if (where === "label") return true;
-    return endsOnFigure(prev) || !partStart(lines[j]);
+    // A label cell with a figure, under a row that has its label: a second row, unless the page's spacing puts it inside
+    // the row above (a label and an amount that both wrap, "coronary artery\tRM 25,000").
+    if (where === "label") return !inRow(j, prev, first, filledBefore(first) === undefined);
+    // Two lines that both open on an amount ("$200,000 on death" over "$100,000 on total disability") are two items.
+    const opensOnAmount = (l: string) => /^\S{0,4}\d/u.test(l.trim().replace(CURRENCY_MARK, "").trim()) || /^\S{0,3}\p{Sc}/u.test(l.trim());
+    return endsOnFigure(prev) || !partStart(lines[j]) || (opensOnAmount(lines[prev]) && opensOnAmount(lines[j]));
   };
   // A word hyphenated across the wrap ("peri-" over "od") is tried whole and with its hyphen, as well as with a space.
   const variants = (text: string) => [text, text.replace(/(\p{L})- (?=\p{Ll})/gu, "$1"), text.replace(/(\p{L})- (?=\p{Ll})/gu, "$1-")];
@@ -691,7 +721,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     let labelled = [...above, i].some((j) => place(j, edge) !== "value");
     for (let u = k + 1; u < filledText.length && below.length < 5; u++) {
       const j = filledText[u];
-      if (!free(j) || alone(j) || ownRow(j, edge, below.at(-1) ?? i, labelled, i)) break;
+      if (!free(j) || alone(j) || ownRow(j, edge, below.at(-1) ?? i, labelled, i, above[0] ?? i)) break;
       below.push(j);
       if (place(j, edge) !== "value") labelled = true;
     }
@@ -813,8 +843,11 @@ type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string
   /** The one currency the page image prints when its text layer prints none (lib/documents/image-currency). */
   imageCurrency?: string;
   /** The page's lines as its geometry gave them: where each cell starts (lib/documents/layout.ts). */
-  lines?: { text: string; cells: string[]; xs?: number[] }[] };
+  lines?: { text: string; cells: string[]; xs?: number[]; y?: number }[] };
 /** Where each cell of each text line starts on the page, when the stored text is still exactly the geometry's lines. */
+/** Where each text line stands down the page, on the same condition. A line rebuilt from a table run has no place (y 0). */
+const ysOf = (p: CheckedPage) => (p.lines && p.lines.map((l) => l.text).join("\n") === p.text
+  ? p.lines.map((l) => (typeof l.y === "number" && l.y > 0 ? l.y : undefined)) : undefined);
 const geometryOf = (p: CheckedPage) => (p.lines && p.lines.map((l) => l.text).join("\n") === p.text
   ? p.lines.map((l) => (l.xs && l.xs.length === l.text.split("\t").length ? l.xs : undefined)) : undefined);
 /** The pages to read again from their image at upload: text pages whose table text shows a scramble sign. */
@@ -832,7 +865,7 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
     const check = !second ? { agree: false as const, kind: "image reading failed", text: null, log: undefined }
       : !image || image.extractionMethod !== "ocr" ? { agree: false as const, kind: "image reading gave no text for this page", text: null, log: undefined }
       : image.unreadable ? { agree: false as const, kind: "image unreadable", text: null, log: undefined }
-      : checkLines(p.text, image.text, p.pageNumber, geometryOf(p));
+      : checkLines(p.text, image.text, p.pageNumber, geometryOf(p), ysOf(p));
     // Agreed: kept as checked. A row confirmed through a wrapped label is stored rebuilt, its full label on the figure's
     // line, so every reader sees the row as the image prints it (re-read check 3 Nov: the rebuilt text was dropped here).
     // A page the image confirmed (in whole or in part) whose text layer prints no currency takes the one currency the image

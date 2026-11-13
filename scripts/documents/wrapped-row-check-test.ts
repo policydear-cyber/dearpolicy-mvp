@@ -29,8 +29,9 @@ async function main() {
     if (n === 1) return [single[i] ?? 78];
     return [84, 303, 480, 600].slice(0, n);
   });
-  const agreed = (text: string, image: string, g?: Geo, page = 2) => {
-    const r = checkLines(text, image, page, g);
+  type Ys = (number | undefined)[];
+  const agreed = (text: string, image: string, g?: Geo, ys?: Ys, page = 2) => {
+    const r = checkLines(text, image, page, g, ys);
     assert.equal(r.agree, true, `expected agreement, got: ${r.kind} ${r.why}\n${r.log}\n${r.text}`);
     assert.ok(!(r.text ?? "").includes(NOT_CHECKED), `nothing masked:\n${r.text}`);
     const out = r.text ?? text;
@@ -38,8 +39,8 @@ async function main() {
     return out;
   };
   /** Refused: the page does not agree, and no line that prints `figure` keeps it unmasked. */
-  const held = (text: string, image: string, figure: string, g?: Geo, page = 2) => {
-    const r = checkLines(text, image, page, g);
+  const held = (text: string, image: string, figure: string, g?: Geo, ys?: Ys, page = 2) => {
+    const r = checkLines(text, image, page, g, ys);
     assert.equal(r.agree, false, `expected a refusal:\n${r.text}`);
     assert.ok(r.text === null || !r.text.split("\n").some((l) => l.includes(figure)), `"${figure}" held back:\n${r.text}`);
   };
@@ -69,26 +70,31 @@ async function main() {
     "Hospital income (ICU)\tRM 300 per day of admission to an intensive care unit, up to 30 days per year",
     "Waiting period: no critical illness benefit is payable for an illness diagnosed within 90 days of the cover start date (1 April 2026).",
   ].join("\n");
-  // Every row is shown but the one whose label AND amount both wrap with a figure on the label's second line ("coronary
-  // artery\tRM 25,000"): by position that line cannot be told from a second row of its own, so it stays held (as on
-  // main), and the page is read in part (Critic #446 R1/M1, TE A1/A3: two rows an image ran together never stored as one).
-  await test("C1 RM CI provisions: every wrapped row confirmed and stored whole; the both-wrap row stays held", () => {
-    const r = checkLines(ciText, ciImage, 2, ciGeo);
-    const out = (r.text ?? "").split("\n");
-    assert.ok(out.includes("Late-stage critical illness\t100% of the Sum Covered, less any early-stage amount already paid"), out.join("\n"));
+  // Where each line stands down the page, as pdf.ts gives it: a cell's lines 12pt apart, rows 18pt apart.
+  const ciYs = [749.89, 726.89, 708.89, 696.89, 678.89, 666.89, 648.89, 636.89, 618.89, 606.89, 585.89, 573.89];
+  await test("C1 RM CI provisions: every wrapped row confirmed, each stored whole", () => {
+    const out = agreed(ciText, ciImage, ciGeo, ciYs).split("\n");
     assert.ok(out.includes("Early-stage critical illness\t25% of the Sum Covered, up to a maximum of RM 50,000, once per lifetime"), out.join("\n"));
+    assert.ok(out.includes("Angioplasty and other invasive treatment for coronary artery\t10% of the Sum Covered, up to a maximum of RM 25,000"), out.join("\n"));
     assert.ok(out.includes("Hospital income (ICU)\tRM 300 per day of admission to an intensive care unit, up to 30 days per year"), out.join("\n"));
     assert.ok(out.includes("Waiting period: no critical illness benefit is payable for an illness diagnosed within 90 days of the cover start date (1 April 2026)."), out.join("\n"));
-    assert.ok(!out.includes("RM 50,000, once per lifetime"), "the parts are emptied");
-    assert.ok(!out.some((l) => /25,000|10%/.test(l)), `angioplasty held:\n${out.join("\n")}`);
-    assert.equal(out.length, ciText.split("\n").length);
+    assert.ok(!out.includes("coronary artery\tRM 25,000") && !out.includes("RM 50,000, once per lifetime"), "the parts are emptied");
   });
-  await test("C1b the same page through crossCheckPages: read in part, RM 50,000 shown, angioplasty held", async () => {
-    const lines = ciText.split("\n").map((t, i) => ({ text: t, cells: t.split("\t"), xs: ciGeo[i] }));
+  await test("C1b the same page through crossCheckPages, places from the stored lines: not unchecked, not in part", async () => {
+    const lines = ciText.split("\n").map((t, i) => ({ text: t, cells: t.split("\t"), xs: ciGeo[i], y: ciYs[i] }));
     const page: { pageNumber: number; text: string; lines: typeof lines; unchecked?: boolean; partChecked?: boolean; uncheckedWhy?: string; checkLog?: string } = { pageNumber: 2, text: ciText, lines };
     const [p] = await crossCheckPages([page], [2], async () => [{ pageNumber: 2, text: ciImage, extractionMethod: "ocr" }]);
-    assert.ok(!p.unchecked && p.partChecked, `${p.uncheckedWhy} ${p.checkLog}`);
-    assert.ok(p.text.includes("RM 50,000, once per lifetime") && p.text.includes("RM 300 per day") && !p.text.includes("RM 25,000"), p.text);
+    assert.ok(!p.unchecked && !p.partChecked, `${p.uncheckedWhy} ${p.checkLog}`);
+    assert.ok(p.text.includes("RM 50,000, once per lifetime") && p.text.includes("RM 25,000") && !p.text.includes(NOT_CHECKED), p.text);
+  });
+  // Without the page's spacing a part between two rows cannot be placed: the rows whose parts could open the next row's
+  // value, and the row whose label and amount both wrap, stay held (as on main); nothing is shown under a wrong row.
+  await test("C1c the same page with no line places: what cannot be placed stays held, the rest is shown", () => {
+    const r = checkLines(ciText, ciImage, 2, ciGeo);
+    const out = (r.text ?? "").split("\n");
+    assert.equal(r.agree, false);
+    assert.ok(out.includes("Late-stage critical illness\t100% of the Sum Covered, less any early-stage amount already paid"), out.join("\n"));
+    assert.ok(!out.some((l) => /25,000|50,000/.test(l)), out.join("\n"));
   });
   await test("C2 GBP schedule: a date split across two lines ('18 February' / '2025)')", () => agreed(
     "Harbourline Assurance plc\nPolicy number: HPA-1\tPeriod of insurance: 1 March 2026 to 28 February 2027\tCurrency\nof this policy: Pounds sterling (GBP)\nDate of issue: 20 February 2026 (renewal schedule; replaces the schedule dated 18 February\n2025)\nInsured person\tSum Insured\nNgozi Okafor\tGBP 100,000",
@@ -97,7 +103,7 @@ async function main() {
   await test("C3 bare-$ travel certificate: '$100 for every full 6 hours of delay, up to' / '$1,000'", () => agreed(
     "Benefit\tLimit per insured person\nTrip cancellation\t$5,000\nTravel delay\t$100 for every full 6 hours of delay, up to\n$1,000\nExcess: $150 per claim applies to medical expenses and baggage.",
     "Benefit\tLimit per insured person\nTrip cancellation\t$5,000\nTravel delay\t$100 for every full 6 hours of delay, up to $1,000\nExcess: $150 per claim applies to medical expenses and baggage.",
-    [[84, 303], [84, 303], [84, 303], [303], [78]]));
+    [[84, 303], [84, 303], [84, 303], [303], [78]], [672.89, 636.89, 600.89, 588.89, 561.89]));
 
   // ---- P: other markets and layouts --------------------------------------------------------------------------------
   await test("P1 S$ three columns, label and limit both wrap, no geometry needed for reading-order value wrap", () => agreed(
@@ -106,18 +112,18 @@ async function main() {
   await test("P2 EUR comma decimals, a value wrapping over three lines", () => agreed(
     "Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem\n3. Tag, höchstens 30 Tage,\ninsgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00",
     "Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem 3. Tag, höchstens 30 Tage, insgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00",
-    geo("Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem\n3. Tag, höchstens 30 Tage,\ninsgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00", [78, 78, 303, 303, 78])));
+    geo("Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem\n3. Tag, höchstens 30 Tage,\ninsgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00", [78, 78, 303, 303, 78]), [700, 682, 670, 658, 640]));
   await test("P3 IDR three-column table, middle column wraps with a figure on each line (by column)", () => {
     const text = "Manfaat\tBatas\tKeterangan\nRawat inap\tRp 1.000.000 per hari,\tmaks. 60 hari\nmaksimal Rp 60.000.000\tper tahun\nPembedahan\tRp 25.000.000\tper tindakan";
     const out = agreed(text,
       "Manfaat\tBatas\tKeterangan\nRawat inap\tRp 1.000.000 per hari, maksimal Rp 60.000.000\tmaks. 60 hari per tahun\nPembedahan\tRp 25.000.000\tper tindakan",
-      [[84, 250, 420], [84, 250, 420], [250, 420], [84, 250, 420]]);
+      [[84, 250, 420], [84, 250, 420], [250, 420], [84, 250, 420]], [700, 682, 670, 652]);
     assert.ok(out.split("\n").includes("Rawat inap\tRp 1.000.000 per hari, maksimal Rp 60.000.000\tmaks. 60 hari per tahun"), out);
   });
   await test("P4 a label centred over two lines: words-only line above, figures on the next two (by column)", () => agreed(
     "Benefit\tAmount\nPermanent disablement\nfrom accident\tHK$500,000, or 50% of\nHK$1,000,000 for loss of one limb\nDeath\tHK$1,000,000",
     "Benefit\tAmount\nPermanent disablement from accident\tHK$500,000, or 50% of HK$1,000,000 for loss of one limb\nDeath\tHK$1,000,000",
-    [[84, 303], [84], [84, 303], [303], [84, 303]]));
+    [[84, 303], [84], [84, 303], [303], [84, 303]], [700, 682, 670, 658, 640]));
   await test("P5 a sentence running onto the next line, no table at all (₱ figures)", () => agreed(
     "Claims\nNotify us within 30 days and we pay up to PHP 20,000 for\nambulance costs, plus PHP 500 per day of confinement.",
     "Claims\nNotify us within 30 days and we pay up to PHP 20,000 for ambulance costs, plus PHP 500 per day of confinement."));
@@ -170,14 +176,14 @@ async function main() {
   });
   await test("P8 three columns, no geometry, a value part in a blank first slot ('\\t250' under 'up to AUD')", () => agreed(
     "Service\tBenefit\tAnnual limit\nOptical\t65% of the fee, up to AUD\tAUD 250 per person\n\t250\nDental\t60%\tAUD 800",
-    "Service\tBenefit\tAnnual limit\nOptical\t65% of the fee, up to AUD 250\tAUD 250 per person\nDental\t60%\tAUD 800"));
+    "Service\tBenefit\tAnnual limit\nOptical\t65% of the fee, up to AUD 250\tAUD 250 per person\nDental\t60%\tAUD 800", undefined, [700, 682, 670, 652]));
   await test("N7 no page geometry, the image puts the label part in the amount's slot: held", () => held(
     "Benefit\tLimit\nAngioplasty and other\t10% of the Sum Covered, up to\ninvasive treatment\tRM 25,000\nICU\tRM 300",
     "Benefit\tLimit\nAngioplasty and other\t10% of the Sum Covered, up to invasive treatment RM 25,000\nICU\tRM 300", "25,000"));
   await test("N13 a label centred beside a value's second line joins once: a second label line below is its own row", () => {
     agreed("Rider\tBenefit\nPremiums waived after 6 months of\nWaiver\ttotal disability, up to 24 months,\nmaximum $2,400 a month\nChild\t$10,000",
       "Rider\tBenefit\nWaiver\tPremiums waived after 6 months of total disability, up to 24 months, maximum $2,400 a month\nChild\t$10,000",
-      [[84, 204], [204], [84, 204], [204], [84, 204]]);
+      [[84, 204], [204], [84, 204], [204], [84, 204]], [700, 682, 670, 658, 640]);
     held("Rider\tBenefit\nPremiums waived after 6 months\nWaiver\t$2,400 a month\nChild\t$10,000",
       "Rider\tBenefit\nWaiver Child\tPremiums waived after 6 months $2,400 a month $10,000", "10,000", [[84, 204], [204], [84, 204], [84, 204]]);
   });
@@ -224,6 +230,24 @@ async function main() {
       "Benefit\tLimit\nPre-existing conditions\tRM 5,000 after a 12-month waiting period, up to RM 10,000\nDeath\tRM 100,000");
     agreed("Benefit\tLimit\nCancer\t25% of the sum, for an early-\nstage cancer up to A$50,000\nDeath\tA$100,000",
       "Benefit\tLimit\nCancer\t25% of the sum, for an early-stage cancer up to A$50,000\nDeath\tA$100,000");
+  });
+
+  await test("N18 a value part between two rows goes where the page's spacing puts it, and is held when spacing is even", () => {
+    const text = "Benefit\tLimit\nOutpatient\tS$500 per visit\nS$100 per visit,\nDental\tS$1,000 a year\nDeath\tS$100,000";
+    const g: Geo = [[84, 303], [84, 303], [303], [84, 303], [84, 303]];
+    const image = "Benefit\tLimit\nOutpatient\tS$500 per visit S$100 per visit,\nDental\tS$1,000 a year\nDeath\tS$100,000";
+    held(text, image, "S$100 per visit", g, [700, 682, 664, 652, 634]); // closer to Dental: it opens Dental's value
+    held(text, image, "S$100 per visit", g, [700, 682, 664, 646, 628]); // evenly spaced: cannot be placed
+    held(text, image, "S$100 per visit", g);                            // no places at all
+    agreed(text, image, g, [700, 682, 670, 652, 634]);                  // closer to Outpatient: its own wrapped value
+  });
+  await test("N19 a second row with a label cell spaced as a row, not as a wrapped line: never joined", () => {
+    const g: Geo = [[84, 303], [84, 303], [84, 303], [84, 303]];
+    held("Benefit\tLimit\nHospital cash\tAUD 100 per day, up to\ndental\tAUD 500\nOptical\tAUD 250",
+      "Benefit\tLimit\nHospital cash dental\tAUD 100 per day, up to AUD 500\nOptical\tAUD 250", "AUD 500", g, [700, 682, 664, 646]);
+    held("Benefit\tLimit\nOutpatient\tS$500 per visit, up to\na yearly limit of\nS$1,500 per year\nDental\tS$300\nDeath\tS$100,000",
+      "Benefit\tLimit\nOutpatient\tS$600 per visit, up to a yearly limit of\nDental\tS$1,500 per year S$300\nDeath\tS$100,000", "1,500",
+      [[84, 303], [84, 303], [303], [303], [84, 303], [84, 303]], [700, 682, 670, 658, 640, 622]);
   });
 
   if (failures.length) { console.error(failures.join("\n\n")); console.error(`\n${failures.length} failed, ${passed} passed`); process.exit(1); }
