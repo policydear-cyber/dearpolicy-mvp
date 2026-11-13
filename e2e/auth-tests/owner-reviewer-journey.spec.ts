@@ -531,7 +531,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     await owner.goto(`/claims/${ids.claim}`);
     const doc = owner.locator(".action-card").filter({ hasText: `${PREFIX}-memo.pdf` });
     await doc.getByRole("button", { name: `Delete ${PREFIX}-memo.pdf` }).click();
-    await expect(doc.getByRole("note")).toContainText("cannot be undone");
+    await expect(doc.getByRole("note")).toContainText("can’t be undone");
     await doc.getByRole("button", { name: `Confirm delete ${PREFIX}-memo.pdf` }).click();
     await expect(owner.getByRole("status").filter({ hasText: "was deleted" })).toBeVisible({ timeout: 60_000 });
     await expect(owner.locator(".action-card").filter({ hasText: `${PREFIX}-memo.pdf` })).toHaveCount(0);

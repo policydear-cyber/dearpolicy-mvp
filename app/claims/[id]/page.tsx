@@ -268,7 +268,7 @@ export default function ClaimEvidencePage() {
                 return (<>
                   <strong>{doc.original_filename}</strong> <span className={`status ${doc.status}`}>{display.label}</span>{" "}
                   <span className="status">{documentTypeLabel(doc.document_type)}</span>{" "}
-                  <span className="status">{doc.identity_status === "confirmed" ? "Name matches" : doc.identity_status === "mismatch" ? "Name doesn't match this family member" : doc.identity_status === "needs_review" ? "Name needs checking" : "Name not checked yet"}</span>
+                  <span className="status">{doc.identity_status === "confirmed" ? "Name matches" : doc.identity_status === "mismatch" ? "Name doesn't match this family member" : doc.identity_status === "needs_review" ? "Name needs checking by a DearPolicy reviewer" : "Name not checked yet"}</span>
                   <p><em>{display.detail}</em></p>
                 </>);
               })()}
@@ -401,7 +401,7 @@ function BillReview({ doc, familyMemberId, claimSessionId, onSaved }: { doc: Evi
             <label>What for<input value={row.category} onChange={(e) => setLine(i, { category: e.target.value })} />{errorFor(`billLineItems.${i}.category`)}</label>
             <label>Description<input value={row.description} onChange={(e) => setLine(i, { description: e.target.value })} />{errorFor(`billLineItems.${i}.description`)}</label>
             <label>Amount as printed<input inputMode="decimal" value={row.amountText} onChange={(e) => setLine(i, { amountText: e.target.value })} />{errorFor(`billLineItems.${i}.amountText`)}</label>
-            <label>Currency code (for example SGD)<input value={row.currency} maxLength={3} onChange={(e) => setLine(i, { currency: e.target.value })} />{errorFor(`billLineItems.${i}.currency`)}</label>
+            <label>Currency code (for example USD or EUR)<input value={row.currency} maxLength={3} onChange={(e) => setLine(i, { currency: e.target.value })} />{errorFor(`billLineItems.${i}.currency`)}</label>
           </div>
         ))}
       </fieldset>
@@ -412,7 +412,7 @@ function BillReview({ doc, familyMemberId, claimSessionId, onSaved }: { doc: Evi
           <div key={i} style={{ display: "grid", gap: 4, gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))" }}>
             <label>Paid by<input value={row.source} onChange={(e) => setPayment(i, { source: e.target.value })} />{errorFor(`thirdPartyPayments.${i}.source`)}</label>
             <label>Amount as printed<input inputMode="decimal" value={row.amountText} onChange={(e) => setPayment(i, { amountText: e.target.value })} />{errorFor(`thirdPartyPayments.${i}.amountText`)}</label>
-            <label>Currency code (for example SGD)<input value={row.currency} maxLength={3} onChange={(e) => setPayment(i, { currency: e.target.value })} />{errorFor(`thirdPartyPayments.${i}.currency`)}</label>
+            <label>Currency code (for example USD or EUR)<input value={row.currency} maxLength={3} onChange={(e) => setPayment(i, { currency: e.target.value })} />{errorFor(`thirdPartyPayments.${i}.currency`)}</label>
           </div>
         ))}
       </fieldset>
