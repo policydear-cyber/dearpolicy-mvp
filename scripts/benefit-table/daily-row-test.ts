@@ -4,21 +4,19 @@
  * and "quoted here from the policy", and nothing was shown below.
  *
  * What this pins down:
- * - the hospital cash row is read with its currency from its own printed figure ("GBP 50"), or, printed with no sign,
- *   from the currency its table declares ("all amounts in GBP"): a row has no currency field of its own, and none is
- *   needed. A bare "$" in a pound policy names none, as before;
+ * - the hospital cash row is read with its currency from its own printed figure ("GBP 50" or "£50"): a row has no
+ *   currency field of its own, and none is needed. A bare "$" in a pound policy names none, as before;
  * - the row is withheld for every person because the schedule prints it once for three people and never says it is each
  *   person's figure (assemble.ts whoseRows, NOT_TOLD_WHY): a figure for one life is never shown for another. Printed under
  *   a "per insured person" column and read as each named person's, the same row reaches each of them as a daily card;
- * - a table that declares its currency for any market ("(all amounts in GBP)", "(€)", "(RM)") gives it to a figure printed
- *   without a sign, from a closed list (check.ts DECLARED); a bare "$" takes only a currency written with "$";
- * - a sentence that promises an amount or figure "quoted below" or "here" never survives when no amount is shown: the
- *   clause that promises goes, the rest of the sentence stays (chat.ts QUOTE_POINTER).
+ * - a sentence that promises an amount or figure "quoted below" or "here" never survives when no amount is shown: a clause
+ *   that only promises the quote goes, and "the amount quoted below" in a sentence that says something of it is said of
+ *   the benefit, as "shown below" is, so no condition or fact is lost (chat.ts QUOTE_POINTER).
  * No model, database or network.
  *   npm run benefit-table:daily-row-test */
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, NOT_TOLD_WHY, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
-import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
+import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { chatRows, dropAmountPointers, withoutPointers } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
 import { runSimpleChat } from "@/lib/simple-chat/hook";
@@ -79,19 +77,12 @@ const household = (pages: { page: number; text: string }[]): Household => ({ acc
     expiryDate: null, uploadedAt: "2026-09-01", uploadedFor: null, linkedPeople: [NGOZI, DANIEL, GRACE], supersededAt: null, processingStatus: "ready", pages } as never] });
 
 async function main() {
-  await test("the daily row's currency is its own printed figure's, or its table's declared one; a bare $ in a pound policy names none", () => {
+  await test("the daily row's currency is its own printed figure's; a bare $ in a pound policy names none", () => {
     assert.equal(cashOf(read(CASH).r)?.currency, "GBP");
     assert.equal(cashOf(read(CASH.replace("GBP 50", "£50")).r)?.currency, "GBP");
-    assert.equal(cashOf(read(CASH.replace("GBP 50", "50")).r)?.currency, "GBP", "no sign: the table's '(all amounts in GBP)'");
     assert.equal(cashOf(read(CASH.replace("GBP 50", "$50")).r)?.currency ?? null, null, "a bare $ under a pound table names no currency");
     assert.equal(cashOf(read(CASH).r)?.fromDay, 3);
     assert.equal(cashOf(read(CASH).r)?.maxDays, 30);
-  });
-  await test("a table's declared currency in any market, from a closed list; never a word that is no currency, never a hedged one", () => {
-    const cases: [string, string | null][] = [["TABLE OF BENEFITS (all amounts in GBP)", "GBP"], ["Benefits (€)", "EUR"], ["Limits (RM)", "MYR"], ["Benefits (S$)", "SGD"],
-      ["All amounts are in pounds sterling.", "GBP"], ["Limits (A$)", "AUD"], ["Benefits (TPD)", null], ["Limits apply in all cases.", null], ["Benefits (ALL)", null],
-      ["(all amounts in EUR) unless otherwise stated", null], ["All amounts are in Singapore Dollars unless stated otherwise.", null]];
-    for (const [heading, want] of cases) assert.equal(declaredCurrency(`${heading}\nDeath\t5,000`), want, heading);
   });
   await test("one table printed once for three people that never says the figure is each person's: shown for no one, and said so", () => {
     const t = tableOf(read(CASH).r);
@@ -100,8 +91,8 @@ async function main() {
     // A share of each person's own sum is each person's own figure.
     for (const p of t.people) assert.ok(p.rows.some((x) => x.benefit === "Permanent total disablement" && x.figure.kind === "worked_out"), p.name);
   });
-  await test("a schedule that insures one person: her daily row reaches her chat rows as a GBP 50 daily card with its days, signed or not", () => {
-    for (const cash of [CASH, CASH.replace("GBP 50", "50")]) {
+  await test("a schedule that insures one person: her daily row reaches her chat rows as a GBP 50 daily card with its days", () => {
+    for (const cash of [CASH, CASH.replace("GBP 50", "£50")]) {
       const { r, pages } = read(cash, { only: NGOZI });
       const rows = chatRows(tableOf(r), household(pages));
       const row = rows.find((x) => x.person.startsWith(NGOZI) && x.benefit === "Hospital cash");
@@ -118,9 +109,20 @@ async function main() {
       "The pages show no figure for this benefit in Ngozi's benefit table.");
     assert.equal(withoutPointers("Hospital cash pays a daily amount, which is shown below."), "Hospital cash pays a daily amount.");
     assert.equal(withoutPointers("The daily figure is quoted below."), "");
-    assert.equal(withoutPointers("The rates are cited here as the schedule prints them."), "");
-    // Words said to be quoted are a point about words, never an amount: kept whole.
-    for (const s of ["The claims rule quoted below requires notice within 30 days.", "See the wording below for the daily amount.", "The insurer quoted a premium at renewal.", "Hospital cash is paid as quoted in your schedule.", "A stay below three days is not paid."]) assert.equal(withoutPointers(s), s);
+    assert.equal(withoutPointers("The limits are cited here as the schedule prints them."), "");
+    // A sentence that says something of the amount quoted keeps it, said of the benefit (Critic+TE on #473).
+    const said: [string, string][] = [
+      ["The amount quoted below is not paid if the injury was self-inflicted.", "This benefit is not paid if the injury was self-inflicted."],
+      ["The limit quoted here is per policy year, not per claim.", "This benefit is per policy year, not per claim."],
+      ["If Ngozi is admitted, the daily figure quoted below is paid for up to 30 days per accident.", "If Ngozi is admitted, the daily benefit is paid for up to 30 days per accident."],
+      ["The limits cited here are reduced by any amount paid under section 6.", "These benefits are reduced by any amount paid under section 6."],
+      ["The amounts quoted below are paid in addition to the death benefit.", "These benefits are paid in addition to the death benefit."],
+      ["Physiotherapy is covered, with the limit quoted in full below.", "Physiotherapy is covered."],
+    ];
+    for (const [s, want] of said) assert.equal(withoutPointers(s), want, s);
+    // Words said to be quoted are a point about words, and a premium or exchange rate is no benefit amount: kept whole.
+    for (const s of ["The daily rate quoted below applies only from the 3rd day of hospitalisation.", "Your premium rates quoted below are guaranteed for 5 years.",
+      "The exchange rate quoted here is the one on the day of the claim.", "The claims rule quoted below requires notice within 30 days.", "See the wording below for the daily amount.", "The insurer quoted a premium at renewal.", "Hospital cash is paid as quoted in your schedule.", "A stay below three days is not paid."]) assert.equal(withoutPointers(s), s);
   });
   await test("with an amount shown and none left out, a promise of a quote below stays: the card is below", () => {
     const answer = { summary: "Hospital cash pays a daily amount.", bottomLine: "Hospital cash pays a daily amount; the amount is quoted below.", statements: [{ text: "Hospital cash.", amount: { text: "GBP 50" } }] };

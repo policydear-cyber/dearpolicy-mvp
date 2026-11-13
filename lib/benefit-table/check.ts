@@ -14,7 +14,7 @@ import { planTypeOfPages, type PlanType } from "@/lib/coverage/plan-type";
 import { nameOnPage, otherLife } from "./lives";
 import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
-import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures, currencyOfAmount, statedCurrencyCode as currencyOfSign } from "@/lib/format/currency";
+import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
@@ -431,10 +431,7 @@ export function startDay(text: string): number | null | undefined {
 }
 export const printsNumber = (text: string, value: number) => numbersIn(text).some((n) => Math.abs(n - value) < 0.005);
 
-// A table's own currency, in any market it is printed for ("Benefits (S$)", "(all amounts in GBP)", "Limits (€)", "amounts
-// are in pounds sterling"): a closed list of signs, codes and names, so "(TPD)" or "amounts in all cases" names none.
-const DECLARED_SIGN = String.raw`S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD|A\$|AUD|NZ\$|NZD|£|GBP|€|EUR|CAD|CHF|JPY|CNY|INR|PHP|IDR|THB`;
-const DECLARED = new RegExp(String.raw`\(\s*(?:all\s+(?:amounts|figures)\s+(?:are\s+)?in\s+)?(${DECLARED_SIGN})\s*\)|\b(?:amounts?|figures?|limits?)\b[^.\n]{0,40}\b(?:in|are in)\s+(${DECLARED_SIGN}|Singapore dollars?|pounds?\s+sterling|euros?)(?![A-Za-z])`, "i");
+const DECLARED = /\(\s*(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD)\s*\)|\b(?:amounts?|figures?|limits?)\b[^.\n]{0,40}\b(?:in|are in)\s+(S\$|SGD|Singapore dollars?)/i;
 /** The currency a page declares for its table ("Benefits (S$)"), or for every figure on it (a policy schedule's "Currency :
  * Singapore Dollar", the chat's own pageCurrency), or null. */
 export function declaredCurrency(pageText: string): string | null {
@@ -442,13 +439,7 @@ export function declaredCurrency(pageText: string): string | null {
   // "All amounts in Singapore Dollar unless stated otherwise" does not settle a figure's currency (TE #97, R59-5).
   if (!m || /\b(?:unless|otherwise|except)\b/i.test(pageText.slice(m.index!, m.index! + m[0].length + 60))) return pageCurrency(pageText);
   const word = m[1] ?? m[2];
-  return /singapore/i.test(word) ? "SGD" : /sterling/i.test(word) ? "GBP" : /^euros?$/i.test(word) ? "EUR" : statedCurrencyCode(word) ?? currencyOfSign(word);
-}
-/** The page's declared currency for an excerpt that states none of its own: one printed with a bare "$" takes only a
- * currency written with "$" (a "$" under a "(GBP)" heading names none: lib/format/currency currencyOfAmount). */
-function declaredFor(excerpt: string, page: string): string | null {
-  const declared = declaredCurrency(page);
-  return /\$/.test(excerpt) ? currencyOfAmount("$", declared) : declared;
+  return /singapore/i.test(word) ? "SGD" : statedCurrencyCode(word);
 }
 
 function asHousehold(doc: SourceDoc): Household {
@@ -587,14 +578,7 @@ function figureCurrency(excerpt: string, value: number, page: string): string | 
   const text = plainText(excerpt);
   const codes = new Set(anyMoneyFigures(text).filter((f) => Math.abs(f.value - value) < 0.005).map((f) => statedCurrencyCode(text.slice(f.index, f.index + f.length))));
   if (codes.size > 1) return null;
-  return [...codes][0] ?? tableCurrencyFor(text, value, page);
-}
-/** The page's declared currency for a figure printed without its own: for a bare "$", only a currency written with "$"
- * (a "$" under a "(GBP)" or "(RM)" heading names none: lib/format/currency currencyOfAmount). */
-function tableCurrencyFor(text: string, value: number, page: string): string | null {
-  const declared = declaredCurrency(page);
-  const dollar = anyMoneyFigures(text).some((f) => Math.abs(f.value - value) < 0.005 && /\$/.test(text.slice(f.index, f.index + f.length)));
-  return dollar ? currencyOfAmount("$", declared) : declared;
+  return [...codes][0] ?? declaredCurrency(page);
 }
 /** The currency of a cap figure: the one printed with it in the excerpt; for a bare "$", the currency its page declares
  * (Critic B2); otherwise null. Two different ones printed with it give null. */
@@ -604,7 +588,7 @@ function capFigureCurrency(excerpt: string, value: number, page: string): string
   const codes = new Set(figures.map((f) => statedCurrencyCode(text.slice(f.index, f.index + f.length))).filter((c): c is string => !!c));
   if (codes.size === 1) return [...codes][0];
   if (codes.size > 1) return null;
-  return figures.some((f) => /\$/.test(text.slice(f.index, f.index + f.length))) ? currencyOfAmount("$", declaredCurrency(page)) : null;
+  return figures.some((f) => /\$/.test(text.slice(f.index, f.index + f.length))) ? declaredCurrency(page) : null;
 }
 /** What a percentage is of may be the sum insured only when the row says so, read with ALLOW-lists in any wording (Critic
  * audit of 5c1075d7, A1 and B1: a list of other bases leaks, "10% Basic Premium", "5% Initial Investment Amount"). After
@@ -1011,7 +995,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       else { out.dropped.push({ what: label, why: `premium ${premium} not printed in the quote or on the page's one plain premium line for this life only; kept the cover without it` }); premium = null; }
     }
     const currency = sumInsured == null && premium == null ? null
-      : statedCurrencyCode(source.excerpt) ?? (premiumSource ? statedCurrencyCode(premiumSource.excerpt) : null) ?? declaredFor(source.excerpt, pageText(source.page));
+      : statedCurrencyCode(source.excerpt) ?? (premiumSource ? statedCurrencyCode(premiumSource.excerpt) : null) ?? declaredCurrency(pageText(source.page));
     const page = pageText(source.page);
     const policyNumber = str(c.policyNumber) && squashed(page).includes(squashed(str(c.policyNumber)!)) ? str(c.policyNumber) : null;
     // A page that says its sum insured is not what is paid (a bonus base): the figure is kept for matching only.
@@ -1042,7 +1026,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     const at = find(line.trim(), c.page);
     const said = !at || at.page !== c.page || at.excerpt.includes("\n") ? null : stacked.length ? stacked[0].label : premiumLineLabel(at.excerpt, premium);
     if (!at || !said || !PLAIN_PREMIUM.test(said)) continue;
-    const currency = statedCurrencyCode(at.excerpt) ?? declaredFor(at.excerpt, text);
+    const currency = statedCurrencyCode(at.excerpt) ?? declaredCurrency(text);
     if (c.currency && currency && c.currency !== currency) continue;
     const frequencies = [...text.matchAll(/\b(?:payment|premium)\s+(?:frequency|mode)\s*[\t:]+\s*(monthly|quarterly|half[\s-]yearly|yearly|annual(?:ly)?|single)\b/gi)].map((m) => m[1]);
     c.premium = premium; c.premiumSource = at; c.premiumLabel = said; c.premiumCurrency = currency;
@@ -1131,7 +1115,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       }
     }
     const currency = pays === "percent"
-      ? (baseSource ? statedCurrencyCode(baseSource.excerpt) ?? declaredFor(baseSource.excerpt, pageText(source.page)) : null)
+      ? (baseSource ? statedCurrencyCode(baseSource.excerpt) ?? declaredCurrency(pageText(source.page)) : null)
       : value == null ? null : figureCurrency(source.excerpt, value, pageText(source.page));
     const conditions: string[] = [], droppedConditions: string[] = [];
     for (const cond of Array.isArray(b.conditions) ? b.conditions : []) {

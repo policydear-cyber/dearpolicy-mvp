@@ -1021,12 +1021,19 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   return { json: { ...(json as object), statements }, report };
 }
 
-/** Words that promise the printed words, or the figure in them, are shown with the answer ("the daily figure is quoted
- * below as the policy prints it", "the amount is quoted here from the policy"). Only the server shows what a document
- * prints, on a card or as a point's quote: a promise of it is a promise of nothing once no amount is shown (live run 13 Nov,
- * a family schedule's hospital cash: the answer said its figure was "quoted below" and nothing followed). */
-// Only an amount or figure said to be quoted: "the claims rule quoted below" is a point about words, kept as it is.
-const QUOTE_POINTER = /\b(?:amounts?|figures?|rates?|sums?|limits?)\s+(?:(?:is|are)\s+)?(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)\b/i;
+/** Words that promise the printed figure is shown with the answer ("the daily figure is quoted below as the policy prints
+ * it", "the amount quoted here"). Only the server shows what a document prints, on a card or as a point's quote: once no
+ * amount is shown the promise is of nothing (live run 13 Nov, a family schedule's hospital cash: the answer said its figure
+ * was "quoted below" and nothing followed). Only an amount, figure, sum or limit said to be quoted: "the claims rule quoted
+ * below" is about words, and a premium or exchange rate is no benefit amount; both are kept as they are. */
+const QUOTE_POINTER = /\b(?:amounts?|figures?|sums?|limits?)\s+(?:(?:is|are)\s+)?(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)\b/i;
+/** The same words used as a name ("the amount quoted below is not paid if ..."): said of the benefit, as "shown below" is. */
+const QUOTED_AS_NAME = /\b(the\s+)?(?:amount|figure|sum|limit)(s?)\s+(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)\b/gi;
+/** A clause that does nothing but promise the quote ("so the daily amount is quoted here from the policy, not given as a
+ * card"): it goes whole. */
+const ONLY_QUOTE_PROMISE = /^(?:(?:and|but|so|while|although|though)\s+)?(?:[\p{L}'’-]+\s+){0,4}(?:amounts?|figures?|sums?|limits?)\s+(?:is|are)\s+(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)(?:\s+(?:from|in|as)\b[^,;.]*)?(?:,\s*(?:and\s+)?not\s+(?:given|shown)\s+(?:as|on)\s+(?:a\s+)?cards?)?\s*[.!?]?$/iu;
+/** Where a figure is quoted, said beside a point ("..., with the limit quoted in full below", "..., quoted below"). */
+const QUOTED_WHERE = /,\s*(?:with\s+(?:the|its|their)\s+(?:[\p{L}-]+\s+){0,2}(?:amounts?|figures?|sums?|limits?)\s+|(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?)(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)\b,?/giu;
 /** Words that point at an amount shown with them ("the Product Summary shows this amount", "the amounts below"), or at a
  * quote of it (QUOTE_POINTER). */
 export const AMOUNT_POINTER = new RegExp(String.raw`\b(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b(?!\s+(?:insured|assured)\b)|\b(?:the\s+)?(?:amounts?|figures?|cards?)\s+(?:below|shown(?!\s+(?:in|on|by)\b)|here)\b|\b(?:amounts?|figures?)\s+(?:is|are)\s+(?:shown\s+|listed\s+)?below(?=\s*(?:[.,;:!]|$))|\b(?:shown|listed|set\s+out)\s+below\b|${QUOTE_POINTER.source}`, "i");
@@ -1054,18 +1061,34 @@ const ofBenefit = (sentence: string) => {
 function withoutPointer(sentence: string): string | null {
   if (!AMOUNT_POINTER.test(sentence)) return sentence;
   // "..., shown below" only says where: the sentence stays without it (live run 23 Oct after #111, A6).
-  const where = sentence.replace(/,\s*(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?(?:shown|listed|set\s+out|quoted|cited|reproduced)\s+(?:in\s+full\s+)?below\b,?/gi, "").replace(/\s+([.,;:!?])/g, "$1").trim();
+  const where = sentence.replace(/,\s*(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?(?:shown|listed|set\s+out)\s+below\b,?/gi, "").replace(/\s+([.,;:!?])/g, "$1").trim();
   if (where !== sentence.trim() && where && !AMOUNT_POINTER.test(where)) return where;
-  // A clause that promises a quote says nothing of the benefit ("so the daily amount is quoted here from the policy, not
-  // given as a card"): it goes whole, never kept as a condition or said of the benefit.
-  if (!QUOTE_POINTER.test(sentence)) {
-    if (CONDITION_OF_AMOUNT(sentence)) return ofBenefit(sentence);
-    if (!POSITIVE_POINTER.test(sentence)) { const said = asBenefit(sentence); if (!AMOUNT_POINTER.test(said)) return said; }
-  }
+  if (QUOTE_POINTER.test(sentence)) return withoutQuotePointer(sentence);
+  if (CONDITION_OF_AMOUNT(sentence)) return ofBenefit(sentence);
+  if (!POSITIVE_POINTER.test(sentence)) { const said = asBenefit(sentence); if (!AMOUNT_POINTER.test(said)) return said; }
   const parts = clauses(sentence);
   if (AMOUNT_POINTER.test(parts[0])) return null;
   const kept = parts.filter((x) => !AMOUNT_POINTER.test(x)).join(", ").replace(/[\s,;:]+$/, "");
   return /[.!?]$/.test(kept) ? kept : `${kept}.`;
+}
+/** A sentence without its promise of a quoted figure: "..., with the limit quoted in full below" and a clause that only
+ * promises the quote go; "the amount quoted below" in a clause that says something of it is said of the benefit ("This
+ * benefit is not paid if ..."), as "the amount shown below" is. Null when the sentence opens with only the promise. */
+function withoutQuotePointer(sentence: string): string | null {
+  const where = sentence.replace(QUOTED_WHERE, "").replace(/\s+([.,;:!?])/g, "$1").trim();
+  if (where !== sentence.trim()) return where ? withoutPointer(where) : null;
+  const parts = clauses(sentence);
+  if (ONLY_QUOTE_PROMISE.test(parts[0].trim())) return null;
+  const kept = parts.filter((c) => !ONLY_QUOTE_PROMISE.test(c.trim()))
+    .map((c) => c.replace(QUOTED_AS_NAME, (_m, the: string | undefined, pl: string) => the ? (pl ? "these benefits" : "this benefit") : pl ? "benefits" : "benefit"))
+    // A promise left inside a clause that says more ("the figure is quoted below and paid from day 3") cannot be said of
+    // the benefit: that clause goes.
+    .filter((c) => !QUOTE_POINTER.test(c));
+  if (!kept.length) return null;
+  const joined = kept.join(", ").replace(/[\s,;:]+$/, "");
+  const said = /[.!?]$/.test(joined) ? joined : `${joined}.`;
+  const text = said.charAt(0).toUpperCase() + said.slice(1);
+  return AMOUNT_POINTER.test(text) ? withoutPointer(text) : text;
 }
 /** A text without what points at an amount. */
 export const withoutPointers = (text: string) => sentences(text ?? "").map(withoutPointer).filter((x): x is string => !!x).join(" ").trim();
