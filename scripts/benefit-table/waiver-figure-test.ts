@@ -63,6 +63,24 @@ test("W3 HK$ schedule: 'Premium Eraser' and 'TPD Waiver' carry no amount", () =>
   assert.equal(s.cov("Premium Eraser")?.sumInsured, null);
   assert.equal(s.cov("TPD Waiver")?.sumInsured, null);
 });
+test("W4 a glued line joining a waiver to a real cover: the cover keeps its sum, the waiver gets none (Critic #460)", () => {
+  const glued = "Crisis Waiver III\tIn Force\t150.00\tTerm Life\tIn Force\t100,000.00";
+  const text = [`Benefit Details`, `Life Assured Name:\t${PERSON}`, `Policy Number:\t80112233`, "Component\tStatus\tSum Assured", glued].join("\n");
+  const doc: SourceDoc = { id: DOC, name: "Schedule.pdf", readable: true, pages: [{ page: 1, text }] };
+  const cv = (cover: string, sum: number) => ({ person: PERSON, product: "Harbour Protector", cover, plan: null, riderOf: null, policyNumber: "80112233", sumInsured: sum, premium: null,
+    premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 1, quote: glued });
+  const bn = (benefit: string, value: number) => ({ section: "Component", column: "Sum Assured", benefit, pays: "amount", value, period: null, basis: null, asOf: null,
+    percentOf: null, baseAmount: null, baseQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: glued });
+  const r = checkReading(doc, { document: { kind: "personal_proof", product: "Harbour Protector", insurer: null, namedPeople: [PERSON], plan: null, periodFrom: null, periodTo: null },
+    covers: [cv("Crisis Waiver III", 150), cv("Term Life", 100000)], benefits: [bn("Crisis Waiver III", 150), bn("Term Life", 100000)] });
+  const t = assembleTable([r], family, []);
+  assert.equal(t.people[0].covers.find((c) => c.cover === "Term Life")?.sumInsured, 100000, "Term Life keeps its sum");
+  assert.equal(t.people[0].covers.find((c) => c.cover === "Crisis Waiver III")?.sumInsured, null, "the waiver has none");
+  // The checked reading's rows (the table leaves a line naming two covers unattributed either way).
+  const kept = (r as unknown as { benefits: { benefit: string; value: number | null }[] }).benefits;
+  assert.equal(kept.find((b) => b.benefit === "Term Life")?.value, 100000, "Term Life's row keeps 100,000");
+  assert.equal(kept.find((b) => b.benefit === "Crisis Waiver III")?.value, null, "the waiver's row shows no 150");
+});
 // Negative controls: a cover that only mentions a waiver, or waives something other than premiums, keeps its sum.
 test("N1 a waiver of something else keeps its sum (excess, deductible, waiting period)", () => {
   const s = schedule([["Harbour Protector", "S$100,000.00", "S$150.00"], ["Collision Damage Waiver", "S$5,000.00", "S$12.00"], ["Waiver of Deductible", "S$3,000.00", "S$8.00"]]);

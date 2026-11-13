@@ -122,6 +122,6 @@ export function money(n: number, currency: string | null): string {
 export function noSumText(cover: { cover: string; source?: { excerpt?: string | null } | null }): string {
   const line = cover.source?.excerpt ?? "";
   if (line.includes("[amount not checked]")) return "Sum insured not checked against the page";
-  if (namesWaiverRider(cover.cover, line)) return "Waives premiums: no sum of its own";
+  if (namesWaiverRider(cover.cover)) return "Waives premiums: no sum of its own";
   return "Sum insured not printed";
 }

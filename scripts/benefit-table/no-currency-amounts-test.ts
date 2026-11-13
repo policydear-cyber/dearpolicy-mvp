@@ -77,6 +77,28 @@ test("A3 a page whose other lines were held back by the page check is still a pa
   const r = ask(build([...LINES, ["Medical Reimbursement III", "[amount not checked]"]]), /^Accelerated Disability/);
   assert.deepEqual(r.cards.map((c) => c.text), ["13,500"]);
 });
+test("A4 a page with an address, a registration number and codes beside words is still a page with no currency", () => {
+  const r = ask(build(LINES, { extra: "Policy Status:\tIn Force\n779 HARBOUR WALK 09\nSingapore 823213\nReg. No 199002477Z\tNRIC S9205195A\tEJ7\tfrom policy year 2 onwards\tthe 10\t7th" }), /^Total and Permanent Disability/);
+  assert.deepEqual(r.cards.map((c) => [c.text, c.currencyResolved]), [["100,000", false]]);
+});
+test("A5 a cover named for its event keeps its sum on the strict path ('Benefit' and 'Disability' are not counts)", () => {
+  const h = build([["Harbour Protector", "100,000.00"], ["Early Stage Disability Benefit", "50,000.00"]]);
+  assert.deepEqual(ask(h, /^Early Stage Disability/).cards.map((c) => c.text), ["50,000"]);
+});
+// Critic #460: any letters or a symbol beside a figure anywhere may be its currency, so the plain figure is not shown.
+for (const [n, extra] of [["rm 150.00", "Premium:\trm 150.00"], ["Usd 150.00", "Premium:\tUsd 150.00"], ["myr 150.00", "Premium:\tmyr 150.00"],
+  ["Rp 150.000", "Premium:\tRp 150.000"], ["Php 150.00", "Premium:\tPhp 150.00"], ["P150.00", "Premium:\tP150.00"], ["Kr 150", "Premium:\tKr 150"],
+  ["Fr. 150", "Premium:\tFr. 150"], ["zł 150", "Premium:\tzł 150"], ["R 150.00", "Premium:\tR 150.00"], ["US 150.00", "Premium:\tUS 150.00"],
+  ["150 dong", "Premium:\t150 dong"], ["150 taka", "Premium:\t150 taka"], ["150 kyat", "Premium:\t150 kyat"], ["150.00 baht", "Premium:\t150.00 baht"]] as const) {
+  test(`L ${n} elsewhere: the plain figure is not shown`, () => {
+    assert.deepEqual(ask(build(LINES, { extra }), /^Total and Permanent Disability/).cards, []);
+  });
+}
+test("L count: 'Benefit Age' and 'Premium Term (Years)' are never amounts on the no-currency path", () => {
+  const h = build([["Harbour Protector", "100,000.00"], ["Benefit Age", "99.00"], ["Premium Term (Years)", "20.00"]]);
+  assert.deepEqual(ask(h, /^Benefit Age/).cards, []);
+  assert.deepEqual(ask(h, /^Premium Term/).cards, []);
+});
 // Controls: any currency printed anywhere keeps the figure unresolved as on main (it may be that currency or another).
 test("C1 another page prints USD: the plain figure is not shown", () => {
   const r = ask(build(LINES, { extra: "Premium Paid:\tUSD 150.00" }), /^Total and Permanent Disability/);

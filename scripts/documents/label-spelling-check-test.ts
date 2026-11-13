@@ -47,8 +47,8 @@ async function main() {
     page([sp(ATI), "Accident Death & Dismemberment III Manual Lapse 10,000.00 1.53 02-Mar-2015 02-Mar-2040", sp(MR)]), "AccidentDeath"));
   await test("K2 Roman numeral read as 'Ill'", () => kept(text,
     page([sp(ATI), sp(ADD), "Medical Reimbursement Ill Manual Lapse 1,000.00 2.13 02-Mar-2015 02-Mar-2040"]), "Medical Reimbursement"));
-  await test("K3 Roman numeral read as 'lll' and glued", () => kept(text,
-    page([sp(ATI), "AccidentDeath&Dismembermentlll Manual Lapse 10,000.00 1.53 02-Mar-2015 02-Mar-2040", sp(MR)]), "AccidentDeath"));
+  await test("K3 Roman numeral read as 'IIl' and glued", () => kept(text,
+    page([sp(ATI), "AccidentDeath&DismembermentIIl Manual Lapse 10,000.00 1.53 02-Mar-2015 02-Mar-2040", sp(MR)]), "AccidentDeath"));
   await test("K4 the numeral as one character (Ⅲ)", () => kept(text,
     page([sp(ATI), sp(ADD), "Medical Reimbursement Ⅲ Manual Lapse 1,000.00 2.13 02-Mar-2015 02-Mar-2040"]), "Medical Reimbursement"));
   await test("K5 spaced in the text, glued in the image", () => {
@@ -86,6 +86,25 @@ async function main() {
   await test("H7 other letters, not an I/l swap ('Ilness' is not 'Illness' read twice)", () => {
     const t = page(["Critical Illness\tIn Force\t30,000.00\t0.00\t02-Mar-2015\t02-Mar-2040"]);
     held(t, page(["Critical Ilness In Force 30,000.00 0.00 02-Mar-2015 02-Mar-2040"]), "Critical Illness");
+  });
+
+  await test("H8 'Plan L' and 'Plan I' swapped in the image are two plans, not one (Critic)", () => {
+    const t = "Schedule\nPlan L\t300,000.00\nPlan I\t900,000.00";
+    const img = "Schedule\nPlan I 300,000.00\nPlan L 900,000.00";
+    held(t, img, "Plan L"); held(t, img, "Plan I");
+  });
+  await test("H9 'Rider LL' is not 'Rider II'", () => {
+    const t = "Schedule\nRider LL\t5,000.00\nRider II\t8,000.00";
+    const img = "Schedule\nRider II 5,000.00\nRider LL 8,000.00";
+    held(t, img, "Rider LL"); held(t, img, "Rider II");
+  });
+  await test("H10 an all-lower-case 'lll' is not read as III (letters, not a mixed numeral)", () => {
+    const t = page(["Plan III\tIn Force\t5,000.00\t0.00\t02-Mar-2015\t02-Mar-2040"]);
+    held(t, page(["Plan lll In Force 5,000.00 0.00 02-Mar-2015 02-Mar-2040"]), "Plan III");
+  });
+  await test("H11 'Still Birth' is not 'StiII Birth' swapped with another plan", () => {
+    const t = "Schedule\nStill Birth\t2,000.00\nStiII Birth\t4,000.00";
+    held(t, "Schedule\nStiII Birth 2,000.00\nStill Birth 4,000.00", "Still Birth");
   });
 
   console.log(`label-spelling check: ${passed} passed, ${failures.length} failed`);
