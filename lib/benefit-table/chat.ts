@@ -1022,18 +1022,45 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
 }
 
 /** Words that promise the printed figure is shown with the answer ("the daily figure is quoted below as the policy prints
- * it", "the amount quoted here"). Only the server shows what a document prints, on a card or as a point's quote: once no
- * amount is shown the promise is of nothing (live run 13 Nov, a family schedule's hospital cash: the answer said its figure
- * was "quoted below" and nothing followed). Only an amount, figure, sum or limit said to be quoted: "the claims rule quoted
- * below" is about words, and a premium or exchange rate is no benefit amount; both are kept as they are. */
-const QUOTE_POINTER = /\b(?:amounts?|figures?|sums?|limits?)\s+(?:(?:is|are)\s+)?(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)\b/i;
-/** The same words used as a name ("the amount quoted below is not paid if ..."): said of the benefit, as "shown below" is. */
-const QUOTED_AS_NAME = /\b(the\s+)?(?:amount|figure|sum|limit)(s?)\s+(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)\b/gi;
+ * it", "the amount quoted here", "the daily rate quoted below"). Only the server shows what a document prints, on a card or
+ * as a point's quote: once no amount is shown the promise is of nothing (live run 13 Nov, a family schedule's hospital
+ * cash: the answer said its figure was "quoted below" and nothing followed). Only an amount, figure, sum or limit, or a
+ * benefit's rate from an allow-list (daily, weekly, monthly, benefit, cash or hospital rate), said to be quoted: "the claims
+ * rule quoted below" is about words, and a premium, exchange, interest or tax rate is no benefit amount; both are kept. */
+const QUOTED_NOUN = String.raw`(?:amounts?|figures?|sums?|limits?|(?:daily|weekly|monthly|benefit|cash|hospital)\s+rates?)`;
+const QUOTED_WORDS = String.raw`(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)\b`;
+const QUOTE_POINTER = new RegExp(String.raw`\b${QUOTED_NOUN}\s+(?:(?:is|are)\s+)?${QUOTED_WORDS}`, "i");
+/** The same words used as a name ("the amount quoted below is not paid if ..."), with the determiner and the one word before
+ * the noun ("the daily figure", "the daily rate"): said of the benefit, as "shown below" is (benefitFor). */
+const QUOTED_AS_NAME = new RegExp(String.raw`\b(?:(the|this|that|these|those)\s+)?(?:(daily|weekly|monthly|benefit|cash|hospital)\s+)?(amount|figure|sum|limit|rate)(s?)\s+${QUOTED_WORDS}`, "giu");
+/** "The figure is quoted below and paid from day 3": the promise goes, what the figure is said to do stays. */
+const QUOTED_AND = new RegExp(String.raw`\b(?:(the|this|that|these|those)\s+)?(?:(daily|weekly|monthly|benefit|cash|hospital)\s+)?(amount|figure|sum|limit|rate)(s?)\s+(is|are)\s+${QUOTED_WORDS}(?:\s+(?:from|in|as)\s+the\s+(?:policy|schedule|document|table)(?:\s+prints\s+it)?)?\s+and\s+`, "giu");
+/** Words after which the name is the object of what is said ("up to the limit quoted below", "paid as the figure quoted
+ * below"): said as a kind of figure, never as "this benefit". */
+const AS_OBJECT = /\b(?:up\s+to|as|at|of|to|within|above|beyond|under|over|by|from|than|with|exceeds?|exceeding)\s*$/i;
+/** What a quoted name is said as: the subject is the benefit ("This benefit is not paid if ..."); an object is a kind of
+ * figure ("up to a limit", "paid as a set amount", "at a daily rate"). Null for a rate with no benefit word before it. */
+function benefitFor(det: string | undefined, adj: string | undefined, noun: string, plural: string, before: string): string | null {
+  const n = noun.toLowerCase();
+  if (n === "rate" && !adj) return null;
+  // "Benefit" before the noun names nothing more: "the benefit rate quoted below" is the benefit, never "benefit benefit".
+  const word = adj && !/^benefit$/i.test(adj) ? adj.toLowerCase() : null;
+  if (AS_OBJECT.test(before)) {
+    // A period stays with its limit or rate ("up to a monthly limit", "at a daily rate").
+    const kind = n === "limit" ? (word ? `${word} limit` : "limit") : n === "rate" ? (word ? `${word} rate` : "rate") : word ? `${word} amount` : "set amount";
+    return plural ? `${kind}s` : `${/^[aeiou]/.test(kind) ? "an" : "a"} ${kind}`;
+  }
+  if (word) return `${det ? `${det} ` : ""}${word} benefit${plural}`;
+  return det ? (plural ? "these benefits" : "this benefit") : plural ? "benefits" : "benefit";
+}
+/** Words after "is" or "are" that keep it ("is paid", "are payable", "is halved"): anything else ("does not apply") is
+ * said of the benefit without it. */
+const KEEPS_VERB = /^(?:[\p{L}-]+ed|paid|payable|made|given|shown|set|held|borne|kept|met|applicable|subject|limited|capped|not)\b/iu;
 /** A clause that does nothing but promise the quote ("so the daily amount is quoted here from the policy, not given as a
  * card"): it goes whole. */
-const ONLY_QUOTE_PROMISE = /^(?:(?:and|but|so|while|although|though)\s+)?(?:[\p{L}'’-]+\s+){0,4}(?:amounts?|figures?|sums?|limits?)\s+(?:is|are)\s+(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)(?:\s+(?:from|in|as)\b[^,;.]*)?(?:,\s*(?:and\s+)?not\s+(?:given|shown)\s+(?:as|on)\s+(?:a\s+)?cards?)?\s*[.!?]?$/iu;
+const ONLY_QUOTE_PROMISE = new RegExp(String.raw`^(?:(?:and|but|so|while|although|though)\s+)?(?:[\p{L}'’-]+\s+){0,4}${QUOTED_NOUN}\s+(?:is|are)\s+${QUOTED_WORDS}(?:\s+(?:from|in|as)\b[^,;.]*)?(?:,\s*(?:and\s+)?not\s+(?:given|shown)\s+(?:as|on)\s+(?:a\s+)?cards?)?\s*[.!?]?$`, "iu");
 /** Where a figure is quoted, said beside a point ("..., with the limit quoted in full below", "..., quoted below"). */
-const QUOTED_WHERE = /,\s*(?:with\s+(?:the|its|their)\s+(?:[\p{L}-]+\s+){0,2}(?:amounts?|figures?|sums?|limits?)\s+|(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?)(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)\b,?/giu;
+const QUOTED_WHERE = new RegExp(String.raw`,\s*(?:with\s+(?:the|its|their)\s+(?:[\p{L}-]+\s+){0,2}${QUOTED_NOUN}\s+|(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?)${QUOTED_WORDS},?`, "giu");
 /** Words that point at an amount shown with them ("the Product Summary shows this amount", "the amounts below"), or at a
  * quote of it (QUOTE_POINTER). */
 export const AMOUNT_POINTER = new RegExp(String.raw`\b(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b(?!\s+(?:insured|assured)\b)|\b(?:the\s+)?(?:amounts?|figures?|cards?)\s+(?:below|shown(?!\s+(?:in|on|by)\b)|here)\b|\b(?:amounts?|figures?)\s+(?:is|are)\s+(?:shown\s+|listed\s+)?below(?=\s*(?:[.,;:!]|$))|\b(?:shown|listed|set\s+out)\s+below\b|${QUOTE_POINTER.source}`, "i");
@@ -1080,7 +1107,13 @@ function withoutQuotePointer(sentence: string): string | null {
   const parts = clauses(sentence);
   if (ONLY_QUOTE_PROMISE.test(parts[0].trim())) return null;
   const kept = parts.filter((c) => !ONLY_QUOTE_PROMISE.test(c.trim()))
-    .map((c) => c.replace(QUOTED_AS_NAME, (_m, the: string | undefined, pl: string) => the ? (pl ? "these benefits" : "this benefit") : pl ? "benefits" : "benefit"))
+    .map((c) => c
+      .replace(QUOTED_AND, (m, det: string | undefined, adj: string | undefined, noun: string, pl: string, verb: string, at: number, all: string) => {
+        const said = benefitFor(det, adj, noun, pl, all.slice(0, at));
+        if (!said) return m;
+        return KEEPS_VERB.test(all.slice(at + m.length)) ? `${said} ${said.endsWith("benefits") ? "are" : verb} ` : `${said} `;
+      })
+      .replace(QUOTED_AS_NAME, (m, det: string | undefined, adj: string | undefined, noun: string, pl: string, at: number, all: string) => benefitFor(det, adj, noun, pl, all.slice(0, at)) ?? m))
     // A promise left inside a clause that says more ("the figure is quoted below and paid from day 3") cannot be said of
     // the benefit: that clause goes.
     .filter((c) => !QUOTE_POINTER.test(c));
