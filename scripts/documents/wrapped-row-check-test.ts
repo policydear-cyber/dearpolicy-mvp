@@ -260,6 +260,14 @@ async function main() {
       "100,000", [...g4, [84, 303]], [80, 100, 120, 135, 160]);
   });
 
+  await test("N21 row gaps come from the row's own table: not from another table's rows, nor under a numbered heading", () => {
+    const image = (t: string) => t.replace("Death\tRM 200,000\nTPD\tRM 100,000", "Death TPD\tRM 200,000 RM 100,000");
+    const z1 = "Benefit\tAmount\nDeath\tRM 200,000\nTPD\tRM 100,000\nSection B\nBenefit\tLimit\nICU\tRM 300\nAmbulance\tRM 500\nDental\tRM 400";
+    held(z1, image(z1), "100,000", [[84, 303], [84, 303], [84, 303], [78], [84, 303], [84, 303], [84, 303], [84, 303]], [80, 100, 112, 140, 160, 180, 204, 228]);
+    const z3 = "Schedule 1 Benefits\nDeath\tRM 200,000\nTPD\tRM 100,000\nSchedule 2 Extras\nICU\tRM 300\nAmbulance\tRM 500\nDental\tRM 400";
+    held(z3, image(z3), "100,000", [[78], [84, 303], [84, 303], [78], [84, 303], [84, 303], [84, 303]], [80, 100, 112, 140, 160, 184, 208]);
+  });
+
   if (failures.length) { console.error(failures.join("\n\n")); console.error(`\n${failures.length} failed, ${passed} passed`); process.exit(1); }
   console.log(`wrapped-row-check: ${passed} passed`);
 }
