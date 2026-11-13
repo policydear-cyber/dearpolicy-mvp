@@ -897,8 +897,9 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   return { s: { ...st, kind: "amount", percentOf: null, alternativeGroup: st.alternativeGroup }, found, person, note: null, whole: basis + timesLine(sf, household, cap, money),
     amount: { value, text: (capped ? "Up to " : "") + money(value), currencyResolved: cur.resolved, illustration: true } };
 }
-/** A named note's multiple as a condition beside the card's single amount, in the note's own printed words (". If this
- * applies (page 2: "a compound fracture is paid at double ..."), it pays double: £800, within its maximum of £1,500"). Read
+/** A named note's multiple as a condition beside the card's single amount, in the note's own printed words ('. Note (a) on
+ * page 2 says: "a compound fracture is paid at double ...". If that applies, this pays £800 (double), within the £1,500
+ * maximum'; above the maximum: 'If that applies, double would be £3,200, but the most it pays is £1,500'). Read
  * again from the note's stored page in the row's document and checked as the row step does (one plain multiple of this
  * row's own case, lib/benefit-table/multiplier.ts noteMultiple); the multiplied share is never past the printed maximum,
  * and above it only when the note keeps that maximum. It is true whoever the case is, so the household's words are not
@@ -912,8 +913,13 @@ function timesLine(sf: ServerFigure, household: Household, cap: { value: number;
   const worked = Math.round(sf.base.value * sf.percent * d.times) / 100;
   if (cap && worked > cap.value + 0.005 && !keepsCapIn(sf.times.quote, cap.value)) return "";
   const capped = !!cap && worked > cap.value;
-  const note = sf.times.quote.trim().replace(/[.;]+$/, "");
-  return `. If this applies (page ${tf.page}: "${note}"), it pays ${timesWords(d.times)}: ${capped ? `${money(worked)}, more than the most it pays, so up to ${money(cap!.value)}` : `${money(worked)}${cap ? `, within its maximum of ${money(cap.value)}` : ""}`}`;
+  // The note by its own printed label when it has one ("Note (a) on page 2 says"), else by the page.
+  const label = /^\s*(note\s*(?:\([a-z0-9]+\)|[a-z0-9]+\b)?)\s*[:.-]\s*/i.exec(sf.times.quote);
+  const words = sf.times.quote.slice(label ? label[0].length : 0).trim().replace(/[.;]+$/, "");
+  const says = label ? `${label[1].replace(/^note/i, "Note")} on page ${tf.page} says` : `The policy (page ${tf.page}) says`;
+  const times = timesWords(d.times);
+  return `. ${says}: "${words}". If that applies, ${capped ? `${times} would be ${money(worked)}, but the most it pays is ${money(cap!.value)}`
+    : `this pays ${money(worked)} (${times})${cap ? `, within the ${money(cap.value)} maximum` : ""}`}`;
 }
 /** The cover a row's percentage is of, by name ("20% of the Critical Illness sum assured" -> ["critical", "illness"]); empty
  * when the row says only "of (the) Sum Assured". */

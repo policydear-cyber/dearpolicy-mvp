@@ -4,9 +4,9 @@ import { moneyFiguresIn } from "@/lib/chat/answer-verification";
  * Section 3 amount, still subject to the GBP 1,500 maximum"). Harbourline family PA test, 13 Nov: "It was a compound
  * fracture." still showed the single 2% of the sum beside prose saying it is doubled.
  * When the model names the note in an amount statement's "multiplierNote", the card keeps the row's single amount and adds
- * the multiple as a condition in the note's own printed words, with its figure worked out within the printed maximum ("If
- * this applies (page 2: "a compound fracture is paid at double ..."), it pays double: £800, within its maximum of
- * £1,500"). That line is true whoever the case is, so the household's words are never read to decide whom it is for: seven
+ * the multiple as a condition in the note's own printed words, with its figure worked out within the printed maximum ('Note
+ * (a) on page 2 says: "a compound fracture is paid at double ...". If that applies, this pays £800 (double), within the
+ * £1,500 maximum'). That line is true whoever the case is, so the household's words are never read to decide whom it is for: seven
  * gate rounds (PR #472) showed a hand-written reader of who and when cannot be the gate. The server checks only the note:
  * one of the row's own printed conditions, one plain multiple (no negation, "up to", "at most", another section's or
  * another row's case, or a trait). A note failing a check adds nothing; no note named gives main's card. Read by the row
@@ -35,7 +35,7 @@ const LIMIT_BEFORE = /\b(?:up\s+to|at\s+most|maximum\s+of|not\s+exceeding|no\s+m
 
 /** The one multiple a condition prints, with its words left once it is taken out, and whether the note pays it plainly;
  * "unsure" when it prints two different ones; null when none (or 1: "100% of the benefit" is the amount itself). */
-export function multipleIn(text: string): { times: number; rest: string; plain: boolean } | "unsure" | null {
+export function multipleIn(text: string): { times: number; rest: string; plain: boolean; at: RegExpMatchArray; count: number } | "unsure" | null {
   const found = [...text.matchAll(MULTIPLE)].map((m) => {
     const w = (m[1] ?? m[2] ?? m[3] ?? m[4] ?? "").toLowerCase();
     return { at: m, times: m[5] != null ? Number(m[5]) / 100 : TIMES[w] ?? Number(w) };
@@ -45,7 +45,41 @@ export function multipleIn(text: string): { times: number; rest: string; plain: 
   let rest = text;
   for (const x of found) rest = rest.replace(x.at[0], " , ");
   const plain = !NOTE_NEGATION.test(text) && !found.some((x) => LIMIT_BEFORE.test(text.slice(Math.max(0, x.at.index! - 40), x.at.index!)));
-  return { times: found[0].times, rest, plain };
+  return { times: found[0].times, rest, plain, at: found[0].at, count: found.length };
+}
+
+/** Words that change what a multiple is paid on or take something off it ("less any amount already paid", "net of", "the
+ * Sum Insured"): a note holding one is never said as a plain multiple of this row's amount (gate round 8). */
+const ARITHMETIC = /\b(?:less|minus|deduct\w*|net\s+of|offset\w*|reduc\w*|plus|additional|in\s+addition)\b/i;
+const OTHER_BASE = /\bsums?\s+(?:insured|assured)\b|\binsured\s+amount\b|\bcover(?:age)?\s+amount\b|\bpremiums?\b|\bsalar(?:y|ies)\b|\bearnings\b|\bincome\b/i;
+/** What a multiple may be of: "the amount", "the Section 3 amount", "the benefit", "its rate", "the fracture benefit". */
+const OBJECT = /^(?:the|its|this|that)\s+((?:[\w-]+\s+){0,3}?)(?:amount|benefit|rate|sum\s+payable|figure)\b/i;
+/** The only words a note may have after its multiple (gate round 8, an allow-list on the note's shape): "is paid", a case
+ * ("if the accident happens at work", "for a fracture of a finger"), the row's maximum kept ("still subject to the GBP
+ * 1,500 maximum per accident", "subject to the same limit") and "per accident". */
+const AFTER: RegExp[] = [
+  /^(?:is|are|will\s+be|shall\s+be)\s+(?:paid|payable)\b/i,
+  /^(?:if|when|while|where|for|during|in|on|at)\b[^,;.]*/i,
+  /^(?:(?:still|but|and|always)\s+)?subject\s+to\s+(?:the\s+|a\s+)?(?:(?:same|overall|(?:[A-Z]{3}|[£$€]|S\$|RM)\s?\d[\d,]*(?:\.\d+)?)\s+)*(?:maximum|limit|cap)\b(?:\s+(?:per|for\s+each|for\s+any\s+one|of)\s+(?:accident|claim|event|fracture|injury|person|insured\s+person|day))?/i,
+  /^per\s+(?:accident|claim|event|fracture|injury|person|day)\b/i,
+];
+/** Whether a note's words are only a case, its one multiple of this row's own amount, and the row's maximum kept: no other
+ * base ("double the Sum Insured"), no deduction ("less any amount already paid") and nothing else after the multiple. */
+function plainShape(note: string, m: { at: RegExpMatchArray; count: number }, row: RowFacts): boolean {
+  if (m.count !== 1 || ARITHMETIC.test(note) || OTHER_BASE.test(note)) return false;
+  const ownSection = row.section ? sectionKey(row.section) : "";
+  const mine = new Set(tokens(row.own.split("\n")[0] ?? "").map(stem));
+  const ofMine = (mid: string) => tokens(mid).every((w) => (w === "section" && !!ownSection) || w === ownSection || ["benefit", "basic", "daily", "this", "that", "its"].includes(w) || mine.has(stem(w)));
+  const said = m.at[0], i = said.search(/\b(?:the|its|this|that)\s/i);
+  let rest = note.slice(m.at.index! + said.length);
+  if (i >= 0) { const o = OBJECT.exec(said.slice(i)); if (!o || !ofMine(o[1])) return false; }
+  else { const o = OBJECT.exec(rest.trimStart()); if (o) { if (!ofMine(o[1])) return false; rest = rest.trimStart().slice(o[0].length); } }
+  for (let moved = true; moved;) {
+    moved = false;
+    rest = rest.replace(/^[\s,;]+/, "");
+    for (const p of AFTER) { const x = p.exec(rest); if (x && x[0].length) { rest = rest.slice(x[0].length); moved = true; break; } }
+  }
+  return /^[\s.;:)]*$/.test(rest);
 }
 
 /** A condition that keeps the row's printed maximum on the multiplied amount: it prints only that maximum's figure, or says
@@ -127,15 +161,16 @@ export const sameNote = (said: string, printed: string) => {
   return a.length > 0 && (a === n(printed) || (a.length >= 12 && printed.split(";").some((p) => n(p) === a)));
 };
 
-/** The multiple a row's own printed note pays, as a condition the card can say beside its single amount ("If this applies:
- * ... it pays double: £800"), or null (the card is then as before). Only the note's own structure is checked, never whom
+/** The multiple a row's own printed note pays, as a condition the card can say beside its single amount ("If that applies,
+ * this pays £800 (double)"), or null (the card is then as before). Only the note's own structure is checked, never whom
  * the household's words are about: the conditional line is true whoever the case is (PR #472 round 7). The note pays one
- * plain multiple (no negation, "up to", "at most"); names no section but the row's own (a row with no section of its own
+ * plain multiple (no negation, "up to", "at most") of this row's own amount, with nothing after it but a case, the row's
+ * maximum kept and "per accident" (plainShape: never "double the Sum Insured" or "less any amount already paid"); names no section but the row's own (a row with no section of its own
  * cannot be told apart) and, with no section number, no case word of another of the person's benefits (W4); and is not
  * keyed on who the person is (a trait note). */
 export function noteMultiple(note: string, row: RowFacts): Multiplier | null {
   const m = multipleIn(note);
-  if (!m || m === "unsure" || !m.plain) return null;
+  if (!m || m === "unsure" || !m.plain || !plainShape(note, m, row)) return null;
   const refs = [...note.matchAll(SECTION_REF)].map((x) => sectionKey(x[1]));
   const own = row.section ? sectionKey(row.section) : "";
   if (refs.length && (!own || refs.some((r) => r !== own))) return null;
