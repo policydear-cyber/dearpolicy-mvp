@@ -219,7 +219,10 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   /** The whole printed line or lines the row's quote is on, and the line after them, as the page prints them (assemble.ts
    * perPersonRow: a row whose own line or the next prints another figure, such as an age or a child's rate, is not every
    * named insured's). Unset when the quote was not placed on its page. */
-  rowText?: string; nextLine?: string; prevLine?: string };
+  rowText?: string; nextLine?: string; prevLine?: string;
+  /** The footnote marks printed on the row's column heading ("Limit per insured person*"), on its own words or where the
+   * page prints it (headingMarks): assemble.ts reads a per-person column with its note (plain-table gate round 5, R5-H2). */
+  columnMarks?: string[] };
 export type Dropped = { what: string; why: string };
 /** periodFrom and periodTo: the document's own period of cover, each kept only when the document prints it. */
 export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
@@ -665,6 +668,16 @@ export function marksIn(text: string): string[] {
     if (m[2] || /^[a-z]$/.test(k) && /\s$/.test(text.slice(0, m.index))) out.add(k);
   }
   for (const m of text.matchAll(/\*{1,3}|†|‡/g)) out.add(m[0]);
+  return [...out];
+}
+/** The footnote marks a column heading prints: in the heading the reader gave ("Limit per insured person*"), or right after
+ * it wherever the page prints it, when the reader left the mark off. */
+export function headingMarks(pageText: string, column: string): string[] {
+  const out = new Set(marksIn(column));
+  const c = column.replace(/(?:\s|\*|†|‡)+$/, "").trim();
+  if (c.length < 3) return [...out];
+  const at = new RegExp(c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "[ \\t]+") + String.raw`[ \t]*(\*{1,3}|†|‡|\(\s*(?:note\s+)?[a-z]\s*\))`, "gi");
+  for (const m of pageText.matchAll(at)) for (const k of marksIn(` ${m[1]}`)) out.add(k);
   return [...out];
 }
 export type DocumentNotes = { lifeNotes: string[]; sharedNotes: string[]; footnotes: { mark: string; text: string }[]; plainBlockers: string[]; premiumFigures: number[] };
@@ -1307,12 +1320,13 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       return { rowText: text.slice(from, to), nextLine: to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "",
         prevLine: prevFrom >= 0 ? text.slice(prevFrom, from - 1) : "" };
     })() : null;
+    const columnMarks = str(b.column) ? headingMarks(pageText(source.page), str(b.column)!) : [];
     const kind = limitKind({ benefit, section: str(b.section), quote: source.excerpt, sentence: at ? quoteSentence(pageText(source.page), at.start, at.end) : null });
     out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays, value, period, basis, asOf: dateOnPage(str(b.asOf), pageText(source.page)),
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
-      limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}),
+      limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}), ...(columnMarks.length ? { columnMarks } : {}),
       ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}) });
   }

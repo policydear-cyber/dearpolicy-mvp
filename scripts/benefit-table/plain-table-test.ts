@@ -286,6 +286,56 @@ for (const line of ["The policyholder must tell us about any change in health.",
 test("H4: the base bug stays fixed: 'Benefits for children under 18 are 50% of the amounts shown' withholds the per-person limits", () => {
   assert.deepEqual(travel(["Benefits for children under 18 are 50% of the amounts shown."]), [0, 0, 0]);
 });
+// R5-H2 (plain-table gate round 5): a per-person column ("Limit per insured person") is held to the plain path's checks:
+// shared and family words, the heading's own footnote and note, payment and premium rows.
+function perPersonColumn(o: { heading?: string; column?: string; rows?: [string, string, number][]; extra?: string[] }) {
+  const lives = ["Asha Rao", "Ben Rao", "Kiran Rao"];
+  const rows = o.rows ?? [["Overseas medical expenses", "S$500,000", 500000], ["Trip cancellation", "S$10,000", 10000]];
+  const column = o.column ?? "Limit per insured person";
+  const text = ["GLOBE TRAVEL ANNUAL - CERTIFICATE OF INSURANCE", `Certificate C-7\tInsured persons: ${lives.join(", ")}`, "Insured person\tCover", ...lives.map((n) => `${n}\tGlobe Travel Annual`),
+    o.heading ?? `Benefit\t${column}`, ...rows.map(([b, c]) => `${b}\t${c}`), "Terms and conditions apply.", ...(o.extra ?? [])].join("\n");
+  const { r, links } = build({ id: TRAVEL, lives, text, rows: rows.map(([benefit, cell, value]) => ({ benefit, value, quote: `${benefit}\t${cell}`, column })) });
+  for (const b of r.benefits) b.forWhom = "each_named_insured";
+  const t = assembleTable([r], BASE_FAMILY, links, [], NOW);
+  return Object.fromEntries(["a", "b", "k"].map((id) => [id, t.people.find((p) => p.id === id)!.rows.filter((x) => x.figure.kind !== "none").map((x) => x.benefit)]));
+}
+const noOne = { a: [], b: [], k: [] };
+test("R5-H2 positive: a per-person column with no shared, family or premium words still gives each person both limits", () => {
+  const all = ["Overseas medical expenses", "Trip cancellation"];
+  assert.deepEqual(perPersonColumn({}), { a: all, b: all, k: all });
+});
+test("R5-H2 (H5i): 'Overseas medical expenses S$500,000 per family' under a per-person column is no one's own", () => {
+  const got = perPersonColumn({ rows: [["Overseas medical expenses", "S$500,000 per family", 500000], ["Trip cancellation", "S$10,000", 10000]] });
+  for (const id of ["a", "b", "k"]) assert.ok(!got[id].includes("Overseas medical expenses"), `${id}: ${got[id]}`);
+});
+for (const column of ["Limit per insured person*", "Limit per insured person"]) {
+  test(`R5-H2 (H5e): heading 'Limit per insured person*' with '* One limit shared by the family.' below (reader's column '${column}') withholds the rows`, () => {
+    assert.deepEqual(perPersonColumn({ heading: "Benefit\tLimit per insured person*", column, extra: ["* One limit shared by the family."] }), noOne);
+  });
+  test(`R5-H2: heading 'Limit per insured person*' with a note that is not a row shape ('* Limits apply to the household.'; column '${column}') withholds the rows`, () => {
+    assert.deepEqual(perPersonColumn({ heading: "Benefit\tLimit per insured person*", column, extra: ["* Limits apply to the household."] }), noOne);
+  });
+  test(`R5-H2: heading 'Limit per insured person*' whose note is not printed (column '${column}') withholds the rows`, () => {
+    assert.deepEqual(perPersonColumn({ heading: "Benefit\tLimit per insured person*", column }), noOne);
+  });
+}
+test("R5-H2: heading 'Limit per insured person*' with '* per period of insurance' (a row shape only) still gives each person both limits", () => {
+  const all = ["Overseas medical expenses", "Trip cancellation"];
+  assert.deepEqual(perPersonColumn({ heading: "Benefit\tLimit per insured person*", column: "Limit per insured person*", extra: ["* per period of insurance"] }), { a: all, b: all, k: all });
+});
+for (const benefit of ["Family personal liability", "Personal liability (shared)", "Household personal liability"]) {
+  test(`R5-H2 (H3): '${benefit} S$1,000,000' under a per-person column is no one's own`, () => {
+    const got = perPersonColumn({ rows: [["Overseas medical expenses", "S$500,000", 500000], [benefit, "S$1,000,000", 1000000]] });
+    for (const id of ["a", "b", "k"]) assert.ok(!got[id].includes(benefit), `${id}: ${got[id]}`);
+  });
+}
+test("R5-H2 (H12): 'Annual premium S$120' in a 'Premium | Per insured person' table is no one's benefit", () => {
+  assert.deepEqual(perPersonColumn({ heading: "Premium\tPer insured person", column: "Per insured person", rows: [["Annual premium", "S$120", 120]] }), noOne);
+});
+test("R5-H2: 'Trip cancellation S$120' under a per-person column, the premium line printing S$120, is no one's own", () => {
+  const got = perPersonColumn({ extra: ["Premium paid: S$120"], rows: [["Overseas medical expenses", "S$500,000", 500000], ["Trip cancellation", "S$120", 120]] });
+  for (const id of ["a", "b", "k"]) assert.ok(!got[id].includes("Trip cancellation"), `${id}: ${got[id]}`);
+});
 test("H4: 'Signed on behalf of the policyholder: N. Okafor' does not block the plain table", () => {
   const { table } = schedule({ post: ["Signed on behalf of the policyholder: N. Okafor"] });
   for (const id of NAMED) assert.equal(fixedShown(table, id).length, 2, id);

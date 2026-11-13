@@ -802,6 +802,32 @@ function anotherRowsNote(r: CheckedReading, b: CheckedBenefit, line: string | un
     : new RegExp(String.raw`\(\s*(?:note\s+)?${mark}\s*\)|\bnote\s+${mark}\b`, "i").test(t);
   return !marks(b.rowText ?? b.source.excerpt) && r.benefits.some((x) => x !== b && marks(x.rowText ?? x.source.excerpt));
 }
+/** Words that make a figure one for a family or household, beyond SHARED_LIMIT ("Family personal liability"). */
+const HOUSEHOLD = /\b(?:famil(?:y|ies)|households?|pool(?:ed|s)?)\b/i;
+/** A row under a per-person column ("Limit per insured person") is each named person's only when the plain path's own checks
+ * pass for it too (plain-table gate round 5, R5-H2: "S$500,000 per family", "Family personal liability", "Personal liability
+ * (shared)", a heading "Limit per insured person*" with "* One limit shared by the family.", "Annual premium S$120" under
+ * "Premium | Per insured person" were each shown as every person's own):
+ * - the document prints no line making a figure one limit for all the lives (sharedNotes);
+ * - the row's label is no payment and its figure no premium-line figure;
+ * - its label, section, column, own line, the note below it and its conditions name no shared limit, family or household,
+ *   premium or contribution;
+ * - each footnote mark its line or its column heading prints points to a note found on the document that names no life, no
+ *   other figure, no shared limit or sum insured, and prints nothing beyond the shapes a row's own cell may print
+ *   (onlyRowShapes): an allow-list, as for a plain row's note. */
+function perPersonColumnRow(r: CheckedReading, b: CheckedBenefit, next: string): boolean {
+  if ((r.sharedNotes ?? []).length) return false;
+  if (PAYMENT_LABEL.test(b.benefit) || (r.premiumFigures ?? []).some((v) => b.value != null && Math.abs(v - b.value) < 0.005)) return false;
+  const words = [b.benefit, b.section ?? "", b.column ?? "", b.rowText ?? b.source.excerpt, next, ...b.conditions].join("\n");
+  if (SHARED_LIMIT.test(words) || HOUSEHOLD.test(words) || PREMIUM.test(words) || PAYMENT_LABEL.test(b.section ?? "")) return false;
+  const people = [...r.namedPeople, ...r.covers.map((c) => c.person)];
+  for (const mark of new Set([...marksIn(b.rowText ?? b.source.excerpt), ...(b.columnMarks ?? [])])) {
+    const notes = plainFootnotes(r, mark);
+    if (!notes.length || notes.some((t) => KIND_OF_LIFE.test(t) || FIGURE_CHANGE.test(t) || SHARED_LIMIT.test(t) || HOUSEHOLD.test(t) || NAMES_SUM.test(t) || PREMIUM.test(t) || ageBand(t) || namesALife(t, people)
+      || !onlyRowShapes(t.replace(/^\s*(?:notes?\s*)?(?:\(\s*\w{1,2}\s*\)|\w{1,2}[.):]|\*{1,3}|†|‡)\s*:?/i, " ")))) return false;
+  }
+  return true;
+}
 function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<string>>, ownProof: (documentId: string, coverKey: string) => boolean) {
   const figure = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
   const firstLine = (t: string) => norm(t.split("\n")[0]);
@@ -838,6 +864,7 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
       && !KIND_OF_LIFE.test(`${x.benefit} ${x.rowText ?? x.source.excerpt} ${x.conditions.join(" ")}`);
     if ([...below, ...above].some((x) => x.forWhom !== "each_named_insured" && !shareOfOwnSum(x))) return false;
     const next = below.length || (plain && anotherRowsNote(r, b, b.nextLine)) ? "" : b.nextLine ?? "";
+    if (!plain && !perPersonColumnRow(r, b, next)) return false;
     // Each number printed may be one of the row's own figures once (amount, cap, days), never twice. The row's own section
     // number, printed in its heading and as the first cell of its line ("5  Hospital cash ..."), is its number, not a figure.
     const own = [b.value, b.cap, b.maxDays, b.fromDay].filter((n): n is number => n != null);
