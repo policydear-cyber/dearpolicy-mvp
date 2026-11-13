@@ -667,16 +667,39 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
   };
   const filledBefore = (j: number) => filledText[filledText.indexOf(j) - 1];
   const filledAfter = (j: number) => filledText[filledText.indexOf(j) + 1];
-  // Whether line j sits inside the row of the line above it (prev), by the page's own spacing: closer to it than the row
-  // stands to the line before the row (the row above, or the table's heading), and, for a value part that a row's label
-  // follows, than j stands to that line. A table that spaces its rows as it spaces a cell's lines says nothing, and the
-  // part is held (Critic #446 R4-1).
-  const inRow = (j: number, prev: number, first: number, toNext: boolean) => {
+  // Whether line j sits inside the row of the line above it (prev), by the page's own spacing (Critic #446 R4-1, Y1-Y8).
+  // The spacing is evidence only against the page's own gaps between rows: for every other line that starts a row (a
+  // label cell beside another cell, printing a figure; a sentence is no row), the gap from the line above it, when that
+  // line belongs to a row (it prints a figure, stands in a value column, or is a label part right under a figure line),
+  // never a heading's gap and never the page's or table's end. With at least two such gaps (this row's own among them), j is inside the
+  // row only when the gap from prev to j is clearly smaller (by 40%) than their median, than the gap above this row (when
+  // it is a row gap), and than the gap above the next line that starts a row. A table that spaces its rows as it spaces a
+  // cell's lines, or a page with too few rows to tell, says nothing, and the part is held.
+  const ROW_GAP = 1.4;
+  const rowGapAbove = (first: number, edge: number | undefined) => {
+    const b = filledBefore(first);
+    if (b === undefined) return undefined;
+    // A label part (one cell, words only) belongs to a row when a figure line stands above it, past up to two more parts.
+    let up = b, parts = 0;
+    while (parts < 3 && up !== undefined && !lines[up].includes("\t") && !sharedHeading(up) && !figureLine(lineTokens(lines[up]))) { up = filledBefore(up); parts++; }
+    const rowLine = figureLine(lineTokens(lines[b])) || place(b, edge) === "value"
+      || (parts > 0 && up !== undefined && figureLine(lineTokens(lines[up])));
+    return rowLine ? gap(b, first) : undefined;
+  };
+  const rowStart = (n: number, edge: number | undefined) => lines[n].includes("\t") && place(n, edge) === "label" && figureLine(lineTokens(lines[n]));
+  // `next`: the line that starts the following row (for a value part, the label line right after it).
+  const inRow = (j: number, prev: number, first: number, edge: number | undefined, next: number | undefined) => {
     const g = gap(prev, j);
     if (g === undefined) return false;
-    const before = gap(filledBefore(first), first), after = toNext ? gap(j, filledAfter(j)) : undefined;
-    if (before === undefined && after === undefined) return false;
-    return (before === undefined || g + 1 < before) && (after === undefined || g + 1 < after);
+    const lo = filledText.indexOf(first), hi = filledText.indexOf(j);
+    const refs = filledText.filter((n, u) => (u < lo || u > hi) && rowStart(n, edge))
+      .map((n) => rowGapAbove(n, edge)).filter((x): x is number => x !== undefined).sort((p, q) => p - q);
+    const above = rowGapAbove(first, edge);
+    // Two gaps between rows at least, this row's own counting.
+    if (refs.length + (above === undefined ? 0 : 1) < 2 || !refs.length) return false;
+    const median = refs.length % 2 ? refs[(refs.length - 1) / 2] : (refs[refs.length / 2 - 1] + refs[refs.length / 2]) / 2;
+    const local = [above, next === undefined ? undefined : gap(filledBefore(next), next)].filter((x): x is number => x !== undefined);
+    return g * ROW_GAP <= Math.min(median, ...local);
   };
   const ownRow = (j: number, edge: number | undefined, prev: number, labelled: boolean, i: number, first: number) => {
     // A sentence running on (the row and the line both one cell, at the page's left margin or with no place) is told by
@@ -690,7 +713,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
       // A value part with a row of its own label right after it could as well open that row's value (a label centred
       // beside its value's second line): only the page's spacing can say it is the row above's.
       const next = filledAfter(j);
-      return next !== undefined && place(next, edge) === "label" && !inRow(j, prev, first, true);
+      return next !== undefined && place(next, edge) === "label" && !inRow(j, prev, first, edge, next);
     }
     if (where === "label" && !labelled) {
       // Above the row's run of value parts and words, the nearest other line must print no figure (a heading, a title):
@@ -701,7 +724,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     }
     // A label cell with a figure, under a row that has its label: a second row, unless the page's spacing puts it inside
     // the row above (a label and an amount that both wrap, "coronary artery\tRM 25,000").
-    if (where === "label") return !inRow(j, prev, first, filledBefore(first) === undefined);
+    if (where === "label") return !inRow(j, prev, first, edge, filledText.slice(filledText.indexOf(j) + 1).find((n) => rowStart(n, edge)));
     // Two lines that both open on an amount ("$200,000 on death" over "$100,000 on total disability") are two items.
     const opensOnAmount = (l: string) => /^\S{0,4}\d/u.test(l.trim().replace(CURRENCY_MARK, "").trim()) || /^\S{0,3}\p{Sc}/u.test(l.trim());
     return endsOnFigure(prev) || !partStart(lines[j]) || (opensOnAmount(lines[prev]) && opensOnAmount(lines[j]));

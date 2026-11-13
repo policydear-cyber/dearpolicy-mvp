@@ -101,29 +101,29 @@ async function main() {
     "Harbourline Assurance plc\nPolicy number: HPA-1\tPeriod of insurance: 1 March 2026 to 28 February 2027\tCurrency of this policy: Pounds sterling (GBP)\nDate of issue: 20 February 2026 (renewal schedule; replaces the schedule dated 18 February 2025)\nInsured person\tSum Insured\nNgozi Okafor\tGBP 100,000",
     [[183], [78, 219.7, 476.5], [78], [78], [78], [84, 303], [84, 303]]));
   await test("C3 bare-$ travel certificate: '$100 for every full 6 hours of delay, up to' / '$1,000'", () => agreed(
-    "Benefit\tLimit per insured person\nTrip cancellation\t$5,000\nTravel delay\t$100 for every full 6 hours of delay, up to\n$1,000\nExcess: $150 per claim applies to medical expenses and baggage.",
-    "Benefit\tLimit per insured person\nTrip cancellation\t$5,000\nTravel delay\t$100 for every full 6 hours of delay, up to $1,000\nExcess: $150 per claim applies to medical expenses and baggage.",
-    [[84, 303], [84, 303], [84, 303], [303], [78]], [672.89, 636.89, 600.89, 588.89, 561.89]));
+    "Benefit\tLimit per insured person\nOverseas medical expenses\t$500,000\nTrip cancellation\t$5,000\nLost or damaged baggage\t$3,000 (single item limit $500)\nTravel delay\t$100 for every full 6 hours of delay, up to\n$1,000\nExcess: $150 per claim applies to medical expenses and baggage.",
+    "Benefit\tLimit per insured person\nOverseas medical expenses\t$500,000\nTrip cancellation\t$5,000\nLost or damaged baggage\t$3,000 (single item limit $500)\nTravel delay\t$100 for every full 6 hours of delay, up to $1,000\nExcess: $150 per claim applies to medical expenses and baggage.",
+    [[84, 303], [84, 303], [84, 303], [84, 303], [84, 303], [303], [78]], [672.89, 654.89, 636.89, 618.89, 600.89, 588.89, 561.89]));
 
   // ---- P: other markets and layouts --------------------------------------------------------------------------------
   await test("P1 S$ three columns, label and limit both wrap, no geometry needed for reading-order value wrap", () => agreed(
     "Benefit\tPlan A\nOutpatient cancer treatment\tS$15,000 per policy year, then 80% of\nthe next S$5,000\nHospital cash\tS$150",
     "Benefit\tPlan A\nOutpatient cancer treatment\tS$15,000 per policy year, then 80% of the next S$5,000\nHospital cash\tS$150"));
   await test("P2 EUR comma decimals, a value wrapping over three lines", () => agreed(
-    "Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem\n3. Tag, höchstens 30 Tage,\ninsgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00",
-    "Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem 3. Tag, höchstens 30 Tage, insgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00",
-    geo("Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem\n3. Tag, höchstens 30 Tage,\ninsgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00", [78, 78, 303, 303, 78]), [700, 682, 670, 658, 640]));
+    "Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem\n3. Tag, höchstens 30 Tage,\ninsgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00\nInvalidität\tEUR 50.000,00",
+    "Leistung\tBetrag\nKrankenhaustagegeld\tEUR 50,00 pro Tag ab dem 3. Tag, höchstens 30 Tage, insgesamt EUR 1.500,00\nTodesfall\tEUR 25.000,00\nInvalidität\tEUR 50.000,00",
+    [[84, 303], [84, 303], [303], [303], [84, 303], [84, 303]], [700, 682, 670, 658, 640, 622]));
   await test("P3 IDR three-column table, middle column wraps with a figure on each line (by column)", () => {
-    const text = "Manfaat\tBatas\tKeterangan\nRawat inap\tRp 1.000.000 per hari,\tmaks. 60 hari\nmaksimal Rp 60.000.000\tper tahun\nPembedahan\tRp 25.000.000\tper tindakan";
+    const text = "Manfaat\tBatas\tKeterangan\nRawat inap\tRp 1.000.000 per hari,\tmaks. 60 hari\nmaksimal Rp 60.000.000\tper tahun\nPembedahan\tRp 25.000.000\tper tindakan\nAmbulans\tRp 2.000.000\tper kejadian";
     const out = agreed(text,
-      "Manfaat\tBatas\tKeterangan\nRawat inap\tRp 1.000.000 per hari, maksimal Rp 60.000.000\tmaks. 60 hari per tahun\nPembedahan\tRp 25.000.000\tper tindakan",
-      [[84, 250, 420], [84, 250, 420], [250, 420], [84, 250, 420]], [700, 682, 670, 652]);
+      "Manfaat\tBatas\tKeterangan\nRawat inap\tRp 1.000.000 per hari, maksimal Rp 60.000.000\tmaks. 60 hari per tahun\nPembedahan\tRp 25.000.000\tper tindakan\nAmbulans\tRp 2.000.000\tper kejadian",
+      [[84, 250, 420], [84, 250, 420], [250, 420], [84, 250, 420], [84, 250, 420]], [700, 682, 670, 652, 634]);
     assert.ok(out.split("\n").includes("Rawat inap\tRp 1.000.000 per hari, maksimal Rp 60.000.000\tmaks. 60 hari per tahun"), out);
   });
   await test("P4 a label centred over two lines: words-only line above, figures on the next two (by column)", () => agreed(
-    "Benefit\tAmount\nPermanent disablement\nfrom accident\tHK$500,000, or 50% of\nHK$1,000,000 for loss of one limb\nDeath\tHK$1,000,000",
-    "Benefit\tAmount\nPermanent disablement from accident\tHK$500,000, or 50% of HK$1,000,000 for loss of one limb\nDeath\tHK$1,000,000",
-    [[84, 303], [84], [84, 303], [303], [84, 303]], [700, 682, 670, 658, 640]));
+    "Benefit\tAmount\nPermanent disablement\nfrom accident\tHK$500,000, or 50% of\nHK$1,000,000 for loss of one limb\nDeath\tHK$1,000,000\nBurns\tHK$200,000",
+    "Benefit\tAmount\nPermanent disablement from accident\tHK$500,000, or 50% of HK$1,000,000 for loss of one limb\nDeath\tHK$1,000,000\nBurns\tHK$200,000",
+    [[84, 303], [84], [84, 303], [303], [84, 303], [84, 303]], [700, 682, 670, 658, 640, 622]));
   await test("P5 a sentence running onto the next line, no table at all (₱ figures)", () => agreed(
     "Claims\nNotify us within 30 days and we pay up to PHP 20,000 for\nambulance costs, plus PHP 500 per day of confinement.",
     "Claims\nNotify us within 30 days and we pay up to PHP 20,000 for ambulance costs, plus PHP 500 per day of confinement."));
@@ -175,15 +175,15 @@ async function main() {
       "100,000", [[120, 303], [130, 303], [136, 303], [134, 303]]);
   });
   await test("P8 three columns, no geometry, a value part in a blank first slot ('\\t250' under 'up to AUD')", () => agreed(
-    "Service\tBenefit\tAnnual limit\nOptical\t65% of the fee, up to AUD\tAUD 250 per person\n\t250\nDental\t60%\tAUD 800",
-    "Service\tBenefit\tAnnual limit\nOptical\t65% of the fee, up to AUD 250\tAUD 250 per person\nDental\t60%\tAUD 800", undefined, [700, 682, 670, 652]));
+    "Service\tBenefit\tAnnual limit\nOptical\t65% of the fee, up to AUD\tAUD 250 per person\n\t250\nDental\t60%\tAUD 800\nPhysio\t70%\tAUD 500",
+    "Service\tBenefit\tAnnual limit\nOptical\t65% of the fee, up to AUD 250\tAUD 250 per person\nDental\t60%\tAUD 800\nPhysio\t70%\tAUD 500", undefined, [700, 682, 670, 652, 634]));
   await test("N7 no page geometry, the image puts the label part in the amount's slot: held", () => held(
     "Benefit\tLimit\nAngioplasty and other\t10% of the Sum Covered, up to\ninvasive treatment\tRM 25,000\nICU\tRM 300",
     "Benefit\tLimit\nAngioplasty and other\t10% of the Sum Covered, up to invasive treatment RM 25,000\nICU\tRM 300", "25,000"));
   await test("N13 a label centred beside a value's second line joins once: a second label line below is its own row", () => {
-    agreed("Rider\tBenefit\nPremiums waived after 6 months of\nWaiver\ttotal disability, up to 24 months,\nmaximum $2,400 a month\nChild\t$10,000",
-      "Rider\tBenefit\nWaiver\tPremiums waived after 6 months of total disability, up to 24 months, maximum $2,400 a month\nChild\t$10,000",
-      [[84, 204], [204], [84, 204], [204], [84, 204]], [700, 682, 670, 658, 640]);
+    agreed("Rider\tBenefit\nPremiums waived after 6 months of\nWaiver\ttotal disability, up to 24 months,\nmaximum $2,400 a month\nChild\t$10,000\nSpouse\t$50,000",
+      "Rider\tBenefit\nWaiver\tPremiums waived after 6 months of total disability, up to 24 months, maximum $2,400 a month\nChild\t$10,000\nSpouse\t$50,000",
+      [[84, 204], [204], [84, 204], [204], [84, 204], [84, 204]], [700, 682, 670, 658, 640, 622]);
     held("Rider\tBenefit\nPremiums waived after 6 months\nWaiver\t$2,400 a month\nChild\t$10,000",
       "Rider\tBenefit\nWaiver Child\tPremiums waived after 6 months $2,400 a month $10,000", "10,000", [[84, 204], [204], [84, 204], [84, 204]]);
   });
@@ -248,6 +248,16 @@ async function main() {
     held("Benefit\tLimit\nOutpatient\tS$500 per visit, up to\na yearly limit of\nS$1,500 per year\nDental\tS$300\nDeath\tS$100,000",
       "Benefit\tLimit\nOutpatient\tS$600 per visit, up to a yearly limit of\nDental\tS$1,500 per year S$300\nDeath\tS$100,000", "1,500",
       [[84, 303], [84, 303], [303], [303], [84, 303], [84, 303]], [700, 682, 670, 658, 640, 622]);
+  });
+
+  // Critic #446 round 5: spacing counts only against the page's own gaps between rows, never a heading's gap or the end.
+  await test("N20 line spacing that cannot show two rows are one: held (under a wider heading gap; first lines; uneven baselines)", () => {
+    const g4: Geo = [[84, 303], [84, 303], [84, 303], [84, 303]];
+    const text = "Benefit\tAmount\nDeath\tRM 200,000\nTPD\tRM 100,000\nICU\tRM 300", image = "Benefit\tAmount\nDeath TPD\tRM 200,000 RM 100,000\nICU\tRM 300";
+    held(text, image, "100,000", g4, [80, 100, 112, 124]);
+    held("Death\tRM 200,000\nTPD\tRM 100,000\nICU\tRM 300", "Death TPD\tRM 200,000 RM 100,000\nICU\tRM 300", "100,000", g4.slice(1), [100, 112, 140]);
+    held("Benefit\tAmount\nICU\tRM 300\nDeath\tRM 200,000\nTPD\tRM 100,000\nAmbulance\tRM 500", "Benefit\tAmount\nICU\tRM 300\nDeath TPD\tRM 200,000 RM 100,000\nAmbulance\tRM 500",
+      "100,000", [...g4, [84, 303]], [80, 100, 120, 135, 160]);
   });
 
   if (failures.length) { console.error(failures.join("\n\n")); console.error(`\n${failures.length} failed, ${passed} passed`); process.exit(1); }
