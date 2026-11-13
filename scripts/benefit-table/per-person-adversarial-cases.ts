@@ -39,8 +39,12 @@ type Expect = Record<string, string[]>; // person -> benefit names expected show
 export type Case = { id: string; what: string; docs: Doc[]; expect: Expect; family?: FamilyMember[]; safeOnly?: string[] };
 const DOCID = (n: number) => `eeeeeeee-0000-4000-8000-0000000000${String(n).padStart(2, "0")}`;
 const D1 = DOCID(1), D2 = DOCID(2);
-const cert = (lives: string[], body: string[], title = "GLOBE TRAVEL ANNUAL - CERTIFICATE OF INSURANCE") =>
-  [title, `Certificate C-7\tInsured persons: ${lives.join(", ")}`, ...body, "Terms and conditions apply."].join("\n");
+/** A certificate: its title, the line naming the insured persons, then one line per person with their cover (so a reader
+ * reads each person's cover, as on a real certificate's schedule of insured persons), the body, and its terms. */
+const cert = (lives: string[], body: string[], title = "GLOBE TRAVEL ANNUAL - CERTIFICATE OF INSURANCE") => {
+  const plan = title.split(" - ")[0].replace(/\w\S*/g, (w) => w[0] + w.slice(1).toLowerCase());
+  return [title, `Certificate C-7\tInsured persons: ${lives.join(", ")}`, "Insured person\tCover", ...lives.map((n) => `${n}\t${plan}`), ...body, "Terms and conditions apply."].join("\n");
+};
 const L = (ids: string[]) => ids.map((i) => NAME[i]);
 /** A one-column per-person table: rows as [benefit, cell, value, extra]. */
 function simple(id: string, what: string, lives: string[], column: string, rows: [string, string, number, Partial<R>?][], expectFor: string[], o: { section?: string; pre?: string[]; post?: string[]; product?: string; kind?: string } = {}): Case {

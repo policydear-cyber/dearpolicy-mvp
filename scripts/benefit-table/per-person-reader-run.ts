@@ -18,8 +18,10 @@ import { assembleTable, coverKeyOf, figureText, sectionKeyOf } from "@/lib/benef
 import { READING_PROMPT, READING_SCHEMA, renderDocument } from "@/lib/benefit-table/reading";
 import { BASE_FAMILY, CASES, NAME, NOW, type Case, type Doc } from "./per-person-adversarial-cases";
 
-const MAX_OUTPUT = 3_500;
-const tokensOf = (s: string) => Math.ceil(s.length / 2.5);
+/** Run ppr-20261113-01 wrote at most 1,456 tokens for one certificate. */
+const MAX_OUTPUT = 2_500;
+/** Tokens from characters, set to run high (P1 was 2.6 characters a token with the schema): the schema is sent too. */
+const tokensOf = (s: string) => Math.ceil((s.length + JSON.stringify(READING_SCHEMA).length) / 2);
 const arg = (n: string) => { const i = process.argv.indexOf(n); return i >= 0 ? process.argv[i + 1] : undefined; };
 const paid = process.argv.includes("--paid"), replay = arg("--replay");
 const choice = { provider: "anthropic", model: "claude-sonnet-5-5" } as ModelChoice;
@@ -53,14 +55,20 @@ function grade(k: Case, readings: CheckedReading[]): { status: string; line: str
   const got: Record<string, string[]> = {};
   for (const p of t.people) got[p.id] = p.rows.filter((x) => x.figure.kind !== "none").map((x) => `${x.benefit}=${figureText(x.figure)}`);
   const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  // safeOnly holds people (ids) the case does not judge, and benefit names it does not judge, each matched whole.
+  const skipPeople = new Set((k.safeOnly ?? []).filter((s) => s in NAME)), skipRows = new Set((k.safeOnly ?? []).filter((s) => !(s in NAME)).map(norm));
+  // The figure a name stands for: the expectation's own figure, or else the certificate's printed figure for that row.
+  const printed = new Map(k.docs.flatMap((d) => d.rows.map((r) => [norm(r.benefit), r.value] as const)));
+  const firstNumber = (s: string) => { const m = s.replace(/,/g, "").match(/\d+(?:\.\d+)?/); return m ? Number(m[0]) : null; };
   const issues: string[] = [];
   for (const id of Object.keys(NAME)) {
-    if (k.safeOnly?.includes(id)) continue;
+    if (skipPeople.has(id)) continue;
     const exp = k.expect[id] ?? [];
     const g = got[id] ?? [];
-    const match = (e: string, x: string) => { const [name, fig] = e.split("="); const [xn, xf] = [x.split("=")[0], x.slice(x.indexOf("=") + 1)];
-      return (norm(xn).includes(norm(name)) || norm(name).includes(norm(xn))) && (!fig || xf.replace(/[^0-9]/g, "").includes(fig.replace(/[^0-9]/g, ""))); };
-    const extra = g.filter((x) => !exp.some((e) => match(e, x)) && !(k.safeOnly ?? []).some((s) => norm(x).startsWith(norm(s))));
+    const match = (e: string, x: string) => { const [name, fig] = e.split("="); const xn = x.slice(0, x.indexOf("=")), xf = x.slice(x.indexOf("=") + 1);
+      const want = fig ? firstNumber(fig) : printed.get(norm(name)) ?? null;
+      return norm(xn) === norm(name) && want != null && firstNumber(xf) === want; };
+    const extra = g.filter((x) => !exp.some((e) => match(e, x)) && !skipRows.has(norm(x.slice(0, x.indexOf("=")))));
     const missing = exp.filter((e) => !g.some((x) => match(e, x)));
     if (extra.length) issues.push(`UNSAFE ${id} got [${extra.join("; ")}]`);
     if (missing.length) issues.push(`MISS ${id} lacks [${missing.join("; ")}]`);
@@ -108,6 +116,9 @@ async function main() {
   for (const k of cases) {
     const readings = k.docs.map((d, i) => raw.get(docKey(k, i)) ? checkReading(sourceOf(d), raw.get(docKey(k, i)) as never) : null);
     if (readings.some((r) => !r)) { lines.push(`NOREAD ${k.id}`); tally.NOREAD = (tally.NOREAD ?? 0) + 1; continue; }
+    // A personal certificate whose people's covers were not read cannot show anyone anything: it tests nothing here.
+    const noCover = k.docs.filter((d, i) => (d.kind ?? "personal_proof") === "personal_proof" && !(readings[i] as CheckedReading).covers.length).map((d) => d.id);
+    if (noCover.length) { lines.push(`NOCOVER ${k.id} ${k.what}: no person's cover was read, so the case tests nothing`); tally.NOCOVER = (tally.NOCOVER ?? 0) + 1; continue; }
     const g = grade(k, readings as CheckedReading[]);
     tally[g.status] = (tally[g.status] ?? 0) + 1;
     lines.push(g.line);

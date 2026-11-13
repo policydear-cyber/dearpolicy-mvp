@@ -93,12 +93,40 @@ for (const forWhom of [null, "some_insured"]) {
   });
 }
 test("one row the reader says is for some of them does not stop the others", () => {
-  const t = run({ lives: ["Asha Rao", "Ben Rao"], column: "Limit per insured person", rows: [{ benefit: "Medical expenses", cell: "$100,000", value: 100000 }, { benefit: "Child care", cell: "$2,000", value: 2000, forWhom: "some_insured" }] });
+  const t = run({ lives: ["Asha Rao", "Ben Rao"], column: "Limit per insured person", rows: [{ benefit: "Medical expenses", cell: "$100,000", value: 100000 },
+    { benefit: "Baggage", cell: "$3,000", value: 3000 }, { benefit: "Child care", cell: "$2,000", value: 2000, forWhom: "some_insured" }] });
+  // Baggage, printed right above the reader's "some" row, is withheld with it; Medical expenses is not its neighbour.
   for (const id of ["a", "b"]) assert.deepEqual(shownFor(t, id), ["Medical expenses | up to $100,000 (currency not stated)"], id);
 });
-test("a child section is checked against each person, even when the reader marks the row wrongly", () => {
+test("a section that names 'each insured child' is checked against each person when the reader marks the row wrongly (only main's tier phrases are caught: a bare 'Child' or 'Senior' rests on the reader)", () => {
   const t = run({ lives: ["Asha Rao", "Kiran Rao"], column: "Limit per insured person", section: "BENEFITS FOR EACH INSURED CHILD", rows: [{ benefit: "Funeral expenses", cell: "$3,000", value: 3000 }] });
   assert.deepEqual(shownFor(t, "a"), []);
+});
+for (const [benefit, section] of [["Child hospital cash", null], ["Children's education fund", null], ["Adult accidental death", null], ["Infant care benefit", null], ["Home nursing", "BENEFITS FOR SENIOR CITIZENS"], ["Hospital cash", "CHILD BENEFITS"], ["Medical expenses (spouse)", null]] as const) {
+  test(`a kind of life in words ("${benefit}"${section ? `, section "${section}"` : ""}) withholds the row even when the reader marks it for every named person`, () => {
+    const t = run({ lives: ["Asha Rao", "Kiran Rao", "Chen Rao"], column: "Limit per insured person", section, rows: [{ benefit, cell: "S$2,000", value: 2000 }] });
+    for (const id of ["a", "k", "c"]) assert.deepEqual(shownFor(t, id), [], id);
+  });
+}
+test("a kind of life in words on the next line ('Children: half of the above amount') withholds the row", () => {
+  const t = run({ lives: ["Asha Rao", "Kiran Rao"], column: "Limit per insured person", rows: [{ benefit: "Hospital cash", cell: "S$50 per day", value: 50, pays: "per_day" }], extraLines: ["Children: half of the above amount"] });
+  for (const id of ["a", "k"]) assert.deepEqual(shownFor(t, id), [], id);
+});
+test("a number the row owns is matched once: a child's 30 a day beside a 30-day limit is someone else's figure", () => {
+  const t = run({ lives: ["Asha Rao", "Kiran Rao"], column: "Limit per insured person", rows: [{ benefit: "Hospital cash", cell: "S$100 per day, up to 30 days (children: S$30 per day)", value: 100, pays: "per_day", maxDays: 30 }] });
+  for (const id of ["a", "k"]) assert.deepEqual(shownFor(t, id), [], id);
+});
+for (const mark of ["some_insured", null]) {
+  test(`a neighbouring row the reader marks ${mark ?? "with nothing"} ("Child rate") withholds the row above it`, () => {
+    const t = run({ lives: ["Asha Rao", "Kiran Rao"], column: "Limit per insured person", rows: [{ benefit: "Hospital cash", cell: "S$50 per day", value: 50, pays: "per_day" },
+      { benefit: "Child rate", cell: "S$25 per day", value: 25, pays: "per_day", forWhom: mark }] });
+    for (const id of ["a", "k"]) assert.deepEqual(shownFor(t, id), [], id);
+  });
+}
+test("a neighbouring row the reader marks for some withholds the row below it too", () => {
+  const t = run({ lives: ["Asha Rao", "Kiran Rao"], column: "Limit per insured person", rows: [{ benefit: "Junior rate", cell: "S$25 per day", value: 25, pays: "per_day", forWhom: "some_insured" },
+    { benefit: "Hospital cash", cell: "S$50 per day", value: 50, pays: "per_day" }] });
+  for (const id of ["a", "k"]) assert.deepEqual(shownFor(t, id), [], id);
 });
 test("a two-letter name in the row's label is a person's name: never the other insured's", () => {
   const family: FamilyMember[] = [{ id: "j", display_name: "Jo Lim" } as FamilyMember, { id: "b", display_name: "Ben Rao" } as FamilyMember];

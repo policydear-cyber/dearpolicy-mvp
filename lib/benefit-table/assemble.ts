@@ -597,6 +597,10 @@ function ownCovers(list: PersonCover[], documentId: string): PersonCover[] {
 /** A column heading that says its figures are each insured person's ("Limit per insured person", "Maximum amount payable
  * each insured person", "Benefit limit per person"). */
 const PER_PERSON_HEADING = /\b(?:per|each|every)\s+(?:insured\s+)?(?:persons?|insured)\b/i;
+/** Words that name a kind of insured life. They only ever withhold a row from the per-person rule, never give one: a
+ * backstop under the reader's own mark for a row such as "Child hospital cash" or a "SENIOR CITIZENS" section, should the
+ * reader mark it for every named person (TE on #464). */
+const KIND_OF_LIFE = /\b(?:child(?:ren)?(?:'s)?|kids?|infants?|bab(?:y|ies)|juvenile|junior|minors?|adults?|seniors?|elderly|aged|students?|spouses?|wife|husband|partner|policy\s*holder|parents?|principal|dependants?|dependents?)\b/i;
 /** A row of a certificate's one column of per-person limits that is for every insured person the certificate names. All
  * must hold, and any doubt gives no one (a figure for one life is never shown for another):
  * - the reader says the row is for each insured person the document names and nothing on it limits the row to some of
@@ -609,7 +613,10 @@ const PER_PERSON_HEADING = /\b(?:per|each|every)\s+(?:insured\s+)?(?:persons?|in
  *   but its own figures (amount, cap, days): an age ("aged 65 and over", "under 18"), a child's rate beside it or another
  *   amount for someone else makes it no one's;
  * - no other row of the document prints its benefit name, or a different figure under a name sharing a word with it (one
- *   row per life, whatever words tell the lives apart).
+ *   row per life, whatever words tell the lives apart);
+ * - a row printed right above or below it is also marked for each named insured person: a neighbour the reader says is
+ *   for some of them ("Child rate S$25 per day") may change this row for those people.
+ * Each number is matched once: a child's "S$30 per day" beside a 30-day limit is a number the row does not own.
  * The row is then checked against each person's kind of life (tierProblem), and never given to anyone the certificate does
  * not name (whoseRows, documentLives). */
 function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<string>>, ownProof: (documentId: string, coverKey: string) => boolean) {
@@ -622,14 +629,25 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
     // (a child's, an adult's, a senior's row; "half for children"): words no layout rule can read (Critic and TE on this rule).
     if (b.forWhom !== "each_named_insured") return false;
     if (b.value == null || b.pays === "percent" || b.pays === "not_covered" || !PER_PERSON_HEADING.test(b.column ?? "")) return false;
+    if (KIND_OF_LIFE.test(`${b.benefit} ${b.section ?? ""} ${b.column ?? ""} ${b.rowText ?? b.source.excerpt} ${b.nextLine ?? ""}`)) return false;
     if (!figureOnlyHeading(b.column, (columnsOn.get(r.documentId)?.size ?? 0) === 1) || !ownProof(r.documentId, coverKey)) return false;
     const others = r.benefits.filter((x) => x !== b);
     const mine = words(b);
     if (others.some((x) => norm(x.benefit) === norm(b.benefit) || (x.value != null && figure(x) !== figure(b) && [...words(x)].some((w) => mine.has(w))))) return false;
-    const starts = others.map((x) => firstLine(x.source.excerpt)).filter(Boolean);
-    const next = b.nextLine && !starts.some((s) => norm(b.nextLine ?? "").startsWith(s)) ? b.nextLine : "";
-    const own = new Set([b.value, b.cap, b.maxDays, b.fromDay].filter((n): n is number => n != null));
-    return numbersIn([b.section, b.column, b.benefit, b.rowText ?? b.source.excerpt, next].filter(Boolean).join("\n")).every((n) => own.has(n));
+    // The rows whose own printed line is the line right below or above this row's.
+    const rowAt = (line: string | undefined) => line && norm(line) ? others.filter((x) => { const f = firstLine(x.rowText ?? x.source.excerpt), l = norm((x.rowText ?? x.source.excerpt).split("\n").at(-1) ?? "");
+      return (f && norm(line).startsWith(f)) || l === norm(line); }) : [];
+    const below = rowAt(b.nextLine), above = rowAt(b.prevLine);
+    if ([...below, ...above].some((x) => x.forWhom !== "each_named_insured")) return false;
+    const next = below.length ? "" : b.nextLine ?? "";
+    // Each number printed may be one of the row's own figures once (amount, cap, days), never twice.
+    const own = [b.value, b.cap, b.maxDays, b.fromDay].filter((n): n is number => n != null);
+    for (const n of numbersIn([b.section, b.column, b.benefit, b.rowText ?? b.source.excerpt, next].filter(Boolean).join("\n"))) {
+      const i = own.indexOf(n);
+      if (i < 0) return false;
+      own.splice(i, 1);
+    }
+    return true;
   };
 }
 /** Why a section's rows are shown for no one when its document prints the cover for two or more people and the rows do
