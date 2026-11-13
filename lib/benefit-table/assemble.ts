@@ -601,6 +601,11 @@ const PER_PERSON_HEADING = /\b(?:per|each|every)\s+(?:insured\s+)?(?:persons?|in
  * backstop under the reader's own mark for a row such as "Child hospital cash" or a "SENIOR CITIZENS" section, should the
  * reader mark it for every named person (TE on #464). */
 const KIND_OF_LIFE = /\b(?:child(?:ren)?(?:'s)?|kids?|infants?|bab(?:y|ies)|juvenile|junior|minors?|adults?|seniors?|elderly|aged|students?|spouses?|wife|husband|partner|policy\s*holder|parents?|principal|dependants?|dependents?)\b/i;
+/** Words that tell one insured life from another in a row's own name ("Hospital cash Mum", "Medical expenses - Insured 1",
+ * "Hospital cash Joint Life", "Accident Dad"). A document any of whose row names holds one prints its rows per life, so none
+ * of its rows is every named person's: withhold-only, like KIND_OF_LIFE, and checked after the "per insured person" phrase
+ * is taken out of the name. */
+const LIFE_TAG = /\b(?:mum|mom|mummy|mommy|mother|dad|daddy|father|grand(?:ma|pa|mother|father|parent|child)|granny|nana|son|daughter|brother|sister|sibling|toddler|teen(?:ager)?|youth|pensioner|retiree|self|insured|assured|holder|applicant|proposer|(?:joint|main|first|second|third|primary|secondary|other)\s+lives?)s?\b/i;
 /** A row of a certificate's one column of per-person limits that is for every insured person the certificate names. All
  * must hold, and any doubt gives no one (a figure for one life is never shown for another):
  * - the reader says the row is for each insured person the document names and nothing on it limits the row to some of
@@ -619,9 +624,44 @@ const KIND_OF_LIFE = /\b(?:child(?:ren)?(?:'s)?|kids?|infants?|bab(?:y|ies)|juve
  * Each number is matched once: a child's "S$30 per day" beside a 30-day limit is a number the row does not own.
  * The row is then checked against each person's kind of life (tierProblem), and never given to anyone the certificate does
  * not name (whoseRows, documentLives). */
+/** The words of a row name, possessives and the "per (insured) person" phrase taken out. */
+const labelWords = (s: string) => norm(s.replace(/['’]s\b/gi, "").replace(/\b(?:per|each|every|for\s+(?:each|every))\s+(?:insured\s+)?(?:persons?|insured|lives?|members?)\b/gi, " ")).split(" ").filter(Boolean);
+/** Whether a row's name names an insured life: a role or relation word (LIFE_TAG), a word of a person the
+ * document names, or their initials ("AR" for Asha Rao). */
+function namesALife(benefit: string, people: string[]): boolean {
+  const ws = labelWords(benefit), text = ws.join(" ");
+  if (LIFE_TAG.test(text)) return true;
+  const own = new Set<string>();
+  for (const p of people) {
+    const pw = norm(p).split(" ").filter(Boolean);
+    pw.forEach((w) => own.add(w));
+    if (pw.length > 1) own.add(pw.map((w) => w[0]).join(""));
+  }
+  return ws.some((w) => own.has(w));
+}
+/** Whether two row names are one benefit printed once per life, by the whole name: equal but for a tag of letters or
+ * numbers ("Insured A" / "Insured B", "Plan 1" / "Plan 2"), equal before a separator ("Medical expenses - X",
+ * "Medical expenses (X)"), equal but for a kind of life ("Adult" / "Junior medical expenses"), or one name the whole start or
+ * end of the other ("Hospital cash" / "Hospital cash Grandma").
+ * Two names that differ in a word of their own ("Travel delay" / "Baggage delay", "Personal accident" / "Personal
+ * liability") are two benefits. */
+function sameBenefitPerLife(a: string, b: string): boolean {
+  const head = (s: string) => norm(s.split(/\s[-–—:\/]\s?|[(\[,;]/)[0]);
+  if (head(a) && head(a) === head(b) && (head(a) !== norm(a) || head(b) !== norm(b))) return true;
+  const x = labelWords(a), y = labelWords(b);
+  if (!x.length || !y.length) return false;
+  let i = 0;
+  while (i < x.length && i < y.length && x[i] === y[i]) i++;
+  let j = 0;
+  while (j < x.length - i && j < y.length - i && x[x.length - 1 - j] === y[y.length - 1 - j]) j++;
+  const dx = x.slice(i, x.length - j), dy = y.slice(i, y.length - j);
+  if (!dx.length || !dy.length) return true;
+  if (!i && !j) return false;
+  // What tells the two apart is a letter or number, or a kind of life ("Adult" / "Junior"), with the rest of the name shared.
+  const tag = (w: string) => /^(?:[a-z]|\d+|[ivx]+)$/.test(w);
+  return (dx.every(tag) && dy.every(tag)) || KIND_OF_LIFE.test(dx.join(" ")) || KIND_OF_LIFE.test(dy.join(" "));
+}
 function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<string>>, ownProof: (documentId: string, coverKey: string) => boolean) {
-  const LINK = new Set(["of", "for", "the", "a", "an", "and", "or", "to", "in", "on", "by", "with", "per", "due"]);
-  const words = (x: CheckedBenefit) => new Set(norm(x.benefit).split(" ").filter((w) => w && !LINK.has(w)));
   const figure = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
   const firstLine = (t: string) => norm(t.split("\n")[0]);
   return (r: CheckedReading, b: CheckedBenefit, coverKey: string): boolean => {
@@ -632,8 +672,11 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
     if (KIND_OF_LIFE.test(`${b.benefit} ${b.section ?? ""} ${b.column ?? ""} ${b.rowText ?? b.source.excerpt} ${b.nextLine ?? ""}`)) return false;
     if (!figureOnlyHeading(b.column, (columnsOn.get(r.documentId)?.size ?? 0) === 1) || !ownProof(r.documentId, coverKey)) return false;
     const others = r.benefits.filter((x) => x !== b);
-    const mine = words(b);
-    if (others.some((x) => norm(x.benefit) === norm(b.benefit) || (x.value != null && figure(x) !== figure(b) && [...words(x)].some((w) => mine.has(w))))) return false;
+    // A document that tells its lives apart in its row names prints its rows per life: none of them is every person's.
+    if (r.benefits.some((x) => namesALife(x.benefit, [...r.namedPeople, ...r.covers.map((c) => c.person)]))) return false;
+    // The same benefit printed again, or printed once per life with a tag ("Medical expenses - Insured 1"), is no one's;
+    // distinct benefits whose names share a word ("Travel delay", "Baggage delay") are each their own row.
+    if (others.some((x) => norm(x.benefit) === norm(b.benefit) || (x.value != null && figure(x) !== figure(b) && sameBenefitPerLife(x.benefit, b.benefit)))) return false;
     // The rows whose own printed line is the line right below or above this row's.
     const rowAt = (line: string | undefined) => line && norm(line) ? others.filter((x) => { const f = firstLine(x.rowText ?? x.source.excerpt), l = norm((x.rowText ?? x.source.excerpt).split("\n").at(-1) ?? "");
       return (f && norm(line).startsWith(f)) || l === norm(line); }) : [];
