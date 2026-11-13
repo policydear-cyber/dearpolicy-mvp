@@ -606,6 +606,8 @@ function percentBaseUnsettled(row: string, value: number): boolean {
   }
   return false;
 }
+/** Words that name one kind of life among several ("an insured child", "adults", "seniors"). */
+export const KIND_OF_LIFE = /\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?|principal|parents?)\b/i;
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -1006,7 +1008,10 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
         // or AUD 15,000" is capped, whatever words join them: Critic #449 round 3).
         // Only on a document printed for one life (one person's covers): on a family or joint schedule the share's life is
         // not settled by the row (Critic #449 rounds 1-4).
-        const own = (t: string) => oneLife && !(moneyIn(row).length || moneyIn(near).length || conditions.some((c) => moneyIn(c).length)) ? withoutOwnShareCap(t, value) : t;
+        // Nor when the row names a kind of life ("an insured child under 16"): the one life may not be that kind (Critic
+        // #449 round 5: a child's 25% worked out on an adult's own certificate).
+        const own = (t: string) => oneLife && !KIND_OF_LIFE.test(`${benefit} ${str(b.column) ?? ""} ${row} ${near} ${conditions.join(" ")}`)
+          && !(moneyIn(row).length || moneyIn(near).length || conditions.some((c) => moneyIn(c).length)) ? withoutOwnShareCap(t, value) : t;
         capUnread = claimed != null || CAP_WORDS.test(own(source.excerpt)) || conditions.some((c) => CAP_WORDS.test(own(c)))
           || CAPPED.test(own(row)) || NEAR_CAP.test(own(near));
         ownShareNamed = !capUnread && own(source.excerpt) !== source.excerpt;

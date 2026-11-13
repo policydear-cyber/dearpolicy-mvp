@@ -162,15 +162,11 @@ test("P5 AUD family: 15% of each person's own sum (60,000 / 37,500 / 12,000)", (
   assert.deepEqual(vals(ask(h, "Grace Kelly", /burns/i).amounts), [37500]);
   assert.deepEqual(vals(ask(h, "Noah Kelly", /burns/i).amounts), [12000]);
 });
-test("P6 AUD: the child's 'limited to 25%' share is worked out on a certificate for the child alone (AUD 20,000); on the family schedule no one gets it", () => {
-  const solo = auFamily(false, [AU[2]]);
-  const r = tableRow(solo, "Noah Kelly", (x) => x.column === "Insured child under 16");
-  assert.ok(r && r.figure.kind === "worked_out" && (r.figure as { amount: number }).amount === 20000, JSON.stringify(r?.figure));
-  // The chat gives no amount: the row's printed line holds two shares (100% and 25%), so which is the person's is not
-  // settled from the line itself (Critic #449 round 4). Never a wrong one.
-  assert.ok(!vals(ask(solo, "Noah Kelly", /Accidental death/).amounts).some((v) => v !== 20000));
-  const h = auFamily();
-  for (const p of AU) assert.notEqual(tableRow(h, p.name, (x) => x.column === "Insured child under 16")?.figure.kind, "worked_out", p.name);
+test("P6 AUD: a share printed for an insured child is never worked out, on the child's own certificate or the family schedule (Critic #449 rounds 4-5)", () => {
+  for (const h of [auFamily(false, [AU[2]]), auFamily(false, [AU[0]]), auFamily()]) for (const p of h.table.people) {
+    assert.notEqual(tableRow(h, p.name, (x) => x.column === "Insured child under 16")?.figure.kind, "worked_out", p.name);
+    assert.deepEqual(vals(ask(h, p.name, /Accidental death/).amounts).filter((v) => v !== 400000 && v !== 250000 && v !== 80000), [], p.name);
+  }
 });
 test("P7 AUD: a daily amount on a one-life schedule is the person's; a family schedule's shared table is out of this change's scope (no one)", () => {
   const r = tableRow(auFamily(false, [AU[1]]), "Grace Kelly", (x) => x.benefit === "Hospital cash");

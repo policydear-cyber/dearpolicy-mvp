@@ -228,12 +228,18 @@ test("control: the server figure is never taken from the model's JSON", () => {
 });
 
 // ---------- 3b. Insured-child rows on a family schedule ----------
-test("on a one-life certificate, 'limited to 25% of the Sum Insured' is the share, worked out (no 'maximum not captured')", () => {
-  for (const spec of [MYR, EUR]) {
-    const child = spec.people.find((p) => p.relationship === "child")!;
-    const h = family({ ...spec, people: [child] });
-    const r = h.table.people[0].rows.find((x) => x.column === "Insured child under 18")!;
-    assert.ok(r.figure.kind === "worked_out" && r.figure.amount === child.sum / 2, JSON.stringify(r.figure));
+test("on a one-life certificate, 'limited to N% of the Sum Insured' is the share, worked out (no 'maximum not captured')", () => {
+  for (const [line, pct] of [["Loss of one finger\tLimited to 10% of the Sum Insured.", 10], ["Partial loss of hearing\tlimited to 25% of the sum insured", 25]] as const) {
+    const [benefit] = line.split("\t");
+    const h = schedule({ people: [MYR.people[0]], page2: `TABLE OF BENEFITS\n${line}`, benefits: [ben({ benefit, pays: "percent", value: pct, percentOf: "sum_insured", quote: line })] });
+    const r = h.table.people[0].rows.find((x) => x.benefit === benefit);
+    assert.ok(r?.figure.kind === "worked_out" && r.figure.amount === 150000 * pct / 100, `${line}: ${JSON.stringify(r?.figure)}`);
+  }
+});
+test("control: a 'limited to' share that names a kind of life is never worked out, even on one life's certificate (Critic #449 round 5)", () => {
+  for (const spec of [MYR, EUR]) for (const p of spec.people) {
+    const h = family({ ...spec, people: [p] });
+    assert.notEqual(h.table.people[0].rows.find((x) => x.column === "Insured child under 18")?.figure.kind, "worked_out", p.name);
   }
 });
 test("control: on a family schedule the share's life is not settled by the row, so no one gets an amount for it", () => {
@@ -359,6 +365,7 @@ test("a payment 'for each insured child' is not the child's own row (Critic #449
 test("a code in its own table cell is the figure before it's when another cell follows (Critic #449 round 3, F5, F6)", () => {
   const cases: [string, number[]][] = [["Hospital cash\t100\tSGD\t30 days", [100]], ["80,000\tGBP\t100%", [80000]], ["Medical\t1,000\tEUR\t2 claims", [1000]],
     ["50\tGBP\t3rd day", [50]], ["500\tUSD\t12 months", [500]], ["Liam Kelly\t100,000\tAUD\t22/07/1984", [100000]], ["Liam Kelly\t100,000\tAUD\t500,000\tAUD", [100000, 500000]],
+    ["Plan 3 NZD 100,000", [100000]], ["Class 2 CHF 50,000", [50000]], ["Policy year 2025 CHF 10,000", [10000]], ["1-2 NZD 500", [500]], ["Plan 3 SGD 100,000", [100000]],
     ["There is no 50 EUR excess", [50]], ["Policy No. 12 EUR 500", [500]]];
   for (const [line, want] of cases) {
     assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);

@@ -63,12 +63,13 @@ export const FIGURE_LEFT_OUT_NOTE = "I’ve left out an amount I couldn’t matc
 export const CLAIM_LEFT_OUT_NOTE = "I’ve left out a statement your documents don’t support.";
 
 /** A figure with its currency before it ("GBP 80,000", "S$300") or after it ("80,000 GBP", "100 SGD\t30 days", "300,000
- * NZD"). A date's last part is never a figure with a code after it: in "02/11/1982\tGBP 80,000", "1982-11-02 GBP 80,000" or
- * "2 Nov 1982 GBP 80,000" the figure is GBP 80,000, not 1982 GBP (TE-ACC-20261113: every sum insured printed after a date
- * of birth was read as the year). A number labelled as an age, an ID or a number ("age 41 EUR 90,000", "ID 55120") is not
- * money. A code in the next table cell ("42\tEUR 60,000") is the next figure's when a figure
- * follows it. Judged by the line's layout, never by the figure's size (Critic #449 rounds 1-2). */
-const FIGURE = /(?:\b(SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\s?|\b(S|SG|US|HK|A|AU|NZ)\$\s?|(?<![A-Za-z])(RM)\s?|([€£¥₱₹฿₩])\s?)(\d[\d,]*(?:\.\d+)?)(?:\s?(k|m|mil|million|thousand|bn|billion)\b)?|(?<![\d,.])(?<!\d[-./]\d{1,2}[-./])(?<!\b(?:[Aa]ged?|AGED?|ID|[Nn][Oo]\.|[Nn]umber|NRIC|I\/?C)\s*:?\s*)(?<!\d{1,2}\s(?:[Jj](?:an|AN)|[Ff](?:eb|EB)|[Mm](?:ar|AR)|[Aa](?:pr|PR)|[Mm](?:ay|AY)|[Jj](?:un|UN)|[Jj](?:ul|UL)|[Aa](?:ug|UG)|[Ss](?:ep|EP)|[Oo](?:ct|CT)|[Nn](?:ov|OV)|[Dd](?:ec|EC))[A-Za-z]{0,6}\.?\s)(\d[\d,]*(?:\.\d+)?)(?:[  ]?|\t(?=(?:SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\b(?![  ]?\d)))(SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\b/g;
+ * NZD"). A date's last part, or a number labelled as an age, an ID or "No.", is never a figure with a code after it
+ * ("02/11/1982\tGBP 80,000", "2 Nov 1982 GBP 80,000", "age 41 EUR 90,000": TE-ACC-20261113, every sum printed after a date
+ * of birth was read as the year). A code followed, after a space, by a plain figure that is not itself coded or counted
+ * opens that figure ("Plan 3 NZD 100,000", "42\tEUR 60,000"); otherwise it closes the figure before it ("2000 SGD 1 visit",
+ * "250 EUR 25,000 EUR", "100,000\tAUD\t1,250.00", a code in its own table cell). Judged by the line's layout, never by a
+ * figure's size (Critic #449 rounds 1-5). */
+const FIGURE = /(?:\b(SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\s?|\b(S|SG|US|HK|A|AU|NZ)\$\s?|(?<![A-Za-z])(RM)\s?|([€£¥₱₹฿₩])\s?)(\d[\d,]*(?:\.\d+)?)(?:\s?(k|m|mil|million|thousand|bn|billion)\b)?|(?<![\d,.])(?<!\d[-./]\d{1,2}[-./])(?<!\b(?:[Aa]ged?|AGED?|ID|[Nn][Oo]\.|[Nn]umber|NRIC|I\/?C)\s*:?\s*)(?<!\d{1,2}\s(?:[Jj](?:an|AN)|[Ff](?:eb|EB)|[Mm](?:ar|AR)|[Aa](?:pr|PR)|[Mm](?:ay|AY)|[Jj](?:un|UN)|[Jj](?:ul|UL)|[Aa](?:ug|UG)|[Ss](?:ep|EP)|[Oo](?:ct|CT)|[Nn](?:ov|OV)|[Dd](?:ec|EC))[A-Za-z]{0,6}\.?\s)(\d[\d,]*(?:\.\d+)?)[  \t]?(SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\b(?![  ]?\d[\d,]*(?:\.\d+)?(?![\d,./%\-A-Za-z])(?![  \t]*(?:(?:SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\b|(?:days?|nights?|visits?|claims?|times|trips?|years?|months?|weeks?|hours?|lives|life|persons?|people|child(?:ren)?|adults?|members?|per|each|x|sessions?|treatments?|admissions?|accidents?|polic(?:y|ies)|units?|items?)\b)))/g;
 const SYMBOL: Record<string, string> = { S: "SGD", SG: "SGD", US: "USD", HK: "HKD", A: "AUD", AU: "AUD", NZ: "NZD", RM: "MYR", "€": "EUR", "£": "GBP", "¥": "JPY", "₱": "PHP", "₹": "INR", "฿": "THB", "₩": "KRW" };
 const MULT: Record<string, number> = { k: 1e3, thousand: 1e3, m: 1e6, mil: 1e6, million: 1e6, bn: 1e9, billion: 1e9 };
 export type StatedFigure = { raw: string; value: number; currency: string };
