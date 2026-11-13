@@ -434,8 +434,9 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
 export type LineCheck = { agree: boolean; kind: DisagreeKind | null; why: string; text: string | null; log: string;
   /** How many of the page's figure lines are held back (shown as not checked). */
   held: number };
-export function checkLines(textReading: string, imageReading: string, pageNumber?: number, geometry?: (number[] | undefined)[]): LineCheck {
-  const first = checkLinesOnce(textReading, imageReading, pageNumber);
+/** `ys`: where each text line stands down the page (lib/documents/layout.ts PageLine.y), when known. */
+export function checkLines(textReading: string, imageReading: string, pageNumber?: number, geometry?: (number[] | undefined)[], ys?: (number | undefined)[]): LineCheck {
+  const first = checkLinesOnce(textReading, imageReading, pageNumber, undefined, geometry, ys);
   if (first.agree || !geometry || !first.heldLines.size) return first;
   // Lines held back on a page whose text layer gives each table column as one run: confirmed column by column (columnRows).
   const zipped = columnRows(textReading, imageReading, geometry, first.heldLines);
@@ -443,8 +444,8 @@ export function checkLines(textReading: string, imageReading: string, pageNumber
   const second = checkLinesOnce(zipped.text, imageReading, pageNumber, zipped);
   return second.agree || second.held < first.held ? second : first;
 }
-function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: number, pre?: { confirmed: Set<number>; image: Set<number> }):
-  LineCheck & { heldLines: Set<number> } {
+function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: number, pre?: { confirmed: Set<number>; image: Set<number> },
+  geometry?: (number[] | undefined)[], ys?: (number | undefined)[]): LineCheck & { heldLines: Set<number> } {
   const lines = textReading.split("\n"), skipText = pairingNothing(textReading, pageNumber), skipImage = pairingNothing(imageReading, pageNumber);
   const imageLinesAll = imageReading.split("\n");
   // A line is confirmed only under the same heading in both readings: the nearest label-only line above it that both
@@ -483,7 +484,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     return image;
   };
   const isWord = (t: Token | undefined) => typeof t === "string" && !isDate(t);
-  const wordsOnly = (j: number) => { if (j < 0 || skipText.has(j) || lent.has(j)) return null; const t = lineTokens(lines[j]); return t.length && t.every(isWord) ? t : null; };
+  const wordsOnly = (j: number) => { if (j < 0 || skipText.has(j) || lent.has(j) || joinedAway.has(j)) return null; const t = lineTokens(lines[j]); return t.length && t.every(isWord) ? t : null; };
   const wrapped = (i: number, tokens: Token[]): { at: number; j: number; joined: Token[] } | null => {
     const k = filledText.indexOf(i);
     for (const j of [filledText[k + 1] ?? -1, filledText[k - 1] ?? -1]) {
@@ -550,19 +551,261 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
       k += run.length;
     }
   }
+  // A row whose cells wrap onto two or more lines in the text layer, figures on more than one of them, while the image
+  // reading prints the row on one line: "Early-stage critical illness\t25% of the Sum Covered, up to a maximum of" over
+  // "RM 50,000, once per lifetime", or a label and its amount both wrapping ("Angioplasty and other invasive treatment
+  // for\t10% of the Sum Covered, up to a maximum of" over "coronary artery\tRM 25,000"), or a sentence that runs onto the
+  // next line mid-date ("... dated 18 February" over "2025)"). Any table, any market: a wrapped cell is how every
+  // schedule prints a long benefit. Before, each part was compared alone, matched nothing, and every figure on the page
+  // was held back although both readings print the same figures (TE-ACC-20261113 H2-A: an RM 50,000 early-stage benefit
+  // hidden).
+  // The lines are joined back into one row in the only two ways the page itself supports, and the row is confirmed when
+  // the image prints one line with exactly its words and figures in the same order, under the same heading:
+  // - column by column, where the page geometry says which column each cell stands in (each column's parts in line order,
+  //   the columns left to right), so a label and its amount that both wrap are read as the row the page prints;
+  // - in reading order, where every line but one is a single cell (a value or a sentence running on).
+  // Nothing is paired differently from how the image reads it: every figure must match in order, a figure the image prints
+  // in another row or not at all matches nothing, and the joined lines stay held back as before. A line that matches an
+  // image line on its own is never joined to another, so two rows the image prints apart are never merged, and a join
+  // that could be made two ways at the same size is no evidence. The joined row is stored on its first line, the other
+  // lines emptied (the line count kept), as a wrapped label is.
+  const joinedAway = new Set<number>();
+  // Every line of a joined row, by each of its lines: a row held back later takes all of its lines with it.
+  const groupOf = new Map<number, number[]>();
+  const sharedHeading = (j: number) => { const h = textHeads[j]; return !!h && shared.has(h); };
+  const alone = (j: number) => { const t = lineTokens(lines[j]); return figureLine(t) && pool.some((o) => sameLine(t, o.t) && o.h === textUnder[j]); };
+  const free = (j: number | undefined): j is number => j !== undefined && !skipText.has(j) && !lent.has(j) && !joinedAway.has(j) && !rebuilt.has(j)
+    && !tableRows.has(j) && !pre?.confirmed.has(j) && !sharedHeading(j);
+  const byColumn = (group: number[]): string | null => {
+    if (!geometry) return null;
+    const rows = group.map((j) => { const cs = lines[j].split("\t"), xs = geometry[j]; return xs && xs.length === cs.length ? cs.map((c, n) => ({ c: c.trim(), x: xs[n] })) : null; });
+    if (rows.some((r) => !r)) return null;
+    // The columns are where the widest line's cells start; every other cell goes to the nearest, left to right. Where every
+    // line is one cell (a label centred between its value's lines), the columns are the distinct places the lines start.
+    const widest = rows.reduce((w, r) => (r!.length > w!.length ? r : w))!;
+    const anchors = widest.length > 1 ? widest.map((c) => c.x)
+      : rows.map((r) => r![0].x).sort((p, q) => p - q).filter((x, n, xs) => n === 0 || x > xs[n - 1] + 1);
+    if (anchors.length < 2) return null;
+    const columns: string[][] = anchors.map(() => []);
+    for (const r of rows) {
+      let last = -1;
+      for (const { c, x } of r!) {
+        if (!c) continue;
+        const col = anchors.reduce((best, a, n) => (Math.abs(a - x) < Math.abs(anchors[best] - x) ? n : best), 0);
+        if (col <= last) return null;
+        columns[col].push(c); last = col;
+      }
+    }
+    return columns.map((parts) => parts.join(" ")).join("\t").replace(/\t+$/, "");
+  };
+  // No geometry for these lines, but every line keeps its TAB slots, blank ones too ("Dental\t80%\tup to", "\t\tAUD 500 a year"): the slots
+  // are the columns.
+  const bySlot = (group: number[]): string | null => {
+    // A line's slots always start at the first column; blank slots at its end are not printed ("\t250" under three columns).
+    const raw = group.map((j) => lines[j].split("\t").map((c) => c.trim()));
+    const width = Math.max(...raw.map((r) => r.length));
+    if (width < 2) return null;
+    const slots = raw.map((r) => [...r, ...Array<string>(width - r.length).fill("")]);
+    return slots[0].map((_, n) => slots.map((r) => r[n]).filter(Boolean).join(" ")).join("\t").replace(/\t+$/, "");
+  };
+  const inOrder = (group: number[]) => (group.filter((j) => lines[j].includes("\t")).length <= 1 ? group.map((j) => lines[j].trim()).join(" ") : null);
+  // A line below that prints a figure joins the row only when it reads as a wrapped part, never as a row of its own
+  // (Critic #446 F3, R1: two complete rows an image reader ran together are never stored as one):
+  // - where the page geometry puts its first cell in a value column (right of the row's label column), it is a part of
+  //   that column ("RM 50,000, once per lifetime", "Maximum S$1,500 a year");
+  // - otherwise it must start lower case in a cased script, with a figure, or with a currency ("coronary artery\tRM
+  //   25,000", "2025)", "$1,000"). A row marker ("(a)", "1.", "ii)"), a capital, or a letter of a script with no case
+  //   ("身故", "เสียชีวิต") starts a row: that line stays held, as before.
+  // Words-only lines below are wrapped label parts and always join.
+  const firstX = (j: number) => { const xs = geometry?.[j]; return xs && xs.length === lines[j].split("\t").length ? xs[0] : undefined; };
+  const partStart = (l: string) => {
+    const t = l.trim();
+    if (/^\(?(?:\d{1,3}|[a-z]|[ivxlc]{1,5})[.)]\s/i.test(t)) return false;
+    const code = t.match(/^\p{L}+/u)?.[0];
+    if (code && (ISO_CURRENCIES.has(code) || LOCAL_CURRENCY_FORMS.has(code))) return true;
+    return /^(?:\d|\p{Ll})/u.test(t) || t.replace(CURRENCY_MARK, "") !== t && /^\S{0,3}\p{Sc}/u.test(t);
+  };
+  // Where a line stands, by column, not by its exact x (Critic #446 M1: indented, centred and right-aligned label columns).
+  // The value column starts at the second cell of the nearest line at or above that has two cells with geometry (the row
+  // itself, or its table's heading); a line whose first cell starts left of it has a label cell. Without geometry, a line
+  // with TAB slots has a label cell when its first slot is filled, a value part when it is blank; a line of one cell with
+  // no geometry is told by how it starts (partStart).
+  const valueStart = (i: number): number | undefined => {
+    for (let u = filledText.indexOf(i); u >= 0; u--) {
+      const j = filledText[u], xs = geometry?.[j];
+      if (xs && xs.length >= 2 && xs.length === lines[j].split("\t").length) return xs[1];
+    }
+    return undefined;
+  };
+  const place = (j: number, edge: number | undefined): "label" | "value" | "unknown" => {
+    const x = firstX(j);
+    if (x !== undefined && edge !== undefined) return x < edge - 1 ? "label" : "value";
+    if (!lines[j].includes("\t")) return "unknown";
+    return lines[j].split("\t")[0].trim() ? "label" : "value";
+  };
+  const endsOnFigure = (j: number) => { const t = lineTokens(lines[j]).at(-1); return t !== undefined && (typeof t === "number" || isDate(t)); };
+  // A line below that prints a figure joins the row only when it reads as a part of it, never as a row of its own (Critic
+  // #446 F3, R1, M1, M2: two complete rows an image reader ran together are never stored as one):
+  // - a value part (its first cell in a value column) joins, unless the next line is a row whose value starts lower case:
+  //   then the part may open that row's value (a label centred beside its value's second line) and which row it belongs
+  //   to is not known;
+  // - a line with a label cell and a figure, when the row has a label already, is a row of its own: by position it cannot
+  //   be told from a second row ("Hospital cash\tAUD 100 per day, up to" over "dental\tAUD 500"), so a label and an
+  //   amount that both wrap stay held, as before (TE #446 A1, A3; Critic R1, M1);
+  // - a single-cell line with no geometry and no TAB slots joins only when it starts lower case in a cased script, with
+  //   a figure or with a currency, and the line above does not end on a figure: a row marker ("(a)", "1."), a capital, or
+  //   a script with no case ("身故", "เสียชีวิต") starts a row;
+  // - a line with a label cell, when the row has none yet (its first line stands in the value column: a label centred
+  //   beside its value's second line), is that label, once, and only when the line above the row prints no figure (a
+  //   heading, a title): under a row with figures, the first line could as well be the end of that row's value, and the
+  //   image is not left to decide which (TE #446 F1: a cap printed at the start of the next row).
+  // Words-only lines below are wrapped label parts and always join.
+  // How far apart two lines stand down the page, when both places are known.
+  const gap = (a: number | undefined, b: number | undefined) => {
+    const ya = a === undefined ? undefined : ys?.[a], yb = b === undefined ? undefined : ys?.[b];
+    return ya === undefined || yb === undefined ? undefined : Math.abs(ya - yb);
+  };
+  const filledBefore = (j: number) => filledText[filledText.indexOf(j) - 1];
+  const filledAfter = (j: number) => filledText[filledText.indexOf(j) + 1];
+  // Whether line j sits inside the row of the line above it (prev), by the page's own spacing (Critic #446 R4-1, Y1-Y8).
+  // The spacing is evidence only against the page's own gaps between rows: for every other line that starts a row (a
+  // label cell beside another cell, printing a figure; a sentence is no row), the gap from the line above it, when that
+  // line belongs to a row (it prints a figure, stands in a value column, or is a label part right under a figure line),
+  // never a heading's gap and never the page's or table's end. With at least two such gaps (this row's own among them), j is inside the
+  // row only when the gap from prev to j is clearly smaller (by 40%) than their median, than the gap above this row (when
+  // it is a row gap), and than the gap above the next line that starts a row. A table that spaces its rows as it spaces a
+  // cell's lines, or a page with too few rows to tell, says nothing, and the part is held.
+  const ROW_GAP = 1.4;
+  // A line that is part of a table row: a row line (a label cell beside another cell, printing a figure) or a value-column
+  // part. A one-cell line at the label edge that prints a figure is a heading or a sentence ("Schedule 1 Benefits",
+  // "Section 2"), never a row (Critic #446 Z3).
+  const rowLineAt = (n: number, edge: number | undefined) => (lines[n].includes("\t") && figureLine(lineTokens(lines[n]))) || place(n, edge) === "value";
+  const rowGapAbove = (first: number, edge: number | undefined) => {
+    const b = filledBefore(first);
+    if (b === undefined) return undefined;
+    // A label part (one cell, words only) belongs to a row when a row line stands above it, past up to two more parts.
+    let up: number | undefined = b, parts = 0;
+    while (parts < 3 && up !== undefined && !lines[up].includes("\t") && !sharedHeading(up) && place(up, edge) !== "value" && !figureLine(lineTokens(lines[up]))) { up = filledBefore(up); parts++; }
+    const rowLine = rowLineAt(b, edge) || (parts > 0 && up !== undefined && rowLineAt(up, edge));
+    return rowLine ? gap(b, first) : undefined;
+  };
+  const rowStart = (n: number, edge: number | undefined) => lines[n].includes("\t") && place(n, edge) === "label" && figureLine(lineTokens(lines[n]));
+  // The table a line stands in: the run of lines around it that are rows, value parts or label parts, up to a column
+  // heading (two cells or more, no figure), a one-cell line printing a figure outside the value column (a numbered
+  // heading or a sentence), or a heading both readings print (Critic #446 Z1, Z3).
+  const breaks = (n: number, edge: number | undefined) => sharedHeading(n)
+    || (lines[n].includes("\t") && !figureLine(lineTokens(lines[n])))
+    || (!lines[n].includes("\t") && place(n, edge) !== "value" && figureLine(lineTokens(lines[n])));
+  const tableOf = (from: number, to: number, edge: number | undefined) => {
+    let lo = filledText.indexOf(from), hi = filledText.indexOf(to);
+    while (lo > 0 && !breaks(filledText[lo - 1], edge)) lo--;
+    while (hi + 1 < filledText.length && !breaks(filledText[hi + 1], edge)) hi++;
+    return filledText.slice(lo, hi + 1);
+  };
+  // `next`: the line that starts the following row (for a value part, the label line right after it).
+  const inRow = (j: number, prev: number, first: number, edge: number | undefined, next: number | undefined) => {
+    const g = gap(prev, j);
+    if (g === undefined) return false;
+    const lo = filledText.indexOf(first), hi = filledText.indexOf(j);
+    const refs = tableOf(first, j, edge).filter((n) => (filledText.indexOf(n) < lo || filledText.indexOf(n) > hi) && rowStart(n, edge))
+      .map((n) => rowGapAbove(n, edge)).filter((x): x is number => x !== undefined).sort((p, q) => p - q);
+    const above = rowGapAbove(first, edge);
+    // Two gaps between rows of the same table at least, this row's own counting.
+    if (refs.length + (above === undefined ? 0 : 1) < 2 || !refs.length) return false;
+    const median = refs.length % 2 ? refs[(refs.length - 1) / 2] : (refs[refs.length / 2 - 1] + refs[refs.length / 2]) / 2;
+    // The next row's gap counts only as a gap between two rows, and only within the table.
+    const nextGap = next === undefined || breaks(next, edge) ? undefined : rowGapAbove(next, edge);
+    const local = [above, nextGap].filter((x): x is number => x !== undefined);
+    return g * ROW_GAP <= Math.min(median, ...local);
+  };
+  const ownRow = (j: number, edge: number | undefined, prev: number, labelled: boolean, i: number, first: number) => {
+    // A sentence running on (the row and the line both one cell, at the page's left margin or with no place) is told by
+    // how the line starts, not by a table's columns. Two cells of a value column are placed as such (Critic #446 X12).
+    const xi = firstX(i), xj = firstX(j);
+    const sentence = !lines[i].includes("\t") && !lines[j].includes("\t")
+      && (xi === undefined || xj === undefined || edge === undefined || (xi < edge - 1 && xj < edge - 1));
+    const where = sentence ? "unknown" : place(j, edge);
+    if (!figureLine(lineTokens(lines[j]))) return false;
+    if (where === "value") {
+      // A value part with a row of its own label right after it could as well open that row's value (a label centred
+      // beside its value's second line): only the page's spacing can say it is the row above's.
+      // Nor does a part with a figure join a line that already ends on a figure ("Contents\tAUD 120,000" over "10% of the
+      // building sum insured, up to"): the part may open a row of its own whose label sits lower (TE #446 R1).
+      if (endsOnFigure(prev)) return true;
+      const next = filledAfter(j);
+      return next !== undefined && place(next, edge) === "label" && !inRow(j, prev, first, edge, next);
+    }
+    if (where === "label" && !labelled) {
+      // Above the row's run of value parts and words, the nearest other line must print no figure (a heading, a title):
+      // under a row with figures the run could as well end that row's value (Critic #446 R4-2, TE F1).
+      let u = filledText.indexOf(first) - 1;
+      while (u >= 0 && place(filledText[u], edge) === "value") u--;
+      return u >= 0 && figureLine(lineTokens(lines[filledText[u]]));
+    }
+    // A label cell with a figure, under a row that has its label: a second row, unless the page's spacing puts it inside
+    // the row above (a label and an amount that both wrap, "coronary artery\tRM 25,000").
+    if (where === "label") return !inRow(j, prev, first, edge, filledText.slice(filledText.indexOf(j) + 1).find((n) => rowStart(n, edge)));
+    // Two lines that both open on an amount ("$200,000 on death" over "$100,000 on total disability") are two items.
+    const opensOnAmount = (l: string) => /^\S{0,4}\d/u.test(l.trim().replace(CURRENCY_MARK, "").trim()) || /^\S{0,3}\p{Sc}/u.test(l.trim());
+    return endsOnFigure(prev) || !partStart(lines[j]) || (opensOnAmount(lines[prev]) && opensOnAmount(lines[j]));
+  };
+  // A word hyphenated across the wrap ("peri-" over "od") is tried whole and with its hyphen, as well as with a space.
+  const variants = (text: string) => [text, text.replace(/(\p{L})- (?=\p{Ll})/gu, "$1"), text.replace(/(\p{L})- (?=\p{Ll})/gu, "$1-")];
+  const joinedRow = (i: number): { group: number[]; text: string; at: number } | null => {
+    const k = filledText.indexOf(i);
+    const above: number[] = [];
+    for (let u = k - 1; u >= 0 && above.length < 3; u--) {
+      const j = filledText[u], t = lineTokens(lines[j]);
+      if (!free(j) || !t.length || !t.every(isWord) || lines[j].includes("\t")) break;
+      above.unshift(j);
+    }
+    const below: number[] = [];
+    const edge = valueStart(i);
+    let labelled = [...above, i].some((j) => place(j, edge) !== "value");
+    for (let u = k + 1; u < filledText.length && below.length < 5; u++) {
+      const j = filledText[u];
+      if (!free(j) || alone(j) || ownRow(j, edge, below.at(-1) ?? i, labelled, i, above[0] ?? i)) break;
+      below.push(j);
+      if (place(j, edge) !== "value") labelled = true;
+    }
+    for (let size = 2; size <= above.length + 1 + below.length; size++) {
+      let found: { group: number[]; text: string; at: number } | null = null, ways = 0;
+      for (let up = Math.min(above.length, size - 1); up >= 0; up--) {
+        const down = size - 1 - up;
+        if (down > below.length) continue;
+        const group = [...above.slice(above.length - up), i, ...below.slice(0, down)];
+        // One group is one way, however many of its spellings match.
+        for (const text of new Set([byColumn(group) ?? bySlot(group), inOrder(group)].filter((x): x is string => x !== null).flatMap(variants))) {
+          const at = pool.findIndex((o) => sameLine(lineTokens(text), o.t) && o.h === textUnder[i]);
+          if (at >= 0) { ways++; found ??= { group, text, at }; break; }
+        }
+      }
+      if (found) return ways === 1 ? found : null;
+    }
+    return null;
+  };
   let figureLines = 0, noLabel = -1, why = "";
   lines.forEach((line, i) => {
     if (skipText.has(i)) return;
     const tokens = lineTokens(line);
     if (!figureLine(tokens)) return;
     figureLines++;
-    if (pre?.confirmed.has(i) || tableRows.has(i)) return;
+    if (pre?.confirmed.has(i) || tableRows.has(i) || joinedAway.has(i)) return;
     const at = labelOf(tokens) ? pool.findIndex((o) => sameLine(tokens, o.t) && o.h === textUnder[i]) : -1;
     if (at >= 0) { pool.splice(at, 1); return; }
     const wrap = labelOf(tokens) ? wrapped(i, tokens) : null;
     if (wrap) {
       rebuilt.set(i, rebuild(line, lines[wrap.j].trim().replace(/\s+/g, " "), wrap.joined, pool[wrap.at].l));
       pool.splice(wrap.at, 1); lent.add(wrap.j); return;
+    }
+    const joined = joinedRow(i);
+    if (joined) {
+      const [head, ...rest] = joined.group;
+      rebuilt.set(head, joined.text);
+      for (const j of rest) joinedAway.add(j);
+      for (const j of joined.group) groupOf.set(j, joined.group);
+      if (head !== i) joinedAway.add(i);
+      pool.splice(joined.at, 1); return;
     }
     unconfirmed.push(i);
     if (!labelOf(tokens) && noLabel < 0) noLabel = i;
@@ -621,14 +864,20 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     kind = !sameFigures(a, b) ? "figures differ" : "pairing differs";
     why = "the lines that print a date or a number alone do not print the same ones in the same order";
   }
-  const confirmed = figureLines - [...spread].filter((i) => !skipText.has(i)).length;
+  // A held line that is part of a joined row holds the whole row: the row is stored on its first line, so holding only
+  // the emptied part would leave the row shown beside a held continuation, or a continuation shown beside its held row
+  // (Critic #446 F1, F2; the same rule as R211-1).
+  for (const i of [...spread]) for (const j of groupOf.get(i) ?? []) spread.add(j);
+  const confirmed = figureLines - [...spread].filter((i) => !skipText.has(i) && isFig(i)).length;
+  // A joined row's words-only first line is held with its row, but is not a figure line of its own.
+  const heldCount = [...spread].filter((i) => skipText.has(i) || isFig(i)).length;
   const seenText = seenFigures(textReading), seenImage = seenFigures(imageReading);
   const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${confirmed} confirmed; figures ${seenText.length} in text, ${seenImage.length} in image; `
     + `only in text ${described(only(seenText, seenImage))}; only in image ${described(only(seenImage, seenText))}`;
-  if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log, held: spread.size, heldLines: spread };
-  const handed = lines.map((l, i) => rebuilt.get(i) ?? (lent.has(i) ? "" : l));
+  if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log, held: heldCount, heldLines: spread };
+  const handed = lines.map((l, i) => rebuilt.get(i) ?? (lent.has(i) || joinedAway.has(i) ? "" : l));
   const text = !spread.size ? handed.join("\n") : confirmed ? handed.map((l, i) => (spread.has(i) ? notChecked(l) : l)).join("\n") : null;
-  return { agree: kind === null, kind, why, text, log, held: spread.size, heldLines: spread };
+  return { agree: kind === null, kind, why, text, log, held: heldCount, heldLines: spread };
 }
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
   : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !/\d/.test(l.replace(LABELLED, " ")))].join("\n");
@@ -637,8 +886,11 @@ type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string
   /** The one currency the page image prints when its text layer prints none (lib/documents/image-currency). */
   imageCurrency?: string;
   /** The page's lines as its geometry gave them: where each cell starts (lib/documents/layout.ts). */
-  lines?: { text: string; cells: string[]; xs?: number[] }[] };
+  lines?: { text: string; cells: string[]; xs?: number[]; y?: number }[] };
 /** Where each cell of each text line starts on the page, when the stored text is still exactly the geometry's lines. */
+/** Where each text line stands down the page, on the same condition. A line rebuilt from a table run has no place (y 0). */
+const ysOf = (p: CheckedPage) => (p.lines && p.lines.map((l) => l.text).join("\n") === p.text
+  ? p.lines.map((l) => (typeof l.y === "number" && l.y > 0 ? l.y : undefined)) : undefined);
 const geometryOf = (p: CheckedPage) => (p.lines && p.lines.map((l) => l.text).join("\n") === p.text
   ? p.lines.map((l) => (l.xs && l.xs.length === l.text.split("\t").length ? l.xs : undefined)) : undefined);
 /** The pages to read again from their image at upload: text pages whose table text shows a scramble sign. */
@@ -656,7 +908,7 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
     const check = !second ? { agree: false as const, kind: "image reading failed", text: null, log: undefined }
       : !image || image.extractionMethod !== "ocr" ? { agree: false as const, kind: "image reading gave no text for this page", text: null, log: undefined }
       : image.unreadable ? { agree: false as const, kind: "image unreadable", text: null, log: undefined }
-      : checkLines(p.text, image.text, p.pageNumber, geometryOf(p));
+      : checkLines(p.text, image.text, p.pageNumber, geometryOf(p), ysOf(p));
     // Agreed: kept as checked. A row confirmed through a wrapped label is stored rebuilt, its full label on the figure's
     // line, so every reader sees the row as the image prints it (re-read check 3 Nov: the rebuilt text was dropped here).
     // A page the image confirmed (in whole or in part) whose text layer prints no currency takes the one currency the image

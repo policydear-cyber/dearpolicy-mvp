@@ -90,7 +90,7 @@ async function uploadDocument(page: Page, file: { name: string; mimeType: string
   // renders; if the file did not register (submit stays disabled), set it
   // again rather than hanging on a permanently disabled button.
   const input = page.locator('.upload-form input[type="file"]');
-  const submit = page.getByRole("button", { name: /upload & analyse/i });
+  const submit = page.getByRole("button", { name: /upload and read/i });
   for (let attempt = 0; attempt < 5; attempt += 1) {
     await input.setInputFiles(file);
     const enabled = await expect(submit).toBeEnabled({ timeout: 4_000 }).then(() => true, () => false);
@@ -268,7 +268,7 @@ test.describe.serial("document ingestion in prototype document-safety mode", () 
     try {
       await page.goto("/policies");
       await page.locator('.upload-form input[type="file"]').setInputFiles(hugePath);
-      await page.getByRole("button", { name: /upload & analyse/i }).click();
+      await page.getByRole("button", { name: /upload and read/i }).click();
       await expect(page.locator(".upload-status")).toContainText(/50\s?MB|too large|limit/i, { timeout: 120_000 });
     } finally {
       rmSync(hugePath, { force: true });

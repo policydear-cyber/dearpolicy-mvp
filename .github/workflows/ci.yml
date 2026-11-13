@@ -31,6 +31,9 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      - name: Brand colour tokens and contrast
+        run: npm run brand:tokens-test
+
       - name: System + database regression suite (PGlite, no live DB needed)
         run: npm run system:test
 
@@ -142,6 +145,9 @@ jobs:
 
       - name: V1.1 evidence, conflicts, retry, cache, unreadable, injection (pure part)
         run: npm run v11:ingestion-test
+
+      - name: Page image check confirms rows whose cells wrap onto several text lines (any market; negative controls)
+        run: npm run documents:wrapped-row-check-test
 
       - name: V1.1 source-verified answers, quota failure, usage attribution
         run: npm run v11:answer-test
@@ -351,6 +357,9 @@ jobs:
 
       - name: CSRF protection regression suite
         run: npm run security:csrf-test
+
+      - name: Public site auth boundary (landing page and Learn public, everything else signed in)
+        run: npm run public-site:auth-boundary-test
 
       - name: Launch capability manifest regression suite
         run: npm run security:launch-check-test

@@ -18,7 +18,7 @@ import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/curr
 import { printedDay } from "./dates";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
-import { CAPPED, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
+import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
@@ -209,6 +209,9 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   combinedLimit?: boolean;
   /** The row is printed under a heading that names the limits of compensation (LIMITS_HEADING). */
   limitsHeading?: boolean;
+  /** "Limited to N% of the Sum Insured" on a document printed for one life names the row's share, not a money cap
+   * (ownShareNamed in checkReading): the table may work it out like any other share (assemble.ts baseFigure). */
+  ownShareNamed?: boolean;
   /** The currency the row's cap itself prints ("up to S$15,000"), when it prints one: a cap in another currency than the
    * amount it limits cannot be compared with it, so no amount is worked out (assemble.ts). */
   capCurrency?: string | null };
@@ -396,7 +399,9 @@ export function startDay(text: string): number | null | undefined {
     limit ||= no;
     return no;
   };
-  for (const m of text.matchAll(/\bfrom\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)\s+(?:(?:to|-|until)\s+(?:the\s+)?\d+(?:st|nd|rd|th)\s+)?day)\b/gi)) if (!negated(m.index)) days.add(Number(m[1] ?? m[2]));
+  for (const m of text.matchAll(/\bfrom\s+(?:the\s+)?(?:day\s+(\d+)|(\d+)(?:st|nd|rd|th)\s+(?:(?:to|-|until)\s+(?:the\s+)?\d+(?:st|nd|rd|th)\s+)?(?:consecutive\s+)?day)\b/gi)) if (!negated(m.index)) days.add(Number(m[1] ?? m[2]));
+  // The same day in words ("payable from the third consecutive day", TE-ACC-20261113): a closed list of ordinals.
+  for (const m of text.matchAll(new RegExp(String.raw`\bfrom\s+(?:the\s+)?(${Object.keys(ORDINAL_DAY).join("|")})\s+(?:consecutive\s+|full\s+)?day\b`, "gi"))) if (!negated(m.index)) days.add(ORDINAL_DAY[m[1].toLowerCase()]);
   // "After" counts only for a day of the stay ("after the 10th day", "after 10 days in hospital"), never a waiting period
   // ("payable after 30 days of continuous cover", Critic R149-1). "Beyond the 30th day" is as often a limit as a start,
   // so it never counts (TE #108 B6).
@@ -601,9 +606,25 @@ function percentBaseUnsettled(row: string, value: number): boolean {
   }
   return false;
 }
+/** Words that name one kind of life among several ("an insured child", "adults", "seniors"). */
+export const KIND_OF_LIFE = /\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?|principal|parents?)\b/i;
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+/** The row's words without "limited to" whose object is the row's own percentage: "For an insured child under 18, limited
+ * to 25% of the Sum Insured" names the share itself, not a money limit on it, so it never marks the row as capped
+ * (TE-ACC-20261113: it left the child's accidental death with "a maximum applies, but it was not captured"). Only "limited
+ * to": "up to 50%" or "a maximum of 50% according to the Scale of Fractures" says the share varies up to that, so the row
+ * still counts as capped and no fixed amount is worked out (Critic #449 F3). Only the row's own percentage: "100% ...,
+ * limited to 25% for a child" or a cap word before any other figure still marks it. Used only on a document printed for
+ * one life (checkReading): on a family schedule, whose life the share is for is not settled (Critic #449 rounds 1-4). */
+export function withoutOwnShareCap(text: string, percent: number | null): string {
+  if (percent == null || !(percent > 0)) return text;
+  const own = String(percent).replace(".", "\\.");
+  // Only of the sum insured itself, with nothing naming another life's sum after it ("of the Sum Insured of the Principal
+  // Insured", "applicable to the Insured Parent": Critic #449 round 4).
+  return text.replace(new RegExp(String.raw`\blimited\s+to\s+(?<![\d.])${own}(?:\.0+)?\s*(?:%|per\s?cent)\s+of\s+(?:the\s+|your\s+)?sum\s+(?:insured|assured)(?!\s*(?:of|for|applicable|payable|under|in\s+respect|as\s+per|according)\b)(?=\s*(?:$|[.;,)\n]))`, "gi"), " ");
+}
 /** The money figures of a row, in any currency (S$, RM, £, € or a code such as MYR or GBP, and a bare "$"), with where
  * each starts in flat(row). A row in ringgit or pounds is read as one in Singapore dollars is: its cap, and a second
  * limit beside it, count the same way (parity test, 25 Oct: "up to RM 200,000 or RM 100,000 after age 65" kept the
@@ -887,6 +908,9 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       c.premiumParts = parts.map((p, i) => ({ label: p.label, amount: p.amount, source: sources[i]! }));
   }
 
+  // A document printed for one life: every cover and every named person is the same person.
+  const lives = new Set([...out.covers.map((c) => c.person), ...out.namedPeople].map((n) => normalizePersonName(n)).filter(Boolean));
+  const oneLife = lives.size === 1;
   for (const b of Array.isArray(r.benefits) ? r.benefits : []) {
     const label = `benefit "${b?.benefit}"${b?.column ? ` [${b.column}]` : ""}`;
     const benefit = str(b?.benefit), quote = str(b?.quote);
@@ -944,7 +968,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // A percentage's printed cap is kept only when its words, with the figure, are printed in the row itself or the lines
     // that continue it (never a neighbouring row's limit); a cap that
     // is claimed but not found, or a row whose words say it is capped with no cap read, gets no worked-out amount.
-    let cap: number | null = null, capSource: Source | null = null, capUnread = false;
+    let cap: number | null = null, capSource: Source | null = null, capUnread = false, ownShareNamed = false;
     // A percentage row's quote holds one row: two percentages mean it runs into the next row (R95-2, N3).
     // A percentage in the row's own label ("Burns: greater than 2% but less than 5%") is the label's, not another row's.
     const percents = (t: string) => (t.match(/\d+(?:\.\d+)?\s*%/g) ?? []).length;
@@ -980,8 +1004,17 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
         cap = capInRow(row); capSource = source;
       } else {
         if (claimed != null) out.dropped.push({ what: label, why: `cap ${claimed} not printed in the row; no amount is worked out for it` });
-        capUnread = claimed != null || CAP_WORDS.test(source.excerpt) || conditions.some((c) => CAP_WORDS.test(c))
-          || CAPPED.test(row) || NEAR_CAP.test(near);
+        // "Limited to 25%" names the share only when the row prints no money beside it ("limited to 25% of the Sum Insured
+        // or AUD 15,000" is capped, whatever words join them: Critic #449 round 3).
+        // Only on a document printed for one life (one person's covers): on a family or joint schedule the share's life is
+        // not settled by the row (Critic #449 rounds 1-4).
+        // Nor when the row names a kind of life ("an insured child under 16"): the one life may not be that kind (Critic
+        // #449 round 5: a child's 25% worked out on an adult's own certificate).
+        const own = (t: string) => oneLife && !KIND_OF_LIFE.test(`${benefit} ${str(b.column) ?? ""} ${row} ${near} ${conditions.join(" ")}`)
+          && !(moneyIn(row).length || moneyIn(near).length || conditions.some((c) => moneyIn(c).length)) ? withoutOwnShareCap(t, value) : t;
+        capUnread = claimed != null || CAP_WORDS.test(own(source.excerpt)) || conditions.some((c) => CAP_WORDS.test(own(c)))
+          || CAPPED.test(own(row)) || NEAR_CAP.test(own(near));
+        ownShareNamed = !capUnread && own(source.excerpt) !== source.excerpt;
       }
     }
     // A share read as of the sum insured whose row names another base ("10% of the annual premium", "50% of the Death
@@ -1005,7 +1038,8 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       percentOf, baseAmount, baseQuote: str(b.baseQuote), cap, capQuote: cap != null ? str(b.capQuote) : null,
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
-      limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}) });
+      limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}),
+      ...(ownShareNamed ? { ownShareNamed } : {}) });
   }
   return out;
 }

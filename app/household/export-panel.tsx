@@ -41,7 +41,7 @@ export function HouseholdExportPanel() {
       const res = await fetch("/api/household/export", { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() } });
       const body = await res.json().catch(() => ({}));
       if (res.status === 401) { setMessage("Please sign in again, then prepare the download."); return; }
-      if (res.status === 403) { setMessage("Only the household owner can download the household's data."); return; }
+      if (res.status === 403) { setMessage("Only an owner of this household can download its data."); return; }
       if (!res.ok) { setMessage("The download could not be started. Please try again."); return; }
       setState(body as ExportState);
       await poll((body as ExportState).id);

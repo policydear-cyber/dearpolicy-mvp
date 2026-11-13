@@ -123,10 +123,10 @@ async function uploadAndWait(page: Page, f: Fixture, profileLabel: string | null
   if (profileLabel) await page.locator(".upload-form select").selectOption({ label: profileLabel }).catch(() => soft(false, `upload ${f.file}: profile hint "${profileLabel}" not offered`));
   await page.locator(".upload-form input[type=file]").setInputFiles({ name: f.file, mimeType: f.mimeType, buffer: f.buffer! });
   const started = Date.now();
-  await page.getByRole("button", { name: "Upload & analyse" }).click();
-  const statusOk = await expect(page.locator(".upload-panel .upload-status")).toContainText(/Upload received|received/i, { timeout: 120_000 }).then(() => true, () => false);
+  await page.getByRole("button", { name: "Upload and read" }).click();
+  const statusOk = await expect(page.locator(".upload-panel .upload-status")).toContainText(/DearPolicy is reading it now/i, { timeout: 120_000 }).then(() => true, () => false);
   const statusText = (await page.locator(".upload-panel .upload-status").innerText().catch(() => "")).trim();
-  soft(statusOk, `upload ${f.file}: no "Upload received" confirmation (status: "${statusText}")`);
+  soft(statusOk, `upload ${f.file}: no "Uploaded. DearPolicy is reading it now" confirmation (status: "${statusText}")`);
   const seen: string[] = [];
   let p: Policy | undefined; let ms: number | null = null;
   for (;;) {

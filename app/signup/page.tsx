@@ -13,7 +13,7 @@ export default function SignupPage() {
       inviteOnly={signupMode() === "invite"}
       footer={PRIVACY_NOTICE_FINAL ? (
         <p className="field-hint">
-          By creating a household you agree to how we handle your information: <Link href="/privacy">privacy notice</Link>.
+          By creating an account you agree to how we handle your information, as set out in our <Link href="/privacy">privacy notice</Link>.
         </p>
       ) : null}
     />

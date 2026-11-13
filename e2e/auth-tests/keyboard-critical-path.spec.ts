@@ -89,9 +89,9 @@ test.describe.serial("keyboard-only critical path", () => {
     const chooser = page.waitForEvent("filechooser");
     await page.keyboard.press("Space");
     await (await chooser).setFiles({ name: file, mimeType: "application/pdf", buffer: await syntheticWordingPdf("keyboard-wording") });
-    await tabTo(page, (f) => f.text === "Upload & analyse", "the upload button");
+    await tabTo(page, (f) => f.text === "Upload and read", "the upload button");
     await page.keyboard.press("Enter");
-    await expect(page.locator(".upload-panel .upload-status")).toContainText("Upload received");
+    await expect(page.locator(".upload-panel .upload-status")).toContainText("DearPolicy is reading it now");
   });
 
   test("sign out, sign in and delete the household using only the keyboard", async ({ page }) => {

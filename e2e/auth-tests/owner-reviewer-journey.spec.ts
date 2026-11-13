@@ -84,7 +84,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
 
   test("1. sign-up form validation: the form and the server both refuse bad input", async () => {
     await owner.goto("/signup");
-    const submit = owner.getByRole("button", { name: "Create household" });
+    const submit = owner.getByRole("button", { name: "Create account" });
     await expect(submit).toBeDisabled();
     await owner.getByLabel("Email").fill(ownerEmail);
     await owner.getByLabel("Password").fill("short");
@@ -124,7 +124,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     await again.goto("/signup");
     await again.getByLabel("Email").fill(ownerEmail);
     await again.getByLabel("Password").fill(newPassword());
-    await again.getByRole("button", { name: "Create household" }).click();
+    await again.getByRole("button", { name: "Create account" }).click();
     await expect(again.locator(".alert[role=alert]")).toContainText(/already registered/i);
     await again.context().close();
   });
@@ -210,8 +210,8 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     for (const [file, profile, buffer] of uploads) {
       await owner.locator(".upload-form select").selectOption({ label: profile });
       await owner.locator(".upload-form input[type=file]").setInputFiles({ name: file, mimeType: "application/pdf", buffer });
-      await owner.getByRole("button", { name: "Upload & analyse" }).click();
-      await expect(owner.locator(".upload-panel .upload-status")).toContainText("Upload received");
+      await owner.getByRole("button", { name: "Upload and read" }).click();
+      await expect(owner.locator(".upload-panel .upload-status")).toContainText("DearPolicy is reading it now");
     }
     const clean = await waitForPolicy(owner, files.clean, (p) => p.processing_status === "ready");
     const flagged = await waitForPolicy(owner, files.flagged, (p) => p.quarantine_status === "scan_rejected");
