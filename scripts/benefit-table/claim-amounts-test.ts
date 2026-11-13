@@ -384,10 +384,13 @@ test("a code between two figures opens the later one only when it ends the cell 
   }
   assert.deepEqual(anyMoneyFigures("1000 € 80 %").map((x) => x.value), [1000]);
 });
-test("a figure before a code is a label only when the layout says so, never by its size (Critic #449 round 7)", () => {
+test("a figure before a code is a label only when the layout says so, never by its size (Critic #449 rounds 7, 8)", () => {
   const cases: [string, number[]][] = [["Hospital cash 50 SGD 365\tdays", [50]], ["Per visit 15 SGD 100\tvisits", [15]], ["Accident 20 MYR 10,000\tper year", [20]],
     ["Renewal 30 EUR 2027.", [30]], ["Excess 50 SGD 100.", [50]], ["Hospital cash 50 SGD 365", [50]], ["Premium 15 USD 2026", [15]], ["Co-pay 20 EUR 100", [20]],
     ["Copay 25 USD 1,000:", [25]], ["Room 300 SGD 1,000", [300]], ["Room\t300 SGD 1,000", [300]], ["Deductible 500 SGD 1,500", [500]], ["Outpatient 2000 SGD 1,500", [2000]],
+    ["Limit per year 1000 SGD 12 visits", [1000]], ["PER YEAR 1000 SGD 12 VISITS", [1000]], ["Each year 500 SGD 2 claims", [500]],
+    ["Basic plan 1500 SGD 10 visits per year", [1500]], ["Outpatient limit per year 2000 SGD 300 deductible", [2000]], ["Limit per year 1000 SGD 50 per visit", [1000]],
+    ["Group 1 USD 50 per visit", [50]], ["Tier 2 SGD 500 per day", [500]], ["Plan 2 SGD 1,000,000", [1000000]],
     ["Plan 3 NZD 100,000\tper year", [100000]], ["Plan 3 NZD 100,000\tPlan 4 NZD 200,000", [100000, 200000]], ["Liam Kelly\t42\tEUR 60,000\t01/02/1983", [60000]]];
   for (const [line, want] of cases) {
     assert.deepEqual(moneyFiguresIn(line).map((x) => x.value), want, line);
