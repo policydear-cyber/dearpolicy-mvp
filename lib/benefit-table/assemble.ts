@@ -601,6 +601,12 @@ const PER_PERSON_HEADING = /\b(?:per|each|every)\s+(?:insured\s+)?(?:persons?|in
  * backstop under the reader's own mark for a row such as "Child hospital cash" or a "SENIOR CITIZENS" section, should the
  * reader mark it for every named person (TE on #464). */
 const KIND_OF_LIFE = /\b(?:child(?:ren)?(?:'s)?|kids?|infants?|bab(?:y|ies)|juvenile|junior|minors?|adults?|seniors?|elderly|aged|students?|spouses?|wife|husband|partner|policy\s*holder|parents?|principal|dependants?|dependents?)\b/i;
+/** Words that tell one insured life from another in a row's own name ("Hospital cash Mum", "Medical expenses - Insured 1",
+ * "Hospital cash Joint Life", "Accident Dad", "Hospital cash Mrs"). A role word counts only with a role before it or a tag
+ * after it ("Joint Life", "Insured 1"), so "Sum insured" is not a life. A document any of whose row names holds one prints its rows per life, so none
+ * of its rows is every named person's: withhold-only, like KIND_OF_LIFE, and checked after the "per insured person" phrase
+ * is taken out of the name. */
+const LIFE_TAG = /\b(?:mum|mom|mummy|mommy|mother|dad|daddy|father|grand(?:ma|pa|mother|father|parent|child)|granny|nana|son|daughter|brother|sister|sibling|toddler|teen(?:ager)?|youth|pensioner|retiree|mr|mrs|ms|miss|male|female|man|woman|men|women)s?\b|\b(?:main|joint|first|second|third|primary|secondary|other|co|additional|named|account|life)\s+(?:insured|assured|lives?|holder|applicant|proposer)\b|\b(?:insured|assured|lives?|holder|applicant|proposer)\s+(?:[a-z]|\d+|[ivx]+)\b/i;
 /** A row of a certificate's one column of per-person limits that is for every insured person the certificate names. All
  * must hold, and any doubt gives no one (a figure for one life is never shown for another):
  * - the reader says the row is for each insured person the document names and nothing on it limits the row to some of
@@ -619,9 +625,78 @@ const KIND_OF_LIFE = /\b(?:child(?:ren)?(?:'s)?|kids?|infants?|bab(?:y|ies)|juve
  * Each number is matched once: a child's "S$30 per day" beside a 30-day limit is a number the row does not own.
  * The row is then checked against each person's kind of life (tierProblem), and never given to anyone the certificate does
  * not name (whoseRows, documentLives). */
+/** The words of a row name, possessives and the "per (insured) person" phrase taken out. */
+const labelWords = (s: string) => norm(s.replace(/['’]s\b/gi, "").replace(/\b(?:per|each|every|for\s+(?:each|every))\s+(?:insured\s+)?(?:persons?|insured|lives?|members?)\b/gi, " ")).split(" ").filter(Boolean);
+/** The plan or tier markers in a row's own name: a tier word ("Gold", "Basic") or the word on either side of plan, tier,
+ * option, package or class ("Plan 1", "Option B", "Class A"), never a travel class ("economy class"). */
+const TIER_WORD = /^(?:gold|silver|platinum|bronze|basic|standard|premier|classic|deluxe|elite|superior|executive|essential|essentials)$/;
+const TIER_HEAD = /^(?:plan|plans|tier|tiers|option|options|package|packages|class)$/;
+const TRAVEL_CLASS = /^(?:economy|business|first|premium|coach|travel)$/;
+function tierMarkers(benefit: string): string[] {
+  const ws = labelWords(benefit), out: string[] = [];
+  ws.forEach((w, k) => {
+    if (TIER_WORD.test(w)) out.push(w);
+    if (!TIER_HEAD.test(w)) return;
+    for (const n of [ws[k - 1], ws[k + 1]]) if (n && !TIER_HEAD.test(n) && !(w === "class" && TRAVEL_CLASS.test(n))) out.push(`${w.replace(/s$/, "")}:${n}`);
+  });
+  return out;
+}
+/** Whether a document's row names contrast plans or tiers: two or more different markers across them ("Gold" and "Silver",
+ * "Option A" and "Option B"). Then its rows are for whoever holds each plan, never every named person's (Critic 1 on #466).
+ * One "Basic" or "Standard" alone is part of a benefit's name. Withhold-only. */
+function contrastsTiers(benefits: CheckedBenefit[]): boolean {
+  // Two rows, each with markers, that differ: one row's own words ("Cancellation option cover") are no contrast.
+  const sets = benefits.map((b) => tierMarkers(b.benefit).sort().join("|")).filter(Boolean);
+  return new Set(sets).size >= 2;
+}
+/** Whether a row's name names an insured life: a role or relation word (LIFE_TAG), a word of a person the
+ * document names, or their initials ("AR" for Asha Rao). */
+function namesALife(benefit: string, people: string[]): boolean {
+  const ws = labelWords(benefit), text = ws.join(" ");
+  if (LIFE_TAG.test(text)) return true;
+  const own = new Set<string>();
+  for (const p of people) {
+    const pw = norm(p).split(" ").filter(Boolean);
+    pw.forEach((w) => own.add(w));
+    if (pw.length > 1) own.add(pw.map((w) => w[0]).join(""));
+  }
+  return ws.some((w) => own.has(w));
+}
+/** Words that name a kind of benefit, event or thing insured. An allow-list: two rows whose names share the rest and differ
+ * only in these ("Travel delay" / "Baggage delay", "Loss of baggage" / "Loss of passport") are two benefits; a word not here
+ * keeps them one benefit, withheld when the figures differ (Critic 1 on #466: "Gold" / "Silver", "Mr" / "Mrs", "male" /
+ * "female", "individual" / "couple"). Only ever lets a row be shown that the rest of the rule already allows. */
+const BENEFIT_KIND = new Set(("travel trip journey flight flights baggage luggage belongings personal effects passport passports document documents money " +
+  "delay delayed cancellation curtailment interruption postponement abandonment missed connection departure diversion overbooking " +
+  "accident accidental death disablement disability dismemberment injury liability legal expenses costs cost medical dental optical " +
+  "hospital hospitalisation hospitalization inpatient outpatient surgical surgery ambulance emergency evacuation repatriation rescue search " +
+  "burial funeral cremation remains mortal compassionate visit follow up treatment care nursing assistance overseas domestic abroad home " +
+  "loss lost theft stolen damage damaged property contents vehicle car rental excess golf ski winter sports equipment gadget mobile phone " +
+  "hijack hijacking kidnap terrorism riot strike weather natural disaster fraud card credit booking hotel accommodation refund deposit " +
+  "illness sickness critical cancer maternity mental health recovery convalescence quarantine pet").split(" "));
+/** Whether two row names are one benefit printed once per life, by the whole name: equal before a separator ("Medical
+ * expenses - X", "Medical expenses (X)"), one name the whole start or end of the other ("Hospital cash" / "Hospital cash
+ * Grandma"), or equal but for words not all naming a kind of benefit (BENEFIT_KIND: a tag, a tier, a kind of life).
+ * Two names that share part and differ only in benefit words ("Travel delay" / "Baggage delay", "Personal accident" /
+ * "Personal liability") are two benefits, as are names that share no start or end. */
+function sameBenefitPerLife(a: string, b: string): boolean {
+  const head = (s: string) => norm(s.split(/\s[-–—:\/]\s?|[(\[,;]/)[0]);
+  if (head(a) && head(a) === head(b) && (head(a) !== norm(a) || head(b) !== norm(b))) return true;
+  const x = labelWords(a), y = labelWords(b);
+  if (!x.length || !y.length) return false;
+  let i = 0;
+  while (i < x.length && i < y.length && x[i] === y[i]) i++;
+  let j = 0;
+  while (j < x.length - i && j < y.length - i && x[x.length - 1 - j] === y[y.length - 1 - j]) j++;
+  const dx = x.slice(i, x.length - j), dy = y.slice(i, y.length - j);
+  if (!dx.length || !dy.length) return true;
+  if (!i && !j) return false;
+  // With the rest of the name shared, they are two benefits only when what tells them apart is, on both sides, words that
+  // name a kind of benefit ("Travel" / "Baggage" delay). Anything else, a plan tier ("Gold" / "Silver"), a sex, a title, a
+  // plan size ("individual" / "couple"), a letter or number, may be one benefit at two figures for different people.
+  return !(dx.every((w) => BENEFIT_KIND.has(w)) && dy.every((w) => BENEFIT_KIND.has(w)));
+}
 function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<string>>, ownProof: (documentId: string, coverKey: string) => boolean) {
-  const LINK = new Set(["of", "for", "the", "a", "an", "and", "or", "to", "in", "on", "by", "with", "per", "due"]);
-  const words = (x: CheckedBenefit) => new Set(norm(x.benefit).split(" ").filter((w) => w && !LINK.has(w)));
   const figure = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
   const firstLine = (t: string) => norm(t.split("\n")[0]);
   return (r: CheckedReading, b: CheckedBenefit, coverKey: string): boolean => {
@@ -632,8 +707,11 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
     if (KIND_OF_LIFE.test(`${b.benefit} ${b.section ?? ""} ${b.column ?? ""} ${b.rowText ?? b.source.excerpt} ${b.nextLine ?? ""}`)) return false;
     if (!figureOnlyHeading(b.column, (columnsOn.get(r.documentId)?.size ?? 0) === 1) || !ownProof(r.documentId, coverKey)) return false;
     const others = r.benefits.filter((x) => x !== b);
-    const mine = words(b);
-    if (others.some((x) => norm(x.benefit) === norm(b.benefit) || (x.value != null && figure(x) !== figure(b) && [...words(x)].some((w) => mine.has(w))))) return false;
+    // A document that tells its lives apart in its row names prints its rows per life: none of them is every person's.
+    if (r.benefits.some((x) => namesALife(x.benefit, [...r.namedPeople, ...r.covers.map((c) => c.person)])) || contrastsTiers(r.benefits)) return false;
+    // The same benefit printed again, or printed once per life with a tag ("Medical expenses - Insured 1"), is no one's;
+    // distinct benefits whose names share a word ("Travel delay", "Baggage delay") are each their own row.
+    if (others.some((x) => norm(x.benefit) === norm(b.benefit) || (x.value != null && figure(x) !== figure(b) && sameBenefitPerLife(x.benefit, b.benefit)))) return false;
     // The rows whose own printed line is the line right below or above this row's.
     const rowAt = (line: string | undefined) => line && norm(line) ? others.filter((x) => { const f = firstLine(x.rowText ?? x.source.excerpt), l = norm((x.rowText ?? x.source.excerpt).split("\n").at(-1) ?? "");
       return (f && norm(line).startsWith(f)) || l === norm(line); }) : [];
