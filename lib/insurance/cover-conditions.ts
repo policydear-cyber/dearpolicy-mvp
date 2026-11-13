@@ -1,4 +1,5 @@
 import { FIGURE_END, PRINTED_FIGURE, SCALE_WORD, groupsInLakhs, printedNumber, scaleOf } from "@/lib/format/printed-number";
+import { formatMoney, statedCurrencyCode } from "@/lib/format/currency";
 import { knownValue } from "@/lib/chat/facts";
 import type { SubjectFacts } from "@/lib/chat/types";
 import type { ClaimItem } from "@/types";
@@ -706,8 +707,11 @@ function conditionsForItem(item:ClaimItem,conditions:CoverCondition[]){
   });
 }
 
-function money(amount:number,currency?:string){
-  return (currency??"SGD").replace("SGD","S$")+amount.toLocaleString("en-SG",{maximumFractionDigits:2});
+/** A figure with its currency; with none stated it says so (formatMoney), never S$. */
+function money(amount:number,currency?:string|null){
+  const code=statedCurrencyCode(currency);
+  if(!code)return formatMoney(amount,null);
+  return code.replace("SGD","S$")+amount.toLocaleString("en-SG",{maximumFractionDigits:2});
 }
 
 /** Test one condition against the facts and one figure. */
@@ -978,7 +982,7 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
       entry.calculatedAmount=now;
       entry.amountText=money(now,entry.currency);
       say((condition.productName??"this cover")+" pays no more than "+money(ceiling)
-        +" in total, so "+entry.title+" is shown at "+money(now)+" rather than "+money(was),8);
+        +" in total, so "+entry.title+" is shown at "+money(now,entry.currency)+" rather than "+money(was,entry.currency),8);
     }
   }
   // Heaviest first, and bounded: an answer has room for a handful, and a list

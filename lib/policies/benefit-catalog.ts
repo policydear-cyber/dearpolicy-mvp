@@ -7,7 +7,7 @@ import { BENEFIT_READ_FAILURE_KEY,clearReadFailure } from "@/lib/policies/read-f
 import { knownValue,normalText } from "@/lib/chat/facts";
 import { benefitTriggerEvents,coverKey,payingEvent,reportedClaimEvents,ruledOutByEvent,type ClaimEventType } from "@/lib/insurance/claim-events";
 import { explicitCurrency,numericTokens } from "@/lib/chat/policy-analysis";
-import { formatMoney,normalizeCurrencyCode,statedCurrencyCode } from "@/lib/format/currency";
+import { currencyOfAmount,formatMoney,statedCurrencyCode,statedCurrencyCode as statedCurrency } from "@/lib/format/currency";
 import type { FactValue,ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
 import { canonicalProduct } from "@/lib/coverage/facts";
 import { PLAN_COLUMNS_NOTE,figuresDifferByPlan,namesOnlyAPlanCell,resolveStoredRules } from "@/lib/insurance/scale-limit";
@@ -537,8 +537,10 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   // Currency comes from the quoted clause, or -- for a share of the sum
   // insured -- from the cover's own currency when its policy evidence states
   // it. Never defaulted to SGD; without one there is no figure.
-  const statedCurrencyCode=benefit.currency?normalizeCurrencyCode(benefit.currency)||null
-    :benefit.formulaKind==="sum_insured"&&coverage?.currencyVerified===true?normalizeCurrencyCode(coverage.currency)||null:null;
+  // A bare "$" takes the cover's verified currency only when that currency is written with "$" (currencyOfAmount).
+  const verifiedCoverCurrency=coverage?.currencyVerified===true?statedCurrency(coverage.currency):null;
+  const statedCurrencyCode=benefit.currency?currencyOfAmount(benefit.currency,verifiedCoverCurrency)
+    :benefit.formulaKind==="sum_insured"?verifiedCoverCurrency:null;
   const currency=statedCurrencyCode??"";
   const missing:string[]=[];
   const conditions=[...benefit.conditions];
@@ -548,7 +550,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   const wrongInjury=injuryNotReported(benefit,facts);
   if(!statedCurrencyCode&&benefit.formulaKind!=="none")missing.push(CATALOG_CURRENCY_MISSING);
   else if(wrongInjury)missing.push("confirmation that \u201c"+wrongInjury+"\u201d is what happened \u2014 this benefit pays for that specific injury, and it is not among the ones you described");
-  else if(benefit.formulaKind==="sum_insured"&&benefit.formulaValue!=null&&coverage?.amount!=null&&coverage.currencyVerified===true&&currency===normalizeCurrencyCode(coverage.currency)){
+  else if(benefit.formulaKind==="sum_insured"&&benefit.formulaValue!=null&&coverage?.amount!=null&&coverage.currencyVerified===true&&currency===statedCurrency(coverage.currency)){
     amount=Math.round(coverage.amount*benefit.formulaValue*100)/100;
     basis=Math.round(benefit.formulaValue*1000)/10+"% of verified "+formatMoney(coverage.amount,currency);
     // A share the passage caps ("10% of Sum Insured, up to S$25,000") is paid up to the cap, and only when the cap is in
@@ -652,7 +654,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
     ...(coverLabel?{coverLabel}:{}),
     ...(namesASpecificInjury(benefit.benefitName)
       ?{scaleGroup:benefit.policyId+"#"+(benefit.sourcePage??0)}:{}),
-    ...(coverage?.amount!=null&&coverage.amount>0&&coverage.currencyVerified===true&&normalizeCurrencyCode(coverage.currency)===currency
+    ...(coverage?.amount!=null&&coverage.amount>0&&coverage.currencyVerified===true&&statedCurrency(coverage.currency)===currency
       ?{coverAmount:coverage.amount}:{}),
     ...(paysOn?{payingEvent:paysOn}:{}),
     status:amount!=null?(missing.length?"potentially_applicable":"likely_applicable"):"needs_document",
@@ -1108,9 +1110,9 @@ export function validateCatalogFormula(input:{
   // against the personal schedule when used. Nothing is defaulted to SGD, and
   // a currency supplied by the reader but absent from the quote is not proof.
   const quoted=explicitCurrency(input.quote);
-  const declared=input.currency?normalizeCurrencyCode(input.currency)||null:null;
+  const declared=input.currency?statedCurrency(input.currency):null;
   if(quoted&&declared&&quoted!==declared)return none;
-  const currency:string|null=quoted??(input.kind==="sum_insured"&&input.coverageCurrency?normalizeCurrencyCode(input.coverageCurrency)||null:null);
+  const currency:string|null=quoted??(input.kind==="sum_insured"&&input.coverageCurrency?statedCurrency(input.coverageCurrency):null);
   if(input.kind==="sum_insured"){
     // A choice of the lower that belongs to a printed cap ("or RM5,000, whichever is lower") is read by shareBound.
     const bound=shareBound(input.quote,input.benefitName);
@@ -1292,7 +1294,7 @@ export function benefitIsForAnotherKindOfEvent(benefitName:string,eventText:stri
 }
 export function describeBenefitFormula(benefit:Pick<CatalogBenefit,"formulaKind"|"formulaValue"|"currency"|"factKey"|"offsetDays"|"maximumDays">
   &Partial<Pick<CatalogBenefit,"quote"|"benefitName"|"reviewedAt">>){
-  const currency=benefit.currency?normalizeCurrencyCode(benefit.currency)||null:null;
+  const currency=benefit.currency?statedCurrency(benefit.currency):null;
   const value=benefit.formulaValue;
   const money=(amount:number,code:string|null)=>code?formatMoney(amount,code):amount.toLocaleString("en-US")+" (currency not stated in the policy wording)";
   if(benefit.formulaKind==="sum_insured"&&value!=null){
@@ -1738,7 +1740,7 @@ export function scheduleFallbackItems(args:{contract:PolicyContract;traits:Scena
       if(contradicted)continue;
       // A schedule line is a figure only when its currency is written in the
       // cover's own policy evidence; otherwise the benefit is listed without one.
-      const verifiedCurrency=coverage.currencyVerified===true?normalizeCurrencyCode(coverage.currency)||null:null;
+      const verifiedCurrency=coverage.currencyVerified===true?statedCurrency(coverage.currency):null;
       const currency=verifiedCurrency??"";
       const label=coverage.productName&&normalText(coverage.productName)!==normalText(coverage.category)?coverage.productName+" ("+coverage.category+")":coverage.category;
       items.push({

@@ -13,6 +13,22 @@ export function statedCurrencyCode(value: string | null | undefined): string | n
   return normalizeCurrencyCode(value, "") || null;
 }
 
+/** The currency an amount is in: the code its own text states, or -- for a bare "$" only -- the currency its document
+ * establishes elsewhere (a verified cover currency, a policy-currency line), when that currency is itself written with
+ * "$" (SGD, USD, AUD, HKD...). Anything else is null: a "$" in a euro policy, or with no established currency, names
+ * none. Never a default. */
+export function currencyOfAmount(printed: string | null | undefined, established?: string | null): string | null {
+  const own = statedCurrencyCode(printed);
+  if (own) return own;
+  if (String(printed ?? "").trim() !== "$") return null;
+  const doc = statedCurrencyCode(established);
+  return doc && writtenWithDollar(doc) ? doc : null;
+}
+function writtenWithDollar(code: string): boolean {
+  try { return new Intl.NumberFormat("en", { style: "currency", currency: code, currencyDisplay: "narrowSymbol" }).format(0).includes("$"); }
+  catch { return false; }
+}
+
 export function normalizeCurrencyCode(value: string | null | undefined, fallback = "SGD") {
   const raw = String(value ?? "").trim();
   if (!raw) return fallback;
