@@ -256,7 +256,7 @@ export const TERMS: LearnTerm[] = [
     match: ["deferred period", "deferment period", "elimination period"] },
   { id: "under-insurance", term: "Under-insurance", alsoCalled: ["average"],
     definition: "Insuring property for less than its real value. Under some home and business policies, each claim, small or large, may then be paid only in the proportion that the amount insured bears to the real value. Some policies allow a margin before this applies.",
-    match: ["under-insurance", "underinsurance", "underinsured", "under-insured", "average clause", "condition of average"] },
+    match: ["underinsurance", "underinsured", "average clause", "condition of average"] },
   { id: "third-party", term: "Third-party cover",
     definition: "Cover for harm you cause to other people or their property, common in motor insurance. Damage to your own vehicle is covered only at higher levels of cover.",
     match: ["third-party liability", "third party liability", "third-party cover", "third party cover", "third party only"] },
@@ -433,6 +433,7 @@ export const GENERAL_GUIDES: LearnGuide[] = [
   {
     slug: "making-a-claim",
     group: "amounts",
+    keywords: ["claim form", "how to claim", "file a claim", "submit a claim", "appeal", "rejected claim", "dispute"],
     icon: "tell",
     title: "Making a claim",
     summary: "General steps that apply to most claims, and where to find your own policy's rules.",

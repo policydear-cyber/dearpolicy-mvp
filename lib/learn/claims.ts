@@ -13,7 +13,7 @@ export const CLAIM_GUIDES: LearnGuide[] = [
     slug: "claims-hospital-stay",
     group: "claims",
     icon: "hospital",
-    keywords: ["hospital", "hospitalisation", "hospitalization", "admitted", "admission", "surgery", "operation", "inpatient", "ward", "room", "pre-authorisation", "letter of guarantee", "panel hospital", "discharge"],
+    keywords: ["hospital", "hospitalisation", "hospitalization", "admitted", "admission", "surgery", "operation", "inpatient", "ward", "room", "hospitalised", "hospital bill", "bill", "warded", "pre-authorisation", "letter of guarantee", "panel hospital", "discharge"],
     title: "Hospital stays and surgery",
     summary: "What to check before a hospital stay, what a hospital plan usually counts, and what can make it pay less.",
     sections: [
@@ -108,7 +108,7 @@ export const CLAIM_GUIDES: LearnGuide[] = [
     slug: "claims-accident",
     group: "claims",
     icon: "accident",
-    keywords: ["accident", "injury", "injured", "broken arm", "broken leg", "fracture", "fell", "fall", "burns", "dislocation", "personal accident", "pa", "accidental death", "sprain"],
+    keywords: ["accident", "injury", "injured", "broken arm", "broken leg", "broke", "fracture", "fell", "fall", "burns", "dislocation", "personal accident", "pa", "accidental death", "sprain"],
     title: "Accidents and injuries",
     summary: "What an accident policy usually pays for, how a table of injuries works, and claiming from more than one policy.",
     sections: [
@@ -184,7 +184,7 @@ export const CLAIM_GUIDES: LearnGuide[] = [
     slug: "claims-death",
     group: "claims",
     icon: "life",
-    keywords: ["death", "died", "passed away", "deceased", "funeral", "life claim", "death claim", "beneficiary", "nominee", "nomination", "estate", "terminal illness", "bereavement"],
+    keywords: ["death", "died", "dad", "mum", "mom", "father", "mother", "husband", "wife", "parent", "passed away", "deceased", "funeral", "life claim", "death claim", "beneficiary", "nominee", "nomination", "estate", "terminal illness", "bereavement"],
     title: "When a family member dies",
     summary: "Finding every policy that may pay, who receives the money, and what usually happens next.",
     sections: [
@@ -315,7 +315,7 @@ export const CLAIM_GUIDES: LearnGuide[] = [
     slug: "claims-home-motor",
     group: "claims",
     icon: "home",
-    keywords: ["home", "house", "contents", "building", "fire", "flood", "water damage", "burglary", "theft", "car", "motor", "vehicle", "accident", "collision", "no claim discount", "ncd", "excess", "under-insurance"],
+    keywords: ["home", "house", "contents", "building", "fire", "flood", "water damage", "water leak", "leak", "pipe burst", "burst pipe", "burglary", "theft", "car", "motor", "vehicle", "accident", "collision", "no claim discount", "ncd", "excess", "under-insurance"],
     title: "Home and motor claims",
     summary: "What to do after damage, a break-in or a road accident, and how under-insurance and no-claim discounts work.",
     sections: [

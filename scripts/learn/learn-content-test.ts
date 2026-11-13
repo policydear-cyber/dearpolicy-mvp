@@ -128,12 +128,14 @@ async function main() {
   });
 
   await t("claims: never invents what an insurer will require (the policy and the insurer say what they need)", () => {
-    const invented = /(you must (?:send|provide|submit|get)|you will need (?:an?|the|your) |the insurer (?:will|always) (?:need|require|ask for)|(?:x-ray|medical report)s? (?:is|are) (?:needed|required))/i;
+    const invented = /\b(you must (?:send|provide|submit|get)|you(?: will|’ll|\x27ll) need (?:an?|the|your) |(?:the )?insurer (?:will |always )?(?:needs?|requires?|asks? for) (?:an?|the|your) |needs? an? (?:x-ray|police report|medical report)|(?:x-ray|medical report)s? (?:is|are) (?:needed|required))/i;
     const hit = joined.match(invented);
     assert.equal(hit, null, `invented requirement: ${hit?.[0]}`);
     const claimText = CLAIM_GUIDES.flatMap((g) => g.sections.flatMap((s) => s.blocks.flatMap(blockTexts))).join("\n");
     assert.match(claimText, /The insurer tells the claimant what it needs/);
     assert.match(claimText, /Your policy says what it needs/);
+    // TE #443: the pattern must catch paraphrases too (a guard that cannot fail is no guard).
+    for (const bad of ["You must send an X-ray with the claim.", "The insurer needs a police report for every claim.", "You'll need a medical report from the specialist.", "An X-ray is required."]) assert.match(bad, invented, bad);
   });
 
   await t("claims: worked examples add up (figures parsed from the text and recomputed)", () => {
@@ -165,6 +167,8 @@ async function main() {
     // Critic #443: everyday phrases that contain a term's words must not link it.
     assert.deepEqual(learnTermsIn(["This is a long-term plan. South African short-term insurance differs. Detected at an early stage, it was removed. Paid for the whole life of the loan."]), []);
     // Inpatient and outpatient open most hospital answers; they stay in the A to Z but do not crowd out deductible and co-payment.
+    assert.deepEqual(learnTermsIn(["Your son is listed under insurance cover from your employer, under insured persons."]), [], "TE #443");
+    assert.deepEqual(learnTermsIn(["The home is underinsured, so an average clause may apply."]).map((x) => x.id), ["under-insurance"]);
     assert.deepEqual(learnTermsIn(["Inpatient and outpatient treatment: a deductible applies, then a co-payment."]).map((x) => x.id), ["deductible", "co-payment"]);
   });
 
@@ -422,6 +426,9 @@ async function main() {
     const last = SINGAPORE_GUIDES[SINGAPORE_GUIDES.length - 1];
     const lastHtml = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: last.slug }) }));
     assert.doesNotMatch(lastHtml, /Next: /, "the last Singapore article does not lead into an unrelated shelf");
+    const claimsShelf = html.slice(html.indexOf('data-testid="learn-shelf-claims"'), html.indexOf('data-testid="learn-shelf-dearpolicy"'));
+    let pos = -1;
+    for (const g of CLAIM_GUIDES) { const i = claimsShelf.indexOf(`href="/learn/${g.slug}"`); assert.ok(i > pos, `claims shelf: ${g.slug} missing or out of order`); pos = i; }
     const firstSg = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: SINGAPORE_GUIDES[0].slug }) }));
     assert.match(firstSg, new RegExp(`Next: <a class="text-link" href="/learn/${SINGAPORE_GUIDES[1].slug}"`));
   });
@@ -440,6 +447,16 @@ async function main() {
     assert.equal(first("cpf nomination"), "/learn/sg-cpf-nominations");
     assert.equal(first("HPS"), "/learn/sg-home-protection-scheme");
     assert.equal(first("hdb mortgage insurance"), "/learn/sg-home-protection-scheme");
+    // TE #443: how households actually type.
+    assert.equal(first("my dad died"), "/learn/claims-death");
+    assert.equal(first("my father passed away"), "/learn/claims-death");
+    assert.equal(first("broke my leg"), "/learn/claims-accident");
+    assert.equal(first("water leak"), "/learn/claims-home-motor");
+    assert.equal(first("pipe burst"), "/learn/claims-home-motor");
+    assert.equal(first("medisave for parents"), "/learn/sg-medisave");
+    assert.equal(first("hospitalised"), "/learn/claims-hospital-stay");
+    assert.equal(first("hospital bill"), "/learn/claims-hospital-stay");
+    assert.equal(first("claim form"), "/learn/making-a-claim");
     assert.equal(first("broken arm"), "/learn/claims-accident");
     assert.equal(first("lost luggage"), "/learn/claims-travel");
     assert.equal(first("passed away"), "/learn/claims-death");

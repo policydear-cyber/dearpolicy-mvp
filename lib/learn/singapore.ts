@@ -250,7 +250,7 @@ export const SINGAPORE_GUIDES: LearnGuide[] = [
     region: SG,
     checkedOn: CHECKED_13NOV,
     sources: [SRC.medisave],
-    keywords: ["medisave", "medi save", "medisav", "cpf medisave", "basic healthcare sum", "bhs", "healthcare savings", "pay hospital bill with cpf", "medisave for family", "community hospital"],
+    keywords: ["medisave", "medi save", "medisav", "cpf medisave", "basic healthcare sum", "bhs", "healthcare savings", "pay hospital bill with cpf", "medisave for family", "medisave for parents", "parents", "family members", "community hospital"],
     title: "What is MediSave?",
     summary: "Your CPF healthcare savings account: what it can pay for, whose bills it can pay, and how it works alongside insurance.",
     sections: [
