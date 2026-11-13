@@ -21,7 +21,7 @@ import type { CatalogBenefit } from "@/lib/policies/benefit-catalog";
  *
  * The point is not the arithmetic. It is that the person stops being asked to
  * confirm a hundred rows their own documents already answer. */
-export type ImpliedScale={limit:number;currency:string;support:number;pages:Set<string>};
+export type ImpliedScale={limit:number;currency:string|null;support:number;pages:Set<string>};
 
 /** Two rows naming the same benefit, however the two documents punctuate it.
  *
@@ -52,7 +52,7 @@ export function impliedScaleLimit(benefits:CatalogBenefit[]):ImpliedScale|null{
     if(!key)continue;
     byKey.set(key,[...(byKey.get(key)??[]),benefit]);
   }
-  type Candidate={limit:number;key:string;page:string;currency:string};
+  type Candidate={limit:number;key:string;page:string;currency:string|null};
   const candidates:Candidate[]=[];
   for(const [key,rows] of byKey){
     const amounts=rows.filter(row=>row.formulaKind==="fixed"&&(row.formulaValue??0)>0);
@@ -61,7 +61,7 @@ export function impliedScaleLimit(benefits:CatalogBenefit[]):ImpliedScale|null{
     for(const amount of amounts)for(const share of shares){
       const limit=Math.round((amount.formulaValue as number)/(share.formulaValue as number));
       if(!Number.isFinite(limit)||limit<100||limit>10_000_000)continue;
-      candidates.push({limit,key,page:pageKey(share),currency:amount.currency??"SGD"});
+      candidates.push({limit,key,page:pageKey(share),currency:amount.currency||null});
     }
   }
   if(!candidates.length)return null;
