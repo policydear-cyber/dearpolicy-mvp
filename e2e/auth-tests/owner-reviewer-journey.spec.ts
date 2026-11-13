@@ -84,7 +84,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
 
   test("1. sign-up form validation: the form and the server both refuse bad input", async () => {
     await owner.goto("/signup");
-    const submit = owner.getByRole("button", { name: "Create household" });
+    const submit = owner.getByRole("button", { name: "Create account" });
     await expect(submit).toBeDisabled();
     await owner.getByLabel("Email").fill(ownerEmail);
     await owner.getByLabel("Password").fill("short");
@@ -124,7 +124,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     await again.goto("/signup");
     await again.getByLabel("Email").fill(ownerEmail);
     await again.getByLabel("Password").fill(newPassword());
-    await again.getByRole("button", { name: "Create household" }).click();
+    await again.getByRole("button", { name: "Create account" }).click();
     await expect(again.locator(".alert[role=alert]")).toContainText(/already registered/i);
     await again.context().close();
   });
