@@ -732,13 +732,36 @@ export function livesTogether(text: string): boolean {
 /** A cap for the lives together set as a multiple of each person's own limit ("twice the limit shown", "200% of the individual
  * limit", "2 times the per insured person limit"): it confirms each person's own limit is the column's figure (a family
  * plan's cap on top of it; per-person-shared gate round 3). */
-const CAP_MULTIPLE = new RegExp(String.raw`\b(?:twice|double|triple|(?:two|three|four|five|\d{1,2})\s*(?:times|x)|\d{3}\s*%|\d{3}\s+per\s*cent)\s+(?:of\s+)?(?:the\s+|your\s+|each\s+)?`
-  + String.raw`(?:(?:individual|per[\s-]+(?:insured[\s-]+)?person|single|each\s+person'?s?|personal|own|shown|stated)\s+(?:\w+\s+)?limits?|limits?\s+(?:shown|stated|per\s+(?:insured\s+)?person|for\s+(?:one|each|an?)\s+(?:insured\s+)?(?:person|individual)))\b`, "i");
-/** Whether a note line (one off every row) sets a cap for the lives together as a multiple of each person's own limit: kept
- * with each person's rows as a condition (capNotes), never withholding them. */
+const CAP_MULTIPLE = new RegExp(String.raw`(?<![\w.])(twice|double|triple|treble|thrice|once|half|one|two|three|four|five|\d+(?:\.\d+)?)(\s*(?:times|x)\b|\s*%|\s+per\s*cent\b)?\s+(?:of\s+)?(?:the\s+|your\s+|each\s+)?`
+  + String.raw`(?:(?:individual|per[\s-]+(?:insured[\s-]+)?person|single|each\s+person'?s?|personal|own|shown|stated)\s+(?:\w+\s+)?limits?|limits?\s+(?:shown|stated|per\s+(?:insured\s+)?person|for\s+(?:one|each|an?)\s+(?:insured\s+)?(?:person|individual)))\b`, "gi");
+const MULTIPLE_WORD: Record<string, number> = { twice: 2, double: 2, triple: 3, treble: 3, thrice: 3, once: 1, half: 0.5, one: 1, two: 2, three: 3, four: 4, five: 5 };
+/** Words that turn a multiple round ("not twice the limit shown", "instead of twice", "rather than double"). */
+const NOT_A_MULTIPLE = /\b(?:not|never|instead\s+of|rather\s+than|no\s+longer|nor)\b/i;
+/** The multiple of each person's own limit a clause prints, as a number (twice 2, "1.5 times" 1.5, "200%" 2, "0.5 times"
+ * 0.5; the smallest when it prints more than one), with whether the clause turns it round; null when it prints none
+ * (per-person-shared gate round 4, R4-H1). */
+function capMultiple(clause: string): { value: number; negated: boolean } | null {
+  let value: number | null = null;
+  for (const m of clause.matchAll(CAP_MULTIPLE)) {
+    const word = m[1].toLowerCase(), suffix = (m[2] ?? "").trim().toLowerCase();
+    const digits = /^\d/.test(word);
+    // A bare number, or a number word that is no multiple on its own ("one limit"), is not a multiple.
+    if ((digits || /^(?:one|two|three|four|five)$/.test(word)) && !suffix) continue;
+    const n = digits ? Number(word) / (/%|cent/.test(suffix) ? 100 : 1) : /%|cent/.test(suffix) ? NaN : MULTIPLE_WORD[word];
+    if (!Number.isFinite(n)) continue;
+    value = value == null ? n : Math.min(value, n);
+  }
+  return value == null ? null : { value, negated: NOT_A_MULTIPLE.test(clause) };
+}
+/** A clause about the lives together: an owner phrase, the lives with a together word, or a family, couple or group plan. */
+const aboutLivesTogether = (clause: string) => wordAt(clause, OWNER_TIE).length > 0 || livesTogether(clause) || /\b(?:famil(?:y|ies)|couples?|group)\b/i.test(clause);
+/** Whether a note line (one off every row) sets a cap for the lives together as a multiple of each person's own limit greater
+ * than one, not turned round: kept with each person's rows as a condition (capNotes), never withholding them. A multiple of
+ * one or less ("100% of", "1 times", "0.5 times the individual limit for the whole family") or a negated one ("not twice")
+ * is one limit, or less, for all of them: a tie (tiesLimitToLives). */
 export function capsAsMultiple(line: string): boolean {
-  return line.split(/[.;!?](?=\s|$)/).some((clause) => CAP_MULTIPLE.test(clause) && !NOT_A_TIE_CLAUSE.test(clause)
-    && (wordAt(clause, OWNER_TIE).length > 0 || livesTogether(clause) || /\bfamil(?:y|ies)|couples?|group\b/i.test(clause)));
+  return line.split(/[.;!?](?=\s|$)/).some((clause) => { const m = capMultiple(clause);
+    return !!m && m.value > 1 && !m.negated && !NOT_A_TIE_CLAUSE.test(clause) && aboutLivesTogether(clause); });
 }
 /** Whether a note line (one off every row) ties a limit to the lives together (per-person-shared gate round 2): in one clause,
  * a tie (OWNER_TIE, or the lives with a together word) within eight words of a limit word, in a clause that is about no
@@ -747,7 +770,14 @@ export function capsAsMultiple(line: string): boolean {
  * of claims", "one limit applies for each insured person", rooms or rescue costs "shared" are none. */
 export function tiesLimitToLives(line: string): boolean {
   for (const clause of line.split(/[.;!?](?=\s|$)/)) {
-    if (NOT_A_TIE_CLAUSE.test(clause) || CAP_MULTIPLE.test(clause)) continue;
+    if (NOT_A_TIE_CLAUSE.test(clause)) continue;
+    const multiple = capMultiple(clause);
+    if (multiple) {
+      // A family plan's cap above each person's own limit leaves that limit standing; one of one or less, or turned round,
+      // is a limit for all of them together (per-person-shared gate round 4).
+      if (multiple.value > 1 && !multiple.negated) continue;
+      if (aboutLivesTogether(clause)) return true;
+    }
     const limits = wordAt(clause, LIMIT_WORD);
     if (!limits.length) continue;
     const lives = wordAt(clause, LIVES);

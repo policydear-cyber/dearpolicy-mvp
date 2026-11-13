@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, figureText, NOT_TOLD_WHY, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
-import { amountsFromRows, chatRows, noteLeftOutAmounts, withheldNote, withheldRows } from "@/lib/benefit-table/chat";
+import { amountsFromRows, chatRows, noteLeftOutAmounts, renderTable, withheldNote, withheldRows } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT } from "@/lib/simple-chat/verify";
 import { BASE_FAMILY, CASES, NAME, NOW, build, type Case } from "./per-person-adversarial-cases";
@@ -446,6 +446,33 @@ for (const cell of ["S$500,000 for the certificate", "S$500,000 (all travellers)
   test(`gate PPS-3: a medical row printing '${cell}' is no one's own; the other rows stay each person's`, () =>
     assert.deepEqual(sixWith({ rows: withSix("Overseas medical expenses", ["Overseas medical expenses", cell, 500000]) }), each(SIX_NAMES.slice(1))));
 }
+// Per-person-shared gate round 4: the multiple is read as a number; only one above 1, not turned round, keeps each person's rows.
+for (const line of ["For Family Plan, the most we pay for the whole family is 100% of the individual limit.", "For Family Plan, the most we pay for the whole family is 1 times the individual limit.",
+  "For Family Plan, the most we pay for the whole family is 0.5 times the individual limit.", "For Family Plan, the most we pay for the whole family is 50% of the individual limit.",
+  "Family plan maximum: 1 times the per insured person limit, in aggregate.", "For the family, the most we pay is the limit shown, not twice the limit shown.",
+  "For the family, the most we pay is the limit shown instead of twice the limit shown.", "For Family Plan, the most we pay for the whole family is half the individual limit."]) {
+  test(`gate PPS-4: '${line}' (a multiple of 1 or less, or turned round) withholds every per-person limit`, () => assert.deepEqual(sixWith({ extra: [line] }), noOne));
+}
+for (const line of ["For Family Plan, the most we pay for the whole family is 150% of the individual limit.", "For Family Plan, the most we pay for the whole family is 1.5 times the individual limit.",
+  "For Family Plan, the most we pay for all insured persons combined is 2 x the limit shown, up to S$600,000."]) {
+  test(`gate PPS-4: '${line}' (a multiple above 1) keeps each person's rows with the note`, () => {
+    const t = perPersonTable({ rows: SIX, extra: [line] });
+    for (const id of ["a", "b", "k"]) {
+      const rows = t.people.find((p) => p.id === id)!.rows.filter((x) => x.figure.kind !== "none");
+      assert.deepEqual(rows.map((x) => x.benefit), SIX_NAMES, id);
+      for (const x of rows) assert.ok(x.conditions.includes(line), `${id} ${x.benefit}`);
+    }
+  });
+}
+test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
+  const t = perPersonTable({ rows: SIX });
+  const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),
+    documents: [{ policyId: TRAVEL, name: "Globe-Travel-Certificate.pdf", insurer: null, productName: "Globe Travel Annual", policyNumber: null, documentType: null, documentRole: null,
+      effectiveDate: null, expiryDate: null, uploadedAt: "2026-03-01", uploadedFor: null, linkedPeople: BASE_FAMILY.map((m) => m.display_name), supersededAt: null, processingStatus: "ready", pages: [] }] } as unknown as Household;
+  const text = renderTable(chatRows(t, household));
+  assert.ok(!/for per insured/.test(text), text.slice(0, 400));
+  assert.match(text, /\| per insured person \|/);
+});
 test("H4: 'Signed on behalf of the policyholder: N. Okafor' does not block the plain table", () => {
   const { table } = schedule({ post: ["Signed on behalf of the policyholder: N. Okafor"] });
   for (const id of NAMED) assert.equal(fixedShown(table, id).length, 2, id);

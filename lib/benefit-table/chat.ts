@@ -8,7 +8,7 @@
 import type { BenefitTable, Figure, PersonCover, TableRow } from "./assemble";
 import type { Source } from "./check";
 import { figureText, periodWords } from "./assemble";
-import { benefitName, benefitNames } from "./headline";
+import { benefitName, benefitNames, qualifierText } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
@@ -647,7 +647,7 @@ export function noteNarrowedPages<T extends { id: string; kind: string; text: st
 export function renderTable(rows: ChatRow[]): string {
   if (!rows.length) return "";
   const line = (r: ChatRow) => [r.id, r.person, [r.product, r.cover !== r.product ? r.cover : null, r.plan ? `plan ${r.plan}` : null].filter(Boolean).join(" / "),
-    r.benefit, r.qualifier ? `for ${r.qualifier}` : null, figureText(r.figure), r.fromDay != null ? `from day ${r.fromDay}` : null,
+    r.benefit, qualifierText(r.qualifier), figureText(r.figure), r.fromDay != null ? `from day ${r.fromDay}` : null,
     r.maxDays != null ? `for at most ${r.maxDays} days` : null, r.conditions.length ? `conditions: ${r.conditions.join("; ")}` : null,
     `${documentId(r.docIndex)} page ${r.source.page}`].filter(Boolean).join(" | ");
   return `\n<benefit_table>
