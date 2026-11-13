@@ -789,11 +789,27 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
   };
   const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, near: "", otherPercent: false }; };
 
-  for (const c of Array.isArray(r.covers) ? r.covers : []) {
+  const readCovers = Array.isArray(r.covers) ? r.covers : [];
+  /** The page's one line that is labelled as a sum insured and prints this figure (see the cover loop). */
+  const ownSumLine = (page: number, person: string, value: number): Source | null => {
+    const text = pageText(page);
+    const sameLife = readCovers.filter((x) => str(x?.person) && normalizePersonName(str(x.person)!) === normalizePersonName(person)
+      && (int(x.page) == null || int(x.page) === page));
+    if (sameLife.length !== 1 || otherLife(text, person, doc.people ?? [])) return null;
+    const lines = text.split("\n").filter((l) => {
+      const label = l.trim().split(/\t|:/)[0].trim();
+      const m = SUM_INSURED_WORDS.exec(label);
+      return !!m && /^\s*(?:\([^)\n]*\))?\s*$/.test(label.slice(m[0].length)) && numbersIn(cellsApart(l)).length > 0;
+    });
+    if (lines.length !== 1 || !printsNumber(cellsApart(lines[0]), value)) return null;
+    const at = find(lines[0].trim(), page);
+    return at && at.page === page && !at.excerpt.includes("\n") ? at : null;
+  };
+  for (const c of readCovers) {
     const label = `cover "${c?.cover}" for ${c?.person}`;
     const person = str(c?.person), product = str(c?.product), cover = str(c?.cover), quote = str(c?.quote);
     if (!person || !product || !cover || !quote) { out.dropped.push({ what: label, why: "incomplete row" }); continue; }
-    const source = find(quote, int(c.page));
+    let source = find(quote, int(c.page));
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
     if (!nameOnPage(person, pageText(source.page))) { out.dropped.push({ what: label, why: "person's name not printed on that page" }); continue; }
     // A sample page gives no one cover; a person printed only inside a sentence (a brochure's example person, a letter's
@@ -805,7 +821,15 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // premium is not this cover's sum: the cover is kept without it.
     const sumWhy = OWN_FIGURE_CHECKS.on && sumInsured != null ? amountOnlyInContext(pageText(source.page), sumInsured, { premium: true }) : null;
     if (sumWhy) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} is printed only as ${figureContextWords(sumWhy)}; kept the cover without it` }); sumInsured = null; }
-    if (sumInsured != null && !printedIn(source, sumInsured)) { out.dropped.push({ what: label, why: `sum insured ${sumInsured} not printed in the quote` }); continue; }
+    // A sum the quote does not print is taken from the page's one sum insured line instead, on the same tests as a premium
+    // on its own line: the page is about this life only, and the reading gives this person no other cover there. Else the
+    // cover is kept without the sum, on the same footing as a cover read with no sum: an unproved sum never costs the
+    // person their cover, whose rows would then go to nobody or to another holder of the cover type (#449 repro).
+    if (sumInsured != null && !printedIn(source, sumInsured)) {
+      const sumLine = ownSumLine(source.page, person, sumInsured);
+      if (sumLine) source = sumLine;
+      else { out.dropped.push({ what: label, why: `sum insured ${sumInsured} not printed in the quote or on the page's one sum insured line for this life only; kept the cover without it` }); sumInsured = null; }
+    }
     let premium = num(c.premium);
     // A premium printed on its own line counts only on the cover's own page, on a line that says it is a premium.
     let premiumSource: Source | null = null, premiumLabel: string | null = null;
