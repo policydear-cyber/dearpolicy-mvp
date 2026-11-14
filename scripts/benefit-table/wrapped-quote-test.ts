@@ -17,6 +17,7 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, wrappedRowsAt, type SourceDoc } from "@/lib/benefit-table/check";
+import { dropQuotePointers } from "@/lib/benefit-table/chat";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|GEMINI|_API_KEY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network in this test"); }) as typeof fetch;
@@ -205,6 +206,135 @@ test("quotes main finds are found as before, from the same place", () => {
   assert.equal(rowOf(r, /Late-stage/)?.source.excerpt, "Late-stage critical illness 100% of the Sum Covered, less any\nearly-stage amount already paid");
   assert.equal(rowOf(r, /Hospital income/)?.value, 300);
   assert.ok(rowOf(r, /Angioplasty/));
+});
+
+/** Gate round 3 probes (wq3, wq3b): "<words> is/are quoted below and REST" in an answer with no quote of it. With a listed
+ * verb, or a listed adverb then a listed verb, the words keep REST ("The terms say RM 20,000", "The wording therefore pays
+ * RM 20,000"); with a listed participle they keep "is"/"are" ("The wording is signed by the insurer"); else REST stands on
+ * its own, capitalised, word for word ("Bed charges are paid up to RM 500 a day"). No figure or word of REST ever changes. */
+const PROMISE_AND: [string, string][] = [
+  ["The wording is quoted below and angioplasty pays RM 20,000.", "Angioplasty pays RM 20,000."],
+  ["The terms are quoted below and Hafiz is not named in them.", "Hafiz is not named in them."],
+  ["The terms are quoted below and are the same for Hafiz.", "The terms are the same for Hafiz."],
+  ["The terms are quoted below and does not mention day surgery.", "The terms does not mention day surgery."],
+  ["The terms are quoted below and were changed in 2023.", "The terms were changed in 2023."],
+  ["The wording is quoted below and bed charges are paid up to RM 500 a day.", "Bed charges are paid up to RM 500 a day."],
+  ["The wording is quoted below and bed and board is paid at RM 300 a day.", "Bed and board is paid at RM 300 a day."],
+  ["The wording is quoted below and red tape applies.", "Red tape applies."],
+  ["The wording is quoted below and shed fees are not covered.", "Shed fees are not covered."],
+  ["The wording is quoted below and Ted is not named in it.", "Ted is not named in it."],
+  ["The wording is quoted below and Ted pays nothing.", "Ted pays nothing."],
+  ["The wording is quoted below and Fred is covered up to RM 10,000.", "Fred is covered up to RM 10,000."],
+  ["The wording is quoted below and Ahmed is covered up to RM 10,000.", "Ahmed is covered up to RM 10,000."],
+  ["The wording is quoted below and Mohamed is named in it.", "Mohamed is named in it."],
+  ["The wording is quoted below and hundred ringgit is the excess.", "Hundred ringgit is the excess."],
+  ["The wording is quoted below and seed money is excluded.", "Seed money is excluded."],
+  ["The wording is quoted below and in Malay.", "In Malay."],
+  ["The wording is quoted below and in Malay it says RM 20,000.", "In Malay it says RM 20,000."],
+  ["The wording is quoted below, and in Malay the limit is RM 20,000.", "In Malay the limit is RM 20,000."],
+  ["The wording is quoted below and not all claims are paid.", "Not all claims are paid."],
+  ["The wording is quoted below and not every claim pays RM 20,000.", "Not every claim pays RM 20,000."],
+  ["The wording is quoted below and all claims are paid within 30 days.", "All claims are paid within 30 days."],
+  ["The wording is quoted below and only angioplasty pays RM 20,000.", "Only angioplasty pays RM 20,000."],
+  ["The wording is quoted below and both plans pay RM 20,000.", "Both plans pay RM 20,000."],
+  ["The wording is quoted below and still pays RM 20,000.", "The wording still pays RM 20,000."],
+  ["The wording is quoted below and also covers angioplasty at RM 20,000.", "The wording also covers angioplasty at RM 20,000."],
+  ["The wording is quoted below and covered claims pay RM 20,000.", "Covered claims pay RM 20,000."],
+  ["The wording is quoted below and insured persons are paid RM 20,000.", "Insured persons are paid RM 20,000."],
+  ["The wording is quoted below and limited cover is RM 20,000.", "Limited cover is RM 20,000."],
+  ["The wording is quoted below and approved hospital stays pay RM 200 a day.", "Approved hospital stays pay RM 200 a day."],
+  ["The wording is quoted below and hospitalised patients get RM 200 a day.", "Hospitalised patients get RM 200 a day."],
+  ["The wording is quoted below and day surgery is paid in full.", "Day surgery is paid in full."],
+  ["The wording is quoted below and up to RM 20,000 is paid.", "Up to RM 20,000 is paid."],
+  ["The wording is quoted below and RM 20,000 is the limit.", "RM 20,000 is the limit."],
+  ["The wording is quoted below and 10% of the Sum Covered is paid.", "10% of the Sum Covered is paid."],
+  ["The wording is quoted below and for angioplasty the limit is RM 25,000.", "For angioplasty the limit is RM 25,000."],
+  ["The wording is quoted below and under Plan A it pays RM 25,000.", "Under Plan A it pays RM 25,000."],
+  ["The wording is quoted below and from day 91 cover starts.", "From day 91 cover starts."],
+  ["The wording is quoted below and after 90 days it pays RM 25,000.", "After 90 days it pays RM 25,000."],
+  ["The wording is quoted below and when diagnosed it pays RM 25,000.", "When diagnosed it pays RM 25,000."],
+  ["The wording is quoted below and if diagnosed early it pays 25%.", "If diagnosed early it pays 25%."],
+  ["The wording is quoted below and so is the exclusion.", "So is the exclusion."],
+  ["The wording is quoted below and Hafiz and Aisyah are both named.", "Hafiz and Aisyah are both named."],
+  ["The wording is quoted below and Hafiz's plan pays RM 20,000.", "Hafiz's plan pays RM 20,000."],
+  ["The wording is quoted below and Hafiz’s plan pays RM 20,000.", "Hafiz’s plan pays RM 20,000."],
+  ["The wording is quoted below and early-stage cover pays 25%.", "Early-stage cover pays 25%."],
+  ["The wording is quoted below and late stage cover pays 100% of the sum.", "Late stage cover pays 100% of the sum."],
+  ["The wording is quoted below and ICU pays RM 400 a day.", "ICU pays RM 400 a day."],
+  ["The wording is quoted below and claims for ICU stays pay RM 400 a day.", "Claims for ICU stays pay RM 400 a day."],
+  ["The wording is quoted below and claims made within the first year are limited to RM 5,000.", "Claims made within the first year are limited to RM 5,000."],
+  ["The wording is quoted below and pays RM 20,000.", "The wording pays RM 20,000."],
+  ["The wording is quoted below and states RM 20,000.", "The wording states RM 20,000."],
+  ["The wording is quoted below and is clear.", "The wording is clear."],
+  ["The wording is quoted below and needed for the claim.", "The wording is needed for the claim."],
+  ["The wording is quoted below and signed by the insurer.", "The wording is signed by the insurer."],
+  ["The wording is quoted below and dated 1 March 2024.", "The wording is dated 1 March 2024."],
+  ["The wording is quoted below and limited to angioplasty.", "The wording is limited to angioplasty."],
+  ["The wording is quoted below and used for every claim.", "The wording is used for every claim."],
+  ["The wording is quoted below and paid claims are listed.", "Paid claims are listed."],
+  ["The wording is quoted below and listed claims are paid.", "Listed claims are paid."],
+  ["The wording is quoted below and need not be signed.", "The wording need not be signed."],
+  ["The wording is quoted below but angioplasty pays RM 20,000.", "Angioplasty pays RM 20,000."],
+  ["The wording is quoted below, but Hafiz is not named.", "Hafiz is not named."],
+  ["The wording is quoted below so angioplasty pays RM 20,000.", "Angioplasty pays RM 20,000."],
+  ["The clause is quoted below and the RM 20,000 limit applies.", "The RM 20,000 limit applies."],
+  ["The clause is quoted below and its limit is RM 20,000.", "Its limit is RM 20,000."],
+  ["The terms are quoted below and pay RM 20,000 for angioplasty.", "The terms pay RM 20,000 for angioplasty."],
+  ["The terms are quoted below and say RM 20,000.", "The terms say RM 20,000."],
+  ["The terms are quoted below and Plan B pays RM 30,000.", "Plan B pays RM 30,000."],
+  ["The terms are quoted below and Section 4 sets the limit at RM 20,000.", "Section 4 sets the limit at RM 20,000."],
+  ["The terms are quoted below and clause 4.2 limits it to RM 20,000.", "Clause 4.2 limits it to RM 20,000."],
+  ["The terms are quoted below and coronary artery treatment is paid at 10%.", "Coronary artery treatment is paid at 10%."],
+  ["The terms are quoted below and coronary artery bypass grafting is paid at 10%.", "Coronary artery bypass grafting is paid at 10%."],
+  ["The terms are quoted below and invasive treatment for coronary artery pays 10%.", "Invasive treatment for coronary artery pays 10%."],
+  ["The terms are quoted below and the amount is shown on the card.", "The amount is shown on the card."],
+  ["The terms are quoted below and they say nothing about day surgery.", "They say nothing about day surgery."],
+  ["The terms are quoted below and nothing is paid for day surgery.", "Nothing is paid for day surgery."],
+  ["The terms are quoted below and none of it applies to Hafiz.", "None of it applies to Hafiz."],
+  ["The terms are quoted below and neither plan pays for day surgery.", "Neither plan pays for day surgery."],
+  ["The terms are quoted below and Dr Lim must certify the claim.", "Dr Lim must certify the claim."],
+  ["The terms are quoted below and Mr Ahmad Bin Hassan Ali is named.", "Mr Ahmad Bin Hassan Ali is named."],
+  ["The terms are quoted below and Tan Mei Ling Rachel is named in them.", "Tan Mei Ling Rachel is named in them."],
+  ["The terms are quoted below and AIA Bhd pays RM 20,000.", "AIA Bhd pays RM 20,000."],
+  ["The terms are quoted below and per claim RM 20,000 is paid.", "Per claim RM 20,000 is paid."],
+  ["The terms are quoted below and each claim pays RM 20,000.", "Each claim pays RM 20,000."],
+  ["The terms are quoted below and RM 20,000 per claim applies.", "RM 20,000 per claim applies."],
+  ["The terms are quoted below and Medisave covers the rest.", "Medisave covers the rest."],
+  ["The terms are quoted below and Medishield Life covers the rest.", "Medishield Life covers the rest."],
+  ["The terms are quoted below and 30 days must pass before a claim.", "30 days must pass before a claim."],
+  ["The terms are quoted below and pre-existing conditions are excluded.", "Pre-existing conditions are excluded."],
+  ["The terms are quoted below and well-documented claims are paid.", "Well-documented claims are paid."],
+  ["The terms are quoted below and red-flag symptoms need a doctor.", "Red-flag symptoms need a doctor."],
+  ["The terms are quoted below and the bed charge is RM 500.", "The bed charge is RM 500."],
+  ["The terms are quoted below and bed is RM 500 a night.", "Bed is RM 500 a night."],
+  ["The terms are quoted below and booked rooms are paid.", "Booked rooms are paid."],
+  ["The wording is quoted below and therefore pays RM 20,000.", "The wording therefore pays RM 20,000."],
+  ["The wording is quoted below and in turn pays RM 20,000.", "The wording in turn pays RM 20,000."],
+  ["The wording is quoted below and clearly states RM 20,000.", "The wording clearly states RM 20,000."],
+  ["The wording is quoted below and in full says RM 20,000.", "The wording in full says RM 20,000."],
+  ["The wording is quoted below and on page 4 states RM 20,000.", "The wording on page 4 states RM 20,000."],
+  ["The wording is quoted below and at clause 4.2 limits it to RM 20,000.", "At clause 4.2 limits it to RM 20,000."],
+  ["The wording is quoted below and expressly excludes day surgery.", "The wording expressly excludes day surgery."],
+  ["The terms are quoted below and together pay RM 20,000.", "The terms together pay RM 20,000."],
+  ["The terms are quoted below and between them cover RM 20,000.", "The terms between them cover RM 20,000."],
+  ["The clause is quoted below and only pays RM 20,000.", "The clause only pays RM 20,000."],
+  ["The clause is quoted below and never pays more than RM 20,000.", "The clause never pays more than RM 20,000."],
+  ["The clause is quoted below and still pays RM 20,000.", "The clause still pays RM 20,000."],
+  ["The terms are quoted below and need not be signed.", "The terms need not be signed."],
+  ["The clause is quoted below and does not mention day surgery.", "The clause does not mention day surgery."],
+  ["The wording is quoted below and mentioned RM 20,000.", "Mentioned RM 20,000."],
+  ["The wording is quoted below and updated in 2024 pays RM 20,000.", "Updated in 2024 pays RM 20,000."],
+  ["The wording is quoted below and Ted.", "Ted."]
+];
+test("a promise of quoted words before 'and': the closed lists decide, and no word or figure after it changes (gate round 3)", () => {
+  const ROWS = ["Angioplasty and other invasive treatment for coronary artery", "Early-stage critical illness", "Hospital income (ICU)", "Late-stage critical illness", "Hospital cash", "Hospital expenses"];
+  for (const [input, want] of PROMISE_AND) {
+    const a = { summary: input, bottomLine: input as string | null, citations: [], statements: [] as { text: string }[] };
+    dropQuotePointers(a, [], ["Hafiz", "Aisyah"], ROWS);
+    assert.equal(a.bottomLine, want, input);
+    // Every figure of the sentence is still there.
+    for (const f of input.match(/\d[\d,.]*%?/g) ?? []) assert.ok(a.bottomLine!.includes(f.replace(/\.$/, "")), `${input}: ${f}`);
+  }
 });
 
 console.log(`${passed} passed, ${failures.length} failed`);

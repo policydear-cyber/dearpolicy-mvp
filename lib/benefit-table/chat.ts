@@ -1174,18 +1174,18 @@ const PROMISE = String.raw`(?:${NOUN_WORDS}${WORDING_NOUN}\s+(?:is|are)\s+${WORD
   + String.raw`|(?:it\s+is|it['’]s|they\s+are)\s+(?:quoted|set\s+out|listed|shown)\s+below(?:\s+with\s+(?:its|their)\s+(?:terms|wording))?\b)`;
 export const WORDING_POINTER = new RegExp(String.raw`\b${WORDING_NOUN}\s+(?:(?:is|are)\s+)?${WORDING_WORDS}|\bquoted\s+(?:in\s+full\s+)?below\b|\b(?:the|a)\s+(?:quotes?|quotations?)\s+below\b|${SEE_QUOTE}`
   + String.raw`|\bI(?:['’]ve|\s+have)\s+(?:quoted|set\s+out|reproduced)\b[^.!?]{0,60}\bbelow\b|\b(?:listed|set\s+out|shown)\s+below\s+with\s+(?:its|their)\s+(?:terms|wording)\b`, "iu");
-/** A word that opens a clause with its own subject ("and the amount is shown on the card", "and they say nothing"). */
-const OWN_SUBJECT = /^(?:the|this|that|these|those|it|its|they|their|he|she|his|her|we|our|you|your|i|a|an|there|each|every|no|any)\b/i;
-/** Verbs said of printed words or of a benefit, in either form: a clause starting with one has no subject of its own
- * ("and are the same", "and does not mention", "and were changed", "and pay ..."); a clause with one within its first
- * five words, after words of its own, has one ("and angioplasty pays RM 20,000", "and Hafiz is not named in them"). */
-const WORD_VERB = String.raw`(?:is|are|was|were|be|been|has|have|had|does|do|did|doesn['’]t|don['’]t|didn['’]t|isn['’]t|aren['’]t|can|cannot|can['’]t|will|won['’]t|would|may|might|must|should|`
-  + String.raw`says?|states?|mentions?|excludes?|includes?|explains?|describes?|defines?|means?|lists?|sets?|shows?|gives?|covers?|pays?|appl(?:y|ies)|needs?|requires?|limits?|names?|refers?|allows?|matches?|counts?|differs?|vary|varies|stops?|ends?|starts?|depends?|follows?|reduces?|exceeds?|remains?|changes?)`;
-const VERB_START = new RegExp(String.raw`^(?:${WORD_VERB}|not|also|only|still|both|all|[a-z]+ed)\b`, "i");
-const OWN_CLAUSE = new RegExp(String.raw`^(?:(?!(?:and|but|or|so)\b)[\p{L}\d'’-]+\s+){1,4}?${WORD_VERB}\b`, "iu");
-const hasOwnSubject = (rest: string) => OWN_SUBJECT.test(rest) || (!VERB_START.test(rest) && OWN_CLAUSE.test(rest));
-/** "The wording is quoted below and angioplasty pays RM 20,000.", "The words are quoted below, and they say …": a leading
- * promise before a clause with a subject of its own goes; the clause stays. */
+/** After "<words> is/are quoted below and", a closed list of verbs said of printed words (and the auxiliaries "is", "are",
+ * "has", "does", "can", "must" …): the words keep the clause as theirs ("The terms say RM 20,000", "The terms are the same
+ * for Hafiz", "The clause has no figure"). Also after one adverb from a closed list ("The wording therefore pays …",
+ * "The clause only pays …"). Gate round 3: no guessing from a word's ending. */
+const AND_VERB = String.raw`(?:pays?|says?|states?|covers?|excludes?|limits?|mentions?|does|do|doesn['’]t|don['’]t|lists?|sets\s+out|set\s+out|shows?|names?|includes?|appl(?:y|ies)`
+  + String.raw`|is|are|was|were|isn['’]t|aren['’]t|has|have|had|can|cannot|can['’]t|will|won['’]t|may|might|must|should|would|needs?|requires?)`;
+const AND_ADVERB = String.raw`(?:therefore|clearly|expressly|together|also|only|still|never|in\s+turn|in\s+full|between\s+them|on\s+page\s+\d+)`;
+const KEEPS_CLAUSE = new RegExp(String.raw`^(?:${AND_ADVERB}\s+)?${AND_VERB}\b`, "i");
+/** A closed list of past participles said of printed words, before a preposition or a date ("signed by the insurer",
+ * "limited to angioplasty", "dated 1 March 2024"): the words keep "is"/"are" ("The wording is signed by the insurer"). */
+const KEEPS_VERB = /^(?:signed|dated|limited|needed|used|required|attached|printed|written|issued|stamped|endorsed)\s+(?:to|by|for|in|on|at|from|with|under|\d)/i;
+/** A promise that opens the sentence, joined to what follows by "and", "but" or "so". */
 const LEADING_AND = new RegExp(String.raw`^\s*${PROMISE}\s*,?\s+(?:and|but|so)\s+`, "iu");
 const STEPS: [RegExp, string | ((...m: string[]) => string)][] = [
   // "(the wording is quoted below)", "(see the quote below)": the aside goes.
@@ -1203,8 +1203,8 @@ const STEPS: [RegExp, string | ((...m: string[]) => string)][] = [
   [new RegExp(String.raw`^\s*${PROMISE}\s*:\s+`, "iu"), ""],
 ];
 /** "The terms are quoted below and are the same …", "the clause is quoted below but has no figure": the promise goes and
- * the words keep their verb ("The terms are the same …", "the clause has no figure"); only when what follows starts with
- * a verb (VERB_START). */
+ * the words keep the clause ("The terms are the same …", "the clause has no figure"); only before a listed verb or
+ * participle (KEEPS_CLAUSE, KEEPS_VERB). */
 const WORDING_AND = new RegExp(String.raw`\b(${WORDING_NOUN})\s+(is|are)\s+${WORDING_WORDS}(?:\s+(?:from|in|as)\s+the\s+(?:policy|schedule|document|table))?\s+(?:and|but)\s+`, "giu");
 /** The same words used as a name ("the wording quoted below says ..."): the name stays without the promise. */
 const WORDING_AS_NAME = new RegExp(String.raw`\b(${WORDING_NOUN})\s+${WORDING_WORDS}(?=\s+[a-z])`, "gu");
@@ -1225,14 +1225,19 @@ function withoutWordingPointer(sentence: string): string | null {
     const next = t.replace(re, by as string);
     if (next !== t && /[\p{L}\d]/u.test(next)) t = next;
   }
+  // "<words> is/are quoted below and REST": with a listed verb (after a listed adverb or not) the words keep REST as their
+  // clause; with a listed participle they keep "is"/"are" too; else, when the promise opens the sentence, REST stands on
+  // its own ("Bed charges are paid …", "Fred is covered …"), word for word. Anything else stays as it is.
   const lead = LEADING_AND.exec(t);
-  if (lead && hasOwnSubject(t.slice(lead[0].length))) t = t.slice(lead[0].length);
-  // Only before a verb of its own does the promise go with the words keeping their verb; else (a subject of its own not
-  // at the start, or unsure) it stays.
+  if (lead) {
+    const rest = t.slice(lead[0].length);
+    if (!KEEPS_CLAUSE.test(rest) && !KEEPS_VERB.test(rest)) t = rest;
+  }
   t = t.replace(WORDING_AND, (m, noun: string, verb: string, at: number, all: string) => {
     const rest = all.slice(at + m.length);
-    if (!VERB_START.test(rest)) return m;
-    return /^(?:is|are|was|were)\b/i.test(rest) || dropsVerb(verb, rest) ? `${noun} ` : `${noun} ${verb.toLowerCase()} `;
+    if (KEEPS_CLAUSE.test(rest)) return `${noun} `;
+    if (KEEPS_VERB.test(rest)) return `${noun} ${verb.toLowerCase()} `;
+    return m;
   }).replace(WORDING_AS_NAME, (_m, noun: string) => noun);
   if (t === text) return sentence;
   const out = tidy(t);

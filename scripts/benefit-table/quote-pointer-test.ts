@@ -123,8 +123,9 @@ async function main() {
       ["The terms are quoted below and were changed in 2026.", "The terms were changed in 2026."],
       ["The terms are quoted below and pay out once per illness.", "The terms pay out once per illness."],
       ["The policy terms are quoted below and the amount depends on the stage.", "The amount depends on the stage."],
-      // Unsure what follows "and": the sentence stays as it is.
-      ["The wording is quoted below and in Malay.", "The wording is quoted below and in Malay."],
+      // Gate round 3: with no listed verb after "and", what follows stands on its own, word for word.
+      ["The wording is quoted below and in Malay.", "In Malay."],
+      // A promise in the middle of a sentence, before a clause with no listed verb: the sentence stays as it is.
       ["Angioplasty is covered and the wording is quoted below and angioplasty pays RM 20,000.", "Angioplasty is covered and the wording is quoted below and angioplasty pays RM 20,000."],
       ["Angioplasty is covered; see the wording below for what counts.", "Angioplasty is covered."],
       ["The angioplasty terms are quoted below and apply only to treatment in Malaysia.", "The angioplasty terms apply only to treatment in Malaysia."],
