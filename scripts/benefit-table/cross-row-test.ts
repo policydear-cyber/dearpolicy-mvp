@@ -402,5 +402,47 @@ test("P-1 control: a benefit heading in (USD), a column header in US$, or a sign
   }
 });
 
+// ---------- Cross-row gate round 4: a USD section on a S$ page is mixed whatever the words around its mention ----------
+const R4: [string, string][] = [
+  ["A0", "OVERSEAS BENEFITS (USD)"],
+  ["A1", "OVERSEAS BENEFITS\nNote: all amounts in this section are in USD"],
+  ["A1b", "* Amounts below are in US dollars"],
+  ["A1c", "Remarks: payable in USD"],
+  ["A2", "THE FOLLOWING OVERSEAS MEDICAL AND EMERGENCY BENEFITS UNDER SECTION B OF THIS POLICY SCHEDULE ARE PAYABLE IN USD"],
+  ["A3", "The following overseas benefits are payable in US dollars (USD)."],
+  ["A3b", "OVERSEAS BENEFITS (USD)."],
+  ["A4", "SURGICAL FEES (USD)"],
+  ["A4b", "HOSPITAL SERVICE CHARGES (USD)"],
+  ["A4c", "Hospital service charges\tUS$2,000"],
+  ["A5", "Benefit\tLimit (USD)\tPremium"],
+  ["A6", "OVERSEAS BENEFITS (USD) - subject to conditions"],
+  ["A7", "OVERSEAS BENEFITS (USD) - ALL LEVELS"],
+  ["A8", "Overseas benefits paid by the Company in USD"],
+  ["A9", "Overseas hospitalisation (inc. evacuation)\tUS$5,000"],
+  ["A10", "Emergency road assistance\tUS$500"],
+  ["A11", "Daily cash (tax-free)\tUS$100"],
+  ["A12", "OVERSEAS BENEFITS (USD) - see Notes"],
+  ["A13", "Section B - Overseas Benefits (USD)"],
+  ["A14", "OVERSEAS BENEFITS (USD) - LIMITED COVER"],
+  ["A15", "OVERSEAS BENEFITS PAYABLE IN USD AT THE EXCHANGE RATE ON THE CLAIM DATE"],
+  ["A16", "Benefit\tLimit (USD)\tRemarks"],
+  ["A18", "Medical expenses in the USA (incl. Floor/Level ICU)\tUS$50,000"],
+  ["A19", "OVERSEAS BENEFITS (USD) - CONTRIBUTION WAIVER"],
+  ["A20", "Pre-existing conditions\tUS$1,000"],
+];
+test("R4: a USD section, heading, column header, note or signed row on a S$ page gives a bare figure no amount (25 shapes)", () => {
+  for (const [name, line] of R4) {
+    const { figures } = run(`Ambulance\tS$500\n${line}\nEmergency medical\t50,000`, [{ benefit: "Emergency medical", pays: "up_to", value: 50000, quote: "Emergency medical\t50,000" }], "TABLE OF BENEFITS (S$)");
+    assert.equal(amountOf(figures.get("Emergency medical")), null, name);
+  }
+});
+test("R4 control: premium, capital, address, conversion and exclusion mentions still leave a S$ page single-currency", () => {
+  for (const line of ["Premium: USD 120 per year", "Harbour Insurance Berhad (paid-up capital RM 100 million)", "Exclusions: claims above US$1,000 incurred in the USA are not covered.",
+    "Note: overseas bills are converted from (US$) at the claim date", "Tel: +65 6123 4567 | www.harbour.example | 1 Harbour Road, Singapore 018989"]) {
+    const { figures } = run(`Ambulance\t500\n${line}`, [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], "TABLE OF BENEFITS (S$)");
+    assert.equal(amountOf(figures.get("Ambulance")), 500, line);
+  }
+});
+
 if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
 console.log(`cross-row-test: ${passed} passed`);
