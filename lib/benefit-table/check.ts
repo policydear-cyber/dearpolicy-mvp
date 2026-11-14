@@ -931,6 +931,11 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   // Every page's lines in one run too, so a note sentence is read across a page break (gate round 8, R8-H1).
   const pageLines = pages.map((p) => p.text.split(/\r?\n/));
   const all = pageLines.flat();
+  // For each line, the next printed line at or after it: blank lines and page numbers ("Page 3 of 5", "3/5", "3") are
+  // skipped, however many (gate round 9, R9-H1 and D2). Built once, from the end.
+  const PAGE_NUMBER = /^\s*(?:page\s+)?\d{1,4}(?:\s*(?:of|\/)\s*\d{1,4})?\s*$/i;
+  const nextPrinted = new Array<number>(all.length + 1).fill(all.length);
+  for (let k = all.length - 1; k >= 0; k--) nextPrinted[k] = flat(all[k]) && !PAGE_NUMBER.test(all[k]) ? k : nextPrinted[k + 1];
   let pageStart = 0, carriedTo = 0;
   for (const lines of pageLines) {
     const off = pageStart;
@@ -955,11 +960,11 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
       // A line already read as the rest of the sentence above it is not read again on its own.
       // Lines are counted across pages (g), so the sentence runs on over a page break and blank lines at a page's foot.
       const g = off + i;
-      const nextText = (from: number) => { let k = from; while (k < all.length && k < from + 8 && !flat(all[k])) k++; return k < all.length && flat(all[k]) ? { k, line: all[k] } : null; };
+      const nextText = (from: number) => { const k = nextPrinted[Math.min(from, all.length)]; return k < all.length ? { k, line: all[k] } : null; };
       if (!rowLine && g >= carriedTo && (TIE_HINT.test(line) || /^\s*[a-z]/.test(nextText(g + 1)?.line ?? ""))) {
         const parts = [line.trim()];
         let j = g + 1;
-        for (let n = nextText(j); n && !/[.!?]\s*$/.test(parts.at(-1)!) && n.k < g + 9 && /^\s*[a-z]/.test(n.line) && !own.has(flat(n.line)); n = nextText(j)) { parts.push(n.line.trim()); j = n.k + 1; }
+        for (let n = nextText(j); n && parts.length < 8 && !/[.!?]\s*$/.test(parts.at(-1)!) && /^\s*[a-z]/.test(n.line) && !own.has(flat(n.line)); n = nextText(j)) { parts.push(n.line.trim()); j = n.k + 1; }
         carriedTo = j;
         const sentence = parts.join(" ");
         if (TIE_HINT.test(sentence)) {

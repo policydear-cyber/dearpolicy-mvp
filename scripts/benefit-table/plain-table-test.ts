@@ -589,6 +589,30 @@ test("gate PPS-8: 'Medical expenses are shared by the family.' withholds 'Overse
   assert.deepEqual(sixWith({ extra: ["Medical expenses are shared by the family."] }), each(SIX_NAMES.slice(1))));
 test("gate PPS-8: 'Hotel rooms shared with a travel companion are covered.' withholds no row (no row's head words)", () =>
   assert.deepEqual(sixWith({ extra: ["Hotel rooms shared with a travel companion are covered."] }), each(SIX_NAMES)));
+// Per-person-shared gate round 9: any number of blank lines before the next page's ceiling; page numbers are no line that
+// carries a sentence on; a shared benefit named by its last word or in other words.
+for (const blanks of [9, 20, 60]) {
+  test(`gate PPS-9 R9-H1: an open shape, ${blanks} blank lines, then page 2's 'or S$5,000, whichever is less.' withholds every per-person limit`, () =>
+    assert.deepEqual(sixWith({ extra: [SHAPE_OPEN, ...Array(blanks).fill("")], page2: ["or S$5,000, whichever is less."] }), noOne));
+}
+test("gate PPS-9: an open shape, a 'Page 1 of 2' footer, then page 2's ceiling withholds every per-person limit", () =>
+  assert.deepEqual(sixWith({ extra: [SHAPE_OPEN, "Page 1 of 2"], page2: ["or S$5,000, whichever is less."] }), noOne));
+for (const footer of ["page 3 of 5", "3/5", "3"]) {
+  test(`gate PPS-9 D2: a complete shape followed only by the page number '${footer}' keeps each person's rows with the note`, () => {
+    const t = perPersonTable({ rows: SIX, extra: [`${SHAPE_OPEN}.`, footer] });
+    for (const id of ["a", "b", "k"]) assert.deepEqual(t.people.find((p) => p.id === id)!.rows.filter((x) => x.figure.kind !== "none").map((x) => x.benefit), SIX_NAMES, id);
+  });
+}
+for (const [line, rows, gone] of [
+  ["Liability is shared by the family.", SIX, "Personal liability"],
+  ["Third party liability is shared by the family.", [...SIX.slice(0, 5), ["Personal liability (third party)", "S$1,000,000", 1000000]], "Personal liability (third party)"],
+  ["Evacuation is shared by all insured persons.", SIX, "Emergency medical evacuation"],
+  ["Medical costs are shared by the family.", SIX, "Overseas medical expenses"]] as [string, [string, string, number][], string][]) {
+  test(`gate PPS-9: '${line}' withholds '${gone}' and no other row`, () =>
+    assert.deepEqual(sixWith({ rows, extra: [line] }), each(rows.map(([b]) => b).filter((b) => b !== gone))));
+}
+test("gate PPS-9: 'Expenses are shared by the family.' names no row by a generic last word", () =>
+  assert.deepEqual(sixWith({ extra: ["Expenses are shared by the family."] }), each(SIX_NAMES)));
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),

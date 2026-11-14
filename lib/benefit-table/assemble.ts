@@ -802,6 +802,8 @@ function anotherRowsNote(r: CheckedReading, b: CheckedBenefit, line: string | un
     : new RegExp(String.raw`\(\s*(?:note\s+)?${mark}\s*\)|\bnote\s+${mark}\b`, "i").test(t);
   return !marks(b.rowText ?? b.source.excerpt) && r.benefits.some((x) => x !== b && marks(x.rowText ?? x.source.excerpt));
 }
+/** Last words of a benefit label too general to name it alone ("Overseas medical expenses" is not named by "expenses"). */
+const GENERIC_LAST_WORD = new Set(["expenses", "expense", "costs", "benefit", "benefits", "cover", "limit", "limits", "amount", "amounts", "allowance", "payment", "charges", "fees"]);
 /** A row label that is a family's or household's own benefit ("Family personal liability", "Household contents"), never
  * one that names who does something ("Compassionate visit by a family member"). */
 const HOUSEHOLD_LABEL = /^\s*(?:famil(?:y|ies)|households?)\b(?!\s+members?\b)/i;
@@ -834,9 +836,12 @@ function perPersonColumnRow(r: CheckedReading, b: CheckedBenefit, next: string):
   // The row is named by its label without a bracketed part ("Personal liability (third party)") or by the label's last two
   // or more words ("Overseas medical expenses" is named by "Medical expenses are shared ..."; gate round 8).
   if ((r.tieLines ?? []).length) {
+    // Also by its last word when that word names a benefit ("Liability is shared ..." against "Personal liability";
+    // "Evacuation ..." against "Emergency medical evacuation"), and "medical costs" as "medical expenses" (gate round 9).
     const words = norm(b.benefit.replace(/\([^)]*\)|\[[^\]]*\]/g, " ")).split(" ").filter(Boolean);
-    const names = words.length === 1 ? (words[0].length >= 5 ? [words[0]] : []) : words.slice(0, -1).map((_, i) => words.slice(i).join(" "));
-    if (names.length && r.tieLines!.some((t) => { const n = ` ${norm(t)} `; return names.some((x) => n.includes(` ${x} `)); })) return false;
+    const last = words.at(-1) ?? "";
+    const names = [...words.slice(0, -1).map((_, i) => words.slice(i).join(" ")), ...(last.length >= 5 && !GENERIC_LAST_WORD.has(last) ? [last] : [])];
+    if (names.length && r.tieLines!.some((t) => { const n = ` ${norm(t).replace(/\bmedical costs?\b/g, "medical expenses")} `; return names.some((x) => n.includes(` ${x} `)); })) return false;
   }
   if (PAYMENT_LABEL.test(b.benefit) || (r.premiumFigures ?? []).some((v) => b.value != null && Math.abs(v - b.value) < 0.005)) return false;
   // The line below is the row's own words only when it carries on the row's cell (starts in lower case); a note line
