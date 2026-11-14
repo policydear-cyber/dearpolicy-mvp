@@ -256,6 +256,10 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
    * Plan, the most we pay for all insured persons combined is twice the limit shown"; capsAsMultiple): each person keeps
    * their per-person rows, with the note as a condition (assemble.ts). */
   capNotes?: string[];
+  /** The document's note sentences, off every row, that tie anything to the lives together (TIED_TO_LIVES or livesTogether),
+   * with or without a limit word: a per-person row whose label such a sentence names ("Personal liability is shared by the
+   * family.") is withheld (assemble.ts perPersonColumnRow; gate round 7). */
+  tieLines?: string[];
   /** Each line starting with a footnote mark ("Note (a):", "(b)", "*"), with the line that continues it: a row printing that
    * mark is read with its note (assemble.ts plainTable). */
   footnotes?: { mark: string; text: string }[];
@@ -749,41 +753,45 @@ function multipleValue(token: string): number {
   const n = Number(/(\d+(?:\.\d+)?)/.exec(t)?.[1] ?? NaN);
   return /%|cent/.test(t) ? n / 100 : n;
 }
-const OWN = String.raw`(?:of\s+)?the\s+(?:individual\s+limit|limits?\s+shown|per[\s-]+insured[\s-]+person\s+limit)`;
-const LEAD = String.raw`(?:for\s+(?:the\s+)?[a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2}\s+plans?\s*,\s*)?`;
-const ALL_LIVES = String.raw`(?:all\s+(?:the\s+)?insured\s+persons|the\s+whole\s+family)`;
-const TAIL = String.raw`(?:\s*,\s*whether\s+or\s+not\s+you\s+travel\s+together)?\s*\.?\s*$`;
+const OWN = String.raw`(?:of\s+)?(?:the\s+|your\s+)?(?:individual\s+limits?|limits?\s+shown|per[\s-]+insured[\s-]+person\s+limits?|limits?\s+per\s+insured\s+person)`;
+const PLAN = String.raw`(?:the\s+|your\s+)?[a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2}\s+plans?`;
+const LEAD = String.raw`(?:(?:(?:for|under)\s+${PLAN}\s*,?|${PLAN}\s*[:,])\s*)?`;
+const ALL_LIVES = String.raw`(?:all\s+(?:the\s+)?insured\s+persons|(?:the\s+|your\s+)(?:whole\s+)?family|both\s+of\s+you)`;
+const TAIL = String.raw`(?:\s+for\s+each\s+benefit)?(?:\s*,\s*whether\s+or\s+not\s+you\s+travel\s+together)?\s*\.?\s*$`;
+const MOST = String.raw`(?:the\s+most\s+we\s+(?:will\s+)?pay|the\s+maximum\s+(?:amount\s+)?(?:payable|we\s+(?:will\s+)?pay)|the\s+total\s+(?:amount\s+)?(?:payable|paid|we\s+(?:will\s+)?pay))`;
+/** A leading footnote mark or "Note:" before a note's words. */
+const NOTE_LEAD = /^\s*(?:\*{1,3}|†|‡|\(\s*[a-z0-9]{1,2}\s*\)|notes?\s*:)\s*/i;
 /** The closed shapes of a family plan's cap set as a multiple above one of each person's own limit (per-person-shared gate
- * round 6: an allow-list over the whole line, after PR #472's lesson, never a parse around the multiple):
- * A) "[For <Plan> plan,] the most we (will) pay for all (the) insured persons / the whole family [combined | together |
- *    in total | in aggregate] is <M> (of) the individual limit / limit shown / per insured person limit."
- * B) "[For <Plan> plan,] <M> (of) the ... limit for the whole family / for all insured persons [combined | in aggregate]."
- * C) "Family / Couple plan maximum: <M> (of) the ... limit[, in aggregate]."
- * each with an optional ", whether or not you travel together". <M> is from the closed list and above one; nothing else may
- * be printed in the line (no money, no other limit, no "which is", "formerly", "but", "only", "for <benefit>", no negation). */
+ * rounds 6, 7: an allow-list over the whole sentence, after PR #472's lesson, never a parse around the multiple), after an
+ * optional footnote mark or "Note:" and an optional "For / Under (the) <Plan> plan(,)" or "<Plan> plan:" lead-in:
+ * A) "the most we (will) pay / the maximum (amount) payable / we (will) pay / the total payable for all (the) insured
+ *    persons / (the|your) (whole) family / both of you [combined | together | in total | in aggregate] is / shall not exceed
+ *    <M> (of) (the) individual limit / limit shown / per insured person limit / limit per insured person."
+ * B) "<M> (of) the ... limit for (the|your) whole family / all insured persons / both of you [combined | in aggregate]."
+ * C) "Family / Couple (plan) maximum / limit: <M> (of) (the) ... limit[, in aggregate]."
+ * each with an optional "for each benefit" and ", whether or not you travel together". <M> is from the closed list and above
+ * one; nothing else may be printed in the sentence (no money, no other limit, no "which is", "formerly", "but", "only",
+ * "for <benefit>", no negation). */
 const KEEP_SHAPES = [
-  new RegExp(String.raw`^\s*${LEAD}the\s+most\s+we\s+(?:will\s+)?pay\s+for\s+${ALL_LIVES}(?:\s+(?:combined|together|in\s+total|in\s+aggregate))?\s+is\s+${M}\s+${OWN}${TAIL}`, "i"),
-  new RegExp(String.raw`^\s*${LEAD}${M}\s+${OWN}\s+(?:for\s+the\s+whole\s+family|for\s+all\s+(?:the\s+)?insured\s+persons)(?:\s+(?:combined|in\s+aggregate))?${TAIL}`, "i"),
-  new RegExp(String.raw`^\s*(?:family|couple)\s+plan\s+maximum\s*:\s*${M}\s+${OWN}(?:\s*,\s*in\s+aggregate)?${TAIL}`, "i"),
+  new RegExp(String.raw`^\s*${LEAD}${MOST}\s+for\s+${ALL_LIVES}(?:\s+(?:combined|together|in\s+total|in\s+aggregate))?\s+(?:is|(?:shall|will)\s+not\s+exceed)\s+${M}\s+${OWN}${TAIL}`, "i"),
+  new RegExp(String.raw`^\s*${LEAD}${M}\s+${OWN}\s+for\s+${ALL_LIVES}(?:\s+(?:combined|in\s+aggregate))?${TAIL}`, "i"),
+  new RegExp(String.raw`^\s*(?:family|couple)\s+(?:plan\s+)?(?:maximum|limit)\s*:\s*${M}\s+${OWN}(?:\s*,\s*in\s+aggregate)?${TAIL}`, "i"),
 ];
-/** Whether a note line is, as a whole, one of the closed family-cap shapes with a multiple above one: kept with each person's
- * rows as a condition (capNotes), never withholding them. Any other line naming each person's own limit about the lives
- * together is a tie (tiesLimitToLives). */
-export function capsAsMultiple(line: string): boolean {
-  const t = line.trim();
+/** Whether a note sentence is, as a whole, one of the closed family-cap shapes with a multiple above one: kept with each
+ * person's rows as a condition (capNotes), never withholding them. A sentence left open (no full stop, with a line after it
+ * that may carry it on) is none. Any other sentence naming each person's own limit about the lives together is a tie
+ * (tiesLimitToLives). */
+export function capsAsMultiple(sentence: string, open = false): boolean {
+  if (open) return false;
+  const t = sentence.replace(NOTE_LEAD, "").trim();
   for (const re of KEEP_SHAPES) {
     const m = re.exec(t);
     if (m) return multipleValue(m[1]) > 1;
   }
   return false;
 }
-/** Whether a note line (one off every row) ties a limit to the lives together (per-person-shared gate round 2): in one clause,
- * a tie (OWNER_TIE, or the lives with a together word) within eight words of a limit word, in a clause that is about no
- * premium or payment, no dispute between the lives and the insurer and no cap per event or conveyance. "Limits apply per
- * insured person per policy period", "Excess: S$100 per policy", "Any dispute between you and us", "regardless of the number
- * of claims", "one limit applies for each insured person", rooms or rescue costs "shared" are none. */
-export function tiesLimitToLives(line: string): boolean {
-  if (capsAsMultiple(line)) return false;
+export function tiesLimitToLives(line: string, open = false): boolean {
+  if (capsAsMultiple(line, open)) return false;
   for (const clause of line.split(/[.;!?](?=\s|$)/)) {
     if (NOT_A_TIE_CLAUSE.test(clause)) continue;
     // Each person's own limit named in a clause about the lives together, in any shape but the closed family-cap ones: one
@@ -797,7 +805,7 @@ export function tiesLimitToLives(line: string): boolean {
   }
   return false;
 }
-export type DocumentNotes = { capNotes: string[]; tiedNotes: string[]; lifeNotes: string[]; sharedNotes: string[]; footnotes: { mark: string; text: string }[]; plainBlockers: string[]; premiumFigures: number[] };
+export type DocumentNotes = { tieLines: string[]; capNotes: string[]; tiedNotes: string[]; lifeNotes: string[]; sharedNotes: string[]; footnotes: { mark: string; text: string }[]; plainBlockers: string[]; premiumFigures: number[] };
 /** Words that change a figure for whoever a line names: a printed share, a cut or a rise (TE gate round 2, R2-M1: never "paid",
  * "only" or "limited", which ordinary lines about who may be insured print). */
 const STRICT_CHANGE = /\b(?:half|halved|halves|doubl\w*|reduc\w*|less|lower|instead|not\s+covered|exclud\w*|subsequent|benefits?|amounts?|limits?|rates?|maximum|pays?)\b|%|\bper\s*cent\b/i;
@@ -847,7 +855,7 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   };
   /** A footnote line and the line that continues it (one starting in lower case). */
   const noteText = (lines: string[], i: number) => /^\s*[a-z]/.test(lines[i + 1] ?? "") ? `${lines[i].trim()} ${lines[i + 1].trim()}` : lines[i].trim();
-  const out: DocumentNotes = { capNotes: [], tiedNotes: [], lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
+  const out: DocumentNotes = { tieLines: [], capNotes: [], tiedNotes: [], lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
   const add = (list: string[], line: string) => { if (!list.includes(line.trim()) && list.length < 20) list.push(line.trim()); };
   const money = (line: string) => anyMoneyFigures(line).map((f) => f.value);
   const named = (l: string) => { const t = ` ${l.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `; return people.filter((n) => t.includes(` ${n.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `)); };
@@ -917,8 +925,22 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
       // A shared or aggregate limit, on a row's own line or any other: every figure may be shared by all the lives.
       if (SHARED_LIMIT.test(line)) add(out.sharedNotes, line);
       // A line off every row's own line that ties a limit to the lives together (a row's own words are read with that row).
-      if (!rowLine && tiesLimitToLives(line)) add(out.tiedNotes, line);
-      if (!rowLine && capsAsMultiple(line)) add(out.capNotes, noteText(lines, i));
+      if (!rowLine) {
+        // The note's whole sentence: this line and the lines that carry it on (starting in lower case), up to its full stop;
+        // the family-cap shape and the tie are judged on the same sentence the row's condition shows (gate round 7, R7-H1).
+        const parts = [line.trim()];
+        let j = i + 1;
+        while (!/[.!?]\s*$/.test(parts.at(-1)!) && j < lines.length && j < i + 6 && /^\s*[a-z]/.test(lines[j]) && !own.has(flat(lines[j]))) parts.push(lines[j++].trim());
+        const sentence = parts.join(" ");
+        // Left open: no full stop, and a line follows that is no row's (it may carry the note on in other words).
+        const next = lines.slice(j).find((x) => flat(x));
+        const open = !/[.!?]\s*$/.test(sentence) && !!next && !own.has(flat(next)) && !tableLine(next);
+        if (tiesLimitToLives(sentence, open)) add(out.tiedNotes, sentence);
+        if (capsAsMultiple(sentence, open)) add(out.capNotes, sentence);
+        // A sentence that ties something to the lives together, printed for one benefit ("Personal liability is shared by
+        // the family."): that row is no one's own (assemble.ts, by the row's label).
+        if (TIED_TO_LIVES.test(sentence) || livesTogether(sentence)) add(out.tieLines, sentence);
+      }
       // A note printed on a row's own line about every row ("All benefits for children are half the amounts shown").
       if (rowLine) {
         prev = null;

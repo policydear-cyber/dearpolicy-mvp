@@ -517,6 +517,48 @@ for (const line of ["For Family Plan, the most we will pay for all the insured p
 for (const line of ["For Family Plan, the most we pay for the whole family is 1 times the individual limit.", "Couple plan maximum: 100% of the individual limit."]) {
   test(`gate PPS-6: the closed shape with a multiple of 1 ('${line}') withholds`, () => assert.deepEqual(sixWith({ extra: [line] }), noOne));
 }
+// Per-person-shared gate round 7: the shape is judged on the whole sentence the condition shows (continuation lines joined),
+// common rewordings of the shape keep, and a sentence sharing one benefit withholds that row.
+for (const [id, first, cont] of [["WR4", "For Family Plan, the most we pay for all insured persons combined is twice the limit shown", "or S$5,000, whichever is less."],
+  ["WR1", "For Family Plan, the most we pay for all insured persons combined is twice the limit shown", "except personal liability, which is shared by the family."],
+  ["WR7", "For Family Plan, the most we pay for all insured persons combined is twice the limit shown", "unless you are injured in the same event, in which case the limit shown is for all of you."]] as const) {
+  for (const where of ["extra", "under"] as const) {
+    test(`gate PPS-7 ${id} (${where}): a shape line carried on by '${cont}' withholds every per-person limit`, () => {
+      const got = sixWith({ [where]: [first, cont] });
+      for (const k of ["a", "b", "k"]) assert.ok(!got[k].includes("Personal liability") && !got[k].includes("Overseas medical expenses"), `${k}: ${got[k]}`);
+    });
+  }
+}
+test("gate PPS-7: a shape sentence with no full stop, followed by another note line, is left open and withholds", () =>
+  assert.deepEqual(sixWith({ extra: ["For Family Plan, the most we pay for all insured persons combined is twice the limit shown", "Or S$5,000, whichever is less."] }), noOne));
+for (const line of ["For Family Plan, the maximum amount payable for all insured persons is 200% of the individual limit.",
+  "For Family Plan, the total payable for all insured persons shall not exceed twice the limit per insured person.",
+  "Couple plan: the most we pay for both of you is 150% of the individual limit.", "For Family Plan, the maximum we will pay for the family is 2 times the individual limit.",
+  "Family limit: 2 x individual limit", "Under the Family Plan, the most we pay for the whole family is twice the limit shown.",
+  "For Family Plan the most we pay for the whole family is twice the limit shown.", "For Family Plan, the most we pay for your whole family is twice the limit shown.",
+  "For Family Plan, the most we pay for all insured persons combined is twice the limit shown for each benefit.",
+  "* For Family Plan, the most we pay for all insured persons combined is twice the limit shown.", "Note: For Family Plan, the most we pay for all insured persons combined is twice the limit shown.",
+  "Twice the limit per insured person for both of you."]) {
+  test(`gate PPS-7: the reworded shape '${line}' keeps each person's rows with the note`, () => {
+    const t = perPersonTable({ rows: SIX, extra: [line] });
+    for (const id of ["a", "b", "k"]) {
+      const rows = t.people.find((p) => p.id === id)!.rows.filter((x) => x.figure.kind !== "none");
+      assert.deepEqual(rows.map((x) => x.benefit), SIX_NAMES, id);
+      for (const x of rows) assert.ok(x.conditions.includes(line), `${id} ${x.benefit}`);
+    }
+  });
+}
+test("gate PPS-7: a shape whose continuation line is plain words of the shape ('...is twice' / 'the limit shown.') keeps, with the whole sentence attached", () => {
+  const t = perPersonTable({ rows: SIX, extra: ["For Family Plan, the most we pay for all insured persons combined is twice", "the limit shown."] });
+  for (const id of ["a", "b", "k"]) {
+    const rows = t.people.find((p) => p.id === id)!.rows.filter((x) => x.figure.kind !== "none");
+    assert.deepEqual(rows.map((x) => x.benefit), SIX_NAMES, id);
+    for (const x of rows) assert.ok(x.conditions.includes("For Family Plan, the most we pay for all insured persons combined is twice the limit shown."), `${id} ${x.benefit}: ${x.conditions}`);
+  }
+});
+for (const line of ["Personal liability is shared by the family.", "Personal liability is shared by all insured persons."]) {
+  test(`gate PPS-7: '${line}' withholds the personal liability row only`, () => assert.deepEqual(sixWith({ extra: [line] }), each(SIX_NAMES.filter((b) => b !== "Personal liability"))));
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),

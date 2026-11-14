@@ -829,6 +829,10 @@ const HEADING_NOTE_SHAPES = [
  *   or period, and the currency (an allow-list, as for a plain row's note). */
 function perPersonColumnRow(r: CheckedReading, b: CheckedBenefit, next: string): boolean {
   if ((r.tiedNotes ?? []).length) return false;
+  // A note sentence that names this row's benefit and ties it to the lives together ("Personal liability is shared by the
+  // family."), even with no limit word: this row is no one's own.
+  const label = norm(b.benefit);
+  if (label.length >= 4 && (r.tieLines ?? []).some((t) => ` ${norm(t)} `.includes(` ${label} `))) return false;
   if (PAYMENT_LABEL.test(b.benefit) || (r.premiumFigures ?? []).some((v) => b.value != null && Math.abs(v - b.value) < 0.005)) return false;
   // The line below is the row's own words only when it carries on the row's cell (starts in lower case); a note line
   // printed under the table is read by the note-line rule (check.ts tiedNotes; per-person-shared gate round 3).
