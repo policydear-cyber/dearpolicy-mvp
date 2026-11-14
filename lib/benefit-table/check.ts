@@ -1028,33 +1028,57 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
   // row is the one printed line whose first cell is that label and whose later cells include every quoted cell, whole and
   // in that order. Only a quote of whole cells on one line, and only when one line in the document fits. A figure is then
   // read only from the quoted cells, never from a cell the quote left out (cellsQuoted, printedIn).
+  // The cell a named column takes in a tabbed table row: the nearest line above the row on its page with the same number
+  // of cells that prints no figure (its header) must name the column, whole (spacing and case aside), at exactly one cell
+  // after the label. No such header, a header that does not name it, or one naming it twice: no cell (Critic #481 H1: a
+  // percentage of plan C or of John Tan is never Basic's or Mary Tan's by matching its value alone). Fails closed.
+  const flatCell = (c: string) => c.replace(/\s+/g, " ").trim().toLowerCase();
+  const HEADER_FIGURE = /\d[\d,.]*\s*%|\d{1,3}(?:,\d{3})+|\d{3,}|[$¥£€₹₩₱฿₫]/;
+  const columnCell = (text: string, lineStart: number, cellCount: number, column: string | null): number | null => {
+    if (!column || cellCount < 2) return null;
+    const want = flatCell(column);
+    const above = text.slice(0, lineStart).split("\n").slice(0, -1).reverse();
+    for (const line of above) {
+      const cells = line.split("\t");
+      if (cells.length !== cellCount || cells.slice(1).some((c) => HEADER_FIGURE.test(c))) continue;
+      const at = cells.map((c, i) => (i > 0 && flatCell(c) === want ? i : -1)).filter((i) => i > 0);
+      return at.length === 1 ? at[0] : null;
+    }
+    return null;
+  };
   const cellsQuoted = new Map<Source, string>();
-  const skippedCells = (quote: string): (Found & { cells: string }) | null => {
-    if (quote.includes("\n")) return null;
-    const flatten = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-    const want = quote.split("\t").map(flatten);
+  // The quoted cell must be the one under the row's own column (columnCell), with the other quoted cells in order before
+  // and after it; the figure is then read from that one cell only (Critic #481 M1: Elite's cell quoted under Basic).
+  const skippedCells = (quote: string, column: string | null): (Found & { cells: string }) | null => {
+    if (quote.includes("\n") || !column) return null;
+    const want = quote.split("\t").map(flatCell);
     if (want.length < 2 || want.some((c) => !c) || !/[a-z]/.test(want[0])) return null;
+    const inOrder = (cells: string[], from: number, to: number, ws: string[]) => {
+      let k = 0;
+      for (let i = from; i < to && k < ws.length; i++) if (flatCell(cells[i]) === ws[k]) k++;
+      return k === ws.length;
+    };
     const hits: (Found & { cells: string })[] = [];
     for (const p of doc.pages) {
       let at = 0;
       for (const line of p.text.split("\n")) {
         const start = at; at += line.length + 1;
         const cells = line.split("\t");
-        if (cells.length <= want.length || flatten(cells[0]) !== want[0]) continue;
-        let k = 1;
-        for (let i = 1; i < cells.length && k < want.length; i++) if (flatten(cells[i]) === want[k]) k++;
-        if (k < want.length) continue;
+        if (cells.length <= want.length || flatCell(cells[0]) !== want[0]) continue;
+        const col = columnCell(p.text, start, cells.length, column);
+        if (col == null) continue;
+        const j = want.findIndex((w, i) => i > 0 && w === flatCell(cells[col]) && inOrder(cells, 1, col, want.slice(1, i)) && inOrder(cells, col + 1, cells.length, want.slice(i + 1)));
+        if (j < 0) continue;
         const lead = line.length - line.trimStart().length;
-        hits.push({ docIndex: 0, page: p.page, excerpt: line.replace(/[ \t]+/g, " ").trim(), offset: start + lead, end: start + line.trimEnd().length,
-          cells: quote.split("\t").slice(1).join("\t") });
+        hits.push({ docIndex: 0, page: p.page, excerpt: line.replace(/[ \t]+/g, " ").trim(), offset: start + lead, end: start + line.trimEnd().length, cells: cells[col] });
       }
     }
     return hits.length === 1 ? hits[0] : null;
   };
-  const find = (quote: string | null, page: number | null): Source | null => {
+  const find = (quote: string | null, page: number | null, column: string | null = null): Source | null => {
     if (!quote) return null;
     const plain = locateQuote(household, quote, 0) ?? wrappedLabel(quote);
-    const skipped = plain ? null : skippedCells(quote);
+    const skipped = plain ? null : skippedCells(quote, column);
     const f = plain ?? skipped;
     if (!f) return null;
     const at = (g: { page: number; excerpt: string; offset: number; end?: number }) => {
@@ -1258,11 +1282,25 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     const benefit = str(b?.benefit), quote = str(b?.quote);
     let pays = (PAYS as readonly string[]).includes(b?.pays as string) ? b.pays : null;
     if (!benefit || !quote || !pays) { out.dropped.push({ what: label, why: "incomplete row" }); continue; }
-    const source = find(quote, int(b.page));
+    const source = find(quote, int(b.page), str(b.column));
     if (!source) { out.dropped.push({ what: label, why: "quote not found in this document" }); continue; }
     if (fromCoverLine.has(b) && out.benefits.some((x) => x.source.page === source.page && flatLine(x.source.excerpt).includes(flatLine(source.excerpt)))) continue;
     let value = num(b.value);
     if (value != null && !printedIn(source, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
+    // Every quote on a tabbed table row, however much of the row it copies: when the header above the row names the column
+    // the reader read it under (columnCell), the figure must be printed in that column's own cell, not a neighbour's
+    // ("Trip cancellation\t50%" read under Mary Tan, whose cell is 100%: TE #481 W1). With no header naming the column,
+    // a quote found as printed keeps main's reading.
+    if (value != null && str(b.column)) {
+      const span = placed.get(source), text = pageText(source.page);
+      if (span && !text.slice(span.start, span.end).includes("\n")) {
+        const lineStart = text.lastIndexOf("\n", span.start - 1) + 1, cells = text.slice(lineStart, lineEndAt(text, lineStart)).split("\t");
+        const col = columnCell(text, lineStart, cells.length, str(b.column));
+        if (col != null && !printsNumber(cellsApart(cells[col]), value)) {
+          out.dropped.push({ what: label, why: `figure ${value} is not in the ${str(b.column)} column's own cell` }); continue;
+        }
+      }
+    }
     // A row whose line prints a figure for each plan ("Emergency evacuation S$50,000 S$150,000 S$300,000", "Trip
     // cancellation S$5,000 S$10,000") gives a figure only with the plan column it was read under: without one, the figure
     // may be any plan's (Critic R364 H1, the FWD plan-column regression). Fails closed whatever the reader did, including
@@ -1327,10 +1365,19 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // row ("Missed connection\t30%\t20%", column "Basic", 30): the quote runs into no other row, and the column says which
     // cell is its own, as it does for a row of plan amounts (plansOnValueLine). Not a quote of two lines, nor a figure
     // printed only inside a longer cell.
-    const span = placed.get(source), spanText = span ? pageText(source.page).slice(span.start, span.end) : "";
+    // The percentage must be the cell under that column's own header (columnCell, Critic #481 H1); a quote of part of
+    // the row must still reach that cell.
     const ownCell = (c: string) => { const m = /^(\d+(?:\.\d+)?)\s*%(?:\s+of\s+(?:the\s+)?sum\s+(?:insured|assured))?$/i.exec(c.trim()); return m ? Number(m[1]) : null; };
-    const oneTableRow = !!str(b.column) && value != null && !spanText.includes("\n") && spanText.includes("\t")
-      && spanText.split("\t").slice(1).some((c) => ownCell(c) === value);
+    const oneTableRow = (() => {
+      const span = placed.get(source), text = pageText(source.page);
+      if (!span || value == null || !str(b.column) || text.slice(span.start, span.end).includes("\n")) return false;
+      const lineStart = text.lastIndexOf("\n", span.start - 1) + 1, line = text.slice(lineStart, lineEndAt(text, lineStart));
+      const cells = line.split("\t");
+      const col = columnCell(text, lineStart, cells.length, str(b.column));
+      if (col == null || ownCell(cells[col]) !== value) return false;
+      const cellEnd = lineStart + cells.slice(0, col + 1).join("\t").length;
+      return span.start <= lineStart + line.length - line.trimStart().length && span.end >= cellEnd - (cells[col].length - cells[col].trimEnd().length);
+    })();
     if (pays === "percent" && !oneTableRow && percents(source.excerpt) > percents(benefit) + 1) {
       out.dropped.push({ what: label, why: "quote holds more than one percentage; kept the row with no figure" });
       out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays: "words", value: null, period: null, basis, asOf: null, percentOf: null, baseAmount: null,
