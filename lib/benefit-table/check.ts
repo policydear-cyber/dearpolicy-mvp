@@ -242,7 +242,28 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
   tierLines?: string;
   /** Every person the reading gave a cover to whose name the document prints, kept or dropped: the document's insured lives
    * (assemble.ts lifeLostCover). */
-  coverPeople?: string[] };
+  coverPeople?: string[];
+  /** The document's printed lines that name a kind of life or an age ("Benefits for children under 18 are halved", "Note:
+   * for insured children the limits are 50% of those shown"), or name an insured person and say something about an amount
+   * ("Benefits for Grace Okafor are halved"), and are neither a benefit row's own line nor a cover's own line: notes that
+   * may change any row for some of the lives (lifeNotesOf). Read by assemble.ts perPersonRows, where any
+   * such note keeps every fixed-amount row of the document from being shown for each named person. */
+  lifeNotes?: string[];
+  /** The document's printed lines, off a cover's own line, that make a figure one limit shared by all the lives ("Limits are
+   * per family unless stated otherwise", "Aggregate limit for all insured persons GBP 10,000"; SHARED_LIMIT): assemble.ts
+   * plainTable then gives no fixed row to each named person. */
+  sharedNotes?: string[];
+  /** Each line starting with a footnote mark ("Note (a):", "(b)", "*"), with the line that continues it: a row printing that
+   * mark is read with its note (assemble.ts plainTable). */
+  footnotes?: { mark: string; text: string }[];
+  /** The document's lines outside its benefit rows and cover lines that are none of the closed set of lines a plain family
+   * schedule prints (lifeNotesOf structural: title, insurer, policy number and period, the insured persons lines, the
+   * premium, column headings, page furniture, admin lines that print no money, share, person, kind of life or word tied to
+   * the amounts, and the footnotes a row points to). Any such line keeps assemble.ts plainTable from giving a fixed row to
+   * each named person (TE gate round 2: an allow-list, not a list of words to refuse). */
+  plainBlockers?: string[];
+  /** The money figures printed on the document's premium lines: a row with one of them is never a benefit for each person. */
+  premiumFigures?: number[] };
 
 // The same lists as evidence.ts's printedFigures (#260): a currency printed right beside a figure, and words before a
 // figure that make it a number other than money.
@@ -626,6 +647,209 @@ function percentBaseUnsettled(row: string, value: number): boolean {
 }
 /** Words that name one kind of life among several ("an insured child", "adults", "seniors"). */
 export const KIND_OF_LIFE = /\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?|principal|parents?)\b/i;
+/** A line that names a kind of life or an age group: KIND_OF_LIFE, a few more words for one life among several, or a number
+ * read as an age ("under 18", "aged 65", "70 years old"; never "over 3 days" or "above 50%"). */
+const LIFE_NOTE = new RegExp(String.raw`${KIND_OF_LIFE.source}|\b(?:infants?|bab(?:y|ies)|juveniles?|students?|elderly|wi(?:fe|ves)|husbands?|partners?|policy\s*holders?|grand(?:children|child|parents?)|(?:first|second|third|fourth|fifth|main|joint|other|additional)\s+(?:insured|life|lives|person|adult|member)s?)\b`
+  + String.raw`|\b(?:under|below|over|above|aged?|age\s+of)\s+(?:the\s+age\s+of\s+)?(?:\d{1,3}|[a-z]+teen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b(?!\s*(?:days?|hours?|weeks?|months?|%|per\s*cent|[,.]\d))|\b\d{1,3}\s*(?:years?|yrs?)\s+(?:old|of\s+age|and\s+(?:over|above|under|below)|or\s+(?:older|younger|over|above|under|below))\b`, "i");
+/** See CheckedReading.lifeNotes. A line counts as a row's own only when it is a line of that row's printed text (rowText):
+ * a note on the line after a row may be about the whole table, so it counts as a note. A cover's own line (an insured
+ * persons table's "Grace Okafor  Child  09/04/2017  GBP 20,000") is who is insured, not a note. */
+const CHANGES_A_FIGURE = /\b(?:benefits?|amounts?|pa(?:id|ys?|yable)|half|halved|double[ds]?|%|per\s*cent|limit(?:ed|s)?|reduc\w*|less|only|maximum|up\s+to|not\s+covered|exclud\w*|instead)\b|\d[\d,]*(?:\.\d+)?\s*%/i;
+/** Words that give some of the lives another figure, with or without naming them ("halved", "reduced cover", "for the second
+ * and subsequent insured persons", "those still in full-time education receive half"). */
+export const FIGURE_CHANGE = /\b(?:half|halved|halves|reduc\w*|double[ds]?|second|subsequent|thereafter|for\s+those|those\s+(?:who|still|in|aged|under|over))\b/i;
+/** Words that make a figure one limit shared by all the lives (per family, per policy, in aggregate, combined). */
+export const SHARED_LIMIT = /\b(?:aggregate[ds]?|in\s+aggregate|combined|together(?!\s+with)|in\s+total|shared|share\s+(?:one|a|the)|per\s+(?:policy|certificate|household|family|schedule)|all\s+(?:the\s+)?(?:insured\s+)?(?:persons|people|lives|members)|whole\s+family|(?:maximum|most|total)\s+(?:\w+\s+){0,3}under\s+this\s+(?:policy|certificate|schedule))\b/i;
+/** Words that say a line or a row's note is about every row of the table, not its own ("All benefits for children are half
+ * the amounts shown in this table"). */
+const WHOLE_TABLE = /\b(?:all|every|each|other|any)\s+(?:the\s+)?(?:benefits?|amounts?|limits?|sections?)\b|\bthe\s+(?:amounts?|limits?|benefits?|figures?)\s+(?:shown|above|below|in\s+this)\b|\bin\s+this\s+(?:table|schedule)\b/i;
+/** A footnote mark at the start of a line ("Note (a):", "(b)", "a)", "*", "†"), and the mark it names. */
+const NOTE_MARK = /^\s*(?:notes?\s*)?(?:\(([a-z]|\d{1,2})\)|([a-z]|\d{1,2})[.):](?=\s)|(\*{1,3}|†|‡))/i;
+export const noteMarkOf = (line: string): string | null => { const m = NOTE_MARK.exec(line); return m ? (m[1] ?? m[2] ?? m[3]).toLowerCase() : null; };
+/** Whether a row's own words print a footnote mark: "(note a)", "(a)" after its words, or a "*", "†" or "‡". */
+export function marksIn(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/\(\s*(?:note\s+)?([a-z]|\d{1,2})\s*\)|\bnote\s+([a-z]|\d{1,2})\b/gi)) {
+    const k = (m[1] ?? m[2]).toLowerCase();
+    // "(1)" after a figure or as a list number, "(s)" in "person(s)": only a letter in brackets after a space, or "note x".
+    if (m[2] || /^[a-z]$/.test(k) && /\s$/.test(text.slice(0, m.index))) out.add(k);
+  }
+  for (const m of text.matchAll(/\*{1,3}|†|‡/g)) out.add(m[0]);
+  return [...out];
+}
+export type DocumentNotes = { lifeNotes: string[]; sharedNotes: string[]; footnotes: { mark: string; text: string }[]; plainBlockers: string[]; premiumFigures: number[] };
+/** Words that change a figure for whoever a line names: a printed share, a cut or a rise (TE gate round 2, R2-M1: never "paid",
+ * "only" or "limited", which ordinary lines about who may be insured print). */
+const STRICT_CHANGE = /\b(?:half|halved|halves|doubl\w*|reduc\w*|less|lower|instead|not\s+covered|exclud\w*|subsequent|benefits?|amounts?|limits?|rates?|maximum|pays?)\b|%|\bper\s*cent\b/i;
+/** A role that is no kind of life on its own: the policyholder is the payer and the payee, named on most schedules. */
+const ROLE_ONLY = /\b(?:policy\s*holders?|proposers?)\b/gi;
+/** Words a plain schedule's own admin lines never print (TE gate round 2: "for you and your family", "one limit applies to
+ * everyone", "the policy as a whole", "regardless of the number of insured persons"). A line with any of them is not an
+ * admin line. Used only as part of the closed set of structural lines (plainLine), never on its own to give a row. */
+const ADMIN_SCOPE = /\b(?:amounts?|limits?|most|maximum|max|each|every|everyone|everybody|all|family|families|household|per|one|once|whole|regardless|however|many|together|share[ds]?|aggregate[ds]?|combined|total|same|half|halved|halves|reduc\w*|doubl\w*|second|subsequent|those|only|less|lower|up\s+to|apply|applies|applied|you|your|yours|we|us|our|instead|except|unless|but|rates?|pays?|payable|covered|cover)\b|%/i;
+/** Words an insured persons line prints beside a name: a relationship or role, a date of birth, a sum (TE gate round 2). */
+const PERSON_LINE_WORDS = new Set(("policyholder policy holder spouse partner husband wife child son daughter insured person persons main joint life assured " +
+  "relationship dependant dependent principal member mr mrs ms miss dr and date of birth dob sum name").split(" "));
+/** See CheckedReading.lifeNotes, sharedNotes, footnotes, plainBlockers and premiumFigures. */
+export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedReading, "covers" | "benefits" | "namedPeople"> & { kind?: CheckedReading["kind"]; product?: string | null; insurer?: string | null }): DocumentNotes {
+  // Only a person's own schedule or certificate gives a row to each named insured person (assemble.ts perPersonRows needs
+  // its own proof, plainTable a personal_proof): any other document's notes are never read, so its pages are not walked
+  // (benefit-table:speed-test: a 360-page household of wordings went from about 0.5 s to 4.8 s when every line was).
+  if (reading.kind != null && reading.kind !== "personal_proof") return { lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
+  const own = new Set<string>();
+  for (const b of reading.benefits) for (const l of (b.rowText ?? "").split("\n")) if (flat(l)) own.add(flat(l));
+  // A row kept as words, whose line was not read around it (a percentage quote holding two percentages): its own table
+  // line, a line of two or more cells, one of its first two the row's label, holding the row's quote.
+  // Read once, not for every line of every page (speed-test).
+  const wordsRows = reading.benefits.filter((b) => !b.rowText && flat(b.benefit).length >= 3).map((b) => ({ label: flat(b.benefit), quote: flat(b.source.excerpt) }));
+  const tableLine = (line: string) => { if (!wordsRows.length || !line.includes("\t")) return false;
+    const cells = line.split("\t").map(flat);
+    if (cells.length < 2) return false;
+    const whole = flat(line);
+    return wordsRows.some((b) => cells.slice(0, 2).includes(b.label) && whole.includes(b.quote)); };
+  const coverLines = reading.covers.map((c) => flat(c.source.excerpt)).filter((x) => x.length >= 6);
+  const people = [...new Set([...reading.namedPeople, ...reading.covers.map((c) => c.person)].map(flat).filter((n) => n.length >= 3 && n.includes(" ")))];
+  const sums = reading.covers.map((c) => c.sumInsured).filter((n): n is number => n != null);
+  // The marks the rows print: a footnote line starting with one is that row's note, read with the row (assemble.ts).
+  const referenced = new Set(reading.benefits.flatMap((b) => marksIn(b.rowText ?? b.source.excerpt)));
+  const markRows = new Map<string, typeof reading.benefits>();
+  for (const b of reading.benefits) for (const m of marksIn(b.rowText ?? b.source.excerpt)) markRows.set(m, [...(markRows.get(m) ?? []), b]);
+  const firstNames = [...new Set([...reading.namedPeople, ...reading.covers.map((c) => c.person)].map((n) => flat(n).split(" ")[0]).filter((n) => n && n.length >= 3))];
+  /** Whether a footnote a row prints the mark of is that row's own (TE gate round 3, R3-H1): an allow-list. It names no
+   * section, row or benefit but its own row's, no whole table ("every", "all", "this table", "sections"), no person or life
+   * (a kind of life, an age, "youngest", "first/last named", "subsequent", "only", "not available", a covered person's full
+   * or first name), and any money figure in it is its row's own figure or cap ("Note (a): a compound fracture is paid at
+   * double the Section 3 amount, still subject to the GBP 1,500 maximum per accident" is row 3's own). Any other note is a
+   * note on the document: it blocks every plain row (plainBlockers). */
+  const ownNote = (mark: string, text: string): boolean => {
+    const rows = markRows.get(mark) ?? [];
+    if (!rows.length) return false;
+    const t = flat(text), w = ` ${t.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `;
+    const ownNumbers = new Set(rows.map((b) => { const m = /^\s*(?:(?:section|part|item|benefit)\s+)?(\d{1,3})[.)]?\s*$/i.exec(b.section ?? ""); return m ? Number(m[1]) : null; }));
+    for (const m of t.matchAll(/\b(?:section|row|item|benefit|part)\s+(\d{1,3})\b/g)) if (!ownNumbers.has(Number(m[1]))) return false;
+    if (/\b(?:sections|rows|items|parts)\b/.test(t)) return false;
+    if (reading.benefits.some((b) => !rows.includes(b) && flat(b.benefit).length >= 5 && w.includes(` ${flat(b.benefit).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `))) return false;
+    if (/\b(?:every|all|each|any|other|others|table|schedule|policy|whole|also|throughout|everyone|everybody|together|shared|you|your)\b/.test(t)) return false;
+    if (LIFE_NOTE.test(text) || /\b(?:youngest|eldest|oldest|first|last|second|third|fourth|named|subsequent|only|not\s+available|do(?:es)?\s+not\s+apply|excluded|policy\s*holders?)\b/.test(t)) return false;
+    if (people.some((n) => w.includes(` ${n.replace(/[^a-z0-9 ]+/g, " ")} `)) || firstNames.some((n) => w.includes(` ${n} `))) return false;
+    return anyMoneyFigures(text).every((f) => rows.some((b) => [b.value, b.cap].some((v) => v != null && Math.abs(v - f.value) < 0.005)));
+  };
+  /** A footnote line and the line that continues it (one starting in lower case). */
+  const noteText = (lines: string[], i: number) => /^\s*[a-z]/.test(lines[i + 1] ?? "") ? `${lines[i].trim()} ${lines[i + 1].trim()}` : lines[i].trim();
+  const out: DocumentNotes = { lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
+  const add = (list: string[], line: string) => { if (!list.includes(line.trim()) && list.length < 20) list.push(line.trim()); };
+  const money = (line: string) => anyMoneyFigures(line).map((f) => f.value);
+  const peopleWords = people.map((n) => ` ${n.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `);
+  const named = (l: string) => { if (!people.length) return []; const t = ` ${l.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `; return people.filter((_, i) => t.includes(peopleWords[i])); };
+  const words = (t: string) => flat(t).replace(/[^a-z0-9 ]+/g, " ").split(" ").filter(Boolean);
+  const strip = (t: string) => {
+    let x = ` ${flat(t)} `;
+    for (const n of [reading.product, reading.insurer]) if (n && flat(n).length >= 4) x = x.split(flat(n)).join(" ");
+    // "(all amounts in GBP)": what currency the table is printed in.
+    return x.replace(/\(?\s*(?:all\s+)?(?:amounts?|figures?)\s+(?:are\s+)?(?:shown\s+|stated\s+)?in\s+[a-z ]{3,20}\)?/g, " ")
+      // A heading over the table: "TABLE OF BENEFITS", "Schedule of benefits", "Benefit schedule".
+      .replace(/\b(?:(?:table|schedule|summary)\s+of\s+benefits?|benefits?\s+(?:table|schedule|summary))\b/g, " ");
+  };
+  // An admin line: no money figure, no share, no person, no kind of life or age (the policyholder aside), none of the
+  // words that would tie it to the amounts (ADMIN_SCOPE).
+  // The money test last: it is the costly one (speed-test), and the others settle most lines.
+  const admin = (line: string) => !ADMIN_SCOPE.test(strip(line)) && !LIFE_NOTE.test(line.replace(ROLE_ONLY, " ")) && !named(flat(line)).length && !money(line).length;
+  /** The premium line test alone (the premium branch of structural), for a document whose blockers list is already full. */
+  const premiumLine = (line: string, l: string) => {
+    if (/\b(?:premiums?|contributions?|instal?l?ments?|direct\s+debit)\b/i.test(line) && !named(l).length && !LIFE_NOTE.test(line.replace(ROLE_ONLY, " "))) out.premiumFigures.push(...money(line));
+  };
+  /** One of the closed set of lines a plain family schedule prints outside its benefit rows (assemble.ts plainTable). */
+  const structural = (line: string, l: string, prevStructural: "admin" | "footnote" | null, full: string): "admin" | "footnote" | "other" | null => {
+    if (/^\s*(?:page\s+)?\d{1,3}(?:\s*(?:of|\/)\s*\d{1,3})?\s*$/i.test(line)) return "admin";
+    // Column headings: two or more cells, no figure, no kind of life, and only words that say what a column is.
+    const cells = line.split("\t").map((c) => c.trim()).filter(Boolean);
+    if (cells.length >= 2 && !/\d/.test(line) && !LIFE_NOTE.test(line.replace(ROLE_ONLY, " ")) && !named(l).length
+      && !ADMIN_SCOPE.test(l.replace(/\b(?:amounts?|limits?|maximum|max|benefits?|payable|sum|insured|cover)\b/g, " "))) return "admin";
+    // The premium the household pays (its figures are never a benefit's: assemble.ts).
+    if (/\b(?:premiums?|contributions?|instal?l?ments?|direct\s+debit)\b/i.test(line) && !named(l).length && !LIFE_NOTE.test(line.replace(ROLE_ONLY, " "))) {
+      out.premiumFigures.push(...money(line)); return "admin";
+    }
+    // An insured persons line: names, a relationship or role, a date of birth, the person's own sum.
+    const names = named(l);
+    if (names.length) {
+      let rest = ` ${l} `;
+      for (const n of names) rest = rest.split(n).join(" ");
+      rest = rest.replace(/\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/g, " ");
+      const figs = anyMoneyFigures(rest);
+      if (figs.some((f) => !sums.some((v) => Math.abs(v - f.value) < 0.005))) return null;
+      for (const f of [...figs].reverse()) rest = rest.slice(0, f.index) + " " + rest.slice(f.index + f.length);
+      return words(rest).every((w) => PERSON_LINE_WORDS.has(w)) && !/\d/.test(rest) ? "admin" : null;
+    }
+    // A footnote a row prints the mark of: read with that row, and its continuation.
+    const mark = noteMarkOf(line);
+    if (mark && referenced.has(mark)) return ownNote(mark, full) ? "footnote" : null;
+    if (prevStructural === "footnote" && /^\s*[a-z]/.test(line)) return "footnote";
+    if (admin(line)) return "admin";
+    // A few admin lines with words admin() refuses (TE gate round 3, LOW): a line saying every limit is each person's,
+    // "Exclusions apply.", and a short field of the plan's kind ("Plan type: Family", "Cover level: Couple").
+    if (/^\s*(?:all\s+|the\s+)?(?:limits|amounts|benefits|figures)(?:\s+shown)?\s+(?:are|apply)\s+(?:per|for\s+each|to\s+each)\s+insured\s+person\.?\s*$/i.test(line)) return "admin";
+    if (/^\s*(?:exclusions|terms(?:\s+and\s+conditions)?|conditions|limits\s+and\s+exclusions)\s+apply\.?\s*$/i.test(line)) return "admin";
+    const field = /^\s*((?:plan|cover|coverage|policy)\s+(?:type|level|basis|category))\s*:\s*([A-Za-z][A-Za-z ]{0,20}?)\s*$/i.exec(line);
+    if (field && !named(l).length && !LIFE_NOTE.test(field[2]) && field[2].split(/\s+/).every((x) => /^(?:family|couple|individual|single|joint|standard|annual|plan|cover)$/i.test(x))) return "admin";
+    // The rest of a wrapped admin line ("of this policy: Pounds sterling (GBP)", "2025)").
+    if (prevStructural === "admin" && /^\s*[a-z(\d]/.test(line) && admin(line)) return "admin";
+    return null;
+  };
+  for (const p of pages) {
+    const lines = p.text.split(/\r?\n/);
+    let prev: "admin" | "footnote" | null = null;
+    lines.forEach((line, i) => {
+      const l = flat(line);
+      if (!l) return;
+      const mark = noteMarkOf(line);
+      if (mark) {
+        // The note and the line that continues it (one starting in lower case).
+        out.footnotes.push({ mark, text: noteText(lines, i) });
+      }
+      const isCover = coverLines.some((c) => l.includes(c) || (l.length >= 6 && c.includes(l)));
+      if (isCover) { prev = "admin"; return; }
+      const rowLine = own.has(l) || tableLine(line);
+      // A shared or aggregate limit, on a row's own line or any other: every figure may be shared by all the lives.
+      if (SHARED_LIMIT.test(line)) add(out.sharedNotes, line);
+      // A note printed on a row's own line about every row ("All benefits for children are half the amounts shown").
+      if (rowLine) {
+        prev = null;
+        if (LIFE_NOTE.test(line) && WHOLE_TABLE.test(line)) add(out.lifeNotes, line);
+        // A footnote another row prints the mark of, read as a row of its own: still a note, held to the same test.
+        if (mark && (markRows.get(mark) ?? []).some((b) => flat((b.rowText ?? "").split("\n")[0]) !== l)) {
+          if (ownNote(mark, noteText(lines, i))) prev = "footnote"; else add(out.plainBlockers, line);
+        }
+        return;
+      }
+      // Once the blockers list is full (add keeps 20), a line's kind can add nothing to it: only a premium line's figures
+      // are still read (speed-test: a long personal document no longer runs every line through the structural tests).
+      if (out.plainBlockers.length >= 20) premiumLine(line, l);
+      else {
+        const kind = structural(line, l, prev, mark ? noteText(lines, i) : line);
+        prev = kind === "admin" || kind === "footnote" ? kind : null;
+        if (!kind) add(out.plainBlockers, line);
+      }
+      // A line naming an insured person is a note when it prints an amount, a share or a change to one ("Grace Okafor:
+      // hospital cash GBP 25 a day", "Benefits for Grace Okafor are halved"); one that only says who they are ("Spouse:
+      // Daniel Okafor") is not. A line naming a kind of life or an age group (the policyholder alone is no kind of life) is
+      // a note when it prints a money figure or a share, says something about an amount, or is a short heading over rows
+      // ("Children (under 18)", "Second insured person"); a definition or a rule about who may be insured ("Partner means
+      // your spouse ...", "Children are covered free of charge up to age 18", "Cover for persons over 70 is limited to trips
+      // of 31 days") is not (TE gate H4, R2-H1, R2-M1). A line that gives some lives another figure without naming them
+      // ("Those still in full-time education receive half") is a note too, unless it is the footnote of a row that prints
+      // its mark (read with that row).
+      // The line's figures only when it names a person or a kind of life (the costly money test; speed-test).
+      const figures = () => money(line).filter((v) => !sums.some((x) => Math.abs(x - v) < 0.005));
+      const heading = l.split(" ").length <= 5 && !/[.:;]\s*$/.test(line.trim());
+      const life = LIFE_NOTE.test(line.replace(ROLE_ONLY, " "));
+      const isNote = named(l).length ? figures().length > 0 || STRICT_CHANGE.test(line) || FIGURE_CHANGE.test(line)
+        : life ? figures().length > 0 || STRICT_CHANGE.test(line) || FIGURE_CHANGE.test(line) || heading
+          : FIGURE_CHANGE.test(line) && !(mark && referenced.has(mark) && ownNote(mark, noteText(lines, i)));
+      if (isNote) add(out.lifeNotes, line);
+    });
+  }
+  return out;
+}
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
@@ -769,7 +993,9 @@ function unescaped(v: unknown): unknown {
   return v;
 }
 
-export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
+/** `notesKind`: the kind of the document a part's reading is merged into (checkStored), so a later part stored with its own
+ * kind ("other", none) still works out the document's notes, which mergeReadings intersects (#474 perf gate, P474-H1). */
+export function checkReading(doc: SourceDoc, raw: unknown, o: { notesKind?: CheckedReading["kind"] } = {}): CheckedReading {
   const r = (unescaped(raw) ?? {}) as Partial<Reading>;
   const d = (r.document ?? {}) as Partial<Reading["document"]>;
   const kind = (DOCUMENT_KINDS as readonly string[]).includes(d.kind as string) ? d.kind! : "other";
@@ -1156,5 +1382,6 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}) });
   }
+  Object.assign(out, lifeNotesOf(doc.pages, { ...out, kind: o.notesKind ?? out.kind, insurer: str(d.insurer) }));
   return out;
 }

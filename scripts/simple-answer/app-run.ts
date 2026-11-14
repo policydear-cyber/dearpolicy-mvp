@@ -102,7 +102,7 @@ export function tableFromRun(dir: string, household: Household): BenefitTable {
     let reading = checkReading(doc, (JSON.parse(readFileSync(raw, "utf8")) as { json: unknown }).json);
     for (const p of d.pages) {
       const pageRaw = resolve(dir, `raw-${d.policyId}-p${p.page}.json`);
-      if (existsSync(pageRaw)) reading = mergeReadings(reading, checkReading(doc, (JSON.parse(readFileSync(pageRaw, "utf8")) as { json: unknown }).json));
+      if (existsSync(pageRaw)) reading = mergeReadings(reading, checkReading(doc, (JSON.parse(readFileSync(pageRaw, "utf8")) as { json: unknown }).json, { notesKind: reading.kind }));
     }
     readings.push(reading);
   }

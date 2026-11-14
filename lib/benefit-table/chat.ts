@@ -11,7 +11,7 @@ import { benefitNamesRead, figureText, periodWords } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
+import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { noteMultiple, sameNote, type Multiplier, type RowFacts } from "./multiplier";
 import { withoutChildLimit } from "./child-limit";
@@ -37,7 +37,10 @@ export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: n
   premium?: true };
 /** `labels`: the server's own wording of each statement it wrote. The chat's checks keep exactly these words (verifyAnswer's
  * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
-export type RowReport = { dropped: { why: string; text: string; notFit?: boolean; row?: string }[]; labels: string[];
+export type RowReport = { dropped: { why: string; text: string; notFit?: boolean; row?: string;
+  /** The amount is a row's that its document prints for more than one person without saying whose (WithheldRow): the
+   * household hears where it is printed (noteLeftOutAmounts), never that it could not be found. */
+  withheld?: { note: string } }[]; labels: string[];
   /** For each label of a daily row: the first paid day and the most days the table read for it (one entry per row). */
   days?: Record<string, { fromDay: number | null; maxDays: number | null; alone: boolean }[]>;
   /** Each "<benefit> also depends on this: <condition>" point, with the condition's own words and the rows whose cards it
@@ -50,6 +53,37 @@ export type RowReport = { dropped: { why: string; text: string; notFit?: boolean
   /** The percentage rows worked out on a person's own sum insured, as pointers the chat's checks verify and work out again
    * (verifyAnswer's serverFigures). */
   figures?: ServerFigure[] };
+
+/** A row with its own figure that the table shows for no one, because its document prints it for two or more people and
+ * does not say whose (assemble.ts notToldRows), with where it is printed in the library. */
+export type WithheldRow = { benefit: string; value: number | null; excerpt: string; docIndex: number; page: number };
+export function withheldRows(table: BenefitTable, household: Household): WithheldRow[] {
+  const index = new Map(household.documents.map((d, i) => [d.policyId, i]));
+  return (table.notToldRows ?? []).flatMap((r) => { const docIndex = index.get(r.source.documentId);
+    return docIndex == null ? [] : [{ benefit: r.benefit, value: r.value, excerpt: r.source.excerpt, docIndex, page: r.source.page }]; });
+}
+/** What the household hears for an amount left out because its row is printed for several people without saying whose. */
+export const withheldNote = (benefit: string, where: string) =>
+  `The amount for ${benefit} is printed in ${where}, but the document prints it for more than one insured person and does not say whose it is, so it is not shown here as anyone’s. Check that page, or ask the insurer.`;
+const flatWords = (s: string) => s.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
+/** The withheld row a dropped amount statement is about: its quote is that row's printed words, or it names that row's
+ * benefit and prints its figure. One row only; otherwise none. */
+function withheldFor(raw: Record<string, unknown>, withheld: WithheldRow[], household: Household): { note: string } | undefined {
+  if (!withheld.length) return undefined;
+  const quote = typeof raw.quote === "string" ? flatWords(raw.quote) : "";
+  const said = flatWords([raw.text, raw.rowBenefit].filter((x) => typeof x === "string").join(" "));
+  const figures = [raw.amount, raw.text, raw.quote].flatMap((x) => typeof x === "string" ? anyMoneyFigures(x).map((f) => f.value) : []);
+  const hits = withheld.filter((w) => {
+    const ex = flatWords(w.excerpt);
+    if (quote.length >= 8 && (ex.includes(quote) || quote.includes(ex))) return true;
+    const name = flatWords(w.benefit);
+    return name.length >= 3 && ` ${said} `.includes(` ${name} `) && w.value != null && figures.some((v) => Math.abs(v - w.value!) < 0.005);
+  });
+  const where = [...new Set(hits.map((w) => `${w.benefit}\u0000${w.docIndex}\u0000${w.page}`))];
+  if (where.length !== 1) return undefined;
+  const w = hits[0];
+  return { note: withheldNote(w.benefit, `${docLabel(household, household.documents[w.docIndex])}, page ${w.page}`) };
+}
 
 /** Said when the table has no rows yet, so a missing amount is never silent. */
 export const NO_ROWS_YET = "Amounts are not shown yet: your documents have not been read into your Coverage page. They appear there, and here, once they have.";
@@ -790,7 +824,7 @@ const POLICY_ONLY_WORDS = new Set(("what what's whats how much many is are does 
  * card given for one person's row is given for every other member's own row of the same benefit and document: each
  * person the document is linked to and the table holds a row for is named, never only the one the model picked (live
  * 637c547: a group scheme's hospital cash named one of the two insured people). Each card is that person's own row. */
-export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = [], forNobody = false): { json: unknown; report: RowReport } {
+export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = [], forNobody = false, withheld: WithheldRow[] = []): { json: unknown; report: RowReport } {
   const report: RowReport = { dropped: [], labels: [], days: {}, conditionPoints: [], cards: {} };
   // A condition said as a point of its own, for the rows whose cards it belongs to (dropConditionsOnCards).
   const pointFor = (text: string, condition: string, row: ChatRow) => {
@@ -843,12 +877,13 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
     const named = (typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined);
-    if (!named) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
+    if (!named) { const held = withheldFor(raw, withheld, household); report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text, ...(held ? { withheld: held } : {}) }); continue; }
     // The model copies the benefit name of the row it gives: a name that is not that row's means the id slipped to another
     // row (round 9 check, S088: the recuperation benefit given as the Child Education Fund's row). The card is left out: a
     // missing amount, never a wrong one. An answer recorded before the field existed has none, and is not checked.
     if (typeof raw.rowBenefit === "string" && !copiedName(raw.rowBenefit, named, rows) && !quotesRow(raw.quote, named, rows)) {
-      report.dropped.push({ why: `row ${named.id} is ${names(named)}, not "${raw.rowBenefit.slice(0, 80)}"`, text, row: named.id }); continue;
+      const held = withheldFor(raw, withheld, household);
+      report.dropped.push({ why: `row ${named.id} is ${names(named)}, not "${raw.rowBenefit.slice(0, 80)}"`, text, row: named.id, ...(held ? { withheld: held } : {}) }); continue;
     }
     const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
     // Every amount statement says whether the event fits its row: a cover that pays only for what its list names, with
@@ -1572,8 +1607,15 @@ export function keepLabelledAmounts<T extends { id?: string; amount?: unknown; t
  * is added here (in place of the weaker "left out a point"), and the household always hears that an amount was left out. */
 export function noteLeftOutAmounts<T extends { id: string; kind: string; text: string }>(statements: T[], report: RowReport, make: (id: string, text: string) => T): T[] {
   // An amount the answer itself says does not fit the event is not one the documents fail to print: no note for it.
-  if (!report.dropped.some((d) => !d.notFit) || statements.some((s) => s.id === "left-out-amount")) return statements;
-  return [...statements.filter((s) => !(s.id === "left-out-fact" && s.text === LEFT_OUT_FACT)), make("left-out-amount", LEFT_OUT_AMOUNT)];
+  const left = report.dropped.filter((d) => !d.notFit);
+  if (!left.length) return statements;
+  // An amount whose row is printed for several people without saying whose is printed: the household hears where, once
+  // for each place, never that it could not be found.
+  const notes = [...new Set(left.flatMap((d) => d.withheld ? [d.withheld.note] : []))].filter((n) => !statements.some((s) => s.text === n));
+  const missing = left.some((d) => !d.withheld) && !statements.some((s) => s.id === "left-out-amount");
+  if (!notes.length && !missing) return statements;
+  return [...statements.filter((s) => !(s.id === "left-out-fact" && s.text === LEFT_OUT_FACT)), ...notes.map((n, i) => make(`withheld-amount-${i + 1}`, n)),
+    ...(missing ? [make("left-out-amount", LEFT_OUT_AMOUNT)] : [])];
 }
 
 /** What a row brings to a multiple the model names (lib/benefit-table/multiplier.ts noteMultiple): its own words (benefit
