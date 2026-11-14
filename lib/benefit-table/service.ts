@@ -326,7 +326,9 @@ export function holdReason(file: Pick<DocumentFile, "quarantine" | "scan_detail"
 /** A stored reading checked against today's pages, with its page re-reads added. */
 export function checkStored(doc: SourceDoc, stored: Pick<StoredReading, "document" | "pages">): CheckedReading {
   let reading = checkReading(doc, stored.document);
-  for (const p of stored.pages ?? []) reading = mergeReadings(reading, checkReading(doc, p.json));
+  // A part's notes are worked out as the whole document's (its kind), never skipped for the part's own kind: mergeReadings
+  // keeps only the notes both readings find (#474 perf gate, P474-H1).
+  for (const p of stored.pages ?? []) reading = mergeReadings(reading, checkReading(doc, p.json, { notesKind: reading.kind }));
   return reading;
 }
 

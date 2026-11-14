@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { qualifierText } from "@/lib/benefit-table/headline";
 import { assembleTable, coverKeyOf, figureText, NOT_TOLD_WHY, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
+import { checkStored } from "@/lib/benefit-table/service";
 import { amountsFromRows, chatRows, noteLeftOutAmounts, renderTable, withheldNote, withheldRows } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT } from "@/lib/simple-chat/verify";
@@ -807,6 +808,35 @@ for (const k of CASES) {
   });
 }
 
+// #474 perf gate, P474-H1: a long certificate stored in parts, a later part keeping its own kind ("other", none,
+// "policy_wording"): the document's notes and blockers are still worked out for every part, so the merged reading keeps
+// "for insured children the limits are 50% of those shown" and no one is given the per-person limits.
+{
+  const id = "eeeeeeee-0000-4000-8000-0000000000f7";
+  const lives = ["Asha Rao", "Ben Rao", "Kiran Rao"];
+  const rows = [["Overseas medical expenses", "S$500,000", 500000], ["Trip cancellation", "S$10,000", 10000]] as const;
+  const text = ["GLOBE TRAVEL ANNUAL - CERTIFICATE OF INSURANCE", `Certificate C-7\tInsured persons: ${lives.join(", ")}`, "Insured person\tCover", ...lives.map((n) => `${n}\tGlobe Travel Annual`),
+    "Benefit\tLimit per insured person", ...rows.map(([b, c]) => `${b}\t${c}`), "Note: for insured children the limits are 50% of those shown.", "Terms and conditions apply."].join("\n");
+  const insuredLine = text.split("\n")[1];
+  const cover = (person: string) => ({ person, product: "Globe Travel Annual", cover: "Travel", plan: null, riderOf: null, policyNumber: "P-f7", sumInsured: null, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 1, quote: insuredLine });
+  const benefit = ([b, c, v]: readonly [string, string, number]) => ({ section: null, column: "Limit per insured person", benefit: b, pays: "up_to", value: v, period: null, basis: null, asOf: null, percentOf: null, baseAmount: null, baseQuote: null,
+    cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: `${b}\t${c}`, forWhom: "each_named_insured" });
+  const reading = (kind: string | null, part: 0 | 1) => ({ document: { ...(kind ? { kind } : {}), product: "Globe Travel Annual", insurer: null, namedPeople: lives, plan: null, periodFrom: null, periodTo: null },
+    covers: part === 0 ? lives.map(cover) : [], benefits: [benefit(rows[part])] });
+  const doc: SourceDoc = { id, name: "certificate.pdf", readable: true, pages: [{ page: 1, text }] };
+  const key = coverKeyOf({ product: "Globe Travel Annual", cover: "Travel", plan: null });
+  const links = [{ section: sectionKeyOf(id, { section: null, column: "Limit per insured person" }), cover: key, why: "certificate benefits" }];
+  for (const kind of ["personal_proof", "other", null, "policy_wording"]) {
+    test(`P474-H1: a certificate stored in two parts, the later part's kind ${kind ?? "missing"}, keeps its children's note and withholds the per-person limits`, () => {
+      const r = checkStored(doc, { document: reading("personal_proof", 0), pages: [{ page: 1, json: reading(kind, 1) }] } as Parameters<typeof checkStored>[1]);
+      assert.equal(r.kind, "personal_proof");
+      assert.deepEqual(r.lifeNotes, ["Note: for insured children the limits are 50% of those shown."]);
+      assert.ok((r.plainBlockers ?? []).length > 0, "the plain table's blockers are kept too");
+      const t = assembleTable([r], BASE_FAMILY, links, [], NOW);
+      for (const p of ["a", "b", "k"]) assert.deepEqual(t.people.find((x) => x.id === p)!.rows.filter((x) => x.figure.kind !== "none").map((x) => x.benefit), [], p);
+    });
+  }
+}
 console.log(`plain-table-test: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
 if (failures.length) process.exit(1);

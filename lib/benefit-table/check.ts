@@ -1157,7 +1157,9 @@ function unescaped(v: unknown): unknown {
   return v;
 }
 
-export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
+/** `notesKind`: the kind of the document a part's reading is merged into (checkStored), so a later part stored with its own
+ * kind ("other", none) still works out the document's notes, which mergeReadings intersects (#474 perf gate, P474-H1). */
+export function checkReading(doc: SourceDoc, raw: unknown, o: { notesKind?: CheckedReading["kind"] } = {}): CheckedReading {
   const r = (unescaped(raw) ?? {}) as Partial<Reading>;
   const d = (r.document ?? {}) as Partial<Reading["document"]>;
   const kind = (DOCUMENT_KINDS as readonly string[]).includes(d.kind as string) ? d.kind! : "other";
@@ -1512,6 +1514,6 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}) });
   }
-  Object.assign(out, lifeNotesOf(doc.pages, { ...out, insurer: str(d.insurer) }));
+  Object.assign(out, lifeNotesOf(doc.pages, { ...out, kind: o.notesKind ?? out.kind, insurer: str(d.insurer) }));
   return out;
 }
