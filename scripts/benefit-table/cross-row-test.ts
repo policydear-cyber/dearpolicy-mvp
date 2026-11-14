@@ -373,26 +373,37 @@ test("Hospital cash\\t100 per day under a single declared currency (S$) keeps S$
   assert.equal(c.b("Physiotherapy")?.cap, 1000, "a bare per-year cap under (S$) is a cap, as on main");
 });
 
-// ---------- Cross-row gate round 3: only benefit rows, headings and column headers name a page's other currency ----------
-test("P-1: a premium, a company footer or exclusion text in another currency never wipes a S$ page's bare figures", () => {
-  const cases: [string, string][] = [
-    ["P1", "Premium: USD 120 per year\nAmbulance\t500"],
-    ["policy fee", "Policy fee: USD 25\nAmbulance\t500"],
-    ["P3", "Ambulance\t500\nHarbour Insurance Berhad (paid-up capital RM 100 million)"],
-    ["P5", "Ambulance\t500\nExclusions: treatment received in the USA, or bills in US$ above the usual charges."],
-    ["conversion figure", "Note: overseas bills above US$1,000 are converted at the claim date\nAmbulance\t500"],
+// ---------- Cross-row gate round 3 (narrowed in round 6): a premium line above the table or a capital footer below it never wipes a S$ page's bare figures ----------
+test("P-1: a premium line above the table or a paid-up capital footer below it leaves a S$ page single-currency", () => {
+  const cases: [string, string, string][] = [
+    ["P1", "Ambulance\t500", "Premium: USD 120 per year\nTABLE OF BENEFITS (S$)"],
+    ["policy fee", "Ambulance\t500", "Policy fee: USD 25\nTABLE OF BENEFITS (S$)"],
+    ["P3", "Ambulance\t500\nHarbour Insurance Berhad (paid-up capital RM 100 million)", "TABLE OF BENEFITS (S$)"],
   ];
-  for (const [name, page] of cases) {
-    const r = run(page, [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], "TABLE OF BENEFITS (S$)");
+  for (const [name, page, head] of cases) {
+    const r = run(page, [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], head);
     assert.equal(amountOf(r.figures.get("Ambulance")), 500, name);
     assert.equal(r.b("Ambulance")?.currency, "SGD", name);
   }
 });
-test("P6: a bare cap on a S$ page with a USD premium line stays a S$ cap", () => {
+test("P-1 (round 6): exclusion and conversion wording never exempts a mention, so P5 and a conversion figure give none", () => {
+  for (const page of ["Ambulance\t500\nExclusions: treatment received in the USA, or bills in US$ above the usual charges.",
+    "Note: overseas bills above US$1,000 are converted at the claim date\nAmbulance\t500"]) {
+    const r = run(page, [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], "TABLE OF BENEFITS (S$)");
+    assert.equal(amountOf(r.figures.get("Ambulance")), null, page);
+  }
+});
+test("P6: a bare cap on a S$ page with a USD premium line above the table stays a S$ cap", () => {
   const q = "Physiotherapy\t10% of Sum Insured, up to 500 per year";
-  const { b, figures } = run(`Premium: USD 120 per year\n${q}`, [{ benefit: "Physiotherapy", pays: "percent", value: 10, percentOf: "sum_insured", cap: 500, capQuote: "up to 500 per year", quote: q }], "TABLE OF BENEFITS (S$)");
+  const { b, figures } = run(q, [{ benefit: "Physiotherapy", pays: "percent", value: 10, percentOf: "sum_insured", cap: 500, capQuote: "up to 500 per year", quote: q }], "Premium: USD 120 per year\nTABLE OF BENEFITS (S$)");
   assert.equal(b("Physiotherapy")?.cap, 500);
   assert.equal(amountOf(figures.get("Physiotherapy")), 500);
+});
+test("P-1 (round 6): a premium line between benefit rows always counts (mixed, none)", () => {
+  const r = run("Ambulance\t500\nPremium: USD 120 per year\nSurgical fees\t5,000", [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" },
+    { benefit: "Surgical fees", value: 5000, quote: "Surgical fees\t5,000" }], "TABLE OF BENEFITS (S$)");
+  assert.equal(amountOf(r.figures.get("Ambulance")), null);
+  assert.equal(amountOf(r.figures.get("Surgical fees")), null);
 });
 test("P-1 control: a benefit heading in (USD), a column header in US$, or a signed US$ benefit row still make the page mixed", () => {
   for (const page of ["OVERSEAS BENEFITS (USD)\nAmbulance\t500", "Benefit\tLimit (US$)\nAmbulance\t500", "Overseas evacuation\tUSD 50,000\nAmbulance\t500",
@@ -436,11 +447,17 @@ test("R4: a USD section, heading, column header, note or signed row on a S$ page
     assert.equal(amountOf(figures.get("Emergency medical")), null, name);
   }
 });
-test("R4 control: premium, capital, address, conversion and exclusion mentions still leave a S$ page single-currency", () => {
-  for (const line of ["Premium: USD 120 per year", "Harbour Insurance Berhad (paid-up capital RM 100 million)", "Exclusions: claims above US$1,000 incurred in the USA are not covered.",
-    "Note: overseas bills above US$1,000 are converted at the claim date", "Tel: +65 6123 4567 | www.harbour.example | 1 Harbour Road, Singapore 018989"]) {
+test("R4 control: a premium line or capital footer after the last row, or an address line, leaves a S$ page single-currency", () => {
+  for (const line of ["Premium: USD 120 per year", "Harbour Insurance Berhad (paid-up capital RM 100 million)",
+    "Tel: +65 6123 4567 | www.harbour.example | 1 Harbour Road, Singapore 018989"]) {
     const { figures } = run(`Ambulance\t500\n${line}`, [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], "TABLE OF BENEFITS (S$)");
     assert.equal(amountOf(figures.get("Ambulance")), 500, line);
+  }
+});
+test("R4 control (round 6): exclusion and conversion figures make a S$ page mixed (none)", () => {
+  for (const line of ["Exclusions: claims above US$1,000 incurred in the USA are not covered.", "Note: overseas bills above US$1,000 are converted at the claim date"]) {
+    const { figures } = run(`Ambulance\t500\n${line}`, [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], "TABLE OF BENEFITS (S$)");
+    assert.equal(amountOf(figures.get("Ambulance")), null, line);
   }
 });
 
@@ -469,6 +486,37 @@ test("R5: 28 shapes naming USD on a S$ page (fees and charges, @, addresses, con
 test("R5 control: a currency named without a figure in a conversion note counts (mixed, none)", () => {
   const { figures } = run("Note: overseas bills are converted from (US$) at the claim date\nAmbulance\t500", [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], "TABLE OF BENEFITS (S$)");
   assert.equal(amountOf(figures.get("Ambulance")), null);
+});
+
+// ---------- Cross-row gate round 6: only a narrow premium label or paid-up/issued/share capital, outside the benefit table, exempts a mention ----------
+const R6 = [
+  "Overseas medical\tUS$50,000 (dental not covered)", "Medical expenses up to US$50,000; cosmetic treatment not covered",
+  "Medical expenses, dental excluded, up to US$50,000", "Overseas medical up to US$50,000 (converted at the exchange rate on the date of treatment)",
+  "Overseas medical\tUS$50,000, converted to S$ on payment", "Overseas medical up to US$50,000 - exceptions apply",
+  "Overseas medical\tUS$50,000 (pre-existing conditions are excluded)", "Overseas medical US$50,000 per trip; cruises not covered",
+  "Overseas medical: we will not pay more than US$50,000 per trip", "Pre-existing exclusion waiver US$5,000", "Currency conversion benefit up to US$500",
+  "Emergency medical evacuation USD50,000 (USA, Canada not covered)",
+  "Accidental death capital US$100,000", "Death capital of USD 100,000", "Accidental death\tcapital US$100,000", "Capital US$100,000",
+  "Service charge: USD 50 per visit reimbursed", "Hospital benefits\nService charges - US$2,000", "Administration charges: US$500",
+  "Waiver of premium\tPremium: US$1,200", "Contribution - USD 1,200 per year waived on disability", "Late charges: US$50",
+  "OVERSEAS TRAVEL SECTION\nTotal premium payable: USD 120",
+];
+test("R6: 23 shapes naming USD between S$ benefit rows give a bare figure no amount", () => {
+  assert.equal(R6.length, 23);
+  for (const line of R6) {
+    const { figures } = run(`Ambulance\tS$500\n${line}\nEmergency medical\t50,000`, [{ benefit: "Emergency medical", pays: "up_to", value: 50000, quote: "Emergency medical\t50,000" }], "TABLE OF BENEFITS (S$)");
+    assert.equal(amountOf(figures.get("Emergency medical")), null, line);
+  }
+});
+test("R6: the same shapes outside the table (before its heading or after its last row) still give none unless premium- or capital-shaped", () => {
+  const exempt = new Set(["OVERSEAS TRAVEL SECTION\nTotal premium payable: USD 120"]);
+  for (const line of R6) {
+    const above = run("Emergency medical\t50,000", [{ benefit: "Emergency medical", pays: "up_to", value: 50000, quote: "Emergency medical\t50,000" }], `${line}\nTABLE OF BENEFITS (S$)`);
+    const below = run(`Emergency medical\t50,000\n${line}`, [{ benefit: "Emergency medical", pays: "up_to", value: 50000, quote: "Emergency medical\t50,000" }], "TABLE OF BENEFITS (S$)");
+    const want = exempt.has(line) ? 50000 : null;
+    assert.equal(amountOf(above.figures.get("Emergency medical")), want, `above: ${line}`);
+    assert.equal(amountOf(below.figures.get("Emergency medical")), want, `below: ${line}`);
+  }
 });
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
