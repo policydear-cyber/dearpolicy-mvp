@@ -6,9 +6,11 @@
  * printed on the row's own lines: the line whose label is the row's label, and the lines that carry that same row on
  * (no item marker, no bullet, no new label of a row of its own).
  *
- * A number followed by a count noun ("up to a maximum of 2 procedures", "10 sessions a year") is a count, never money
- * (wrapped-quote gate, P2: "up to S$2"). Both are allow-lists. No model, database or network. */
-import { anyMoneyFigures } from "@/lib/format/currency";
+ * A bare number (no currency sign or code) is money only when what follows it is on an allow-list (nothing, punctuation,
+ * "per", "each", "a day", "or", a currency word ...): "up to a maximum of 2 procedures", "12 fillings" are counts, never
+ * money (wrapped-quote gate, P2: "up to S$2"; cross-row gate H5). A figure printed with a currency is always money
+ * ("S$150\tDays 1-30", cross-row gate M1). Allow-lists throughout. No model, database or network. */
+import { ANY_MONEY_FIGURE, anyMoneyFigures } from "@/lib/format/currency";
 
 /** A list item's own marker: "(a)", "b)", "ii.", "3)", "(iv)", or a bullet. A line that starts with one is its own item. */
 const ITEM_START = /^[ \t]*(?:\(?(?:[a-z]|[ivx]{1,5}|\d{1,3})[.)](?=\s|$)|\((?:[a-z]|[ivx]{1,5}|\d{1,3})\)|[•●○◦▪▫■□‣⁃∙·*–—-](?=\s))/i;
@@ -42,97 +44,158 @@ function likeness(a: string[], b: string[]): number {
   return shared / (a.length + b.length - shared);
 }
 
-type Group = { label: string; marked: boolean; figure: boolean; pieces: string[] };
+/** What may follow a bare number that is money: nothing, punctuation, a bracket or a slash, or a word from this list.
+ * Anything else ("procedures", "fillings", "check-ups", "x") makes it no money figure. */
+const MONEY_AFTER = /^(?:[ \t]*$|[ \t]*[,.;:)\]\n\t(\/]|[ \t]*[-–](?![ \t]*\d)|[ \t]+(?:per|each|every|a(?:n)?[ \t]+(?:day|night|week|month|year)|for|in[ \t]+respect[ \t]+of|in[ \t]+total|in[ \t]+aggregate|or|and|whichever|up[ \t]+to|subject|max(?:imum)?|only|payable|paid|lump|overall|on|upon|after|from|if|when|while|under|less|plus|limit|dollars?|ringgit|pounds?|euros?|sgd|usd|myr|hkd|aud|gbp|eur|rm)\b)/i;
+const BARE_NUMBER = /(?<![\d.,\/\p{L}$£€])(?<!\d[ \t]?[-–][ \t]?)\d[\d,]*(?:\.\d+)?(?![\d%])/gu;
+/** Bare numbers in the text that read as money (followed by an allowed word), with where each starts. */
+function bareMoney(t: string): { value: number; index: number }[] {
+  return [...t.matchAll(BARE_NUMBER)].filter((m) => MONEY_AFTER.test(t.slice(m.index! + m[0].length)))
+    .map((m) => ({ value: Number(m[0].replace(/,/g, "")), index: m.index! }));
+}
+/** A figure in a line or cell: a money figure (any currency), a percentage, or a bare number that reads as money. */
+const MONEY_RE = new RegExp(ANY_MONEY_FIGURE, "u");
+function firstFigureAt(t: string): number {
+  const at = [t.search(/\d\s*%/), t.search(MONEY_RE), ...bareMoney(t).slice(0, 1).map((b) => b.index)].filter((i) => i >= 0);
+  return at.length ? Math.min(...at) : -1;
+}
+/** A label that only names a tier of the row above: "Days 1-30", "Day 31 onwards", "Year 1", "Visits 1 to 10",
+ * "Thereafter", "Subsequent days" (cross-row gate M2). */
+const TIER_LABEL = /^[ \t(]*(?:(?:days?|nights?|weeks?|months?|years?|visits?|sessions?|claims?|trips?)[ \t]*\d+(?:[ \t]*(?:-|–|to)[ \t]*\d+)?(?:[ \t]*(?:onwards?|and[ \t]+above|thereafter))?|thereafter|subsequent(?:[ \t]+\p{L}+)?|(?:first|next|following|remaining)[ \t]+\d+[ \t]+\p{L}+|from[ \t]+day[ \t]+\d+(?:[ \t]+onwards?)?)[ \t):,;\-–]*$/iu;
+/** A label that carries the row's limit on: a cap phrase, optionally after "or"/"(", or a lone connective ("or S$50,000"). */
+const CAP_LABEL = /^[ \t,;(]*(?:(?:or|and)[ \t]+)?(?:up[ \t]+to|subject[ \t]+to|max(?:imum)?\.?|limited[ \t]+to|not[ \t]+(?:to[ \t]+)?exceed(?:ing)?|capped[ \t]+at|whichever)\b|^[ \t,;(]*(?:or|and|plus)?[ \t,;:(]*$/i;
+/** The line above runs on into this one: it stops on a joining word, a comma, "&", "/" or a hyphen, without ending a
+ * sentence (a lower-case start is judged by the caller). */
+const RUNS_INTO = (above: string) => !/[.!?:]\s*$/.test(above) && /(?:\b(?:by|for|of|on|in|to|with|under|from|at|and|or|the|a|an|any|all|other|our|your|its|their|which|that|than|is|are|be)|[,&/–-])\s*$/.test(above);
 
-/** The row's own text inside its quote's span of the page, or null when that cannot be told.
- * rows: how many rows the span holds (1: the whole span is the row's, as before).
- * The span's lines are cut into rows: a line starts another row when it starts with an item marker or a bullet, or when it
- * prints a figure after a label of its own that does not carry on the line above (RUNS_ON), is not a connective or cap
- * word, and is not the rest of this row's label wrapped below (its words are in the row's label, and the label above does
- * not yet hold all of them, and no figure has been printed yet). A tab cell after a figure starts another row on the same
- * line when it is a label (upper case, words only, no cap or value words, not the reading's column) with a figure after
- * it. A heading above the first row that is not the row's own label (no marker, no figure) is part of that first row.
- * With two or more rows, the row's own is the one whose label is most like the benefit's, and only when exactly one is;
- * a row with no figure of its own (a list item "(a) loss of one limb" above "(b) … S$100,000") gives no figure, unless the
- * quote starts on a line that prints only a figure, with no label, just above the row's label line. */
+/** A label that ends by introducing its figure as a limit ("will be payable, subject to a maximum amount of"). */
+const CAP_BEFORE_FIGURE = /(?:\bup[ \t]+to|\bmax(?:imum)?(?:[ \t]+amount)?(?:[ \t]+of)?|\bmax\.|\blimited[ \t]+to|\bcapped[ \t]+at|\bnot[ \t]+(?:to[ \t]+)?exceed(?:ing)?|\bsubject[ \t]+to(?:[ \t]+an?)?(?:[ \t]+max(?:imum)?)?(?:[ \t]+(?:amount|limit))?(?:[ \t]+of)?)[ \t:]*$/i;
+/** A figure followed by a description in lower case, of three words or more ("S$100 for every six hours diverted"): it
+ * describes the row's benefit, not another row's figure. */
+const DESCRIBED_FIGURE = /^[ \t]*\S*\d[\d,.]*%?(?:[ \t]+[a-z][\p{L}'’-]*){3,}/u;
+type Line = { from: number; text: string; marked: boolean; label: string; figure: boolean };
+type Group = { label: string; marked: boolean; figure: boolean; ownFigure: boolean; pieces: string[]; first: number; last: number };
+const markerLength = (t: string) => ITEM_START.exec(t)?.[0].length ?? 0;
+function lineOf(text: string, from: number): Line {
+  const m = markerLength(text), rest = text.slice(m), f = firstFigureAt(rest);
+  return { from, text, marked: m > 0, label: (f < 0 ? rest : rest.slice(0, f)).replace(/\s+/g, " ").trim(), figure: f >= 0 };
+}
+const hasWords = (t: string) => /\p{L}{2}/u.test(t);
+
+/** The row's own text among the lines its quote touches, or null when that cannot be told.
+ * rows: how many rows those lines hold (1: the quote is the row's, as before).
+ * The lines are read whole (a cap printed after the quote on the row's own cells is the row's: cross-row gate M0) and cut
+ * into rows. A line starts another row when:
+ * - it starts with an item marker or a bullet;
+ * - it prints a label, then a figure (whatever its case: "surgical fees\tS$5,000", "And Ambulance\tS$500"), unless the label
+ *   names a tier of the row ("Days 1-30") or carries its limit on ("up to", "subject to a maximum of", "or"), or no figure
+ *   has been printed yet and the line is the row's label wrapped (the line above runs into it, it starts in lower case, or
+ *   its words finish the benefit's name);
+ * - it prints only a figure after a row that already has its figure, unless the line above runs into it;
+ * - it prints only words, after a row that has its figure, and the next line of the quote prints only a figure (a label
+ *   with its figure below: "Surgical fees\n\tS$5,000"); or before any figure, when the row's label above is already whole
+ *   and these words are not part of it.
+ * A tab cell after a figure starts another row on the same line when it is a label (words only, no cap or value words, not
+ * the reading's column) with a figure after it. A heading above the first row that is not the row's own label is part of it.
+ * The row's own is the one whose label is most like the benefit's, only when exactly one is, and only when it prints a figure;
+ * except a quote that starts on a line of a figure alone, just above the row's label line, where the page line above that
+ * figure is not a label without a figure and the line below the label is not a figure alone ("100%\n9.\tLoss of …": a
+ * figure extracted above its label; never "(a) Left Hand\n70%\n(b) Right Hand\n60%": cross-row gate H3). */
 export function ownRowText(pageText: string, start: number, end: number, benefit: string, column: string | null = null): { rows: number; text: string | null } {
   const from = pageText.lastIndexOf("\n", start - 1) + 1;
   const stop = (() => { const e = pageText.indexOf("\n", Math.max(start, end - 1)); return e < 0 ? pageText.length : e; })();
   const whole = pageText.slice(start, end);
   if (!whole.includes("\n") && !/\S\t+\S/.test(pageText.slice(from, stop))) return { rows: 1, text: whole };
   const want = labelWords(benefit), columnWords = labelWords(column ?? "");
-  const groups: Group[] = [];
-  let at = from, prevLine = "", prevFirst = "";
-  for (const line of pageText.slice(from, stop).split("\n")) {
-    const lineFrom = at;
-    at += line.length + 1;
-    if (!line.trim()) continue;
-    const cells: { text: string; s: number; e: number }[] = [];
-    for (const m of line.matchAll(/[^\t]+/g)) if (m[0].trim()) cells.push({ text: m[0].trim(), s: lineFrom + m.index!, e: lineFrom + m.index! + m[0].length });
-    const firstFigureCell = cells.findIndex((c) => /\d/.test(c.text.replace(ITEM_START, "")));
-    cells.forEach((c, j) => {
-      let g = groups[groups.length - 1];
-      const bare = c.text.replace(ITEM_START, "").trim();
-      const labelPart = bare.replace(/(?:[A-Z]{0,3}\$|RM|£|€)?\s*\d.*$/s, "").trim();
-      let starts = !g;
-      if (g && j === 0) {
-        const marked = ITEM_START.test(line);
-        const words = labelWords(labelPart);
-        const wrappedLabel = !g.figure && within(words, want) && !within(want, labelWords(g.label));
-        starts = marked || (firstFigureCell >= 0 && !!labelPart && /^[A-Z]/.test(labelPart) && !CARRIES_ON.test(labelPart)
-          && !RUNS_ON(prevLine, line) && !RUNS_ON(prevFirst, c.text) && !wrappedLabel);
-      } else if (g && j > 0) {
-        starts = g.figure && !/\d/.test(c.text) && /^[A-Z][\p{L}'’&/(). -]+$/u.test(c.text) && /\p{L}{2}/u.test(c.text)
-          && !CARRIES_ON.test(c.text) && !VALUE_WORDS.test(c.text) && !within(labelWords(c.text), columnWords)
-          && cells.slice(j + 1).some((x) => /\d/.test(x.text));
-      }
-      if (starts) { groups.push({ label: "", marked: j === 0 && ITEM_START.test(line), figure: false, pieces: [] }); g = groups[groups.length - 1]; }
-      if (!g.figure) g.label += " " + labelPart;
-      if (/\d/.test(bare)) g.figure = true;
-      const s = Math.max(c.s, start), e = Math.min(c.e, end);
-      if (e > s) g.pieces.push(pageText.slice(s, e));
-    });
-    prevLine = line; prevFirst = cells[0]?.text ?? "";
+  const lines: Line[] = [];
+  for (let at = from; at <= stop;) {
+    const e = pageText.indexOf("\n", at), to = e < 0 || e > stop ? stop : e;
+    const text = pageText.slice(at, to);
+    if (text.trim()) lines.push(lineOf(text, at));
+    at = to + 1;
   }
+  const groups: Group[] = [];
+  const open = (marked: boolean, k: number) => { groups.push({ label: "", marked, figure: false, ownFigure: false, pieces: [], first: k, last: k }); return groups[groups.length - 1]; };
+  lines.forEach((line, k) => {
+    // A line whose figure is a limit ("Capped at S$200 per day", or words in lower case, in one cell, ending in a cap phrase:
+    // "will be payable, subject to a maximum amount of S$25,000") carries the row on, and its figure is not the row's own
+    // figure (the row's figures may still follow it).
+    const capLine = line.figure && (CAP_LABEL.test(line.label) || (/^[a-z]/.test(line.label) && !line.text.slice(0, line.text.search(/\d/)).includes("\t") && CAP_BEFORE_FIGURE.test(line.label)));
+    let g = groups[groups.length - 1];
+    if (!g) g = open(line.marked, k);
+    else {
+      const prev = lines[k - 1].text, next = lines[k + 1];
+      const lower = /^[a-z]/.test(line.label), words = labelWords(line.label);
+      let starts: boolean;
+      if (line.marked) starts = true;
+      else if (line.figure && hasWords(line.label)) {
+        starts = !(capLine || TIER_LABEL.test(line.label)
+          || (!g.ownFigure && (RUNS_INTO(prev) || lower || (within(words, want) && !within(want, labelWords(g.label))))));
+      } else if (line.figure) starts = g.ownFigure && !RUNS_INTO(prev) && !DESCRIBED_FIGURE.test(line.text.split("\t")[0]);
+      else if (CAP_LABEL.test(line.label) || TIER_LABEL.test(line.label) || lower || RUNS_INTO(prev)) starts = false;
+      else if (g.ownFigure) starts = !!next && !next.marked && next.figure && !hasWords(next.label);
+      else starts = within(want, labelWords(g.label)) && !within(words, want);
+      if (starts) g = open(line.marked, k);
+    }
+    g.last = k;
+    // The line's cells: a later cell that is a label with a figure after it is another row on the same line.
+    const cells = line.text.split("\t").filter((c) => c.trim());
+    cells.forEach((cell, j) => {
+      const c = cell.trim();
+      if (j > 0 && g.ownFigure && !/\d/.test(c) && /^[A-Z][\p{L}'’&/(). -]+$/u.test(c) && hasWords(c) && !CAP_LABEL.test(c)
+        && !VALUE_WORDS.test(c) && !CARRIES_ON.test(c) && !TIER_LABEL.test(c) && !within(labelWords(c), columnWords)
+        && cells.slice(j + 1).some((x) => firstFigureAt(x) >= 0)) { g = open(false, k); }
+      const bare = j === 0 ? c.slice(markerLength(c)).trim() : c;
+      const f = firstFigureAt(bare);
+      if (!g.ownFigure && !capLine) g.label += " " + (f < 0 ? bare : bare.slice(0, f));
+      if (f >= 0) { g.figure = true; if (!capLine) g.ownFigure = true; }
+      g.pieces.push(c);
+    });
+  });
   // A heading above the first row ("Section 2: Hospital", "Permanent disablement:") that is not itself the row's label is
   // that row's heading.
   while (groups.length > 1 && !groups[0].figure && !groups[0].marked && !within(want, labelWords(groups[0].label))) {
     const [head, next] = groups.splice(0, 2);
-    groups.unshift({ label: `${head.label} ${next.label}`, marked: next.marked, figure: next.figure, pieces: [...head.pieces, ...next.pieces] });
+    groups.unshift({ ...next, label: `${head.label} ${next.label}`, pieces: [...head.pieces, ...next.pieces], first: head.first });
   }
   if (groups.length <= 1) return { rows: 1, text: whole };
   const scores = groups.map((g) => likeness(labelWords(g.label), want));
   const best = Math.max(...scores);
   const top = groups.filter((_, k) => scores[k] === best);
   if (best <= 0 || top.length !== 1) return { rows: groups.length, text: null };
-  const own = groups.indexOf(top[0]);
-  // A figure printed on a line of its own, with no label, that the quote starts on, just above the row's label line that
-  // prints none ("70%\n(b) Right Hand": an extraction that puts the figure cell above its label) is the row's.
-  if (!top[0].figure && own === 1 && groups[0].figure && !labelWords(groups[0].label).length && !groups[0].label.trim())
-    return { rows: groups.length, text: [...groups[0].pieces, ...top[0].pieces].join("\t") };
-  if (!top[0].figure) return { rows: groups.length, text: null };
-  return { rows: groups.length, text: top[0].pieces.join("\t") };
+  const own = top[0];
+  if (own.figure) return { rows: groups.length, text: own.pieces.join("\t") };
+  // A figure alone, extracted above its label: only as the quote's first line, just above the label line, with the page line
+  // above it not a label lacking a figure, and the page line below the label not a figure alone.
+  const head = groups[0];
+  if (groups.indexOf(own) !== 1 || !head.figure || hasWords(head.label) || head.first !== head.last || own.first !== 1) return { rows: groups.length, text: null };
+  const pageLine = (pos: number, dir: -1 | 1): Line | null => {
+    let at = pos;
+    for (;;) {
+      if (dir < 0) { if (at <= 0) return null; const s0 = pageText.lastIndexOf("\n", at - 2) + 1; const t = pageText.slice(s0, at - 1); at = s0; if (t.trim()) return lineOf(t, s0); }
+      else { const e = pageText.indexOf("\n", at); if (e < 0) return null; const e2 = pageText.indexOf("\n", e + 1); const t = pageText.slice(e + 1, e2 < 0 ? pageText.length : e2); at = e + 1; if (t.trim()) return lineOf(t, e + 1); }
+    }
+  };
+  const above = pageLine(lines[head.first].from, -1), below = pageLine(lines[own.last].from, 1);
+  if (above && !above.figure && (hasWords(above.label) || above.marked)) return { rows: groups.length, text: null };
+  if (below && below.figure && !hasWords(below.label) && !below.marked) return { rows: groups.length, text: null };
+  return { rows: groups.length, text: [...head.pieces, ...own.pieces].join("\t") };
 }
 
-/** Nouns of things counted: a number before one is a count, never money. */
-export const COUNT_NOUN = /^[ \t]*(?:procedures?|treatments?|visits?|sessions?|days?|nights?|weeks?|months?|years?|yrs?|hours?|hrs?|claims?|times|events?|persons?|people|child(?:ren)?|members?|items?|pairs?|admissions?|trips?|operations?|surger(?:y|ies)|consultations?|courses?|cycles?|teeth|tooth|lives|polic(?:y|ies)|units?|occasions?|episodes?)\b/i;
-
-/** The value is printed in the text only as a count: every printed occurrence of it is followed by a count noun, and none is
- * a money figure ("up to a maximum of 2 procedures", "10 sessions"). */
+/** The value is printed in the text, and never as money: no money figure prints it, and every bare printing of it is
+ * followed by something off the MONEY_AFTER allow-list ("up to a maximum of 2 procedures", "12 fillings", "2 x"). */
 export function printedOnlyAsCount(text: string, value: number): boolean {
   const t = text.normalize("NFKC");
-  if (anyMoneyFigures(t).some((f) => Math.abs(f.value - value) < 0.005 && !COUNT_NOUN.test(t.slice(f.index + f.length)))) return false;
-  const hits = [...t.matchAll(/(?<![\d.,])\d[\d,]*(?:\.\d+)?(?![\d])/g)].filter((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
-  return hits.length > 0 && hits.every((m) => COUNT_NOUN.test(t.slice(m.index! + m[0].length)));
+  if (anyMoneyFigures(t).some((f) => Math.abs(f.value - value) < 0.005)) return false;
+  const hits = [...t.matchAll(BARE_NUMBER)].filter((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
+  return hits.length > 0 && !bareMoney(t).some((b) => Math.abs(b.value - value) < 0.005);
 }
 
-/** A cap figure in the cap's own words that is money: printed as a money figure (with a code or a sign, a bare "$" too,
- * whose currency it never sets: check.ts capFigureCurrency), or printed bare on a page that declares its currency ("Limit
- * (S$)": "up to 500"); and never followed by a count noun ("up to a maximum of 2 procedures"). */
-export function moneyCapPrinted(text: string, value: number, pageDeclares: string | null): boolean {
+/** A cap figure in the cap's own words that is money: a money figure (a code or a sign; a bare "$" too, whose currency it
+ * never sets: check.ts capFigureCurrency), or a bare number that reads as money (MONEY_AFTER) where the row's currency is
+ * declared ("Limit (S$)": "up to 500 per year"). */
+export function moneyCapPrinted(text: string, value: number, declared: string | null): boolean {
   const t = text.normalize("NFKC");
-  if (anyMoneyFigures(t).some((f) => Math.abs(f.value - value) < 0.005 && !COUNT_NOUN.test(t.slice(f.index + f.length)))) return true;
-  if (!pageDeclares) return false;
-  return [...t.matchAll(/(?<![\d.,])\d[\d,]*(?:\.\d+)?(?![\d])/g)].some((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005
-    && !COUNT_NOUN.test(t.slice(m.index! + m[0].length)) && !/^\s*(?:%|per\s?cent|x\b|×)/i.test(t.slice(m.index! + m[0].length)));
+  if (anyMoneyFigures(t).some((f) => Math.abs(f.value - value) < 0.005)) return true;
+  return !!declared && bareMoney(t).some((b) => Math.abs(b.value - value) < 0.005);
 }

@@ -238,5 +238,78 @@ test("printedOnlyAsCount: counts are counts, money is money", () => {
   assert.equal(printedOnlyAsCount("2 procedures", 3), false, "not printed");
 });
 
+// ---------- Cross-row gate round 1 (/mnt/project-files/test-engineer/cross-row-gate.md) ----------
+test("M0: a cap after the quote, on the row's own cells of a two-row line, is still the row's (TE L22)", () => {
+  const { figures } = run("Hip\t75% up to S$50,000\tWrist\t20% up to S$5,000",
+    [{ benefit: "Hip", pays: "percent", value: 75, percentOf: "sum_insured", cap: 50000, capQuote: "up to S$50,000", quote: "Hip\t75%" }]);
+  assert.equal(amountOf(figures.get("Hip")), 50000);
+});
+test("M1: a figure printed with a currency is never a count, whatever word follows it", () => {
+  const a = run("Hospital income\tS$150\tDays 1-30", [{ benefit: "Hospital income", pays: "per_day", value: 150, quote: "Hospital income\tS$150\tDays 1-30" }]);
+  assert.equal(amountOf(a.figures.get("Hospital income")), 150);
+  const b = run("Hospital income: S$200 days 1-30, S$100 thereafter", [{ benefit: "Hospital income", pays: "per_day", value: 200, quote: "Hospital income: S$200 days 1-30, S$100 thereafter" }]);
+  assert.equal(amountOf(b.figures.get("Hospital income")), 200);
+  const c = run("Family benefit\tS$1,000 Children", [{ benefit: "Family benefit", value: 1000, quote: "Family benefit\tS$1,000 Children" }]);
+  assert.equal(amountOf(c.figures.get("Family benefit")), 1000);
+});
+test("M2: a tier line (Days 1-30) carries the row above on", () => {
+  const { figures } = run("Hospital income\nDays 1-30\tS$150 per day\nDays 31-90\tS$75 per day",
+    [{ benefit: "Hospital income", pays: "per_day", value: 150, quote: "Hospital income\nDays 1-30\tS$150 per day" }]);
+  assert.equal(amountOf(figures.get("Hospital income")), 150);
+});
+test("H3: a figure above the label is never taken when the page prints figures below their labels", () => {
+  const p = run("(a) Left Hand\n70%\n(b) Right Hand\n60%", [{ benefit: "Right Hand", pays: "percent", value: 70, percentOf: "sum_insured", quote: "70%\n(b) Right Hand" }]);
+  assert.equal(amountOf(p.figures.get("Right Hand")), null);
+  assert.notEqual(p.b("Right Hand")?.value, 70);
+  const m = run("(a) Left Hand\nS$5,000\n(b) Right Hand\nS$3,000", [{ benefit: "Right Hand", value: 5000, quote: "S$5,000\n(b) Right Hand" }]);
+  assert.equal(amountOf(m.figures.get("Right Hand")), null);
+});
+test("H3 control: a figure extracted just above its label, between labelled rows, is the row's", () => {
+  const { b } = run("(a) Both Hands\t100%\n70%\n(b) Right Hand\n(c) Left Hand\t50%", [{ benefit: "Right Hand", pays: "percent", value: 70, percentOf: "sum_insured", quote: "70%\n(b) Right Hand" }]);
+  assert.equal(b("Right Hand")?.value, 70);
+});
+test("H1: a label line with its figure on the next line is another row", () => {
+  const a = run("Hospital cash\tS$100 per day\nSurgical fees\n\tS$5,000", [
+    { benefit: "Hospital cash", value: 5000, quote: "Hospital cash\tS$100 per day\nSurgical fees\n\tS$5,000" },
+    { benefit: "Surgical fees", pays: "per_day", value: 100, quote: "Hospital cash\tS$100 per day\nSurgical fees\n\tS$5,000" }]);
+  assert.equal(amountOf(a.figures.get("Hospital cash")), null);
+  assert.equal(amountOf(a.figures.get("Surgical fees")), null);
+  const b = run("Hospital cash\nS$100 per day\nSurgical fees\nS$5,000", [{ benefit: "Hospital cash", value: 5000, quote: "Hospital cash\nS$100 per day\nSurgical fees\nS$5,000" }]);
+  assert.equal(amountOf(b.figures.get("Hospital cash")), null);
+});
+test("H2: a figure alone on a line after the row's own figure is not the row's", () => {
+  const { figures } = run("Hospital cash\tS$100 per day\nS$5,000\tSurgical fees", [{ benefit: "Hospital cash", value: 5000, quote: "Hospital cash\tS$100 per day\nS$5,000\tSurgical fees" }]);
+  assert.equal(amountOf(figures.get("Hospital cash")), null);
+});
+test("H4: a next row's label in lower case, or starting with Per or And, is still another row", () => {
+  for (const next of ["surgical fees\tS$5,000", "Per Disability Limit\tS$5,000", "And Ambulance\tS$5,000"]) {
+    const q = `Hospital cash\tS$100 per day\n${next}`;
+    const { figures } = run(q, [{ benefit: "Hospital cash", value: 5000, quote: q }]);
+    assert.equal(amountOf(figures.get("Hospital cash")), null, next);
+  }
+});
+test("H5: a bare number followed by a word off the allow-list is no money (fillings, check-ups, fractures)", () => {
+  const { figures } = run("Dental\tup to 12 fillings\nCheck-up\tup to 4 check-ups", [
+    { benefit: "Dental", pays: "up_to", value: 12, quote: "Dental\tup to 12 fillings" },
+    { benefit: "Check-up", pays: "up_to", value: 4, quote: "Check-up\tup to 4 check-ups" }], "TABLE OF BENEFITS (S$)");
+  assert.equal(amountOf(figures.get("Dental")), null);
+  assert.equal(amountOf(figures.get("Check-up")), null);
+  const q = "Fracture\t10% of Sum Insured, up to 3 fractures";
+  const c = run(q, [{ benefit: "Fracture", pays: "percent", value: 10, percentOf: "sum_insured", cap: 3, capQuote: "up to 3 fractures", quote: q }], "TABLE OF BENEFITS (S$)");
+  assert.equal(c.b("Fracture")?.cap, null);
+  assert.notEqual(amountOf(c.figures.get("Fracture")), 3);
+});
+test("H6: a section heading's currency overrides the page's for the rows under it", () => {
+  const q = "Physiotherapy\t10% of Sum Insured, up to 500 per trip";
+  const { b, figures } = run(`OVERSEAS (USD)\n${q}\nOverseas ambulance\tup to 800 per trip`, [
+    { benefit: "Physiotherapy", pays: "percent", value: 10, percentOf: "sum_insured", cap: 500, capQuote: "up to 500 per trip", quote: q },
+    { benefit: "Overseas ambulance", pays: "up_to", value: 800, quote: "Overseas ambulance\tup to 800 per trip" }], "TABLE OF BENEFITS (S$)");
+  assert.notEqual(amountOf(figures.get("Physiotherapy")), 500, "never a S$500 cap");
+  assert.equal(b("Physiotherapy")?.capCurrency, "USD", "the cap is read in the section's currency");
+  assert.equal(b("Overseas ambulance")?.currency, "USD");
+  const home = run(q, [{ benefit: "Physiotherapy", pays: "percent", value: 10, percentOf: "sum_insured", cap: 500, capQuote: "up to 500 per trip", quote: q }], "TABLE OF BENEFITS (S$)");
+  assert.equal(amountOf(home.figures.get("Physiotherapy")), 500, "control: under the page's own (S$) it is S$500");
+});
+
 if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
 console.log(`cross-row-test: ${passed} passed`);
