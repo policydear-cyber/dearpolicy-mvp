@@ -47,7 +47,7 @@ const OCR_MODELS = new Set(["PP-OCRv5", "PP-OCRv5-latin", "PP-OCRv6"]);
 // was submitted with (BAIDU_IDENTITY_EXCEPTION), so an alias is refused before anything is sent.
 const DOC_MODELS = new Set(["PP-StructureV3", "PaddleOCR-VL-1.5", "PaddleOCR-VL-1.6"]);
 /** Bumped whenever the way a Baidu result is turned into page text changes, so an older cached reading is not reused. */
-const TEXT_VERSION = "baidu-md-v5"; // v4: headers, footers and footnotes kept (#441); v5: blocks only in the layout list added
+const TEXT_VERSION = "baidu-md-v6"; // v4: headers, footers and footnotes kept (#441); v5: blocks only in the layout list added; v6: read again once so each page logs its layout list
 
 type Env = NodeJS.ProcessEnv;
 const intEnv = (v: string | undefined, fallback: number, min: number, max: number) => {
@@ -441,6 +441,20 @@ export function blocksMissingFromText(list: unknown, text: string): { text: stri
   return labels.length ? { text: paras.join("\n\n"), added: labels.length, labels } : none;
 }
 
+/** What a page's layout list holds, in fixed words and Baidu's own labels: "no list", or the block count with each label's
+ * count ("12 blocks: text 7, footer 2, table 1"). A label that is not a plain word is counted as "other". */
+export function layoutSummary(list: unknown): string {
+  if (!Array.isArray(list)) return "no list";
+  const counts = new Map<string, number>();
+  for (const block of list) {
+    const raw = block && typeof block === "object" ? (block as { block_label?: unknown }).block_label : undefined;
+    const label = typeof raw === "string" && /^[a-z_]{1,32}$/.test(raw) ? raw : "other";
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const parts = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([l, n]) => `${l} ${n}`);
+  return `${list.length} block${list.length === 1 ? "" : "s"}${parts.length ? `: ${parts.join(", ")}` : ""}`;
+}
+
 /** Each page's text, in page order, from the result JSONL. */
 export function baiduPagesFromJsonl(jsonl: string, model: string): string[] {
   const pages: string[] = [];
@@ -461,7 +475,12 @@ export function baiduPagesFromJsonl(jsonl: string, model: string): string[] {
       for (const item of result.layoutParsingResults as { markdown?: { text?: unknown }; prunedResult?: { parsing_res_list?: unknown } }[]) {
         const md = item?.markdown?.text;
         const text = typeof md === "string" ? baiduMarkdownToText(md) : "";
-        const missing = blocksMissingFromText(item?.prunedResult?.parsing_res_list, text);
+        const list = item?.prunedResult?.parsing_res_list;
+        const missing = blocksMissingFromText(list, text);
+        // Every page, fixed words and Baidu's own layout labels only (never a block's text): whether Baidu returned a
+        // layout list and what it holds, so a line that is in neither the Markdown nor the reading can be told apart from
+        // one Baidu never detected (13 Nov 2026: a schedule's last line missing, with no layout list seen).
+        console.info(`[baidu-ocr] page ${pages.length + 1} layout: ${layoutSummary(list)}; added ${missing.added}`);
         if (missing.added) {
           // Fixed words and Baidu's own layout labels only: never a block's text.
           console.warn(`[baidu-ocr] page ${pages.length + 1}: ${missing.added} block(s) not in Baidu's Markdown added from its layout list (labels: ${missing.labels.join(", ")})`);

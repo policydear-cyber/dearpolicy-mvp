@@ -316,6 +316,23 @@ async function main() {
       assert.equal(warned.length, 3);
     } finally { console.warn = warn; }
   }
+  // 9b. Every document-model page logs what Baidu's layout list holds, in fixed words and Baidu's labels only.
+  {
+    const said: string[] = []; const info = console.info; console.info = (m: string) => { said.push(String(m)); };
+    try {
+      const page = (list?: unknown) => ({ markdown: { text: "Death S$100,000" }, ...(list === undefined ? {} : { prunedResult: { parsing_res_list: list } }) });
+      bd.baiduPagesFromJsonl(JSON.stringify({ result: { layoutParsingResults: [
+        page([{ block_label: "text", block_content: "Death S$100,000" }, { block_label: "footer", block_content: "Reg 200412345K" }, { block_label: "text", block_content: "Death S$100,000" }, { block_label: "Weird Label!", block_content: "x" }]),
+        page(), page([]),
+      ] } }), "PaddleOCR-VL-1.5");
+      assert.deepEqual(said.filter((m) => m.startsWith("[baidu-ocr]")), [
+        "[baidu-ocr] page 1 layout: 4 blocks: text 2, footer 1, other 1; added 1",
+        "[baidu-ocr] page 2 layout: no list; added 0",
+        "[baidu-ocr] page 3 layout: 0 blocks; added 0",
+      ]);
+      assert.ok(said.every((m) => !m.includes("200412345") && !m.includes("Death")), "never a block's text");
+    } finally { console.info = info; }
+  }
   process.env.BAIDU_OCR_PAGES_PER_JOB = "1";
   seen = []; baidu = baiduJob([vlLine([PAGE_A])], { states: ["done"] });
   out = await run();
