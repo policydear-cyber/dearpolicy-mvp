@@ -131,33 +131,93 @@ export function printedLife(lines: string[], at: number, person = "", others: st
   return { birth, relationship };
 }
 
-// ---------- A child-limit sentence anywhere in the document (gate rounds R4-H3, R5-H1, R5-H2) ----------
+// ---------- Other words about children in the document (gate rounds R4-H3, R5, R6) ----------
+// Two decisions, kept apart:
+// (1) Giving a child's share read from a row's own cell (childWordsElsewhere): only when the WHOLE document prints no child
+//     or young-life word and no age phrase anywhere but that cell and the people table's relationship cells. No limiting
+//     word is needed: any such word is doubt, and doubt gives the child no share (main's behaviour).
+// (2) Withholding a plain row's own share from a person not proven an adult (childLimitNotes): only for a sentence that
+//     limits an insured child's benefit, by closed lists; anything else falls back to main's behaviour.
+
+/** A number that is an age by the words next to it, never days, nights, cm, hours, weeks or months. */
+const NOT_AGE = String.raw`(?!\s*(?:days?|nights?|cm|mm|km|kg|hours?|hrs?|weeks?|months?|%|per\s?cent|miles?|metres?|meters?|minutes?|am|pm))`;
+const CHILD_ANY = /\b(?:child(?:ren)?|sons?|daughters?|minors?|juveniles?|dependants?|dependents?|students?|young\s+(?:persons?|people|lives)|infants?|kids?|U\d{2}s?|under-\d{1,2}s?)\b/i;
+const AGE_ANY = new RegExp(String.raw`\bage[ds]?\b\s*(?:of\s+|between\s+|under\s+|below\s+|over\s+|above\s+|from\s+|up\s+to\s+|less\s+than\s+)?\d{1,3}\b|\b\d{1,3}\s*(?:years?(?:\s*-?\s*old|\s+of\s+age)?|yrs?|year-old)\b|\bbetween\s+\d{1,3}\s+and\s+\d{1,3}\b${NOT_AGE}|\b0\s*[-–]\s*\d{1,2}\b${NOT_AGE}|\b(?:under|below|less\s+than|younger\s+than|over|above|older\s+than)\s+\d{1,2}\b${NOT_AGE}`, "i");
+/** A tab cell that is only a relationship ("Child", "Dependent child", "Son"), as a people table prints it. */
+const RELATION_CELL = /^(?:(?:insured|dependent|dependant|eligible|covered)\s+)?(?:child|son|daughter|minor|juvenile|student)$/i;
+/** A page footer or header line ("Page 2 of 3\tHPA-55120-K"): never part of a sentence. */
+const FOOTER = /^\s*(?:page\s+\d+(?:\s+of\s+\d+)?|\d+\s*\/\s*\d+|-\s*\d+\s*-)(?:\s|\t|$)/i;
+/** The document's text with the row's own cell taken out, as units: each tab line on its own (a people table's
+ * relationship cells left out, on a line naming an insured person), and running text joined across blank lines, page
+ * breaks and footer lines. */
+function textUnits(pages: { page: number; text: string }[], own: { page: number; from: number; to: number } | null, people: string[]): string[] {
+  const names = people.map((n) => n.replace(/\s+/g, " ").trim().toLowerCase()).filter((n) => n.length >= 3);
+  const units: string[] = [];
+  let run: string[] = [];
+  const flush = () => { if (run.length) units.push(run.join(" ")); run = []; };
+  for (const pg of pages) {
+    let text = pg.text;
+    if (own && pg.page === own.page) text = `${text.slice(0, own.from)}\n\t\n${text.slice(own.to)}`;
+    for (const line of text.split("\n")) {
+      if (!line.trim() || FOOTER.test(line)) continue;
+      if (!line.includes("\t")) { run.push(line.trim()); continue; }
+      flush();
+      const flat = line.replace(/\s+/g, " ").toLowerCase();
+      const peopleLine = names.some((n) => flat.includes(n));
+      const cells = line.split("\t").map((c) => c.trim()).filter((c) => c && !(peopleLine && RELATION_CELL.test(c)));
+      if (cells.length) units.push(cells.join(" "));
+    }
+  }
+  flush();
+  return units;
+}
+/** Sentences of a unit: split after ".", ";", "!" or "?" before a capital, a digit or a mark, never after an abbreviation
+ * ("e.g.", "i.e.", "etc.", "No.", "approx.", "Mr."). */
+const ABBREVIATION = /(?:\b(?:e\.g|i\.e|etc|no|nos|approx|incl|max|min|mr|mrs|ms|dr|st|vs|cf|viz|sec|art|cl|para|p|pp)\.|\b[A-Z]\.)$/i;
+function noteSentences(unit: string): string[] {
+  const out: string[] = [];
+  let start = 0;
+  for (const m of unit.matchAll(/[.;!?](?=\s+[\p{Lu}\d*(†‡"“])/gu)) {
+    const end = m.index! + 1;
+    if (m[0] === "." && ABBREVIATION.test(unit.slice(start, end))) continue;
+    out.push(unit.slice(start, end).trim());
+    start = end;
+  }
+  out.push(unit.slice(start).trim());
+  return out.filter(Boolean);
+}
+/** Decision (1): whether the document prints any child or young-life word, or any age phrase, outside the row's own
+ * cell (`own`) and the people table's relationship cells (on a line naming one of `people`). When it does, the cell's
+ * child share is never given (gate R6-H1: "Children: ...", a "CHILDREN" heading, a "Child\tGBP 3,000" limits row, a note
+ * split by a page break, a blank line or a footer). */
+export function childWordsElsewhere(pages: { page: number; text: string }[], own: { page: number; from: number; to: number } | null, people: string[] = []): boolean {
+  return textUnits(pages, own, people).some((u) => CHILD_ANY.test(u) || AGE_ANY.test(u));
+}
+
+// Decision (2): a sentence that limits an insured child's benefit.
 // (a) A phrase whose subject is an insured child or a young insured life, a closed list. An age number counts only beside an
-// age word or right after a child or person word, never beside days, cm, hours, weeks or months.
-const NOT_AGE = String.raw`(?!\s*(?:days?|nights?|cm|mm|km|kg|hours?|hrs?|weeks?|months?|%|per\s?cent|miles?|metres?|meters?|minutes?))`;
+// age word or right after a child or person word.
 const AGE_PHRASES: { re: RegExp; plus: number }[] = [
-  // "under / below / less than / younger than (the age of) 18 (years)"
   { re: new RegExp(String.raw`\b(?:aged\s+)?(?:under|below|less\s+than|younger\s+than)\s+(?:the\s+)?age\s+(?:of\s+)?(\d{1,2})\b`, "i"), plus: 0 },
   { re: new RegExp(String.raw`\b(?:aged\s+)?(?:under|below|less\s+than|younger\s+than)\s+(\d{1,2})\s*(?:years?|yrs?)(?:\s*-?\s*old|\s+of\s+age)?\b`, "i"), plus: 0 },
   { re: new RegExp(String.raw`\baged\s+(?:under|below|less\s+than|younger\s+than)\s+(\d{1,2})\b${NOT_AGE}`, "i"), plus: 0 },
-  // "children / persons / lives / insured under 18"
   { re: new RegExp(String.raw`\b(?:child(?:ren)?|persons?|people|lives|insureds?|members?)\s+(?:who\s+are\s+)?(?:under|below|less\s+than|younger\s+than)\s+(\d{1,2})\b${NOT_AGE}`, "i"), plus: 0 },
-  // "not (yet) reached (the) age (of) 18"
   { re: /\bnot\s+(?:yet\s+)?reached\s+(?:the\s+)?age\s+(?:of\s+)?(\d{1,2})\b/i, plus: 0 },
-  // "aged 0-17", "aged 17 or under / or less / and below"
-  { re: /\baged?\s+0\s*(?:-|–|to)\s*(\d{1,2})\b/i, plus: 1 },
+  { re: /\baged?\s+(?:between\s+)?0\s*(?:-|–|to|and)\s*(\d{1,2})\b/i, plus: 1 },
   { re: new RegExp(String.raw`\baged\s+(\d{1,2})\s*(?:years?\s+)?(?:or|and)\s+(?:under|less|below|younger)\b`, "i"), plus: 1 },
-  // "up to (the) age (of) 17"
   { re: /\bup\s+to\s+(?:the\s+)?age\s+(?:of\s+)?(\d{1,2})\b/i, plus: 1 },
-  // "U18", "under-18s"
   { re: /\bU(\d{2})s?\b/, plus: 0 },
   { re: /\bunder-(\d{1,2})s?\b/i, plus: 0 },
 ];
 const CHILD_SUBJECT = /\b(?:(?:insured\s+(?:child(?:ren)?|minors?|juveniles?)|(?:for|to)\s+(?:an?\s+|the\s+|each\s+|every\s+|any\s+)?(?:insured\s+|covered\s+|eligible\s+)?child(?:ren)?|child(?:ren)?\s+(?:aged|under|below|less\s+than|younger\s+than|up\s+to)|child(?:ren)?['’]s?\s+(?:limit|benefit|death|cover|sum|share)|(?:dependent|dependant)\s+child(?:ren)?|minors?|juveniles?|young\s+persons?|students?)\b|children\s+of\s+(?:the\s+)?[\p{L}])/iu;
+/** A sentence or limits row that starts with the child class as its label ("Children: ...", "Child - ...", "CHILDREN The
+ * death benefit ...", "Child GBP 3,000", "Sons and daughters of the policyholder: ..."). */
+const CHILD_LABEL = /^\s*(?:(?:insured\s+|dependent\s+|dependant\s+)?(?:child(?:ren)?|minors?|juveniles?|kids|infants)|sons?\s+and\s+daughters?)\b(?!\s+care)/i;
 // (b) A limiting word, a share or a money figure in the same sentence.
 const LIMITING = /\b(?:limited|limits?|maximum|max|up\s+to|only|reduced|restricted|not\s+payable|nothing\s+(?:is\s+)?payable|no\s+benefit|not\s+covered|excluded|capped)\b|%|\bper\s?cent\b|(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$)\s?\d|\d[\d,.]*\s?(?:\b[A-Z]{3}\b|[£€])/i;
-/** A tab cell that is only a relationship ("Child", "Dependent child", "Son", "Insured minor"), as a people table prints it. */
-const RELATION_CELL = /^(?:(?:insured|dependent|dependant|eligible|covered)\s+)?(?:child|son|daughter|minor|juvenile|student)$/i;
+/** Not a limit on an insured child's own benefit (gate R6-H2): premiums and discounts, who is paid, a payment to a parent or
+ * guardian, child care, school fees, a parent staying with or an allowance for a parent. */
+const NOT_CHILD_LIMIT = /\b(?:premiums?|discounts?|paid\s+to|payable\s+to|payment\s+(?:is\s+|will\s+be\s+)?made\s+to|on\s+behalf\s+of|guardian|child\s*care|school\s+fees?|tuition|education|staying\s+with|parent['’]?s?\s+(?:allowance|accommodation)|accommodation)\b/i;
 /** A row's own cell printing its share with a child's share after it ("100% of the Sum Insured. For an insured child under
  * 18, limited to 25% of the Sum Insured."): that sentence is that row's own rule, not a note for the document. */
 function ownCellChildSentence(cell: string): string | null {
@@ -168,39 +228,25 @@ function ownCellChildSentence(cell: string): string | null {
   const rest = withoutChildLimit(cell, limit).replace(/[\s.;]+$/, "");
   return new RegExp(String.raw`^\s*${m[0].trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i").test(rest) ? limit.words : null;
 }
-/** The child-limit sentences a document prints outside one row's own cell (`own`: that cell's page and its range in the
- * page's text): a sentence (anywhere: any page, a note, a footnote, a line naming a person, another row of a table) that
- * has both (a) a phrase whose subject is an insured child or a young life, by a closed list, and (b) a limiting word, a
- * share or a money figure. Another row's own cell that prints only its share and an allow-listed child's share
- * (ownCellChildSentence) is that row's own rule and does not count. `age`: the highest age the sentences print (the age a
- * person must be proven to have reached), or null when none prints one. */
-export function childLimitNotes(pages: { page: number; text: string }[], own: { page: number; from: number; to: number } | null): { found: boolean; age: number | null } {
+/** Decision (2): the child-limit sentences a document prints outside one row's own cell (`own`: that cell's page and its
+ * range in the page's text): a sentence (any page, a note, a footnote, a heading joined to its rule, a line naming a
+ * person, a row of a table) that has both (a) a phrase or label whose subject is an insured child or a young life, by
+ * closed lists, and (b) a limiting word, a share or a money figure, and is not about premiums, payments to someone,
+ * child care or school fees. Another row's own cell that prints only its share and an allow-listed child's share
+ * (ownCellChildSentence) is that row's own rule. `age`: the highest age the sentences print, or null when none does. */
+export function childLimitNotes(pages: { page: number; text: string }[], own: { page: number; from: number; to: number } | null, people: string[] = []): { found: boolean; age: number | null } {
   let found = false, age: number | null = null;
-  for (const pg of pages) {
-    let text = pg.text;
-    if (own && pg.page === own.page) text = `${text.slice(0, own.from)}\n\n${text.slice(own.to)}`;
-    // Units: a tab line on its own; the lines between tab lines and blank lines joined as running text.
-    const units: string[] = [];
-    let run: string[] = [];
-    for (const line of text.split("\n")) {
-      if (line.includes("\t") || !line.trim()) {
-        if (run.length) units.push(run.join(" "));
-        run = [];
-        if (line.includes("\t")) {
-          // A people table's relationship cell ("Dependent child", "Son") is who a person is, never a limit: left out.
-          const cells = line.split("\t").filter((c) => !RELATION_CELL.test(c.trim()))
-            .map((c) => { const w = ownCellChildSentence(c); return w ? withoutChildLimit(c, { words: w }) : c; });
-          units.push(cells.join(" "));
-        }
-      } else run.push(line.trim());
-    }
-    if (run.length) units.push(run.join(" "));
-    for (const u of units) for (const sentence of u.split(/(?<=[.;!?])\s+(?=[\p{Lu}\d*(†‡])/u)) {
-      const ages = AGE_PHRASES.flatMap(({ re, plus }) => { const m = re.exec(sentence); return m ? [Number(m[1]) + plus] : []; }).filter((n) => n >= 1 && n <= 30);
-      if (!(ages.length || CHILD_SUBJECT.test(sentence)) || !LIMITING.test(sentence)) continue;
-      found = true;
-      for (const n of ages) age = Math.max(age ?? 0, n);
-    }
+  // The row's own cell taken out first, then another row's own cell with an allow-listed child's share (that row's rule).
+  const rest = pages.map((pg) => {
+    const cut = own && pg.page === own.page ? `${pg.text.slice(0, own.from)}\n\t\n${pg.text.slice(own.to)}` : pg.text;
+    return { page: pg.page, text: cut.split("\n").map((line) => !line.includes("\t") ? line
+      : line.split("\t").map((c) => { const w = ownCellChildSentence(c); return w ? withoutChildLimit(c, { words: w }) : c; }).join("\t")).join("\n") };
+  });
+  for (const u of textUnits(rest, null, people)) for (const sentence of noteSentences(u)) {
+    const ages = AGE_PHRASES.flatMap(({ re, plus }) => { const m = re.exec(sentence); return m ? [Number(m[1]) + plus] : []; }).filter((n) => n >= 1 && n <= 30);
+    if (!(ages.length || CHILD_SUBJECT.test(sentence) || CHILD_LABEL.test(sentence)) || !LIMITING.test(sentence) || NOT_CHILD_LIMIT.test(sentence)) continue;
+    found = true;
+    for (const n of ages) age = Math.max(age ?? 0, n);
   }
   return { found, age };
 }

@@ -26,7 +26,7 @@ import type { AnswerStatement, StructuredAnswer } from "@/components/answer-card
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
 import { keepsCapIn, noteMultiple, timesWords } from "@/lib/benefit-table/multiplier";
-import { childCase, childLimitIn, childLimitNotes, personStatus, provenAdult, printedLife, withoutChildLimit } from "@/lib/benefit-table/child-limit";
+import { childCase, childLimitIn, childLimitNotes, childWordsElsewhere, personStatus, provenAdult, printedLife, withoutChildLimit } from "@/lib/benefit-table/child-limit";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
@@ -857,8 +857,12 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   // continues it, or a line naming a household member): no child share, and the row's own share only for a person whose
   // own line proves they are not a child (read again below).
   const rpage = household.documents[rf.docIndex].pages.find((p) => p.page === rf.page)!.text, rrow = rowLine(rpage, rf.offset);
-  const notes = childLimitNotes(household.documents[rf.docIndex].pages, { page: rf.page, from: rrow.start, to: rrow.start + rowText.length });
+  const rpages = household.documents[rf.docIndex].pages, rown = { page: rf.page, from: rrow.start, to: rrow.start + rowText.length };
+  const members = household.members.map((m) => m.name);
+  const notes = childLimitNotes(rpages, rown, members);
   const childNote = notes.found;
+  // A child's share only when nothing else in the document speaks of children or ages (gate R6-H1).
+  if (child && childWordsElsewhere(rpages, rown, members)) return null;
   if ((child && childNote) || (childNote && (!sf.adult?.days.length || sf.adult.age !== notes.age))) return null;
   if (sf.child && (!child || child.percent !== sf.child.percent || child.belowAge !== sf.child.belowAge
     || sf.percent !== (sf.child.status === "child" ? child.percent : sf.child.own))) return null;

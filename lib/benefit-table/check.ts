@@ -16,7 +16,7 @@ import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, personOnlyI
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
-import { childColumn, childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife, childLimitNotes } from "./child-limit";
+import { childColumn, childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife, childLimitNotes, childWordsElsewhere } from "./child-limit";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
@@ -1863,13 +1863,17 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // A child's share printed in the row's own cell ("100% of the Sum Insured. For an insured child under 18, limited to
     // 25% of the Sum Insured"): read only when the cell prints nothing else beside the row's own share, then the child's
     // sentence is left out of the row's own checks (lib/benefit-table/child-limit.ts). Anything else is as before.
-    let childLimit: ChildLimit | null = null, childNote: { age: number | null } | null = null;
+    let childLimit: ChildLimit | null = null, childNote: { age: number | null } | null = null, childDoubt = false;
     if (pays === "percent" && value != null && percentOf === "sum_insured" && placed.has(source)) {
       // Every page of the document, leaving out only the row's own cell (its line, from the quote's start to the end of
-      // the line its quote ends on).
+      // the line its quote ends on) and the people table's relationship cells.
       const p = placed.get(source)!, text = pageText(source.page);
-      const notes = childLimitNotes(doc.pages.map((x) => ({ page: x.page, text: x.text })), { page: source.page, from: text.lastIndexOf("\n", p.start - 1) + 1, to: lineEndAt(text, p.end) });
+      const pages = doc.pages.map((x) => ({ page: x.page, text: x.text })), ownCell = { page: source.page, from: text.lastIndexOf("\n", p.start - 1) + 1, to: lineEndAt(text, p.end) };
+      const people = [...out.covers.map((x) => x.person), ...out.namedPeople, ...(doc.people ?? []), ...readCovers.map((x) => str(x?.person) ?? "")];
+      const notes = childLimitNotes(pages, ownCell, people);
       if (notes.found) childNote = { age: notes.age };
+      // Decision (1): a child's share from the cell only when nothing else in the document speaks of children or ages.
+      childDoubt = childWordsElsewhere(pages, ownCell, people);
     }
     if (pays === "percent" && value != null && percentOf === "sum_insured" && num(b.cap) == null && placed.has(source)) {
       const p = placed.get(source)!, text = pageText(source.page);
@@ -1880,7 +1884,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       const line = text.slice(text.lastIndexOf("\n", p.start - 1) + 1, lineEndAt(text, p.end));
       // Nothing else on the page may speak of children (gate R4-H3, childNote): a note under the table limiting a child's
       // benefit would make the cell's own sentence only half the rule.
-      const found = ownLabelLine(line, benefit, str(b.section), text) && !childNote ? childLimitIn(cell.replace(/\t/g, " "), value) : null;
+      const found = ownLabelLine(line, benefit, str(b.section), text) && !childNote && !childDoubt ? childLimitIn(cell.replace(/\t/g, " "), value) : null;
       if (found) {
         const seg = segmentOf(source);
         const rest = [source.excerpt, cell, seg.text, seg.near, ...conditions].map((t) => withoutChildLimit(t, found));
