@@ -8,7 +8,7 @@
  *   npm run benefit-table:child-limit-test */
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
-import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
+import { checkReading, foldChildColumns, type SourceDoc } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
 import { readModelAnswer, verifyAnswer, type ServerFigure } from "@/lib/simple-chat/verify";
@@ -127,11 +127,24 @@ test("whom it is for: the person's own line, under the table's columns or after 
   assert.deepEqual(printedLife(lines, 2), { birth: "09/04/2017", relationship: "Child" });
   // A row whose cells do not line up with the header is not read by column.
   assert.deepEqual(printedLife(["Name\tDate of birth\tSum", "Tom Lee\tGBP 5,000"], 1), { birth: null, relationship: null });
-  assert.deepEqual(printedLife(["Insured: Tom Lee (date of birth: 3 May 2015)"], 0).birth, "3 May 2015");
+  assert.deepEqual(printedLife(["Insured: Tom Lee (date of birth: 3 May 2015)"], 0, "Tom Lee").birth, "3 May 2015");
+  // The label route only right after the person's own name, on a line naming no one else (gate H3).
+  assert.equal(printedLife(["Insured: Tom Lee (date of birth: 3 May 2015)"], 0).birth, null);
+  assert.equal(printedLife(["Grace Okafor, child of Ngozi Okafor (Policyholder date of birth: 14/06/1984)\tGBP 20,000"], 0, "Grace Okafor", ["Ngozi Okafor"]).birth, null);
+  assert.equal(printedLife(["Insured child: Grace Okafor - Parent: Ngozi Okafor, born 14/06/1984 - Sum Insured GBP 20,000"], 0, "Grace Okafor", ["Ngozi Okafor"]).birth, null);
+  assert.equal(printedLife(["Insured child: Grace Okafor - Parent: Ngozi Okafor, born 14/06/1984"], 0, "Grace Okafor", []).birth, null, "the label not after her name");
   // A start date column is not a date of birth.
   assert.deepEqual(printedLife(["Name\tCover start\tSum", "Tom Lee\t01/03/2015\tGBP 5,000"], 1), { birth: null, relationship: null });
   // Two dates on the line beside a label: not settled.
-  assert.equal(printedLife(["Tom Lee DOB: 03/05/2015, joined 01/03/2020"], 0).birth, null);
+  assert.equal(printedLife(["Tom Lee DOB: 03/05/2015, joined 01/03/2020"], 0, "Tom Lee").birth, null);
+  // Another table's header above is never reached past the person's own table's header (gate H2).
+  const two = ["Proposer\tOccupation\tDate of birth\tNationality", "Ngozi Okafor\tTeacher\t14/06/1984\tBritish",
+    "Insured person\tRelationship\tCover start\tDate of birth\tSum Insured", "Ngozi Okafor\tPolicyholder\t01/03/2026\t14/06/1984\tGBP 100,000",
+    "Daniel Okafor\tSpouse\t01/03/2026\tGBP 80,000", "Grace Okafor\tChild\t01/03/2026\t09/04/2017\tGBP 20,000"];
+  assert.deepEqual(printedLife(two, 4), { birth: null, relationship: null });
+  assert.deepEqual(printedLife(two, 5), { birth: "09/04/2017", relationship: "Child" });
+  // A blank line or a heading line ends the search.
+  assert.deepEqual(printedLife(["Name\tDate of birth\tSum", "", "Tom Lee\t03/05/2015\tGBP 5,000"], 2), { birth: null, relationship: null });
   const day = printedDay("13/11/2026")!;
   assert.equal(personStatus({ birth: "09/04/2017", relationship: null }, { belowAge: 18 }, [day]), "child");
   assert.equal(personStatus({ birth: "14/06/1984", relationship: null }, { belowAge: 18 }, [day]), "not_child");
@@ -139,6 +152,15 @@ test("whom it is for: the person's own line, under the table's columns or after 
   assert.equal(personStatus({ birth: null, relationship: "Child" }, { belowAge: null }, [day]), "child");
   assert.equal(personStatus({ birth: null, relationship: "Spouse" }, { belowAge: null }, [day]), "not_child");
   assert.equal(personStatus({ birth: null, relationship: "Nominee" }, { belowAge: null }, [day]), null);
+  // Only child, son or daughter; never step, grand or in-law forms (gate H1).
+  for (const r of ["Stepchild", "Step-son", "Grandchild", "Son-in-law", "Adult child", "Child (over 18)", "Dependant", "Ward"])
+    assert.equal(personStatus({ birth: null, relationship: r }, { belowAge: null }, [day]), null, r);
+  // Relationship and date of birth on the same line must agree (gate H1).
+  for (const r of ["Daughter", "Child", "Son"]) assert.equal(personStatus({ birth: "01/01/1990", relationship: r }, { belowAge: null }, [day]), null, r);
+  for (const r of ["Self", "Insured", "Principal insured", "Policyholder"]) assert.equal(personStatus({ birth: "01/01/2016", relationship: r }, { belowAge: null }, [day]), null, r);
+  assert.equal(personStatus({ birth: "02/11/2012", relationship: "Spouse" }, { belowAge: 18 }, [day]), null);
+  assert.equal(personStatus({ birth: "01/01/2016", relationship: "Daughter" }, { belowAge: null }, [day]), "child");
+  assert.equal(personStatus({ birth: "01/01/1980", relationship: "Spouse" }, { belowAge: 18 }, [day]), "not_child");
   // Turning 18 inside the days that matter: not settled.
   assert.equal(personStatus({ birth: "01/12/2008", relationship: null }, { belowAge: 18 }, [day, printedDay("28 February 2027")!]), null);
   // Day-first and month-first readings that disagree: not settled; that agree: settled.
@@ -251,6 +273,59 @@ test("the chat's checks read the share and the date of birth again: a figure cha
   assert.deepEqual(ask(h, GRACE.name, /death/, "If Grace died?", age).amounts, []);
 });
 
+// ---------- Gate round 1-2 repros: a wrong amount where main shows none, now none ----------
+test("gate H1: a printed relationship and date of birth that disagree give no amount", () => {
+  const cell = "100% of the Sum Insured. For an insured child, limited to 25% of the Sum Insured.";
+  for (const rel of ["Daughter", "Stepchild", "Step-son", "Grandchild"]) {
+    const kemi = P("Kemi Okafor", rel, "01/01/1990", "GBP 20,000", 20000);
+    assert.deepEqual(death(family([NGOZI, kemi], cell, { condition: null }), kemi).amounts, [], rel);
+  }
+  for (const rel of ["Self", "Insured", "Principal insured", "Policyholder"]) {
+    const kemi = P("Kemi Okafor", rel, "01/01/2016", "GBP 20,000", 20000);
+    assert.deepEqual(death(family([NGOZI, kemi], cell, { condition: null }), kemi).amounts, [], rel);
+  }
+  const dan = P("Daniel Okafor", "Spouse", "02/11/2012", "GBP 80,000", 80000);
+  assert.deepEqual(death(family([NGOZI, dan, GRACE]), dan).amounts, []);
+  // The point says what does not agree.
+  const kemi = P("Kemi Okafor", "Daughter", "01/01/1990", "GBP 20,000", 20000);
+  assert.ok(death(family([NGOZI, kemi], cell, { condition: null }), kemi).points.some((t) => /prints a relationship \("Daughter"\) and a date of birth \(01\/01\/1990\) that do not agree/.test(t)));
+});
+test("gate H2: another table's 'Date of birth' header above is never used for a line of a different shape", () => {
+  const people = [P("Ngozi Okafor", "Policyholder", "", "", 100000, ["Ngozi Okafor", "Policyholder", "01/03/2026", "14/06/1984", "GBP 100,000"]),
+    P("Daniel Okafor", "Spouse", "", "", 80000, ["Daniel Okafor", "Spouse", "01/03/2026", "GBP 80,000"]),
+    P("Grace Okafor", "Child", "", "", 20000, ["Grace Okafor", "Child", "01/03/2026", "09/04/2017", "GBP 20,000"])];
+  const h = family(people, CELL, { header: "Proposer\tOccupation\tDate of birth\tNationality\nNgozi Okafor\tTeacher\t14/06/1984\tBritish\nInsured person\tRelationship\tCover start\tDate of birth\tSum Insured" });
+  assert.deepEqual(death(h, people[1]).amounts, []);
+  assert.deepEqual(death(h, people[2]).amounts, ["£5,000"]);
+  assert.deepEqual(death(h, people[0]).amounts, ["£100,000"]);
+});
+test("gate H3: a date-of-birth label on the child's line that is another person's gives no amount", () => {
+  for (const line of ["Grace Okafor, child of Ngozi Okafor (Policyholder date of birth: 14/06/1984)\tGBP 20,000",
+    "Insured child: Grace Okafor - Parent: Ngozi Okafor, born 14/06/1984 - Sum Insured GBP 20,000"]) {
+    const g = { ...GRACE, line };
+    const h = family([NGOZI, g], CELL, { header: "Insured persons" });
+    assert.deepEqual(death(h, g).amounts, [], line);
+  }
+});
+test("gate H4: a row whose quote is found in a longer-named row's line never takes its child share", () => {
+  for (const [name, other] of [["Death", "Accidental death"], ["Burns", "Burns (third degree)"]]) {
+    const h = schedule([NGOZI, GRACE], [`1\t${other}\t${CELL}`, `2\t${name}\t100% of the Sum Insured`], [
+      ben({ section: "1", benefit: other, pays: "percent", value: 100, percentOf: "sum_insured", quote: CELL }),
+      ben({ section: "2", benefit: name, pays: "percent", value: 100, percentOf: "sum_insured", quote: "100% of the Sum Insured" })]);
+    const row = h.rows.find((r) => r.person === GRACE.name && r.benefit === name)!;
+    assert.equal(row.childLimit, undefined, name);
+    assert.notDeepEqual(ask(h, GRACE.name, new RegExp(`^${name}$`), `What does ${name} pay for Grace?`).amounts, ["£5,000"], name);
+    assert.deepEqual(ask(h, GRACE.name, new RegExp(`^${other.replace(/[()]/g, "\\$&")}$`), "And the other?").amounts, ["£5,000"], other);
+  }
+});
+test("gate L1: a printed date of birth that crosses the age inside the period is said as such, not as 'not printed'", () => {
+  const sam = P("Sam Okafor", "Child", "01/12/2008", "GBP 20,000", 20000);
+  const a = death(family([NGOZI, sam]), sam);
+  assert.deepEqual(a.amounts, []);
+  assert.ok(a.points.some((t) => /prints a date of birth \(01\/12\/2008\) that does not settle whether they are under 18 on every day/.test(t)), a.points.join(" | "));
+  assert.ok(!a.points.some((t) => /does not print a date of birth/.test(t)));
+});
+
 // ---------- The real reader's shape (TE-ACC-20261114-R3): the child's sentence also read as a row of its own ----------
 /** A family PA schedule laid out as the app's PDF reader prints one (pages as extracted), with made-up people and insurer,
  * and a reading in the shape the reader (prompt 2026-11-13.1) gave: the death row quoting its whole line with the child's
@@ -345,6 +420,27 @@ test("not folded, as before: plan or age-band columns, a child row with no paren
     assert.ok(f.every((x) => x.split(",").every((y) => y === "none" || y.includes("["))), `${JSON.stringify(o)}: ${f}`);
   }
   assert.deepEqual(figs(realShape({ childPct: 30 }), /Accidental death/), ["100000", "80000", "5000"]);
+  // A disagreeing row's parent says why, never "a maximum ... not captured" (gate R2-L1).
+  const why = realShape({ childCol: "Insured child under 16" }).table.people[0].rows.find((x) => x.benefit === "Accidental death" && !x.column)!.figure;
+  assert.ok(why.kind === "none" && /read two ways/.test(why.why) && !/maximum/.test(why.why), JSON.stringify(why));
+});
+test("the fold decides on all of a parent's child rows together, in any order, and never changes the parent it read (gate R2-L2, L3)", () => {
+  const agree = { pays: "percent", quote: "For an insured child under 18, limited to 25% of the Sum Insured.", value: 25, column: "Insured child under 18", benefit: "Accidental death", section: "1", percentOf: "sum_insured" };
+  const disagree = { ...agree, column: "Dependent child" };
+  for (const order of [[agree, disagree], [disagree, agree]]) {
+    const h = realShape({ childCol: null, extra: order });
+    assert.equal(h.reading.benefits.filter((b) => b.column).length, 2);
+    assert.ok(figs(h, /Accidental death/).every((f) => f.split(",").every((y) => y === "none" || y.includes("["))));
+  }
+  const both = realShape({ childCol: null, extra: [agree, { ...agree }] });
+  assert.equal(both.reading.benefits.filter((b) => b.column).length, 0);
+  assert.deepEqual(figs(both, /Accidental death/), ["100000", "80000", "5000"]);
+  // The parent object the fold was handed keeps its child share.
+  const parent = { ...both.reading.benefits.find((b) => b.benefit === "Accidental death")! };
+  const child = { ...parent, column: "Dependent child", childLimit: undefined, source: { ...parent.source, excerpt: "For an insured child under 18, limited to 25% of the Sum Insured." }, value: 25 };
+  const out = foldChildColumns([parent, child], []);
+  assert.ok(parent.childLimit && !parent.childLimitConflict);
+  assert.ok(out[0] !== parent && out[0].childLimitConflict && !out[0].childLimit);
   // A child row whose quote is another cell of the page (the next row's "5% of the Sum Insured per accident" read at 5%):
   // kept, and the parent loses its child share.
   const elsewhere = realShape({ childPct: 5, childQuote: "5% of the Sum Insured per accident" });

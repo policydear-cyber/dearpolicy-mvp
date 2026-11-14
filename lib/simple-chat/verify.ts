@@ -874,7 +874,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const onLine = moneyFiguresIn(line);
   if (!namesPerson(have) || onLine.length !== 1 || onLine[0].currency !== sf.currency || !sameValue(onLine[0].value, sf.base.value)) return null;
   // Whom the child's share is for, read again from the person's own line on the base's page.
-  const life = child ? printedLife(bpage.text.split("\n"), at) : null;
+  const life = child ? printedLife(bpage.text.split("\n"), at, person, household.members.map((m) => m.name)) : null;
   if (child && (!sf.child!.days.length || personStatus(life, child, sf.child!.days) !== sf.child!.status)) return null;
   // Two sums for the person are doubt. When the row and the sum are printed in the same document, that document settles it
   // and only its own lines count (a renewal schedule's table and its own sums, whatever last year's schedule printed).

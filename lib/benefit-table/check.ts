@@ -873,6 +873,18 @@ export function withoutOwnShareCap(text: string, percent: number | null): string
   // Insured", "applicable to the Insured Parent": Critic #449 round 4).
   return text.replace(new RegExp(String.raw`\blimited\s+to\s+(?<![\d.])${own}(?:\.0+)?\s*(?:%|per\s?cent)\s+of\s+(?:the\s+|your\s+)?sum\s+(?:insured|assured)(?!\s*(?:of|for|applicable|payable|under|in\s+respect|as\s+per|according)\b)(?=\s*(?:$|[.;,)\n]))`, "gi"), " ");
 }
+/** Whether a printed line is a row's own: one of its tab cells is the row's benefit name, whole, after at most a section
+ * number ("1\tAccidental death\t...", "1. Accidental death\t..."); a line with no tab cells starts so and goes on with
+ * its figure ("1 Accidental death 100% of ..."). Compared without case, spacing or end punctuation. */
+export function ownLabelLine(line: string, benefit: string): boolean {
+  const n = (t: string) => t.toLowerCase().replace(/\s+/g, " ").replace(/^(?:section\s+)?\d{1,3}[.)]?\s+/, "").replace(/[\s:.;,-]+$/, "").trim();
+  const name = n(benefit);
+  if (!name) return false;
+  const cells = line.split("\t");
+  if (cells.length >= 2) return cells.some((c) => n(c) === name);
+  const flatLine = n(line);
+  return flatLine.startsWith(`${name} `) && /^\s*\d/.test(flatLine.slice(name.length));
+}
 /** A child's share the reader put in a row of its own (TE-ACC-20261114-R3: the cell "100% of the Sum Insured. For an
  * insured child under 18, limited to 25% of the Sum Insured." read as that row plus a second "Accidental death" row with
  * column "Insured child under 18" and 25%). Folded into its parent, so the parent's child share decides each person's
@@ -885,21 +897,33 @@ export function withoutOwnShareCap(text: string, percent: number | null): string
  * read. Applied again after a stored reading's parts are merged (service.ts checkStored). */
 export function foldChildColumns(benefits: CheckedBenefit[], dropped: Dropped[]): CheckedBenefit[] {
   const key = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const out: CheckedBenefit[] = [];
+  // Every child column row's parent first, then each parent's verdict on all of its rows together (order-independent).
+  const parentOf = new Map<CheckedBenefit, CheckedBenefit>();
   for (const x of benefits) {
     const col = key(x.column) ? childColumn(x.column) : undefined;
     const parents = col ? benefits.filter((p) => p !== x && !key(p.column) && key(p.benefit) === key(x.benefit) && key(p.section) === key(x.section) && p.source.page === x.source.page) : [];
-    if (!col || parents.length !== 1 || !parents[0].childLimit) { out.push(x); continue; }
-    const p = parents[0], limit = p.childLimit!;
+    if (col && parents.length === 1 && parents[0].childLimit) parentOf.set(x, parents[0]);
+  }
+  const agrees = (x: CheckedBenefit, p: CheckedBenefit) => {
+    const limit = p.childLimit!, col = childColumn(x.column)!;
     const words = flat(limit.words), quote = flat(x.source.excerpt);
-    const same = col.belowAge === limit.belowAge && x.pays === "percent" && x.value != null && Math.abs(x.value - limit.percent) < 1e-9
+    return col.belowAge === limit.belowAge && x.pays === "percent" && x.value != null && Math.abs(x.value - limit.percent) < 1e-9
       && x.percentOf === "sum_insured" && x.cap == null && quote.length >= 10 && words.includes(quote);
-    if (same) { dropped.push({ what: `benefit "${x.benefit}" [${x.column}]`, why: "the child's share printed in its parent row's own cell; folded into that row" }); continue; }
-    // The column row says something else than the printed sentence: the parent keeps no child share and no amount.
-    delete p.childLimit;
-    p.capUnread = true;
-    dropped.push({ what: `benefit "${p.benefit}"`, why: `a row read under "${x.column}" disagrees with its printed child share; no amount is worked out for it` });
-    out.push(x);
+  };
+  const conflict = new Set([...parentOf].filter(([x, p]) => !agrees(x, p)).map(([, p]) => p));
+  const out: CheckedBenefit[] = [];
+  for (const b of benefits) {
+    const p = parentOf.get(b);
+    if (p && !conflict.has(p)) { dropped.push({ what: `benefit "${b.benefit}" [${b.column}]`, why: "the child's share printed in its parent row's own cell; folded into that row" }); continue; }
+    if (conflict.has(b)) {
+      // Its child share was read two ways: a copy with no child share and no amount (the parent object is never changed).
+      const rest: CheckedBenefit = { ...b };
+      delete rest.childLimit;
+      dropped.push({ what: `benefit "${b.benefit}"`, why: "its child's share was read two ways (its own cell and a row under a child column); no amount is worked out for it" });
+      out.push({ ...rest, childLimitConflict: true });
+      continue;
+    }
+    out.push(b);
   }
   return out;
 }
@@ -1252,7 +1276,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     const lines = text.split("\n");
     const have = new Set((lines[index] ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u));
     if (!normalizePersonName(c.person).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).every((w) => have.has(w))) continue;
-    const life = printedLife(lines, index);
+    const life = printedLife(lines, index, c.person, [...out.covers.map((x) => x.person), ...out.namedPeople, ...(doc.people ?? [])]);
     if (life.birth || life.relationship) c.life = life;
   }
   // A document printed for one life: every cover and every named person is the same person.
@@ -1350,10 +1374,11 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     if (pays === "percent" && value != null && percentOf === "sum_insured" && num(b.cap) == null && placed.has(source)) {
       const p = placed.get(source)!, text = pageText(source.page);
       const cell = text.slice(p.start, p.end) + text.slice(p.end, lineEndAt(text, p.end)).split("\t")[0];
-      // Only on the row's own line: the line the quote is on prints the row's own benefit name (a quote such as "100% of
-      // the Sum Insured" found first in another row's cell is never given that row's child share).
-      const line = text.slice(text.lastIndexOf("\n", p.start - 1) + 1, lineEndAt(text, p.end)).replace(/\s+/g, " ").toLowerCase();
-      const found = line.includes(benefit.replace(/\s+/g, " ").toLowerCase()) ? childLimitIn(cell.replace(/\t/g, " "), value) : null;
+      // Only on the row's own line: one of the line's own cells is the row's benefit name, whole (with at most a section
+      // number before it), so a quote such as "100% of the Sum Insured" found first in another row's cell ("Accidental
+      // death" for a "Death" row, "Burns (third degree)" for "Burns") is never given that row's child share (gate H4).
+      const line = text.slice(text.lastIndexOf("\n", p.start - 1) + 1, lineEndAt(text, p.end));
+      const found = ownLabelLine(line, benefit) ? childLimitIn(cell.replace(/\t/g, " "), value) : null;
       if (found) {
         const seg = segmentOf(source);
         const rest = [source.excerpt, cell, seg.text, seg.near, ...conditions].map((t) => withoutChildLimit(t, found));

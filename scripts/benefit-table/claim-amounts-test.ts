@@ -461,6 +461,12 @@ test("a row whose line prints another share for a kind of life: each person's sh
     const h = schedule({ people: MYR.people, page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\n${line}`, benefits: [ben({ benefit: "Burns", pays: "percent", value: 10, percentOf: "sum_insured", quote: "Burns\t10% of the Sum Insured" })] });
     assert.deepEqual(MYR.people.map((p) => ask(h, p.name, /Burns/).amounts), [["RM15,000"], ["RM10,000"], ["RM2,000"]], line);
   }
+  // Control (gate H1): a "Daughter" whose printed date of birth makes her an adult gets no amount.
+  const adultDaughter = { ...MYR.people[2], line: "Adam Bin Ahmad\tDaughter\t01/01/1990\tRM 40,000" };
+  const hd = schedule({ people: [MYR.people[0], adultDaughter], page2: "TABLE OF BENEFITS\nBenefit\tAmount payable\nBurns\t10% of the Sum Insured. For an insured child, 5% of the Sum Insured.",
+    benefits: [ben({ benefit: "Burns", pays: "percent", value: 10, percentOf: "sum_insured", quote: "Burns\t10% of the Sum Insured" })] });
+  assert.deepEqual(ask(hd, adultDaughter.name, /Burns/).amounts, []);
+  assert.deepEqual(ask(hd, MYR.people[0].name, /Burns/).amounts, ["RM15,000"]);
   // Control: "Children: 5%" on a 10% row (5% of the sum or of the benefit is not said), an age in the condition and no date
   // of birth column, or no relationship column: no amount for anyone, as before.
   const noDob = MYR.people.map((p) => ({ ...p, line: p.line.split("\t").filter((_, i) => i !== 2).join("\t") }));

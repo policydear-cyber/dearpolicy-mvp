@@ -1022,7 +1022,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
         // A child's share printed in the row's cell for a person the schedule does not prove is or is not that child: no
         // amount, and the printed condition is quoted, so the household sees what decides it (lib/benefit-table/child-limit.ts).
         if (r.childLimit && !r.childLimit.status && r.figure.kind === "none") {
-          const said = `${names(r)} pays ${r.childLimit.own}% of the sum insured, and the policy says: "${r.childLimit.words.replace(/[.;]+$/, "")}". ${baseName(r.person)}'s own line of the schedule does not print ${r.childLimit.belowAge != null ? "a date of birth" : "whether they are insured as a child"}, so no amount is worked out.`;
+          const said = `${names(r)} pays ${r.childLimit.own}% of the sum insured, and the policy says: "${r.childLimit.words.replace(/[.;]+$/, "")}". ${baseName(r.person)}'s own line of the schedule ${r.childLimit.why ?? "does not settle whether this applies"}, so no amount is worked out.`;
           points.push({ kind: "fact", text: said, person: baseName(r.person), document: documentId(r.docIndex), quote: r.childLimit.words, amount: null, percentOf: null,
             conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
         }

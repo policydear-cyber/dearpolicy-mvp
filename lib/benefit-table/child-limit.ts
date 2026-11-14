@@ -81,32 +81,47 @@ const BIRTH_HEAD = /^(?:date\s+of\s+birth|birth\s*date|d\.?\s?o\.?\s?b\.?|born)$
 const RELATION_HEAD = /^(?:relationship(?:\s+to\s+(?:the\s+)?(?:policyholder|proposer|insured|policy\s+owner))?|relation)$/i;
 const DATE = String.raw`\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\.?,?\s+\d{4}`;
 const DATES = new RegExp(DATE, "g");
-/** The date of birth and relationship a page prints on one person's line: under a header row whose cells line up with the
- * line's (tab-separated, the same count, the header naming "Date of birth" or "Relationship" exactly once), or after a
- * "Date of birth:" / "DOB:" label on the line itself when the line prints no other date. `lines`: the page's lines;
- * `at`: the person's line. A header is the nearest line above with the same number of cells, no digits, within 12 lines. */
-export function printedLife(lines: string[], at: number): PrintedLife {
+/** The date of birth and relationship a page prints on one person's line. `lines`: the page's lines; `at`: the person's
+ * line; `person`: their printed name; `others`: the other names the document prints for its insured lives.
+ * - By column: the person's line has tab cells, and the nearest line above it with no digits is its table's header (every
+ *   line between is a row of tab cells; a blank line, a line without cells or more than 12 lines ends the search, and a
+ *   header is never skipped for an earlier one). Read only when the header has as many cells as the person's line and
+ *   names "Date of birth" or "Relationship" exactly once (gate H2: another table's header above is never reached).
+ * - By label: "<the person's name>, date of birth: <date>" / "(DOB <date>)" / "born <date>", the label right after the
+ *   person's own name, on a line naming no one else the document names and printing no other date (gate H3: "child of
+ *   <parent> (Policyholder date of birth ...)" is never the child's). */
+export function printedLife(lines: string[], at: number, person = "", others: string[] = []): PrintedLife {
   const line = lines[at] ?? "";
   const cells = line.split("\t").map((c) => c.trim());
   let birth: string | null = null, relationship: string | null = null;
   if (cells.length >= 2) {
     for (let i = at - 1; i >= 0 && i >= at - 12; i--) {
-      const head = lines[i].split("\t").map((c) => c.trim());
-      if (head.length !== cells.length || /\d/.test(lines[i])) continue;
-      const b = head.flatMap((h, k) => (BIRTH_HEAD.test(h) ? [k] : [])), r = head.flatMap((h, k) => (RELATION_HEAD.test(h) ? [k] : []));
-      if (b.length === 1 && new RegExp(String.raw`^(?:${DATE})$`).test(cells[b[0]])) birth = cells[b[0]];
-      if (r.length === 1 && /^[A-Za-z][A-Za-z ()/-]{1,40}$/.test(cells[r[0]])) relationship = cells[r[0]];
+      const text = lines[i];
+      const head = text.split("\t").map((c) => c.trim());
+      if (!text.trim() || head.length < 2) break;
+      if (/\d/.test(text)) continue;
+      if (head.length === cells.length) {
+        const b = head.flatMap((h, k) => (BIRTH_HEAD.test(h) ? [k] : [])), r = head.flatMap((h, k) => (RELATION_HEAD.test(h) ? [k] : []));
+        if (b.length === 1 && new RegExp(String.raw`^(?:${DATE})$`).test(cells[b[0]])) birth = cells[b[0]];
+        if (r.length === 1 && /^[A-Za-z][A-Za-z ()/-]{1,40}$/.test(cells[r[0]])) relationship = cells[r[0]];
+      }
       break;
     }
   }
-  if (!birth) {
-    const m = new RegExp(String.raw`\b(?:date\s+of\s+birth|d\.?o\.?b\.?|born(?:\s+on)?)\s*[:\-]?\s*(${DATE})`, "i").exec(line);
+  const words = (n: string) => n.trim().split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const own = words(person);
+  const lower = line.toLowerCase();
+  const named = (n: string) => { const w = n.trim().toLowerCase(); return !!w && lower.includes(w); };
+  if (!birth && own.length && !others.some((o) => o.trim().toLowerCase() !== person.trim().toLowerCase() && named(o))) {
+    const m = new RegExp(String.raw`(?<![\p{L}\p{N}])${own.join(String.raw`\s+`)}\s*[,(\-–]?\s*(?:date\s+of\s+birth|d\.?o\.?b\.?|born(?:\s+on)?)\s*[:\-]?\s*(${DATE})`, "iu").exec(line);
     if (m && (line.match(DATES) ?? []).length === 1) birth = m[1];
   }
   return { birth, relationship };
 }
 
-const CHILD_RELATION = /^(?:(?:insured|dependent|dependant)\s+)?(?:child|son|daughter|step-?(?:child|son|daughter)|grand(?:child|son|daughter))$/i;
+/** The relationships that make a person an insured child, a closed list: never a step, grand or in-law form, "adult child"
+ * or "child (over 18)" (gate H1). */
+const CHILD_RELATION = /^(?:child|son|daughter)$/i;
 const ADULT_RELATION = /^(?:policy\s*holder|policy\s*owner|proposer|principal(?:\s+insured)?|main\s+insured|self|insured|spouse|husband|wife|partner|(?:legal|de\s+facto|civil)\s+(?:spouse|partner))$/i;
 
 /** Whole years on a day count, from a printed birth date read one way. */
@@ -132,25 +147,55 @@ function birthReadings(text: string): [number, number, number][] {
   return [[x.getUTCFullYear(), x.getUTCMonth() + 1, x.getUTCDate()]];
 }
 
-/** Whether a person is the child the limit is for, on every day given (today and the printed period of insurance), from
- * the schedule's own line only: "child", "not_child", or null when not settled (no date of birth for an age, two readings
- * of a date that disagree, an age that changes side within those days, no relationship or one not on the closed lists). */
-export function personStatus(life: PrintedLife | null | undefined, limit: Pick<ChildLimit, "belowAge">, days: number[]): "child" | "not_child" | null {
-  if (!life || !days.length) return null;
-  if (limit.belowAge != null) {
-    if (!life.birth) return null;
-    const readings = birthReadings(life.birth);
-    if (!readings.length) return null;
-    const seen = new Set<string>();
-    for (const [y, mo, d] of readings) for (const day of days) {
-      const age = yearsOn(y, mo, d, day);
-      if (age < 0 || age > 130) return null;
-      seen.add(age < limit.belowAge ? "child" : "not_child");
-    }
-    return seen.size === 1 ? ([...seen][0] as "child" | "not_child") : null;
+/** Which side of an age a person is on every day given, by every reading of their printed date of birth: "under",
+ * "over", or null (not settled: no readable date, or readings or days on both sides). */
+function ageSide(birth: string, days: number[], age: number): "under" | "over" | null {
+  const readings = birthReadings(birth);
+  if (!readings.length || !days.length) return null;
+  const seen = new Set<"under" | "over">();
+  for (const [y, mo, d] of readings) for (const day of days) {
+    const years = yearsOn(y, mo, d, day);
+    if (years < 0 || years > 130) return null;
+    seen.add(years < age ? "under" : "over");
   }
-  const r = life.relationship?.trim() ?? "";
-  return CHILD_RELATION.test(r) ? "child" : ADULT_RELATION.test(r) ? "not_child" : null;
+  return seen.size === 1 ? [...seen][0] : null;
+}
+const relationClass = (r: string | null | undefined): "child" | "adult" | "other" | null => {
+  const t = (r ?? "").trim();
+  return !t ? null : CHILD_RELATION.test(t) ? "child" : ADULT_RELATION.test(t) ? "adult" : "other";
+};
+/** Whether a person is the child the limit is for, on every day given (today and the printed period of insurance), from
+ * the schedule's own line only, with why not when it is not settled:
+ * - an age in the condition: the printed date of birth decides; with no age, the printed relationship (child, son or
+ *   daughter; policyholder, self, insured, spouse, partner ...) decides;
+ * - whatever decides, everything else the line prints must agree (gate H1): a printed relationship must be on one of the
+ *   two closed lists, a child relationship needs a date of birth under 18 on every day, an adult one 18 or over, when a
+ *   date of birth is printed; and with an age in the condition, a printed relationship must be printed too only if it
+ *   agrees.
+ * Anything else is not settled: no amount. */
+export function personStatusWhy(life: PrintedLife | null | undefined, limit: Pick<ChildLimit, "belowAge">, days: number[]): { status: "child" | "not_child" } | { status: null; why: string } {
+  const no = (why: string) => ({ status: null, why });
+  if (!days.length) return no("has no day to settle it on");
+  const rel = relationClass(life?.relationship), birth = life?.birth ?? null;
+  if (rel === "other") return no(`prints the relationship "${life!.relationship!.trim()}", which does not settle whether they are insured as a child`);
+  // The printed relationship and date of birth must agree: a child under 18, an adult 18 or over.
+  if (rel && birth) {
+    const side = ageSide(birth, days, 18);
+    if (!side) return no(`prints a date of birth (${birth}) that does not settle whether they are under 18 on every day of the period of insurance`);
+    if ((rel === "child") !== (side === "under")) return no(`prints a relationship ("${life!.relationship!.trim()}") and a date of birth (${birth}) that do not agree`);
+  }
+  if (limit.belowAge != null) {
+    if (!birth) return no("does not print a date of birth");
+    const side = ageSide(birth, days, limit.belowAge);
+    if (!side) return no(`prints a date of birth (${birth}) that does not settle whether they are under ${limit.belowAge} on every day of the period of insurance`);
+    return { status: side === "under" ? "child" : "not_child" };
+  }
+  if (!rel) return no("does not print whether they are insured as a child");
+  return { status: rel === "child" ? "child" : "not_child" };
+}
+/** personStatusWhy's status alone. */
+export function personStatus(life: PrintedLife | null | undefined, limit: Pick<ChildLimit, "belowAge">, days: number[]): "child" | "not_child" | null {
+  return personStatusWhy(life, limit, days).status;
 }
 /** The days a status must hold on: today, and the document's printed period of insurance (each end) when printed. */
 export function statusDays(today: number, from?: string | null, to?: string | null): number[] {
