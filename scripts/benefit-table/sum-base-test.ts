@@ -221,7 +221,7 @@ test("B control: another line with the Death label printing another sum is doubt
   const a = ask(h, DANIEL, /permanent/);
   assert.deepEqual(a.amounts, []);
   assert.doesNotMatch(JSON.stringify(a.kept), /450,000|400,000/);
-  assert.match(a.refused.map((r) => r.why).join("|"), /sum's own label prints a different sum/);
+  assert.match(a.refused.map((r) => r.why).join("|"), /one of several sums|sum's own label prints a different sum/);
 });
 test("B control: two Death covers with different sums leave the TPD row with no amount", () => {
   const tpd = "Total and permanent disability\t100% of the death sum assured";
@@ -390,6 +390,31 @@ test("gate R2 check: the CI schedule with its currency wrapped onto its own line
     benefits: [{ section: "BENEFIT PROVISIONS", benefit: "Early-stage critical illness", value: 25, cap: 50000, capQuote: "up to a maximum of\nRM 50,000", quote: early }] });
   assert.equal(amountOf(h, "Aisyah Rahman", /Early/), 50000);
   assert.deepEqual(ask(h, "Aisyah Rahman", /Early/).amounts, ["RM50,000"]);
+});
+
+// ---------- Gate round 3 (sum-base-gate.md "Round 3"): every repro ----------
+const R3S = `Death sum assured\tS$450,000\n${TPD_LINE}`;
+for (const l of ["Name: Lim Bee Hoon", "Lim Bee Hoon (DOB 02/02/1982)", "Lim Bee Hoon, age 42", "Tan, Grace Mei", "LIM, Bee Hoon", "Lim Bee Hoon\tNRIC S1234567A", "Mdm Lim",
+  "lim bee hoon", "Benefits for Lim Bee Hoon", "Lim Bee Hoon’s cover", "Cover for Ms Lim", "Second policy - Lim Bee Hoon", "Policy TG-5522 (Lim Bee Hoon)", "Bee Hoon Lim 2nd", "Nominee: Lim Bee Hoon"])
+  test(`gate R3-H1: a second life's block under ${JSON.stringify(l)}: no TPD figure in the chat`, () => {
+    assert.deepEqual(ask(otherLifeDoc(`${R2H}\n${R3S}\n${l}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
+  });
+for (const mid of ["Accidental death benefit:", "Accidental death cover", "Section 2 - Accident benefit", "Extra cover (2)", "Booster", "Top-up cover", "Accidental Death Benefit\t", "ADB", "Enhancement", "Package B - Accident"])
+  test(`gate R3-H2: another cover's 'Death' line under ${JSON.stringify(mid)}: no TPD figure in the chat`, () => {
+    assert.deepEqual(ask(otherLifeDoc(`${R2H}\nSum assured\tS$450,000\n${TPD_LINE}\n${mid}\nDeath\tS$100,000`, "Death\tS$100,000", 100000), DANIEL, /permanent/).amounts, []);
+  });
+test("gate R3-L1: particulars beside the field, and a table heading above the sum, keep the person's one sum", () => {
+  for (const p1 of [`TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\nLife assured: Daniel Tan Wei\tDate of birth: 01/01/1980\nDeath\tS$450,000\n${TPD_LINE}`,
+    `TERM GUARD - POLICY SCHEDULE\nLife assured\tDaniel Tan Wei\tAge\t45\nDeath\tS$450,000\n${TPD_LINE}`, `${R2H}\nBENEFIT SUMMARY\nDeath\tS$450,000\n${TPD_LINE}`])
+    assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, ["S$450,000"], p1);
+});
+test("gate R3 control: a second name cell beside the field that is not a particular still refuses", () => {
+  assert.deepEqual(ask(otherLifeDoc(`TERM GUARD - POLICY SCHEDULE\nLife assured\tDaniel Tan Wei\tSpouse\tLim Bee Hoon\nDeath\tS$450,000\n${TPD_LINE}`, "Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, []);
+});
+test("gate R3-L2: a next line opening with a preposition, an article or 'Per' continues the cell", () => {
+  for (const next of ["Under The Rider\tRM 5,000", "For Each Child\t5%", "Less Earlier Payments\tRM 0", "Of The Basic Plan\t10", "Per Day\t1", "Payable Monthly\tN/A", "The Basic Plan\tRM 1,000", "With Bonus\tRM 1,000"])
+    assert.equal(headlineSumShare("Burns\t10% of the Sum Covered", 10, next), false, next);
+  for (const cell of ["Burns\t10% of the Sum Covered, up to SGD 5,000", "Burns\t10% of the Sum Covered, up to US$5,000"]) assert.equal(headlineSumShare(cell, 10), true, cell);
 });
 
 if (failures.length) {

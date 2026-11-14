@@ -649,7 +649,9 @@ const SHARE_LIFE = new RegExp(String.raw`${KIND_OF_LIFE_WORDS}|\b(?:wi(?:fe|ves)
 /** Words that take something off what is paid, in any cell or condition: never settled as a share of the sum. */
 const TAKES_OFF = /\b(?:less|minus|deduct\w*|reduc\w*|net\s+of|exclud\w*|subtract\w*|balance|offset\w*|previously\s+paid|already\s+paid|paid\s+earlier|after\s+deducting|ditolak|tolak|potong\w*)\b/i;
 /** A line that starts a new table row: a label starting with a capital, a tab, and its own figure, percentage or words for
- * not covered. */
+ * not covered; never one opening with a preposition, an article or a joining word ("Under The Rider", "Per Day"), which
+ * continues the cell above. */
+const ROW_STOP = /^(?:under|of|per|the|for|in|on|with|and|or|less|plus|minus|up|subject|payable|paid|excluding|each|whichever|to|by|from|at|after|before)\b/i;
 const NEW_ROW = new RegExp(String.raw`^\p{Lu}[^\t]*\t\s*(?:\d|${CELL_MONEY}|(?:not\s+covered|nil|n\/a|no\s+cover)\b)`, "u");
 /** Whether a row whose reading did not settle its percentage's base prints it, in its WHOLE cell, as exactly "<n>% of
  * <the policy's headline sum>" with only closed phrases after it (HEADLINE_CELL). `cell` is every printed line the row's
@@ -661,7 +663,7 @@ export function headlineSumShare(cell: string, value: number, next = "", words =
   // The line after the cell is a new row only when it reads like one: a left cell starting with a capital and a right cell
   // starting with its own figure, percentage or "not covered" (NEW_ROW). Anything else may continue the cell, unquoted
   // ("for deaths abroad<TAB>under the rider"), so the share is left as read.
-  if (next.trim() && !NEW_ROW.test(next)) return false;
+  if (next.trim() && (!NEW_ROW.test(next) || ROW_STOP.test(next))) return false;
   const pcts = [...all.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent\b)/gi)];
   if (pcts.length !== 1 || Math.abs(Number(pcts[0][1].replace(",", ".")) - value) > 0.0001) return false;
   // Only the label may come before the share; every later line is the share's own (continuations start with a tab or are

@@ -852,6 +852,24 @@ function personLikeLine(line: string, own: string[], docWords: Set<string>): boo
   if (lower.some((w) => NOT_A_NAME.has(w) || docWords.has(w))) return false;
   return !lower.every((w) => own.includes(w) || NAME_PARTICLES.has(w));
 }
+/** The labels of the person's own particulars that may sit beside the insured-person field on its line, as a label cell and
+ * a value cell ("Life assured<TAB>Ana Lee<TAB>Age<TAB>45"). */
+const PARTICULAR_LABEL = /^(?:age|age next birthday|anb|date of birth|dob|gender|sex|nric(?:\s+no\.?)?|id(?:\s+no\.?)?|passport(?:\s+no\.?)?|occupation|smoker(?:\s+status)?|policy\s+(?:number|no\.?)|certificate\s+(?:number|no\.?)|(?:policy\s+)?currency|class)$/i;
+/** Whether every cell on an insured-person field's line is a "Label: value" field of its own, or the line is label and
+ * value pairs whose other labels are the person's own particulars (PARTICULAR_LABEL). */
+function fieldCells(cells: string[]): boolean {
+  if (cells.every((c) => /^[^:]{1,40}:/.test(c))) return true;
+  const at = cells.findIndex((c) => new RegExp(String.raw`^${INSURED_LABEL}$`, "i").test(c));
+  if (at < 0 || at + 1 >= cells.length) return false;
+  const rest = [...cells.slice(0, at), ...cells.slice(at + 2)];
+  const pairs: string[] = [];
+  for (let i = 0; i < rest.length; i++) {
+    if (/^[^:]{1,40}:/.test(rest[i])) continue;
+    if (!PARTICULAR_LABEL.test(rest[i]) || i + 1 >= rest.length) return false;
+    pairs.push(rest[i + 1]); i++;
+  }
+  return pairs.every((v) => !/\p{L}{2,}\s+\p{L}{2,}/u.test(v) || /\d/.test(v));
+}
 /** Whether a document is printed for this person alone, so that a line on it need not repeat their name: true, or why not.
  * An ALLOW-list: ALL of these must hold, else main's rule (the line names the person) stands:
  * - it is linked to this person and no one else;
@@ -871,7 +889,7 @@ function soleLifeDocument(d: HouseholdDocument, person: string, household: House
   if (!fieldLines.length) return "no insured-person field";
   for (const l of fieldLines) {
     const cells = l.split("\t").map((c) => c.trim()).filter(Boolean);
-    if (!(cells.length === 2 && !cells[0].includes(":")) && cells.some((c) => !/^[^:]{1,40}:/.test(c))) return "an insured-person field's line prints a cell that is not a field";
+    if (!(cells.length === 2 && !cells[0].includes(":")) && !fieldCells(cells)) return "an insured-person field's line prints a cell that is not a field";
   }
   const fields = d.pages.flatMap((pg) => [...pg.text.matchAll(INSURED_FIELD)].map((m) => [m[1].split("\t")[0].trim()]));
   for (const [value] of fields) {
@@ -905,6 +923,8 @@ const headingLine = (l: string) => {
 /** Why the sum's line on a one-life document may be another block's (a rider's, another life's), or null. On the sum's
  * page, the person's insured-person field must come first, and between it (or the top of the page when it is on an
  * earlier page) and the sum's line there may be no heading line and no line with a rider's words. */
+/** The words of a heading over the schedule's own table of benefits, not over another cover's or life's block. */
+const TABLE_HEADING_WORDS = new Set(["benefit", "benefits", "summary", "schedule", "table", "of", "the", "policy", "details", "cover", "coverage", "sum", "sums", "assured", "insured", "covered", "amount", "amounts", "your"]);
 function sumLineInOwnBlock(text: string, lineAt: number): string | null {
   const lines = text.split("\n");
   let from = -1;
@@ -912,9 +932,33 @@ function sumLineInOwnBlock(text: string, lineAt: number): string | null {
   if (from < 0 && lines.some((l) => new RegExp(INSURED_FIELD.source, "im").test(l))) return "comes before the insured-person field";
   for (const l of lines.slice(from + 1, lineAt)) {
     if (RIDER_WORDS.test(l)) return "is below a rider's line";
-    if (headingLine(l)) return "is below a heading";
+    // A heading of the schedule's own table ("BENEFIT SUMMARY") opens no other block.
+    if (headingLine(l) && !tokens(l).every((w) => TABLE_HEADING_WORDS.has(w))) return "is below a heading";
   }
   return null;
+}
+/** The structural rule for a document printed for one life (gate round 3): the WHOLE document may print only one figure on
+ * lines that could be this row's sum, however they are headed or whoever is named around them. A line could be when it
+ * prints money and every word of its label is the row's own or a name of a sum (labelFits, as sumLineIsRows). The row's
+ * own lines and its maximum's, and lines printing a percentage, are shares, not sums. Two such lines with the same figure
+ * agree ("Sum covered  RM 150,000" and "Death benefit  RM 150,000"); two different figures leave main's rule. */
+function oneSumOnDocument(d: HouseholdDocument, row: string, sf: ServerFigure): string | null {
+  const flat = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
+  const own = [flat(sf.row.quote), flat(sf.cap?.quote ?? "")].filter(Boolean);
+  const seen = new Set<string>();
+  for (const pg of d.pages) for (const l of pg.text.split("\n")) {
+    const figs = moneyFiguresIn(l);
+    if (!figs.length || /\d\s?(?:%|per\s?cent)/i.test(l) || own.some((o) => o.includes(flat(l)))) continue;
+    if (!labelFits(l, row)) continue;
+    for (const f of figs) seen.add(`${f.currency}|${Math.round(f.value * 100)}`);
+  }
+  return seen.size === 1 && seen.has(`${sf.currency}|${Math.round(sf.base.value * 100)}`) ? null : "is one of several sums the document prints under the row's or a sum's name";
+}
+/** Whether every word of a money line's label is the row's own (`row`) or a name of a sum (SUM_LINE_WORDS). */
+function labelFits(line: string, row: string): boolean {
+  const label = moneyFiguresIn(line).reduce((t, f) => t.split(f.raw).join(" "), line);
+  const rowWords = new Set(tokens(row));
+  return tokens(label).every((w) => rowWords.has(w) || SUM_LINE_WORDS.has(w));
 }
 /** Words a sum's own line may print besides its figure on a document for one life, with the row's own words: the names of
  * the sum and of a cover. */
@@ -979,7 +1023,8 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const ownDocument = soleLifeDocument(bdoc, person, household);
   if (!namesPerson(have)) {
     if (ownDocument !== true) return no(`the sum's line does not name the person, and its document is not printed for them alone (${ownDocument})`);
-    const lineWhy = sumLineIsRows(line, `${sf.row.quote}\n${st.text}`, person, household) ?? sumLineInOwnBlock(bpage.text, at);
+    const rowWords = `${sf.row.quote}\n${st.text}`;
+    const lineWhy = sumLineIsRows(line, rowWords, person, household) ?? oneSumOnDocument(bdoc, rowWords, sf) ?? sumLineInOwnBlock(bpage.text, at);
     if (lineWhy) return no(`the sum's line ${lineWhy}`);
   }
   if (onLine.length !== 1) return no("the sum's line prints no money figure or more than one");
