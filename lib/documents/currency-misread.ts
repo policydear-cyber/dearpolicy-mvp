@@ -53,3 +53,52 @@ export function maskPrefixLetterMisreads(text: string): { text: string; masked: 
   });
   return { text: out, masked };
 }
+
+/**
+ * A scan reader can print a thousands comma as a dot: "S$935,542" read as "S$935.542", "S$1,372,820" as "S$1.372.820"
+ * (50-document Baidu PaddleOCR run, 14 Nov 2026: 12 such figures in 8 of 11 made-up documents, every one right after a
+ * currency mark, in documents whose figures are otherwise all comma-grouped). Read as printed, the amount is a
+ * thousand times too small. Some documents do group thousands with dots ("EUR 1.372.820,50"), so the style is the
+ * document's own, decided from its figures, never from the currency's name.
+ *
+ * In a comma-grouped document, on a transcribed page, a figure grouped by dots is not confirmed: replaced by the page
+ * check's "[amount not checked]" mark, never repaired. That is a figure right after a currency mark with one or more dot
+ * groups of three ("S$935.542", "GBP 48.000"), or anywhere with two or more ("1.372.820": never a decimal). A single dot
+ * group with no currency mark ("0.125", "a factor of 1.375") is a decimal and stays, as does a percentage.
+ */
+/** A currency mark right before a figure: a symbol with its country letters, or a code from a closed list. */
+const MONEY_MARK = String.raw`(?:(?<![A-Za-z])(?:[A-Z]{1,3})?\$|[£€¥₹₱฿₩]|(?<![A-Za-z])(?:RM|Rp\.?|Rs\.?|[A-Z]{3})(?![A-Za-z]))`;
+const ISO = new Set(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : ["SGD", "USD", "MYR", "GBP", "EUR", "IDR", "HKD", "INR", "PHP", "THB", "AUD", "CNY", "JPY", "CHF", "NZD"]);
+/** Thousands grouped by commas ("935,542", "1,372,820.50"). */
+const COMMA_GROUPED = /(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?(?![\d]|[.,]\d)/g;
+/** Thousands grouped by dots ("1.372.820", "1.372,50"), or a comma decimal ("372,50"): the dot style's own forms. */
+const DOT_STYLE = /(?<![\d.,])(?:\d{1,3}(?:\.\d{3}){2,}(?:,\d{1,2})?|\d{1,3}(?:\.\d{3})+,\d{1,2}|\d+,\d{2})(?![\d]|[.,]\d)/g;
+/** A dot-grouped figure: after a currency mark, one dot group or more; with no mark, two or more. */
+const DOT_FIGURE = new RegExp(String.raw`(${MONEY_MARK}\s?)?(?<![\d.,])(\d{1,3}(?:\.\d{3})+)(?![\d]|[.,]\d|\s*(?:%|per\s*cent))`, "g");
+
+/** How the document groups thousands, from its own figures: "comma" when comma groups clearly outnumber the dot style's
+ * own forms (at least 3 comma-grouped figures and three times as many as dot-style ones), "dot" the other way round,
+ * "unknown" otherwise (nothing is marked). */
+export function thousandsStyle(text: string): "comma" | "dot" | "unknown" {
+  const comma = String(text ?? "").match(COMMA_GROUPED)?.length ?? 0, dot = String(text ?? "").match(DOT_STYLE)?.length ?? 0;
+  if (comma >= 3 && comma >= 3 * dot) return "comma";
+  if (dot >= 3 && dot >= 3 * comma) return "dot";
+  return "unknown";
+}
+
+/** In a comma-grouped document, the page text with every dot-grouped figure marked as not checked, and the figures so
+ * marked, as printed. */
+export function maskDotGroupedFigures(text: string, style: ReturnType<typeof thousandsStyle>): { text: string; masked: string[] } {
+  const source = String(text ?? "");
+  if (style !== "comma") return { text: source, masked: [] };
+  const masked: string[] = [];
+  const out = source.replace(DOT_FIGURE, (token: string, mark: string | undefined, figure: string) => {
+    const code = mark?.trim().replace(/\.$/, "");
+    const isMark = !!mark && (!/^[A-Z]{3}$/.test(code ?? "") || ISO.has(code!));
+    const groups = figure.split(".").length - 1;
+    if (!(isMark || groups >= 2)) return token;
+    masked.push(token.trim());
+    return isMark ? NOT_CHECKED : token.replace(figure, NOT_CHECKED);
+  });
+  return { text: out, masked };
+}

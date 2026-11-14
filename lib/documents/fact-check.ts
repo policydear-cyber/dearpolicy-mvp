@@ -56,7 +56,8 @@ export function moneyPrinted(text: string, value: number): boolean {
 function moneyPrintedExact(text: string, value: number): boolean {
   const body = digitsPattern(value);
   // Round 10: never part of a figure a scan printed unclearly ("S$5O,000" is not S$5).
-  const after = String.raw`(?![\d.,]\d|\s*%|\s*per\s*cent|[,.]?[OoIl|])`;
+  // A digit right after the figure means it is part of a longer one ("S$935.542" is not S$935.54; Baidu run, 14 Nov).
+  const after = String.raw`(?!\d|[\d.,]\d|\s*%|\s*per\s*cent|[,.]?[OoIl|])`;
   const marked = new RegExp(CURRENCY_MARK + String.raw`\s?` + body + after, "i");
   if (marked.test(text) || new RegExp(GLUED_MARK + String.raw`\s?` + body + after).test(text)) return true;
   const bare = new RegExp(String.raw`(?<![\d.,/-])(?<![\d][,.]?[OoIl|]+[,.]?)` + body + String.raw`(?![\d]|[.,]\d|\s*(?:%|per\s*cent|days?|nights?|years?|months?|hours?|weeks?|x\b|times)|[/-]\d|[,.]?[OoIl|])`, "i");
