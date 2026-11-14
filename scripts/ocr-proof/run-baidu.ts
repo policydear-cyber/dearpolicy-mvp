@@ -52,7 +52,12 @@ function scrubStatus(s: unknown): unknown {
 async function readDoc(file: string) {
   const name = basename(file, ".pdf");
   const dir = join(outDir, name);
-  if (existsSync(join(dir, "done.json"))) { console.log(name, "already done"); return; }
+  // A document is skipped only when every job came back; one with a failed job is read again in full.
+  if (existsSync(join(dir, "done.json"))) {
+    const prev = JSON.parse(readFileSync(join(dir, "done.json"), "utf8")) as { jobs: { ok?: boolean }[] };
+    if (prev.jobs.every((j) => j.ok)) { console.log(name, "already done"); return; }
+    console.log(name, "had a failed job: reading it again");
+  }
   mkdirSync(dir, { recursive: true });
   const bytes = new Uint8Array(readFileSync(file));
   const total = (await PDFDocument.load(bytes, { ignoreEncryption: true })).getPageCount();
