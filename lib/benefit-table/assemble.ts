@@ -20,7 +20,7 @@ import { PREMIUM, SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
 import { anyMoneyFigures } from "@/lib/format/currency";
-import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, marksIn, namesTheLives, noteMarkOf, numbersIn, bindsToGroup, withoutOwnShareCap, withoutTravelTogether, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
+import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, marksIn, namesTheLives, noteMarkOf, numbersIn, bindsToGroup, sharesLimitStrongly, withoutOwnShareCap, withoutTravelTogether, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 import { benefitWords } from "./cover-rows";
@@ -831,13 +831,16 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
   });
   for (const t of r.tieLines ?? []) {
     // Never a row named from inside "travelling together", "on the same trip", "submitted together" (gate round 11).
-    const n = ` ${stems(withoutTravelTogether(t)).join(" ")} `;
+    // Nor from inside a unit of time or event ("per trip", "each journey", "any one event"): no benefit's name.
+    const n = ` ${stems(withoutTravelTogether(t).replace(/\b(?:per|each|every|any\s+one)\s+(?:trip|journey|event|day|claim|accident|occurrence|period|year)s?\b/gi, " ")).join(" ")} `;
     // A group of people named, or the certificate as the unit ("Under one certificate the limit shown is paid once."; gate round 13).
     const lives = bindsToGroup(t) && !PREMIUM.test(t);
     let placed = labels.filter((x) => x.phrases.some((p) => n.includes(` ${p} `)));
     if (!placed.length && lives) placed = labels.filter((x) => x.content.some((c) => n.includes(` ${c} `)));
     for (const x of placed) out.rows.add(x.b);
-    if (!placed.length && lives && BENEFIT_NOUN.test(t)) out.all = true;
+    // A strong sharing word with no group named withholds every row when it names a limit but no row ("The limits shown are
+    // held jointly."; gate round 14); never a premium's.
+    if (!placed.length && ((lives && BENEFIT_NOUN.test(t)) || (sharesLimitStrongly(t) && !PREMIUM.test(t)))) out.all = true;
   }
   tiedCache.set(r, out);
   return out;

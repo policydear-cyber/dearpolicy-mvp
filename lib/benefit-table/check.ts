@@ -723,7 +723,7 @@ const OWNER_TIE = new RegExp(String.raw`\b(?:per\s+(?:famil(?:y|ies)|households?
   + String.raw`|(?:draw|claim)\s+(?:on|from|against)\s+the\s+same|up\s+to\s+the\s+limits?\s+shown\s+in\s+total|for\s+both(?!\s+(?:adults?|children|trips?|sections?|benefits?))`
   + String.raw`|(?:maximum|most|total|limits?)\s+(?:\w+\s+){0,3}for\s+(?:this|the)\s+(?:certificate|policy)(?!\s+(?:period|year|term))`
   + String.raw`|for\s+all\s+(?:the\s+)?(?:insured\s+persons|travell?ers|insured)\s+on\s+(?:this|the)\s+(?:certificate|policy)`
-  + String.raw`|per\s+(?:certificate|policy|booking)(?!\s+(?:period|year|term|claim))`
+  + String.raw`|per\s+(?:certificate|policy|booking|plan)(?!\s+(?:period|year|term|claim|type))`
   + String.raw`|(?:regardless\s+of|whatever)\s+(?:the\s+)?numbers?\s+of\s+(?:insured|persons|people|travell?ers|lives))\b`, "gi");
 /** A clause about the premium or payment, a dispute between the lives and the insurer, or a cap per event or conveyance:
  * never a limit shared by the lives (each person's own limit still applies). */
@@ -742,49 +742,78 @@ export const withoutTravelTogether = (text: string) => text.replace(TRAVEL_TOGET
 const EACH_OWN = /\b(?:(?:to|for)\s+each\s+(?:of\s+(?:the\s+)?)?(?:insured\s+)?(?:persons?|travell?ers?|of\s+you)|each\s+insured\s+(?:person|traveller|traveler)|each\s+of\s+the\s+insured(?:\s+persons)?|(?:their|his\s+or\s+her|your)\s+own\s+(?:\w+\s+)?limits?)\b/i;
 const SHARE_WORD = /\b(?:shared?|shares|sharing|jointly|pool(?:ed|s)?|combined|together|collectively|in\s+aggregate|aggregate|between|as\s+a\s+(?:whole|unit)|whole|not\s+(?:per|for\s+each)|in\s+total)\b/i;
 const MOST_FOR_LIVES = /\b(?:most|maximum|total|limits?|sum)\b[^.;]*?\bfor\s+(?:(?:the\s+|your\s+|all\s+(?:the\s+)?)(?:whole\s+)?(?:famil|household|couple|group|party|insured\s+persons|travell)|everyone|everybody|all\s+of\s+(?:you|them)|both\s+of\s+you|you\s+all)/i;
-/** The rule (per-person-shared gate round 13): a sentence shares a limit only when it binds a limit or amount to a group of
- * people, or to the certificate or policy as the unit, in the same clause. "One / single / only one", "once", "combined",
- * "in total", "same", "common" and "share" are sharing words only with that group side present; joining benefits,
- * sections, items, events, days or trips they share nothing ("The single article limit is S$500"; "paid once per trip";
- * "Medical and dental expenses combined"). */
-/** The group side: the lives together (LIVES), a party, group or booking, between them, whoever claims, or the certificate or
- * policy as the unit ("per certificate", "under one certificate", "for the whole policy"). */
-const UNIT = /\b(?:per\s+(?:certificate|policy|booking|party|parties|group)(?!\s+(?:period|year|term|claim))|under\s+(?:one|a\s+single|the\s+same)\s+(?:certificate|policy)|for\s+(?:the|this)\s+(?:whole\s+)?(?:certificate|policy)(?!\s+(?:period|year|term))|between\s+(?:the\s+|all\s+)?(?:insured|you|both|them)|for\s+both\s+of\s+you|whoever\s+(?:claims|makes)|no\s+matter\s+who)\b/i;
+/** The rule (per-person-shared gate rounds 13, 14): a sentence shares a limit when it binds a limit or amount to a group of
+ * people, or to the certificate, policy or plan as the unit, in the same clause, or when it says so in a strong sharing
+ * word.
+ * - Strong words share on their own, group or not: share(s/d), sharing, jointly, pooled, "not multiplied by the number of",
+ *   "however many", "(only) once, whoever ...". Their one excuse is joining benefits, sections or items rather than people
+ *   ("the limit is shared between cancellation and curtailment"; "Both sections ...").
+ * - Weak words share only with the group side present: one / single / only one, once, combined, in total, the same, a common
+ *   or the certificate limit. Joining benefits, sections, items, events, days or trips they share nothing ("The single
+ *   article limit is S$500"; "paid once per trip"; "Medical and dental expenses combined").
+ * - The group side: the lives (LIVES), the unit (UNIT), whoever or no matter who with a limit or payment word, or they,
+ *   their or them in a clause with a sharing word ("their combined limit"). */
+const UNIT = /\b(?:per\s+(?:certificate|policy|booking|party|parties|group|plan)(?!\s+(?:period|year|term|claim|type))|under\s+(?:one|a\s+single|the\s+same)\s+(?:certificate|policy)|for\s+(?:the|this)\s+(?:whole\s+)?(?:certificate|policy)(?!\s+(?:period|year|term))|between\s+(?:the\s+|all\s+)?(?:insured|you|both|them)|for\s+both\s+of\s+you|(?:you\s+and\s+)?(?:your|their|his|her)\s+(?:travel(?:ling)?\s+)?companions|however\s+many)\b/i;
+const WHOEVER = /\b(?:whoever|no\s+matter\s+who)\b/i;
+const LIMIT_OR_PAY = /\b(?:limits?|maximum|sums?|amounts?|benefits?|cover|pay|paid|payable)\b/i;
+const PRONOUN = /\b(?:they|their|them|theirs)\b/i;
+/** "Per insured person per policy" is each person's limit: the policy there is no unit the limit is bound to. */
+const perPersonOnly = (text: string) => text.replace(/\b(?:per|for\s+each)\s+(?:insured\s+)?(?:person|traveller|traveler|life)\s+per\s+(?:policy|certificate|plan|trip)\b/gi, "per insured person");
+const unitSide = (text: string) => UNIT.test(text) || (WHOEVER.test(text) && LIMIT_OR_PAY.test(text));
 /** Whether words name a group of people or the certificate as the unit (travel-together phrases aside). */
-export const namesTheGroup = (text: string) => namesTheLives(withoutTravelTogether(text)) || UNIT.test(text);
+export const namesTheGroup = (text: string) => namesTheLives(withoutTravelTogether(text)) || unitSide(perPersonOnly(text));
 /** Whether words bind a limit, sum or benefit to the certificate or policy as the unit ("per policy" for an excess binds none). */
-export const limitForTheUnit = (text: string) => UNIT.test(text) && /\b(?:limits?|maximum|sums?\s+insured|sums?|amounts?|benefits?|cover)\b/i.test(text);
+export const limitForTheUnit = (text: string) => unitSide(perPersonOnly(text)) && /\b(?:limits?|maximum|sums?\s+insured|sums?|amounts?|benefits?|cover)\b/i.test(text);
 /** Each person's claims drawn from one pool ("Claims for each insured person come out of a single limit"): the people are
  * the group side even though each is named alone. */
 const POOL = /\b(?:out\s+of|from|towards|against|draws?\s+on|drawn\s+from|deducted\s+from|counts?\s+(?:towards|against))\s+(?:a|one|the\s+same|a\s+single|a\s+common|one\s+common)\s+(?:\w+\s+)?(?:limits?|sums?(?:\s+insured)?|amounts?|maximum)\b/i;
 const EACH_PERSON = /\beach\s+(?:insured\s+)?(?:person|traveller|traveler|of\s+you)\b/i;
 const poolsEachPerson = (text: string) => POOL.test(text) && EACH_PERSON.test(text);
-/** Whether a sharing note binds its limit to a group of people or to the certificate as the unit (assemble.ts: such a note
- * naming no row withholds every row). */
-export const bindsToGroup = (text: string) => namesTheLives(withoutTravelTogether(text)) || limitForTheUnit(text) || poolsEachPerson(text);
 /** One limit, amount or benefit; paid once (with no time or event after it: "once a day", "once per trip", "once after 6
  * hours", "once the claim is approved" are none). A "one limit" clause going on to say each or per person is each
  * person's own ("one limit applies for each insured person"), unless it goes on "and their family". */
 const ONE_OR_ONCE = /\b(?:(?:only\s+)?(?:one|a\s+single|single)\s+(?:[\w-]+\s+){0,2}?(?:limits?|amounts?|sums?|benefits?|maximum)\b(?![^.;,]*\b(?:each|per\s+(?:insured\s+)?(?:person|traveller|traveler|life))\b(?![^.;,]*\band\s+(?:their|the|your|his\s+or\s+her)\s+famil))|(?:paid|payable|pay|claimed)\s+(?:only\s+)?once\b(?!\s+(?:a|an|per|each|every|after|before|when|while|the|you|your|in|on|during|within|if|it|we|they|for\s+each|to\s+each|for\s+every)\b))/i;
-/** Further sharing words, each only with the group side: for all of them or everyone, as a family, combined, in total, the
- * same, a common or the certificate limit. */
-const SHARE_SIGNAL = /\b(?:for\s+(?:all\s+of\s+(?:them|you)|everyone|everybody|both\s+of\s+you|you\s+all)|as\s+a\s+(?:family|couple|household|group|whole|unit)|combined|in\s+total|(?:same|common|certificate|policy)\s+(?:\w+\s+)?(?:limits?|maximum|sums?(?:\s+insured)?|amounts?|cover))\b/i;
+/** Further weak sharing words: for all of them or everyone, for you and your companions, as a family, combined, in total, a
+ * common or the certificate limit, and the same limit only with a pooling verb ("the same limit covers all", "draw on the
+ * same limit"; never "have the same limits"). */
+const SHARE_SIGNAL = /\b(?:for\s+(?:all\s+of\s+(?:them|you)|everyone|everybody|both\s+of\s+you|you\s+all|(?:you\s+and\s+)?your\s+(?:travel(?:ling)?\s+)?companions)|as\s+a\s+(?:family|couple|household|group|whole|unit)|combined|in\s+total|(?:common|certificate|policy)\s+(?:\w+\s+)?(?:limits?|maximum|sums?(?:\s+insured)?|amounts?|cover)|same\s+(?:\w+\s+)?(?:limits?|maximum|sums?(?:\s+insured)?|amounts?|cover)\s+(?:covers?|applies\s+to\s+(?:all|every|both|everyone))|(?:draws?|drawn|claims?|paid)\s+(?:on|from|against|out\s+of)\s+the\s+same|share\s+the\s+same)\b/i;
 const sharingWord = (text: string) => ONE_OR_ONCE.test(text) || SHARE_SIGNAL.test(text);
-const eachOwnClause = (clause: string, group: boolean) => EACH_OWN.test(clause) && !SHARE_WORD.test(clause) && !(group && sharingWord(clause)) && !poolsEachPerson(clause) && !MOST_FOR_LIVES.test(clause) && !new RegExp(OWNER_TIE.source, "i").test(clause);
+/** The strong sharing words. */
+const STRONG = /\b(?:shared(?!\s+(?:rooms?|wards?|accommodation))|shares?|sharing(?!\s+(?:a\s+)?(?:rooms?|wards?|accommodation))|jointly|joint\s+limits?|pool(?:ed|s|ing)?|not\s+multiplied\s+by\s+the\s+number|however\s+many|(?:only\s+)?once,?\s+(?:whoever|however|no\s+matter))\b/i;
+/** Words joining benefits, sections or items, with no person named: the strong word's one excuse. */
+const BENEFIT_JOIN = /\b(?:both\s+(?:sections?|benefits?|parts?|covers?|items?)|sections?\s+\d+\s+(?:and|or)\s+\d+|between\s+[\w-]+(?:\s+[\w-]+){0,2}\s+(?:and|or)\s+[\w-]+|for\s+both\s+[\w-]+(?:\s+[\w-]+)?\s+and\s+[\w-]+|[\w-]+\s+(?:and|or)\s+[\w-]+(?:\s+[\w-]+)?\s+(?:are\s+)?(?:combined|shared|pooled|share)|(?:combined|shared|pooled)\s+(?:for|between|across)\s+[\w-]+(?:\s+[\w-]+)?\s+(?:and|or)\s+[\w-]+)\b/i;
+const PEOPLE_WORD = /\b(?:you|your|spouse|partners?|child(?:ren)?|adults?|members?|dependants?|parents?|companions?|persons?|people|travell?ers?|they|them|their|we|us|famil(?:y|ies)|households?|couples?|everyone|everybody|insured)\b/i;
+const sharesStrongly = (c: string, group: boolean) => STRONG.test(c) && (group || !BENEFIT_JOIN.test(c) || PEOPLE_WORD.test(c));
+/** The group side of a clause (c: travel-together phrases out; cu: the clause with "per insured person per policy" read as
+ * each person's). */
+const groupSide = (cu: string, c: string) => namesTheGroup(cu) || (PRONOUN.test(c) && (sharingWord(c) || STRONG.test(c)));
+/** Whether a sharing note binds its limit to a group of people or to the certificate as the unit (assemble.ts: such a note
+ * naming no row withholds every row). */
+export const bindsToGroup = (text: string) => namesTheLives(withoutTravelTogether(text)) || limitForTheUnit(text) || poolsEachPerson(text)
+  || (PRONOUN.test(text) && (sharingWord(text) || STRONG.test(text)));
+/** Whether a note shares a limit in a strong word with no group named ("The limits shown are held jointly."): assemble.ts
+ * withholds the rows it names, or every row when it names none but names a limit. */
+export const sharesLimitStrongly = (text: string) => {
+  const c = withoutTravelTogether(text);
+  return sharesStrongly(c, false) && new RegExp(LIMIT_WORD.source, "i").test(c);
+};
+const eachOwnClause = (clause: string, group: boolean) => EACH_OWN.test(clause) && !SHARE_WORD.test(clause) && !STRONG.test(clause) && !(group && sharingWord(clause)) && !poolsEachPerson(clause) && !MOST_FOR_LIVES.test(clause) && !new RegExp(OWNER_TIE.source, "i").test(clause);
 /** Whether a note sentence, read clause by clause with the travel-together phrases out, ties something to the lives together
  * (a sharing note: assemble.ts withholds the rows it names, or every row when it names none). */
 export const sharesWithLives = (sentence: string) => sentence.split(/[.;!?](?=\s|$)/).some((clause) => {
-  const c = withoutTravelTogether(clause);
-  const group = namesTheGroup(clause);
+  const cu = perPersonOnly(clause);
+  const c = withoutTravelTogether(cu);
+  const group = groupSide(cu, c);
   if (NOT_A_TIE_CLAUSE.test(c) || eachOwnClause(c, group)) return false;
+  if (sharesStrongly(c, group)) return true;
   if (livesTogether(c) || (group && sharingWord(c)) || poolsEachPerson(c)) return true;
   // In a clause about travelling, buying or submitting together, a bare "for the family" says whose the trip or the claims
   // are, not that a limit is shared ("Baggage claims for the family must be submitted together." ties nothing; gate round 12).
-  const t = c === clause ? c : c.replace(WEAK_OWNER, " ");
-  return new RegExp(OWNER_TIE.source, "i").test(t) || (TIED_TO_LIVES.test(t) && (namesTheLives(t) || UNIT.test(clause)));
+  const t = c === cu ? c : c.replace(WEAK_OWNER, " ");
+  return new RegExp(OWNER_TIE.source, "i").test(t) || (TIED_TO_LIVES.test(t) && (namesTheLives(t) || unitSide(cu)));
 });
 /** A clause that ties nothing to the lives together: a dispute with us, a cap per event or conveyance, or each person's own limit. */
-const noTieClause = (clause: string) => NOT_A_TIE_CLAUSE.test(clause) || eachOwnClause(clause, namesTheGroup(clause));
+const noTieClause = (clause: string) => NOT_A_TIE_CLAUSE.test(clause) || eachOwnClause(clause, groupSide(perPersonOnly(clause), clause));
 const WEAK_OWNER = /\bfor\s+(?:the|your)\s+(?:famil(?:y|ies)|households?|couples?|group|party)\b/gi;
 const wordAt = (text: string, re: RegExp) => [...text.matchAll(re)].map((m) => text.slice(0, m.index).split(/\s+/).filter(Boolean).length);
 /** Whether the words name the lives taken together ("combined for all insured", "in total for the travellers", "insured
@@ -855,9 +884,9 @@ export function tiesLimitToLives(line: string, open = false): boolean {
 }
 /** A cheap first look: a sentence with none of these words can tie nothing to the lives together, set no family cap and name
  * no shared benefit (every word OWNER_TIE, TOGETHER, LIVES, TIED_TO_LIVES and KEEP_SHAPES need starts here). */
-const TIE_HINT = /(?:once|named|common|out\s+of|draws?\s+on|famil|household|couple|part(?:y|ies)|group|shar|joint|together|combined|total|aggregate|collectiv|pool|every|\ball\b|both|two\s+of\s+you|however|whole|unit|regardless|whatever|travell?er|insured\s+(?:persons|people|lives|members)|not\s+(?:per|for)|same|between|\bone\b|single|certificate|polic|booking|schedule)/i;
+const TIE_HINT = /(?:once|named|common|\bplan\b|companion|multiplied|whoever|no\s+matter|they|their|them|out\s+of|draws?\s+on|famil|household|couple|part(?:y|ies)|group|shar|joint|together|combined|total|aggregate|collectiv|pool|every|\ball\b|both|two\s+of\s+you|however|whole|unit|regardless|whatever|travell?er|insured\s+(?:persons|people|lives|members)|not\s+(?:per|for)|same|between|\bone\b|single|certificate|polic|booking|schedule)/i;
 function tiesInClauses(line: string): boolean {
-  for (const clause of withoutTravelTogether(line).split(/[.;!?](?=\s|$)/)) {
+  for (const clause of withoutTravelTogether(perPersonOnly(line)).split(/[.;!?](?=\s|$)/)) {
     if (noTieClause(clause)) continue;
     // Each person's own limit named in a clause about the lives together, in any shape but the closed family-cap ones: one
     // limit, or some share of one, for all of them (per-person-shared gate round 6).
@@ -1077,11 +1106,17 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
       const isNote = named(l).length ? figures().length > 0 || STRICT_CHANGE.test(line) || FIGURE_CHANGE.test(line)
         : life ? figures().length > 0 || STRICT_CHANGE.test(line) || FIGURE_CHANGE.test(line) || heading
           : FIGURE_CHANGE.test(line) && !(mark && referenced.has(mark) && ownNote(mark, noteText(lines, i)));
-      if (isNote) add(out.lifeNotes, line);
+      // A line giving some lives the same limits as everyone ("Insured persons aged 70 and above have the same limit for
+      // medical expenses") gives them no other figure (gate round 14), unless it also prints a figure or another change.
+      const sameAsAll = life && SAME_FIGURE.test(line) && !OTHER_THAN_SAME.test(line) && !figures().length;
+      if (isNote && !sameAsAll) add(out.lifeNotes, line);
     });
   }
   return out;
 }
+/** The same limits, cover or benefits as everyone; and the words that would still change a figure next to them. */
+const SAME_FIGURE = /\b(?:the\s+)?same\s+(?:\w+\s+)?(?:limits?|cover|benefits?|amounts?|sums?(?:\s+insured)?)\b/i;
+const OTHER_THAN_SAME = /\b(?:half|halved|double[ds]?|reduc\w*|less|lower|higher|only|except|but|not|instead|up\s+to|maximum)\b|%|per\s*cent/i;
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();

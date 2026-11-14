@@ -757,6 +757,46 @@ for (const line of ["One limit covers each insured person and their family.", "E
   test(`gate PPS-13 R13-H1: '${line}' withholds every per-person row`, () =>
     assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), noOne));
 }
+// Per-person-shared gate round 14: strong sharing words (share, jointly, pooled, not multiplied by the number of, however
+// many, once whoever) withhold on their own unless they join benefits, sections or items; weak ones need the group side,
+// which takes in they / their / them with a sharing word, per plan, companions, however many and whoever with a limit or
+// payment word; "the same limit" shares only with a pooling verb. Each sentence follows a valid family-cap note.
+for (const [line, gone] of [
+  ["The limits shown are their combined limit.", EIGHT_NAMES], ["Medical expenses are shared.", ["Overseas medical expenses"]],
+  ["They share the limits shown.", EIGHT_NAMES], ["The limits shown are held jointly.", EIGHT_NAMES],
+  ["The limit shown is not multiplied by the number of insured persons.", EIGHT_NAMES],
+  ["We pay the limit shown once, however many of you claim.", EIGHT_NAMES], ["We pay the limit shown only once, whoever is hurt.", EIGHT_NAMES],
+  ["Limits are per plan.", EIGHT_NAMES], ["Your companions share your limit.", EIGHT_NAMES], ["The limit is per trip, for you and your companions.", EIGHT_NAMES],
+  // The gate's round-14 under-withholding attacks, still withheld.
+  ["You and your spouse share one limit.", EIGHT_NAMES], ["You and your children are covered by one limit.", EIGHT_NAMES],
+  ["The adults and children on this plan share the limits shown.", EIGHT_NAMES], ["Your family members share the limit shown.", EIGHT_NAMES],
+  ["All travellers share one limit.", EIGHT_NAMES], ["The household has one limit.", EIGHT_NAMES], ["Limits are per family.", EIGHT_NAMES],
+  ["Limits are per couple.", EIGHT_NAMES], ["Insured persons collectively are covered up to the limit shown.", EIGHT_NAMES],
+  ["The limits shown apply jointly to you and your spouse.", EIGHT_NAMES], ["This limit is for all of you.", EIGHT_NAMES],
+  ["The limit shown is per policy, whoever is insured.", EIGHT_NAMES], ["Personal liability: one limit per policy.", ["Personal liability"]],
+  ["The limits are per plan, not per person.", EIGHT_NAMES], ["The limits are not for each person.", EIGHT_NAMES],
+  ["Spouse and children share the policyholder's limit.", EIGHT_NAMES], ["Your spouse and children are covered within your limit.", EIGHT_NAMES],
+  ["The limits shown cover you, your spouse and your children together.", EIGHT_NAMES], ["The limit shown covers the whole party.", EIGHT_NAMES],
+  ["All members of the group share the limit shown.", EIGHT_NAMES], ["Dependants are covered within the main insured person's limit.", EIGHT_NAMES],
+  ["Each insured person's claims reduce the limit for the others.", EIGHT_NAMES],
+  ["Personal liability is limited to S$1,000,000 per policy.", ["Personal liability"]], ["The limits shown are per policy.", EIGHT_NAMES]] as [string, string[]][]) {
+  test(`gate PPS-14: '${line}' withholds ${gone.length === EIGHT.length ? "every per-person row" : gone.join(", ")}`, () => {
+    const got = sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] });
+    for (const id of ["a", "b", "k"] as const) for (const b of gone) assert.ok(!got[id].includes(b), `${id} ${b}: ${got[id].join(", ")}`);
+  });
+}
+for (const line of ["Every insured person has the same limits.", "Insured persons aged 70 and above have the same limit for medical expenses.",
+  "A single limit applies per insured person per policy.", "Both sections are limited to the amount shown.",
+  "Benefits under this policy are combined for loss and theft.", "Cover is for persons between the ages of 18 and 70.",
+  "The limit shown is for both trip cancellation and curtailment.", "Whoever claims must provide receipts.", "No matter who claims, receipts are required.",
+  "Excess: S$100 per policy.", "The limits apply per policy period.", "The limits apply per policy year.", "The limits apply for the whole policy period.",
+  "Benefits under this certificate are paid once the claim is approved.", "One limit applies to this policy for each insured person.",
+  "Cover under one policy may include up to 10 insured persons.", "Each named person has their own limit.", "All named persons are covered for the limits shown.",
+  "The combined limit for cancellation and curtailment is shown above.", "The limit is shared between trip cancellation and curtailment.",
+  "Hotel rooms shared with a travel companion are covered.", "Search and rescue costs are shared with other rescued parties."]) {
+  test(`gate PPS-14: '${line}' keeps every per-person row`, () =>
+    assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),
