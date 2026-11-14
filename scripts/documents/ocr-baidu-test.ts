@@ -766,6 +766,31 @@ async function main() {
   // 10. Markdown clean-up keeps every figure exactly.
   assert.equal(bd.baiduMarkdownToText("# Title\n\n<div style=\"text-align: center;\">Policy No. <b>SYN-1</b></div>\n\nSum &lt;S$1,000&gt; &amp; 25%"), "Title\n\nPolicy No. SYN-1\n\nSum <S$1,000> & 25%");
 
+  // 11. A label and its value printed side by side (two layout blocks, two Markdown paragraphs) go back on one line.
+  {
+    const blk = (content: string, bbox: number[], label = "text") => ({ block_label: label, block_content: content, block_bbox: bbox });
+    const md = "Policy Schedule\n\nSum Insured\n\nUSD 980,000\n\nAnnual premium\n\nUSD 9,000";
+    const list = [blk("Policy Schedule", [76, 76, 300, 124], "paragraph_title"), blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372]),
+      blk("Annual premium", [89, 390, 263, 418]), blk("USD 9,000", [451, 389, 556, 414])];
+    const r = bd.sameRowPairsJoined(list, md);
+    assert.equal(r.joined, 2);
+    assert.equal(r.text, "Policy Schedule\n\nSum Insured\tUSD 980,000\n\nAnnual premium\tUSD 9,000");
+    // Through the result parser too, with the layout list Baidu returns.
+    const jsonl = JSON.stringify({ result: { layoutParsingResults: [{ markdown: { text: md }, prunedResult: { parsing_res_list: list } }] } });
+    assert.equal(bd.baiduPagesFromJsonl(jsonl, "PaddleOCR-VL-1.6")[0], r.text);
+    // Negative controls: a block below (not beside), a value to the left, two columns of running text (many lines),
+    // a long label, a block that is not plain text, and paragraphs that are not each a whole block: nothing joined.
+    const keep = (l: unknown[], t: string) => assert.deepEqual(bd.sameRowPairsJoined(l, t), { text: t, joined: 0 });
+    keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [89, 390, 210, 416])], "Sum Insured\n\nUSD 980,000");
+    keep([blk("Sum Insured", [451, 348, 580, 375]), blk("USD 980,000", [89, 347, 210, 372])], "Sum Insured\n\nUSD 980,000");
+    keep([blk("We will pay the costs incurred\nwithin 30 days of the Accident", [56, 300, 290, 400]), blk("The Insurer may refuse any loss\narising from war for the Insured", [305, 300, 540, 400])],
+      "We will pay the costs incurred\nwithin 30 days of the Accident\n\nThe Insurer may refuse any loss\narising from war for the Insured");
+    keep([blk("Total sum insured for all named persons on this policy", [89, 348, 400, 375]), blk("USD 980,000", [451, 347, 577, 372])], "Total sum insured for all named persons on this policy\n\nUSD 980,000");
+    keep([blk("Sum Insured", [89, 348, 222, 375], "paragraph_title"), blk("USD 980,000", [451, 347, 577, 372])], "Sum Insured\n\nUSD 980,000");
+    keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372])], "Sum Insured USD 980,000 and more");
+    keep([], "Sum Insured\n\nUSD 980,000");
+  }
+
   console.log("DearPolicy Baidu PaddleOCR (mocked contract): request shape, token handling, polling, result parsing, per-page, weak-page and whole-job fallback to the AI reader, ledger row, verified provenance, result-host allow-list, function deadline, cache only of full readings, no cap on reading, not-read marking, switch-off, ledger fail-closed, signed-link submit with staged copy removal, connection retry only before anything is sent, background reading that waits for Baidu instead of handing pages to the AI reader -- passed. Live Baidu behaviour is NOT covered by this test.");
 }
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });

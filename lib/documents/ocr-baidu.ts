@@ -47,7 +47,7 @@ const OCR_MODELS = new Set(["PP-OCRv5", "PP-OCRv5-latin", "PP-OCRv6"]);
 // was submitted with (BAIDU_IDENTITY_EXCEPTION), so an alias is refused before anything is sent.
 const DOC_MODELS = new Set(["PP-StructureV3", "PaddleOCR-VL-1.5", "PaddleOCR-VL-1.6"]);
 /** Bumped whenever the way a Baidu result is turned into page text changes, so an older cached reading is not reused. */
-const TEXT_VERSION = "baidu-md-v6"; // v4: headers, footers and footnotes kept (#441); v5: blocks only in the layout list added; v6: read again once so each page logs its layout list
+const TEXT_VERSION = "baidu-md-v7"; // v4: headers, footers and footnotes kept (#441); v5: blocks only in the layout list added; v6: read again once so each page logs its layout list; v7: a label and its value printed side by side put back on one line
 
 type Env = NodeJS.ProcessEnv;
 const intEnv = (v: string | undefined, fallback: number, min: number, max: number) => {
@@ -464,6 +464,45 @@ export function layoutSummary(list: unknown): string {
   return `${list.length} block${list.length === 1 ? "" : "s"}${parts.length ? `: ${parts.join(", ")}` : ""}`;
 }
 
+/** A schedule's label and its value printed side by side ("Sum Insured    USD 980,000") come back from Baidu's document
+ * models as two layout blocks, and so as two paragraphs of the Markdown (14 Nov 2026, OCR proof run on made-up wordings:
+ * 10 of 16 schedule pages). The checks downstream look for a figure on its label's own line (check.ts: "the page's one sum
+ * insured line"), so the sum insured and premium were dropped although both were read. This puts each such pair back on
+ * one line, TAB between, from Baidu's own boxes. Only two plain text blocks next to each other in the layout list, each a
+ * short single line (label up to 40 characters, value up to 80), the value to the right of the label and sharing most of
+ * its height, and each standing as a whole paragraph of its own, one straight after the other in the text: running text in
+ * two columns (a column's block is many lines) is never joined. Nothing is added, dropped or reworded. */
+export function sameRowPairsJoined(list: unknown, text: string): { text: string; joined: number } {
+  const none = { text, joined: 0 };
+  if (!Array.isArray(list) || !text) return none;
+  type Box = { key: string; x1: number; y1: number; x2: number; y2: number; len: number };
+  const boxes: (Box | null)[] = list.map((block) => {
+    const b = (block ?? {}) as { block_label?: unknown; block_content?: unknown; block_bbox?: unknown };
+    const bb = b.block_bbox;
+    if (b.block_label !== "text" || typeof b.block_content !== "string" || /\n/.test(b.block_content.trim())) return null;
+    if (!Array.isArray(bb) || bb.length !== 4 || !bb.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
+    const clean = baiduMarkdownToText(b.block_content);
+    const [x1, y1, x2, y2] = bb as number[];
+    return x2 > x1 && y2 > y1 ? { key: blockKey(clean), x1, y1, x2, y2, len: clean.length } : null;
+  });
+  const paras = text.split(/\n{2,}/);
+  const keys = paras.map(blockKey);
+  let joined = 0;
+  for (let i = 0; i + 1 < boxes.length; i++) {
+    const a = boxes[i], b = boxes[i + 1];
+    if (!a || !b || !a.key || !b.key || a.len > 40 || b.len > 80) continue;
+    const ha = a.y2 - a.y1, hb = b.y2 - b.y1, overlap = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1);
+    // One line each (neither more than about twice the other's height), side by side, the value to the right.
+    if (ha > 2 * hb || hb > 2 * ha || overlap < 0.6 * Math.min(ha, hb) || b.x1 <= a.x2) continue;
+    const k = keys.findIndex((x, n) => x === a.key && keys[n + 1] === b.key);
+    if (k < 0) continue;
+    paras.splice(k, 2, `${paras[k].trim()}\t${paras[k + 1].trim()}`);
+    keys.splice(k, 2, a.key + b.key);
+    joined++;
+  }
+  return joined ? { text: paras.join("\n\n"), joined } : none;
+}
+
 /** Each page's text, in page order, from the result JSONL. `pageNumbers` are the document's own numbers of the pages the
  * job held, in order, so a log names the document page; without them a log names the page's place in the job. */
 export function baiduPagesFromJsonl(jsonl: string, model: string, pageNumbers?: number[]): string[] {
@@ -496,7 +535,9 @@ export function baiduPagesFromJsonl(jsonl: string, model: string, pageNumbers?: 
           // Fixed words and Baidu's own layout labels only: never a block's text.
           console.warn(`[baidu-ocr] ${pageName(pages.length)}: ${missing.added} block(s) not in Baidu's Markdown added from its layout list (labels: ${missing.labels.join(", ")})`);
         }
-        pages.push(missing.text);
+        const joined = sameRowPairsJoined(list, missing.text);
+        if (joined.joined) console.info(`[baidu-ocr] ${pageName(pages.length)}: ${joined.joined} label/value pair(s) printed side by side put back on one line`);
+        pages.push(joined.text);
       }
     }
   }
