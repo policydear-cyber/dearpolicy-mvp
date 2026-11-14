@@ -1775,12 +1775,15 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // the reader read it under (columnCell), the figure must be printed in that column's own cell, not a neighbour's
     // ("Trip cancellation\t50%" read under Mary Tan, whose cell is 100%: TE #481 W1). With no header naming the column,
     // a quote found as printed keeps main's reading.
+    // A quote over several lines (a row whose cells wrap, found by wrappedRow) is held to its first line's header the
+    // same way: the figure must be in that column's cell on one of its lines of the same width (Critic merge look on #481).
     if (value != null && str(b.column)) {
       const span = placed.get(source), text = pageText(source.page);
-      if (span && !text.slice(span.start, span.end).includes("\n")) {
-        const lineStart = text.lastIndexOf("\n", span.start - 1) + 1, cells = text.slice(lineStart, lineEndAt(text, lineStart)).split("\t");
-        const col = columnCell(text, lineStart, cells.length, str(b.column));
-        if (col != null && !printsNumber(cellsApart(cells[col]), value)) {
+      if (span) {
+        const lineStart = text.lastIndexOf("\n", span.start - 1) + 1, width = text.slice(lineStart, lineEndAt(text, lineStart)).split("\t").length;
+        const col = columnCell(text, lineStart, width, str(b.column));
+        const rows = text.slice(lineStart, lineEndAt(text, Math.max(span.end - 1, lineStart))).split("\n").map((l) => l.split("\t")).filter((c) => c.length === width);
+        if (col != null && !rows.some((c) => printsNumber(cellsApart(c[col]), value!))) {
           out.dropped.push({ what: label, why: `figure ${value} is not in the ${str(b.column)} column's own cell` }); continue;
         }
       }

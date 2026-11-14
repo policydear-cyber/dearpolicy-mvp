@@ -927,6 +927,16 @@ test("backfill SQL: inserts only for the account's current policy, never over a 
     assert.equal(at(NOBREAK, "Plan A", 200000, "Hospital\t200,000"), null, "never the earlier table's header");
     assert.equal(at("Benefit\tPlan B\tPlan A\nPart 2\nHospital\t100,000\t200,000", "Plan A", 200000, "Hospital\t200,000"), null, "no header in its own table");
   });
+  test("#481 merge: a wrapped row's figure is kept only from its own column's cell", () => {
+    const text = "Benefit\tPlan A\tPlan B\nHospital cash for each day of\tS$100\tS$200\nstay in a general ward";
+    const at = (column: string, value: number, quote: string) =>
+      checkReading({ id: "w", name: "Plans.pdf", readable: true, pages: [{ page: 2, text }] }, doc("policy_wording", [], [benefit({ benefit: "Hospital cash", column, pays: "amount", value, quote, page: 2 })])).benefits[0]?.value ?? null;
+    for (const quote of ["Hospital cash for each day of\nstay in a general ward\tS$100\tS$200", "Hospital cash for each day of stay in a general ward\tS$100\tS$200"]) {
+      assert.equal(at("Plan A", 200, quote), null, "Plan B's S$200 is not Plan A's: " + quote);
+      assert.equal(at("Plan B", 200, quote), 200, quote);
+      assert.equal(at("Plan A", 100, quote), 100, quote);
+    }
+  });
   test("plan percentages with no column, or a quote over two rows, still give no figure", () => {
     const noCol = one({ benefit: "Missed connection", pays: "percent", value: 20, quote: "Missed connection\t30%\t20%\tS$500\tNot covered" });
     assert.equal(noCol.benefits[0]?.value ?? null, null);
