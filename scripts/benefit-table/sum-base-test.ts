@@ -90,7 +90,7 @@ test("A control: another sum, a kind of life, a reduction or a name left off the
     ["Fracture\t50% of the benefit amount", 50], ["TPD\t100% of the death sum assured", 100], ["Rider\t20% of the rider sum assured", 20],
     ["Early CI\t20% of the Basic Plan Sum Assured", 20], ["Death\t100% of the sum at risk", 100], ["Death\t100% of the insured amount", 100],
     ["Burns\t10%", 10], ["Burns\t10% of the Sum Covered of the basic plan", 10], ["Burns\t10% of the Sum Covered per insured child", 10],
-    ["Burns\t20% of the Sum Covered", 10],
+    ["Burns\t20% of the Sum Covered", 10], ["Carcinoma in situ\t25% of Basic Coverage Amount", 25], ["Death\t100% of the basic face amount", 100],
   ] as const) assert.equal(headlineSumShare(row, pct), false, row);
 });
 

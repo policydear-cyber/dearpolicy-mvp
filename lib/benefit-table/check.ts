@@ -623,7 +623,8 @@ const SPELLED_PERCENT = /^\(\s*[\p{L}\s-]*\bper\s*cent\s*\)\s*/iu;
  * amount was shown although the certificate prints its Sum Covered). Each name, and why it is here:
  * - "sum insured", "sum assured": the general and life-insurance names of the plan's own sum;
  * - "sum covered": the takaful name for the same sum (a takaful certificate covers, it does not insure or assure);
- * - "basic"/"base" before any of them: the basic plan's own sum (a rider's row naming it is refused in assemble.ts);
+ * - "basic"/"base" before those three: the basic plan's own sum (a rider's row naming it is refused in assemble.ts); never
+ *   before the names below ("Basic Coverage Amount" stays as the reading had it);
  * - "face amount": the life-insurance name of the policy's own death sum, printed on its face;
  * - "coverage amount": the plan's own amount of cover;
  * - Malay "jumlah diinsuranskan" (sum insured) and "jumlah dilindungi" (sum covered), as printed on Malaysian documents.
@@ -634,7 +635,7 @@ const SPELLED_PERCENT = /^\(\s*[\p{L}\s-]*\bper\s*cent\s*\)\s*/iu;
  * "payable ..."): "the sum covered under the rider", "for each child", "of the basic plan" name another sum. A row that
  * takes something off the share ("less any early-stage amount already paid", "minus", "net of", "reduced") is left as
  * the reading had it: what it pays is not the share. */
-const HEADLINE_SUM = /^(?:(?:the|your|its)\s+)?(?:(?:basic|base)\s+)?(?:sum\s+(?:insured|assured|covered)|face\s+amount|coverage\s+amount|jumlah\s+(?:diinsuranskan|dilindungi))(?=\s*$|\s*[,.;)]|\s+(?:up\s+to|subject\s+to|payable|paid|whichever|once|to\s+a\s+maximum|in\s+(?:one|a)\s+lump\s+sum|as\s+a\s+lump\s+sum)\b)/iu;
+const HEADLINE_SUM = /^(?:(?:the|your|its)\s+)?(?:(?:(?:basic|base)\s+)?sum\s+(?:insured|assured|covered)|face\s+amount|coverage\s+amount|jumlah\s+(?:diinsuranskan|dilindungi))(?=\s*$|\s*[,.;)]|\s+(?:up\s+to|subject\s+to|payable|paid|whichever|once|to\s+a\s+maximum|in\s+(?:one|a)\s+lump\s+sum|as\s+a\s+lump\s+sum)\b)/iu;
 const TAKES_OFF = /\b(?:less|minus|deduct\w*|reduc\w*|net\s+of|after\s+deducting)\b/i;
 /** Whether a row whose reading did not settle its percentage's base prints every percentage equal to `value` as a share
  * "of" the policy's own headline sum (HEADLINE_SUM), and names no kind of life (a child's or a spouse's share is another
