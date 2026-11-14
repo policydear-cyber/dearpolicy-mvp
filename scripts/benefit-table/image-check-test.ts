@@ -136,14 +136,27 @@ async function main() {
     assert.equal(copyConfirms("25%", 25, money("SGD")), false, "a percentage never confirms money");
     assert.equal(copyConfirms("S$25", 25, pct), false, "money never confirms a percentage");
     assert.equal(copyConfirms("80% up to S$500", 80, pct), true);
-    assert.equal(copyConfirms("80% up to S$500", 500, money("SGD", null)), true, "a cap: the money figure, past the percentage");
+    assert.equal(copyConfirms("80% up to S$500", 500, money("SGD", null)), false, "money is never confirmed by a copy with a percentage (R2-1)");
     assert.equal(copyConfirms("S$200 per day", 200, money("SGD", "day")), true);
     assert.equal(copyConfirms("S$200 per day", 200, money("SGD", "year")), false, "per day is not per year");
     assert.equal(copyConfirms("S$200 per day", 200, money("SGD", "once")), false, "per day is not a lump sum");
     assert.equal(copyConfirms("S$1,000 per year", 1000, money("SGD", "year")), true);
     assert.equal(copyConfirms("S$1,000 half-yearly", 1000, money("SGD", "year")), false, "half-yearly is not yearly");
     assert.equal(copyConfirms("S$150 x 30 days", 30, money("SGD", "once")), false, "another number in the cell is not its amount");
-    assert.equal(copyConfirms("S$150 x 30 days", 150, money("SGD", "once")), true);
+    assert.equal(copyConfirms("S$150 x 30 days", 150, money("SGD", "once")), false, "a multiplier: money is not confirmed");
+    // Critic 2, R485 R2-1: every basis the copy prints must be the figure's own period.
+    assert.equal(copyConfirms("S$500 per visit", 500, money("SGD", "day")), false);
+    assert.equal(copyConfirms("S$5,000 per trip", 5000, money("SGD", "year")), false);
+    assert.equal(copyConfirms("S$1,000 per claim", 1000, money("SGD", "year")), false);
+    assert.equal(copyConfirms("S$1,000 per disability", 1000, money("SGD", "once")), false);
+    assert.equal(copyConfirms("S$3,000 each confinement", 3000, money("SGD", "day")), false);
+    assert.equal(copyConfirms("S$2,000,000 lifetime", 2000000, money("SGD", "year")), false);
+    assert.equal(copyConfirms("S$50,000 per policy year", 50000, money("SGD", "year")), true);
+    assert.equal(copyConfirms("S$3,000 per year", 3000, money("SGD", null)), false, "a cap next to a basis");
+    assert.equal(copyConfirms("2 x Sum Insured", 2, money(null)), false);
+    assert.equal(copyConfirms("200% of S$50,000", 50000, money("SGD")), false);
+    assert.equal(copyConfirms("200% of S$50,000", 200, pct), true);
+    assert.equal(copyConfirms("One hundred thousand dollars (S$100,000)", 100000, money("SGD")), true);
     assert.equal(copyConfirms("S$100 per day (S$50 for children)", 50, money("SGD", "day")), false, "TE2 F1: a second figure in the cell is not its own");
     assert.equal(copyConfirms("S$100 per day (S$50 for children)", 100, money("SGD", "day")), true);
     assert.equal(copyConfirms("$520,000", 520000, money("SGD")), false, "a bare $ never establishes a currency");
@@ -151,15 +164,21 @@ async function main() {
     assert.deepEqual(periodsIn("S$120.50 (monthly)"), ["month"]);
     assert.deepEqual(periodsIn("S$100 a day, up to S$3,000 per year"), ["day", "year"]);
     assert.deepEqual(periodsIn("S$500 per trip"), []);
+    assert.deepEqual(periodsIn("S$50 p.a."), ["year"]);
+    assert.deepEqual(periodsIn("payable daily up to 30 days"), ["day"]);
   });
 
   await test("the question never prints the figure, even when the OCR'd row, column or plan name carries it (Critic 2, R485 H2)", () => {
-    assert.equal(blindWhere('Page 3: the row "Hospital cash S$520 per day", in the column "Plan B (S$520,000)"', 520000), 'Page 3: the row "Hospital cash S$520 per day", in the column "Plan B (S$…)"');
-    assert.equal(blindWhere('Page 3: the row "Hospital cash S$520 per day", in the column "Plan 2"', 520), 'Page 3: the row "Hospital cash S$… per day", in the column "Plan 2"');
-    assert.equal(blindWhere('Page 3: in the column "Plan 1"', 520), 'Page 3: in the column "Plan 1"', "other numbers stay");
+    assert.equal(blindWhere('Page 3: the row "Hospital cash S$520 per day", in the column "Plan B (S$520,000)"', [520000]), 'Page 3: the row "Hospital cash S$520 per day", in the column "Plan B (S$…)"');
+    assert.equal(blindWhere('Page 3: the row "Hospital cash S$520 per day", in the column "Plan 2"', [520]), 'Page 3: the row "Hospital cash S$… per day", in the column "Plan 2"');
+    assert.equal(blindWhere('Page 3: in the column "Plan 1"', [520]), 'Page 3: in the column "Plan 1"', "other numbers stay");
+    assert.equal(blindWhere('Page 3: the row "Plan 520K", "S$0.52m", "1.5 million"', [520000, 1500000]), 'Page 3: the row "Plan …", "S$…", "…"', "scale words (R2-2)");
     const r = checked();
     const q = imageQuestions([{ ...claimsOf(r)[0], where: 'Page 2: the row "Trip postponement", in the column "Plan S$500"' }]);
     assert.ok(!/500/.test(q));
+    // R2-2: another question in the same call never shows a figure asked in it.
+    const two = imageQuestions([{ ...claimsOf(r)[0], value: 520000, where: 'Page 3: Ann\'s cover "Life", plan "Plan B (S$520,000)"' }, { ...claimsOf(r)[1], value: 100000, where: 'Page 3: the row "Death", in the column "Plan B (S$520,000)"' }]);
+    assert.ok(!/520/.test(two), two);
   });
 
   await test("a figure on a page with no record of its own text layer is checked, never agreed unchecked (Critic 2, R485 N1)", async () => {
@@ -214,12 +233,13 @@ async function main() {
   });
 
   await test("a page with more figures than one call takes is asked in batches", async () => {
-    const lines = Array.from({ length: IMAGE_BATCH + 5 }, (_, i) => `Item ${i + 1}\tS$${(i + 1) * 10}`);
+    // Figures that no label prints (a label number equal to a figure asked in the same call is masked: R2-2).
+    const lines = Array.from({ length: IMAGE_BATCH + 5 }, (_, i) => `Item ${i + 1}\tS$${(i + 1) * 1000}`);
     const doc: SourceDoc = { id: "d2", name: "Long schedule", readable: true, pages: [{ page: 1, text: "Schedule of benefits\n" + lines.join("\n") }] };
     const r = checkReading(doc, { document: { kind: "scheme_terms", product: "Example Group Plan", namedPeople: [], plan: null }, covers: [],
-      benefits: lines.map((l, i) => ({ section: "Schedule of benefits", column: null, benefit: `Item ${i + 1}`, pays: "amount", value: (i + 1) * 10, period: null, basis: null, percentOf: null,
+      benefits: lines.map((l, i) => ({ section: "Schedule of benefits", column: null, benefit: `Item ${i + 1}`, pays: "amount", value: (i + 1) * 1000, period: null, basis: null, percentOf: null,
         baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], page: 1, quote: l })) });
-    const a = checker("first", (q) => `S$${Number(/"Item (\d+)"/.exec(q)?.[1]) * 10}`);
+    const a = checker("first", (q) => `S$${Number(/"Item (\d+)"/.exec(q)?.[1]) * 1000}`);
     const g = await run(r, source([1]), a, checker("second"));
     assert.deepEqual(a.calls.map((c) => [...c.user.matchAll(/<q id=/g)].length), [IMAGE_BATCH, 5]);
     assert.ok(Object.values(g.verdicts).every((v) => v.status === "agreed"));

@@ -61,15 +61,30 @@ export const IMAGE_CHECK_SCHEMA = {
 };
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-/** Where to look, with any number in it that prints the figure masked: the row, column, heading, product and plan names
- * come from the OCR text and can print the figure itself ("Plan B (S$520,000)"), an OCR misread included, which the
- * checker must never be shown (Critic 2, R485 H2). Other numbers stay, so "Plan 1" and "Plan 2" are still told apart. */
-export function blindWhere(where: string, value: number): string {
-  return where.replace(/\d[\d,.]*(?:\s*(?:million|mil|billion|bn|thousand|k|m)\b)?/gi, (tok) => numbersIn(tok).some((n) => Math.abs(n - value) < 0.005) ? "…" : tok);
+/** The values a printed number token can stand for: as read, and with its scale word ("520K", "S$0.52m", "1.5 million"). */
+const SCALES: [RegExp, number][] = [[/^(?:k|thousand)$/i, 1e3], [/^(?:m|mil|million|mn)$/i, 1e6], [/^(?:b|bn|billion)$/i, 1e9]];
+export function tokenValues(tok: string): number[] {
+  const m = /^(\d[\d,.]*)\s*([a-z]*)$/i.exec(tok.trim());
+  const out = numbersIn(tok);
+  if (m) {
+    const base = Number(m[1].replace(/,/g, ""));
+    const scale = SCALES.find(([re]) => re.test(m[2]))?.[1];
+    if (Number.isFinite(base) && scale) out.push(base * scale);
+  }
+  return out;
 }
-/** The questions: where to look and what to copy; never the figure. */
+/** Where to look, with every number masked that prints ANY figure asked in the same call: the row, column, heading,
+ * product and plan names come from the OCR text and can print a figure ("Plan B (S$520,000)"), an OCR misread included,
+ * and a plan column's name repeats in every row of it (Critic 2, R485 H2, R2-2). Other numbers stay, so "Plan 1" and
+ * "Plan 2" are still told apart. */
+export function blindWhere(where: string, values: number[]): string {
+  return where.replace(/\d[\d,.]*(?:\s*(?:million|mil|mn|billion|bn|thousand|k|m|b)\b)?/gi,
+    (tok) => tokenValues(tok).some((n) => values.some((v) => Math.abs(n - v) < 0.005)) ? "…" : tok);
+}
+/** The questions: where to look and what to copy; never a figure asked in the call. */
 export function imageQuestions(claims: Claim[]): string {
-  return `<questions>\n${claims.map((c, i) => `<q id="q${i + 1}">${esc(blindWhere(c.where, c.value))}. Copy ${esc(c.ask)}, exactly as printed.</q>`).join("\n")}\n</questions>`;
+  const values = claims.map((c) => c.value);
+  return `<questions>\n${claims.map((c, i) => `<q id="q${i + 1}">${esc(blindWhere(c.where, values))}. Copy ${esc(c.ask)}, exactly as printed.</q>`).join("\n")}\n</questions>`;
 }
 /** A checker's reply read back to each claim by id: the copied cell, or null (not found, unreadable or malformed). */
 export function readCopies(json: unknown, claims: Claim[]): (string | null)[] {
@@ -104,29 +119,44 @@ function currencies(r: CheckedReading): (string | null)[] {
 }
 
 const PERCENT_TOKEN = /\d[\d,.]*\s*(?:%|per\s?cent\b)/gi;
-/** The periods a copied cell prints (an allow-list of plain wordings). "Half-yearly" is a half year, never also a year. */
-export function periodsIn(copy: string): Per[] {
-  const halfYear = /\bhalf[-\s]?year(?:ly)?\b|\bsemi[-\s]?annual(?:ly)?\b|\b(?:per|a|each|every)\s+half[-\s]year\b/i;
-  const rest = copy.replace(new RegExp(halfYear.source, "gi"), " ");
-  const out: Per[] = [];
-  if (halfYear.test(copy)) out.push("half_year");
-  const words: [RegExp, Per][] = [
-    [/\b(?:per|a|each|every)\s+day\b|\bdaily\b|\/\s*day\b|\bper\s+diem\b/i, "day"],
-    [/\b(?:per|a|each|every)\s+week\b|\bweekly\b|\/\s*week\b/i, "week"],
-    [/\b(?:per|a|each|every)\s+month\b|\bmonthly\b|\/\s*month\b/i, "month"],
-    [/\b(?:per|a|each|every)\s+quarter\b|\bquarterly\b/i, "quarter"],
-    [/\b(?:per|a|each|every)\s+(?:year|annum)\b|\bannual(?:ly)?\b|\byearly\b|\/\s*year\b|\bp\.a\.?(?![a-z])/i, "year"],
-  ];
-  for (const [re, per] of words) if (re.test(rest)) out.push(per);
+/** The bases a copied cell prints, each mapped to a period, or "other" for a basis no period here can hold ("per visit",
+ * "each confinement", "lifetime", "aggregate"). An allow-list: a basis word that is not a known period is "other". */
+export function basesIn(copy: string): (Per | "other")[] {
+  const out: (Per | "other")[] = [];
+  const text = copy.toLowerCase();
+  const named = (w: string): Per | "other" => {
+    const x = w.replace(/^(?:policy|calendar|insured|benefit|cover|contract)\s+/, "").trim();
+    if (/^days?$/.test(x)) return "day";
+    if (/^weeks?$/.test(x)) return "week";
+    if (/^months?$/.test(x)) return "month";
+    if (/^quarters?$/.test(x)) return "quarter";
+    if (/^half[-\s]?years?$/.test(x)) return "half_year";
+    if (/^(?:years?|annum)$/.test(x)) return "year";
+    return "other";
+  };
+  for (const m of text.matchAll(/\b(?:per|each|every|a|an)\s+((?:(?:policy|calendar|insured|benefit|cover|contract)\s+)?(?:half[-\s]year|[a-z]+))/g)) out.push(named(m[1]));
+  for (const m of text.matchAll(/\/\s*(day|week|month|year)\b/g)) out.push(named(m[1]));
+  if (/\bhalf[-\s]?yearly\b|\bsemi[-\s]?annual(?:ly)?\b/.test(text)) out.push("half_year");
+  const rest = text.replace(/\bhalf[-\s]?yearly\b|\bsemi[-\s]?annual(?:ly)?\b/g, " ");
+  if (/\bdaily\b|\bper\s+diem\b/.test(rest)) out.push("day");
+  if (/\bweekly\b/.test(rest)) out.push("week");
+  if (/\bmonthly\b/.test(rest)) out.push("month");
+  if (/\bquarterly\b/.test(rest)) out.push("quarter");
+  if (/\bannual(?:ly)?\b|\byearly\b|\bp\.\s?a\.?(?![a-z])/.test(rest)) out.push("year");
+  if (/\blifetime\b|\bfor\s+life\b|\bin\s+total\b|\baggregate\b/.test(rest)) out.push("other");
   return out;
 }
+/** The periods a copied cell prints that map to one (see basesIn). */
+export const periodsIn = (copy: string): Per[] => [...new Set(basesIn(copy).filter((b): b is Per => b !== "other"))];
+const MULTIPLIER = /\d\s*(?:x|×|times)(?![a-z])|(?:^|[^a-z])(?:x|×)\s*\d/i;
 
-/** Whether a copy of the cell confirms the figure (an allow-list; Critic 2, R485 H1):
+/** Whether a copy of the cell confirms the figure (an allow-list; Critic 2, R485 H1 and R2-1, TE2 F1):
  * - the copy's OWN amount is the figure: for a percentage, the first figure printed with "%"; for money, the first figure
- *   printed without one. Another number in the cell ("S$150 x 30 days": 30) confirms nothing;
- * - a percentage is never confirmed by a money copy, nor money by a percentage copy;
- * - a period the copy prints ("per day", "yearly") must be the figure's own; money with no period of its own (a cap) is
- *   confirmed whatever the cell prints after it;
+ *   in the cell. Another number in the cell confirms nothing ("S$100 per day (S$50 for children)": not 50);
+ * - money is never confirmed by a copy that also prints a percentage or a multiplier ("200% of S$50,000", "2 x Sum
+ *   Insured", "S$150 x 30 days"), nor a percentage by a copy with no "%";
+ * - every basis the copy prints ("per day", "yearly", "per visit", "lifetime") must be the figure's own period: a basis no
+ *   period can hold, or money with no period of its own (a cap, a lump sum) next to any basis, is not confirmed;
  * - the copy names no other currency, and a bare "$" (which never establishes a currency) does not confirm a figure read
  *   in one. A copy that names a currency the reading does not know confirms the number only: the table keeps the currency
  *   it had (none, when it had none). */
@@ -134,11 +164,12 @@ export function copyConfirms(copy: string | null, value: number, facts: ClaimFac
   if (copy == null) return false;
   const percents = [...copy.matchAll(PERCENT_TOKEN)].map((m) => m[0]);
   const percent = facts.per === "percent";
-  const own = percent ? (percents.length ? numbersIn(percents[0])[0] : undefined) : numbersIn(copy.replace(PERCENT_TOKEN, " "))[0];
+  if (!percent && (percents.length || MULTIPLIER.test(copy))) return false;
+  const own = percent ? (percents.length ? numbersIn(percents[0])[0] : undefined) : numbersIn(copy)[0];
   if (own == null || Math.abs(own - value) >= 0.005 || !printsNumber(copy, value)) return false;
-  if (!percent && facts.per != null) {
-    const periods = periodsIn(copy);
-    if (periods.length && !periods.includes(facts.per)) return false;
+  if (!percent) {
+    const bases = basesIn(copy);
+    if (bases.length && (facts.per == null || facts.per === "once" || bases.some((b) => b !== facts.per))) return false;
   }
   const named = statedCurrencyCode(copy);
   if (named && facts.currency && named !== facts.currency) return false;
