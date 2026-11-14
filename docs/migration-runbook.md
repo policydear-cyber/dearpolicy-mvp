@@ -7,7 +7,7 @@ Nothing here has been run against any live database. Placeholders look like `<LI
 
 - Apply to **staging first**, run every check in sections 5-7 there, and only then schedule production.
 - Apply migrations **before** deploying the application build that needs them. The app lazily re-applies `claim-evidence.sql`, `critical-illness.sql`, `disability.sql` and `claim-reviewers.sql` at runtime (`lib/claims/evidence/*schema.ts`, `lib/claims/reviewers/schema.ts`). If those tables were created that way *after* `household-rls.sql` ran, they would carry Supabase's default grants and none of the household guards.
-- Do **not** use `npm run db:setup` for staging or production. `scripts/setup-db.ts` is a local-development helper: it omits `model-provenance.sql`, `rate-limit.sql`, `background-jobs.sql`, `infrastructure-rls.sql` and `storage-rls.sql`.
+- Do **not** use `npm run db:setup` for staging or production. `scripts/setup-db.ts` is a local-development helper: it omits `storage-rls.sql` (which needs Supabase Storage) and has no production safeguards.
 - Run each file with `psql -v ON_ERROR_STOP=1 --single-transaction -f <file>`, one file per invocation. None of the files contains its own `BEGIN`/`COMMIT`, `CREATE INDEX CONCURRENTLY` or `ALTER TYPE ... ADD VALUE`, so each file can be applied atomically: it either fully applies or rolls back.
 - Connect as the Supabase `postgres` role (the table owner). Do not apply migrations as `authenticated`, `anon` or `service_role`.
 
