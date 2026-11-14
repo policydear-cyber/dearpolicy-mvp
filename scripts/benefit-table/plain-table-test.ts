@@ -425,8 +425,7 @@ test("gate PPS-3: a cell carried on to the next line ('per family') is still the
   const got = sixWith({ under: ["per family"] });
   for (const id of ["a", "b", "k"]) assert.ok(!got[id].includes("Personal liability"), `${id}: ${got[id]}`);
 });
-for (const line of ["For Family Plan, the most we pay for all insured persons combined is twice the limit shown.", "For Family Plan, baggage and travel delay limits are 200% of the individual limit for the whole family.",
-  "Family plan maximum: 2 times the per insured person limit, in aggregate.", "Couple plans: the limits shown apply to each insured person, up to three times the limit shown for all insured persons together."]) {
+for (const line of ["For Family Plan, the most we pay for all insured persons combined is twice the limit shown.", "Family plan maximum: 2 times the per insured person limit, in aggregate."]) {
   test(`gate PPS-3: the family-plan multiple '${line}' keeps each person's rows, with the note as each row's condition`, () => {
     const t = perPersonTable({ rows: SIX, extra: [line] });
     for (const id of ["a", "b", "k"]) {
@@ -486,6 +485,38 @@ test("gate PPS-5: the chat's sentence for a per-person row says 'per insured per
   assert.equal(qualifierText("per insured"), "per insured person");
   assert.equal(qualifierText("child"), "for child");
 });
+// Per-person-shared gate round 6: a family cap keeps each person's rows only when the whole line is one of the closed shapes
+// (check.ts KEEP_SHAPES); any other line naming each person's own limit about the lives together withholds. The two round-3
+// notes that name benefits or say more than the cap now withhold too (stricter than round 3, by design).
+const FP = "For Family Plan, the most we pay for the whole family is";
+for (const line of ["For Family Plan, baggage and travel delay limits are 200% of the individual limit for the whole family.",
+  "Couple plans: the limits shown apply to each insured person, up to three times the limit shown for all insured persons together.",
+  `${FP} the lesser of twice the individual limit and the limit shown.`, `${FP} the individual limit, or twice the individual limit for medical expenses.`,
+  `${FP} twice the individual limit for baggage and the individual limit for all other benefits.`, `${FP} up to twice the individual limit for single-trip plans and the limit shown for annual plans.`,
+  "Unlike the old plan, which paid twice the individual limit, the whole family now shares the limit shown.",
+  "The family limit, formerly twice the individual limit, is now the limit shown for the whole family.",
+  "For Family Plan, all insured persons combined are covered up to the limit shown, which is twice the individual limit.",
+  `${FP} the limit shown and not, as before, twice the limit shown.`, `${FP} up to twice the individual limit but not for personal liability, which is shared.`,
+  `${FP} twice the individual limit, subject to a maximum of 100,000 dollars.`, `${FP} twice the individual limit, subject to the overall maximum in the Schedule.`,
+  "For Family Plan, the premium is S$300 and the limit shown applies to the whole family.", "For Family Plan, the premium is payable monthly and the limit shown applies to the whole family.",
+  "For Family Plan, the whole family shares the individual limit, which is twice the limit shown.", `${FP} twice the individual limit for medical expenses only.`,
+  `${FP} twice the limit shown - not the individual limit.`, "We will not pay more than twice the individual limit for the whole family."]) {
+  test(`gate PPS-6: '${line}' is no closed family-cap shape and withholds every per-person limit`, () => assert.deepEqual(sixWith({ extra: [line] }), noOne));
+}
+for (const line of ["For Family Plan, the most we will pay for all the insured persons in aggregate is three times the individual limit.", "For Family Plan, 2 times the individual limit for all insured persons combined.",
+  "Twice the limit shown for the whole family.", "Couple plan maximum: 150% of the individual limit."]) {
+  test(`gate PPS-6: the closed family-cap shape '${line}' keeps each person's rows with the note`, () => {
+    const t = perPersonTable({ rows: SIX, extra: [line] });
+    for (const id of ["a", "b", "k"]) {
+      const rows = t.people.find((p) => p.id === id)!.rows.filter((x) => x.figure.kind !== "none");
+      assert.deepEqual(rows.map((x) => x.benefit), SIX_NAMES, id);
+      for (const x of rows) assert.ok(x.conditions.includes(line), `${id} ${x.benefit}`);
+    }
+  });
+}
+for (const line of ["For Family Plan, the most we pay for the whole family is 1 times the individual limit.", "Couple plan maximum: 100% of the individual limit."]) {
+  test(`gate PPS-6: the closed shape with a multiple of 1 ('${line}') withholds`, () => assert.deepEqual(sixWith({ extra: [line] }), noOne));
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),
