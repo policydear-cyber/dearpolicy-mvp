@@ -952,10 +952,26 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
     let m: RegExpExecArray | null;
     if ((m = new RegExp(`^${L}\\s*:\\s*${PP}$`, "i").exec(t))) return isRowLabel(m[1]);
     if ((m = new RegExp(`^${PP}\\s+for\\s+${L}$`, "i").exec(t))) return isRowLabel(m[1]);
+    // The rest as each person's own: "all other limits are per person", "each person has their own limits for the rest"
+    // (gate round 23).
+    const REST = String.raw`(?:(?:all\s+)?(?:the\s+)?other\s+(?:limits|benefits|sections|cover)|everything\s+else|the\s+rest)`;
+    if (new RegExp(String.raw`^${REST}\s+(?:is|are|apply)\s+${PP}$`, "i").test(t)) return true;
+    if (new RegExp(String.raw`^each\s+(?:insured\s+)?person\s+has\s+(?:their|his\s+or\s+her|his|her)\s+own\s+limits?\s+for\s+${REST}$`, "i").test(t)) return true;
     if ((m = new RegExp(String.raw`^each\s+(?:insured\s+)?person\s+has\s+(?:their|his\s+or\s+her|his|her)\s+own\s+limits?(?:\s+for\s+${L})?$`, "i").exec(t))) return !m[1] || isRowLabel(m[1]);
     if ((m = new RegExp(String.raw`^${L}\s+(?:limits?\s+)?apply\s+${PP}$`, "i").exec(t))) return isRowLabel(m[1]);
     if ((m = new RegExp(String.raw`^${L}\s+(?:is|are)\s+${PP}$`, "i").exec(t))) return isRowLabel(m[1]);
     return false;
+  };
+  /** A ";" part that says something of its own subject: row labels or whole-table words, then ":" or is / are / apply
+   * ("Medical expenses are shared", "everything else: shared"), or each person's own limit. A part with no subject ("up to
+   * S$3,000 for the family", "but no more than ...", "together the family can claim ...") qualifies the part before it
+   * (gate round 23). */
+  const ownSubject = (part: string) => {
+    if (eachOwnPart(part)) return true;
+    const m = /^\s*([A-Za-z][A-Za-z ,'-]*?)\s*(?::|\b(?:is|are|apply)\b)/i.exec(part);
+    if (!m) return false;
+    const label = m[1].replace(/^(?:the|your|our)\s+/i, "");
+    return isRowLabel(label) || WHOLE_TABLE.test(label) || /^(?:all\s+)?(?:the\s+)?(?:other\s+)?(?:limits?|benefits?|cover|sections?)$/i.test(label);
   };
   /** One note, or one ";" part of a note, judged. */
   const judge = (text: string, tied: boolean) => {
@@ -983,6 +999,8 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
     }
     // "Medical expenses are shared with baggage.": shared with a benefit, never an outsider ("with the rental company"):
     // every row (gate round 19).
+    // "The family shares the rest / everything else / all other limits": every row (gate round 23).
+    if (/\bshar(?:e|es|ing)\s+(?:the\s+rest|the\s+remainder|everything(?:\s+else)?|(?:all\s+)?(?:the\s+)?others?\b|all\s+(?:the\s+)?(?:other|remaining)\b|the\s+remaining\b)/i.test(text) && !PREMIUM.test(text)) { out.all = true; return; }
     const withWhat = /\b(?:is|are)\s+(?:shared|pooled)\s+with\s+(.+)$/i.exec(text)?.[1];
     if (withWhat && !PREMIUM.test(text) && (rowsNamed(withWhat, false).size || stems(withWhat).some((w) => DISTINCTIVE.has(w)))) { out.all = true; return; }
     const named = rowsNamed(text, lives);
@@ -998,7 +1016,8 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
     // the note is judged without it (gate rounds 21, 22).
     const parts = text.split(";");
     const kept = parts.filter((x) => !eachOwnPart(x));
-    if (parts.length < 2 || kept.length === parts.length) { judge(text, tied); continue; }
+    // Only when every other part has its own subject: else the each-own part is qualified by what follows it (gate round 23).
+    if (parts.length < 2 || kept.length === parts.length || !kept.every(ownSubject)) { judge(text, tied); continue; }
     if (kept.join("").trim()) judge(`${kept.join(";").trim().replace(/[;,.\s]*$/, "")}.`, tied);
   }
   tiedCache.set(r, out);
@@ -1049,7 +1068,7 @@ const outsiderWith = (text: string) => {
 /** A note with footnote markers ("*", "†", "¹", "(1)", "[2]", "(see note 3)"), invisible characters and curly quotes
  * made plain, before any word or character of it is read (gate round 22). */
 const cleanNote = (t: string) => t.replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, "").replace(/[\u201C\u201D\u201E"]/g, "").replace(/[\u2018\u2019\u201A]/g, "'")
-  .replace(/\(\s*(?:see\s+)?(?:foot)?notes?\s+\w{1,3}\s*\)|\(\s*\d{1,2}\s*\)|\[\s*\d{1,2}\s*\]/gi, " ").replace(/[*\u2020\u2021\u00A7#\u00B6\u00B9\u00B2\u00B3\u2070-\u2079]+/g, "");
+  .replace(/\(\s*(?:see\s+)?(?:foot)?notes?\s+\w{1,3}(?:\s+(?:overleaf|below|above|on\s+page\s+\d{1,3}))?\s*\)|,?\s*see\s+(?:foot)?notes?\s+\w{1,3}\b(?:\s+(?:overleaf|below|above))?|\(\s*\d{1,3}\s*\)|\[\s*\d{1,3}\s*\]|\(\s*[a-z]\s*\)|\(\s*(?:i{1,3}|iv|vi{0,3}|ix|x)\s*\)|\u207D[\u2070\u00B9\u00B2\u00B3\u2074-\u2079]+\u207E|\^\s*\d{1,3}|\u00A7\s*\d{1,3}/gi, " ").replace(/[*\u2020\u2021\u00A7#\u00B6\u00B9\u00B2\u00B3\u2070-\u2079]+/g, "");
 /** Last words of a benefit label too general to name it alone ("Overseas medical expenses" is not named by "expenses"). */
 const GENERIC_LAST_WORD = new Set(["expenses", "expense", "costs", "cost", "benefit", "benefits", "cover", "limit", "limits", "amount", "amounts", "allowance", "payment", "charges", "charge", "fees", "fee"]);
 /** A row label that is a family's or household's own benefit ("Family personal liability", "Household contents"), never

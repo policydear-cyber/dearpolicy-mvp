@@ -943,6 +943,8 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   // its own proof, plainTable a personal_proof): any other document's notes are never read, so its pages are not walked
   // (benefit-table:speed-test: a 360-page household of wordings went from about 0.5 s to 4.8 s when every line was).
   if (reading.kind != null && reading.kind !== "personal_proof") return { tieLines: [], capNotes: [], tiedNotes: [], lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
+  // Invisible characters inside a word ("sha\u00ADred") are no character of it (gate round 23).
+  pages = pages.map((p) => /[\u200B-\u200D\u2060\uFEFF\u00AD]/.test(p.text) ? { ...p, text: p.text.replace(INVISIBLE, "") } : p);
   const own = new Set<string>();
   for (const b of reading.benefits) for (const l of (b.rowText ?? "").split("\n")) if (flat(l)) own.add(flat(l));
   // A row kept as words, whose line was not read around it (a percentage quote holding two percentages): its own table
@@ -1168,7 +1170,9 @@ function noteSentences(text: string): string[] {
 }
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
-const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+const flat = (s: string) => s.replace(INVISIBLE, "").toLowerCase().replace(/\s+/g, " ").trim();
+/** Characters a page may hold inside a word that print nothing (zero-width space, soft hyphen; gate round 23). */
+const INVISIBLE = /[\u200B-\u200D\u2060\uFEFF\u00AD]/g;
 /** The row's words without "limited to" whose object is the row's own percentage: "For an insured child under 18, limited
  * to 25% of the Sum Insured" names the share itself, not a money limit on it, so it never marks the row as capped
  * (TE-ACC-20261113: it left the child's accidental death with "a maximum applies, but it was not captured"). Only "limited
