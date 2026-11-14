@@ -625,8 +625,8 @@ for (const [line, rows, gone] of [
   ["Medical bills are shared by the family.", SIX, ["Overseas medical expenses", "Emergency medical evacuation"]],
   ["Medical treatment is shared by the family.", SIX, ["Overseas medical expenses", "Emergency medical evacuation"]],
   ["Overseas medical expense is shared by the family.", SIX, ["Overseas medical expenses"]],
-  ["Hospital expenses are shared by the family.", SIX, SIX_NAMES],
-  ["Hospital bills are shared by all insured persons.", SIX, SIX_NAMES]] as [string, [string, string, number][], string[]][]) {
+  ["Hospital expenses are shared by the family.", SIX, ["Overseas medical expenses", "Emergency medical evacuation"]],
+  ["Hospital bills are shared by all insured persons.", SIX, ["Overseas medical expenses", "Emergency medical evacuation"]]] as [string, [string, string, number][], string[]][]) {
   test(`gate PPS-10: '${line}' withholds ${gone.length === rows.length ? "every per-person row" : gone.join(", ")}`, () =>
     assert.deepEqual(sixWith({ rows, extra: [line] }), each(rows.map(([b]) => b).filter((b) => !gone.includes(b)))));
 }
@@ -955,6 +955,35 @@ for (const [line, gone] of [
 }
 for (const line of ["Loss and damage are shared.", "Personal money and passport are shared.", "Theft and loss are pooled."]) {
   test(`gate PPS-18 tier 0: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
+}
+// Per-person-shared gate round 19: tier 2 and tier 0 are a closed allow-list over the whole note. Every word, its group
+// phrase out, is a row's label word, a distinctive benefit word, a benefit that is no row, a closed neutral extra, filler or
+// a neutral sentence joined to it; any other word withholds every row. Rows named anywhere in the note are unioned.
+// "Hospital" without "cash" names the medical rows. Each sentence follows a valid family-cap note.
+for (const line of ["Medical expenses are shared, as is baggage.", "Medical expenses are shared along with baggage.", "Medical expenses are shared together with baggage.",
+  "Medical expenses plus baggage are shared.", "Medical expenses are shared with baggage.", "Medical expenses are also shared.",
+  "Medical expenses are shared by the family, as is baggage.", "Medical expenses are shared. Same for personal liability.",
+  "Medical expenses are shared. The same applies to personal liability.", "Medical and related expenses are shared.", "Medical and further expenses are shared.",
+  "Medical and additional expenses are shared.", "Medical and similar expenses are shared.", "Any medical expenses are shared.",
+  "Medical expenses for each trip are shared.", "The whole medical limit is shared.", "The entire medical limit is shared.", "The full medical limit is shared.",
+  "The total medical limit is shared.", "The balance of medical expenses is shared.", "Policy medical limits are shared.", "Certificate medical limits are shared.",
+  "Medical expenses and so on are shared.", "Medical expenses and the like are shared.", "Medical expenses and more are shared.",
+  "Medical expenses and anything else are shared.", "Hospital cash is shared by the family.", "Hospital cash and dental are shared by the family.",
+  "Medical expenses and both sections are shared.", "Medical expenses are shared. Ditto baggage.", "Medical expenses are shared. Personal liability: same."]) {
+  test(`gate PPS-19 tier 1: '${line}' withholds every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), noOne));
+}
+for (const [line, gone] of [
+  ["Medical expenses are shared, and personal liability.", ["Overseas medical expenses", "Personal liability"]],
+  ["Medical expenses are shared, and baggage is shared.", ["Overseas medical expenses", "Loss of baggage", "Baggage delay"]],
+  ["Medical expenses are shared by the family, and personal liability is joint.", ["Overseas medical expenses", "Personal liability"]],
+  ["Medical expenses are shared by the family and personal liability is pooled.", ["Overseas medical expenses", "Personal liability"]],
+  ["Hospital limits are shared.", MED2], ["Hospital treatment is shared.", MED2], ["Hospital expenses are shared.", MED2],
+  ["The cost of medical expenses is shared.", ["Overseas medical expenses"]], ["Medical expenses for children are shared by the family.", ["Overseas medical expenses"]],
+  ["Medical expenses (item no. 3) are shared by the family.", ["Overseas medical expenses"]]] as [string, string[]][]) {
+  test(`gate PPS-19 tier 2: '${line}' withholds ${gone.join(", ")} only`, () => scoped(EIGHT, [CAP_NOTE, line], gone));
+}
+for (const line of ["Hospital cash is shared.", "Hospital cash and dental expenses are shared.", "Legal expenses are shared."]) {
+  test(`gate PPS-19 tier 0: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
 }
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });

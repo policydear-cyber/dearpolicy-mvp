@@ -786,7 +786,16 @@ const STRONG = /\b(?:shared(?!\s+(?:rooms?|wards?|accommodation))|shares?|sharin
 /** Words joining benefits, sections or items, with no person named: the strong word's one excuse. */
 const BENEFIT_JOIN = /\b(?:both\s+(?:sections?|benefits?|parts?|covers?|items?)|sections?\s+\d+(?:\s*,\s*\d+)*\s+(?:and|or|&)\s+(?:sections?\s+)?\d+|(?:section|part)\s+\w+\s+(?:and|or|&)\s+(?:section|part)\s+\w+|parts?\s+[a-z]\s+(?:and|or|&)\s+[a-z]\b|between\s+[\w-]+(?:\s+[\w-]+){0,2}\s+(?:and|or)\s+[\w-]+|for\s+both\s+[\w-]+(?:\s+[\w-]+)?\s+and\s+[\w-]+|(?:combined|shared|pooled)\s+(?:for|between|across)\s+[\w-]+(?:\s+[\w-]+)?\s+(?:and|or)\s+[\w-]+)\b/i;
 const PEOPLE_WORD = /\b(?:you|your|spouse|partners?|child(?:ren)?|adults?|members?|dependants?|parents?|companions?|persons?|people|travell?ers?|they|them|their|we|us|famil(?:y|ies)|households?|couples?|everyone|everybody|insured)\b/i;
-const sharesStrongly = (c: string, group: boolean) => STRONG.test(c) && (group || !BENEFIT_JOIN.test(c) || PEOPLE_WORD.test(c));
+/** The join excuse holds only when the subject of a bare "is / are shared, pooled or joint" is the join alone ("Section 1 and
+ * Section 2 limits are shared."); with more words ("Medical expenses and both sections are shared.") the note is read by
+ * the shared-note rule (gate round 19). */
+const BARE_SHARED = /^(.*?)\b(?:is|are)\s+(?:(?:also|likewise|similarly|equally|still|then)\s+)?(?:shared|pooled|joint)\b(?!\s+(?:between|across|among(?:st)?|for)\b)/i;
+const joinIsMore = (c: string) => {
+  const subject = BARE_SHARED.exec(c)?.[1];
+  if (subject === undefined) return false;
+  return /\w/.test(subject.replace(new RegExp(BENEFIT_JOIN.source, "gi"), " ").replace(/\b(?:the|their|your|limits?|cover|benefits?|sums?(?:\s+insured)?|amounts?)\b/gi, " "));
+};
+const sharesStrongly = (c: string, group: boolean) => STRONG.test(c) && (group || !BENEFIT_JOIN.test(c) || PEOPLE_WORD.test(c) || joinIsMore(c));
 /** The group side of a clause (c: travel-together phrases out; cu: the clause with "per insured person per policy" read as
  * each person's). */
 const groupSide = (cu: string, c: string) => namesTheGroup(cu) || (PRONOUN.test(c) && (sharingWord(c) || STRONG.test(c)));
@@ -1137,7 +1146,7 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
 const SAME_FIGURE = /\b(?:the\s+)?same\s+(?:\w+\s+)?(?:limits?|cover|benefits?|amounts?|sums?(?:\s+insured)?)\b/i;
 const OTHER_THAN_SAME = /\b(?:half|halved|double[ds]?|reduc\w*|less|lower|higher|only|except|but|not|instead|up\s+to|maximum)\b|%|per\s*cent/i;
 /** A sentence that refers back to the one before it, or carries its point on: judged with it (gate round 16). */
-const REFERS_BACK = /^\s*(?:this|these|that|those|it|they|everything|the\s+(?:rest|remainder|others?|same)|all\s+(?:the\s+)?others?|all\s+other|each\s+other|every\s+other|same|so|likewise|similarly|also|as\s+(?:is|are|do|does)|or|and|but|except|unless|other\s+than|apart\s+from)\b|\b(?:too|as\s+well|also|likewise)\b/i;
+const REFERS_BACK = /^\s*(?:this|these|that|those|it|they|everything|the\s+(?:rest|remainder|others?|same)|all\s+(?:the\s+)?others?|all\s+other|each\s+other|every\s+other|same|ditto|so|likewise|similarly|also|as\s+(?:is|are|do|does)|or|and|but|except|unless|other\s+than|apart\s+from)\b|\b(?:too|as\s+well|also|likewise|ditto)\b|:\s*(?:the\s+)?same\b/i;
 /** A sentence saying the rest are each person's: the per-person part, judged on its own (gate round 18). */
 const REST_PER_PERSON = /^\s*(?:the\s+(?:rest|remainder|others?)|all\s+(?:the\s+)?others?|(?:all\s+)?other\s+(?:limits|benefits|sections))\s+(?:apply|are|is)\s+(?:paid\s+)?(?:per|for\s+each|to\s+each)\s+(?:insured\s+)?(?:person|traveller|traveler)\b/i;
 /** Neutral admin sentences that may follow a family-cap sentence on its line without changing it. */
