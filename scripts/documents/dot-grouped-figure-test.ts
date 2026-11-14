@@ -65,6 +65,16 @@ async function main() {
     assert.deepEqual(maskDotGroupedFigures("Effective 12.03.2026, clause 1.2.3", "comma").masked, []);
   });
 
+  test("N7 a figure starting with 0 or a per mille rate stays ($0.125 per mille, S$0.375, 1.250 per mille)", () => {
+    assert.deepEqual(maskDotGroupedFigures("Loading of $0.125 per mille\nrate S$0.375 a year\nCharge 1.250 per mille of S$1,000", "comma").masked, []);
+  });
+  test("N8 dotted references on a line not about money stay (Policy No. 123.456.789, Version 1.200.300)", () => {
+    const page = "Policy No. 123.456.789\nVersion 1.200.300\nCertificate ref 4.567.890";
+    assert.deepEqual(maskDotGroupedFigures(page, "comma").masked, []);
+    // On a line about money, the same shape is marked: a benefit word, or another figure.
+    assert.deepEqual(maskDotGroupedFigures("Overall limit 1.372.820\nHospital\t1.200.300\tS$2,000", "comma").masked, ["1.372.820", "1.200.300"]);
+  });
+
   // The figure check never reads a longer figure as a shorter amount.
   test("F1 S$935.542 is not printed S$935.54 or S$935.542; S$1.372.820 is not S$1.37", () => {
     assert.equal(moneyPrinted("up to S$935.542 in total", 935.54), false);

@@ -74,7 +74,12 @@ const COMMA_GROUPED = /(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?(?![\d]|[.,]\d
 /** Thousands grouped by dots ("1.372.820", "1.372,50"), or a comma decimal ("372,50"): the dot style's own forms. */
 const DOT_STYLE = /(?<![\d.,])(?:\d{1,3}(?:\.\d{3}){2,}(?:,\d{1,2})?|\d{1,3}(?:\.\d{3})+,\d{1,2}|\d+,\d{2})(?![\d]|[.,]\d)/g;
 /** A dot-grouped figure: after a currency mark, one dot group or more; with no mark, two or more. */
-const DOT_FIGURE = new RegExp(String.raw`(${MONEY_MARK}\s?)?(?<![\d.,])(\d{1,3}(?:\.\d{3})+)(?![\d]|[.,]\d|\s*(?:%|per\s*cent))`, "g");
+const DOT_FIGURE = new RegExp(String.raw`(${MONEY_MARK}\s?)?(?<![\d.,])([1-9]\d{0,2}(?:\.\d{3})+)(?![\d]|[.,]\d|\s*(?:%|per\s*(?:cent|mille)|‰))`, "g");
+/** A line about money: a cover, limit or charge word, or another money figure (a currency mark or a comma-grouped
+ * figure). A dot-grouped figure with no currency mark is marked only on such a line, so a dotted reference ("Policy No.
+ * 123.456.789", "Version 1.200.300") stays as printed (Critic #478 L2). An allow-list: a line naming none of these is
+ * left alone. */
+const MONEY_LINE = new RegExp(String.raw`\b(?:limits?|sums?\s+(?:insured|assured)|benefits?|premiums?|cover(?:ed|age)?|amounts?|excess|deductibles?|totals?|maximum|up\s+to|pay(?:s|able|ment)?|reimburse\w*|expenses?|liability|compensation|charges?|fees?|costs?|per\s+(?:day|year|claim|event|person|trip))\b|${MONEY_MARK}\s?\d|\d,\d{3}`, "i");
 
 /** How the document groups thousands, from its own figures: "comma" when comma groups clearly outnumber the dot style's
  * own forms (at least 3 comma-grouped figures and three times as many as dot-style ones), "dot" the other way round,
@@ -92,11 +97,16 @@ export function maskDotGroupedFigures(text: string, style: ReturnType<typeof tho
   const source = String(text ?? "");
   if (style !== "comma") return { text: source, masked: [] };
   const masked: string[] = [];
-  const out = source.replace(DOT_FIGURE, (token: string, mark: string | undefined, figure: string) => {
+  const out = source.replace(DOT_FIGURE, (token: string, mark: string | undefined, figure: string, at: number) => {
     const code = mark?.trim().replace(/\.$/, "");
     const isMark = !!mark && (!/^[A-Z]{3}$/.test(code ?? "") || ISO.has(code!));
     const groups = figure.split(".").length - 1;
-    if (!(isMark || groups >= 2)) return token;
+    if (!isMark) {
+      if (groups < 2) return token;
+      const from = source.lastIndexOf("\n", at - 1) + 1, to = source.indexOf("\n", at);
+      const line = source.slice(from, to < 0 ? undefined : to).replace(token, " ");
+      if (!MONEY_LINE.test(line)) return token;
+    }
     masked.push(token.trim());
     return isMark ? NOT_CHECKED : token.replace(figure, NOT_CHECKED);
   });
