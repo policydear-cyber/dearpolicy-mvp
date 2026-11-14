@@ -197,7 +197,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .alert.error { background: var(--critical-tint); color: var(--critical); border: 1px solid var(--critical-line); }
 .note { margin-top: 12px; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; }
 .field small.error { color: var(--critical); font-size: var(--fs-xs); }
-.empty-card, .empty-row { color: var(--muted); border: 1px dashed var(--line-strong); border-radius: var(--r-md); padding: 20px; font-size: var(--fs-sm); line-height: 1.5; }
+.empty-card, .empty-row { color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-md); padding: 20px; font-size: var(--fs-sm); line-height: 1.5; }
 .status { border-radius: 999px; padding: 3px 8px; background: var(--bg-2); color: var(--ink-2); text-transform: capitalize; font-size: var(--fs-xs); font-weight: 600; }
 .status.ready { background: var(--good-tint); color: var(--good-text); }
 .status.failed { background: var(--critical-tint); color: var(--critical); }
@@ -1542,4 +1542,25 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
   .learn-page .learn-notice, .learn-page .learn-search { max-width: 760px; }
   .learn-article, .learn-terms { max-width: 80ch; }
   .chat-empty { max-width: 720px; }
+}
+
+/* Visual polish pass (Nov 2026): spacing and layout only, no colour-role changes. */
+/* Home "Not found" kinds read as one sentence: inline links, not 44px-tall flex boxes; padding keeps the tap area. */
+.home-not-found .text-link { display: inline; min-height: 0; padding-block: 6px; }
+.home-not-found p { line-height: 1.9; }
+.home-attention + .member-strip { margin-top: 14px; }
+.chat-composer textarea { resize: none; }
+.schedule-controls .field:last-child { flex: 1 1 320px; }
+@media (max-width: 620px) {
+  /* Long names: the title gets its own line, the Coverage/Benefits links sit under it. */
+  .section-heading:has(> .section-links) { flex-wrap: wrap; align-items: flex-start; }
+  .section-heading > .section-links { width: 100%; justify-content: flex-start; }
+  /* Person chips scroll sideways: fade the edge so a clipped name reads as "more this way". */
+  .member-pills { mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%); -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%); padding-right: 24px; }
+}
+@media (max-width: 480px) {
+  /* The ask field gets the full width so its example question isn't cut off; Ask goes underneath. */
+  .home-ask-row { flex-wrap: wrap; }
+  .home-ask-row input { flex-basis: 100%; }
+  .home-ask-row .button { width: 100%; }
 }
