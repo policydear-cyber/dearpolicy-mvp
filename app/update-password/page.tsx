@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { customerMessage } from "@/components/customer-text";
+import { safeInviteNext } from "@/lib/auth/invite-return";
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -24,7 +25,10 @@ export default function UpdatePasswordPage() {
         setError(customerMessage(data.error, "We couldn't change your password. The link may have expired. Ask for a new one from “Forgot your password?” on the sign-in page."));
         return;
       }
-      router.push("/");
+      // An invited person setting their first password goes on to join (lib/auth/invite-return.ts); anyone else, home.
+      let next: string | null = null;
+      try { next = safeInviteNext(new URLSearchParams(window.location.search).get("next")); } catch { /* home */ }
+      router.push(next ?? "/");
       router.refresh();
     } catch {
       setError("We couldn't change your password. Check your connection and try again.");
