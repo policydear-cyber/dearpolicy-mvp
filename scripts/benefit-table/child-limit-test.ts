@@ -160,7 +160,8 @@ test("whom it is for: the person's own line, under the table's columns or after 
   assert.equal(printedLife(["Grace Okafor (DOB 14/06/1984 of policyholder)\tGBP 20,000"], 0, "Grace Okafor").birth, null);
   assert.equal(printedLife(["Grace Okafor, born 14/06/1984 (mother's date)\tGBP 20,000"], 0, "Grace Okafor").birth, null);
   assert.equal(printedLife(["Grace Okafor (DOB 09/04/2017)\tGBP 20,000"], 0, "Grace Okafor").birth, "09/04/2017");
-  assert.equal(printedLife(["Grace Okafor, date of birth 09/04/2017, child of N. Okafor\tGBP 20,000"], 0, "Grace Okafor").birth, "09/04/2017");
+  // Gate R4-H4: after the date only an optional ")" and the end of the cell; anything more is not settled as theirs.
+  assert.equal(printedLife(["Grace Okafor, date of birth 09/04/2017, child of N. Okafor\tGBP 20,000"], 0, "Grace Okafor").birth, null);
   // A blank line or a heading line ends the search.
   assert.deepEqual(printedLife(["Name\tDate of birth\tSum", "", "Tom Lee\t03/05/2015\tGBP 5,000"], 2), { birth: null, relationship: null });
   const day = printedDay("13/11/2026")!;
@@ -359,9 +360,54 @@ test("gate R3-H2: the same label printed twice on a page never takes the child s
   const k = schedule([NGOZI, GRACE], [`3\tAccidental death\t${CELL}`], [ben({ section: "1", benefit: "Accidental death", pays: "percent", value: 100, percentOf: "sum_insured", quote: CELL })]);
   assert.equal(k.rows.find((x) => x.person === GRACE.name)!.childLimit, undefined);
 });
-test("a footnote mark after the label is still the row's own label (gate R3 LOW)", () => {
-  const h = schedule([NGOZI, GRACE], [`1\tAccidental death*\t${CELL}`], [ben({ section: "1", benefit: "Accidental death", pays: "percent", value: 100, percentOf: "sum_insured", quote: CELL })]);
-  assert.deepEqual(ask(h, GRACE.name, /death/, "If Grace died?").amounts, ["£5,000"]);
+test("gate R4-H2: a label carrying a footnote mark gets no child share; its note is never read", () => {
+  for (const [label, note] of [["Accidental death*", "* Not payable for an insured child under 10."],
+    ["Accidental death (a)", "Note (a): for an insured child the death benefit is limited to GBP 3,000."], ["Accidental death†", null]] as const) {
+    const h = schedule([NGOZI, GRACE], [`1\t${label}\t${CELL}`, ...(note ? [note] : [])], [ben({ section: "1", benefit: "Accidental death", pays: "percent", value: 100, percentOf: "sum_insured", quote: CELL })]);
+    assert.equal(h.rows.find((x) => x.person === GRACE.name)!.childLimit, undefined, label);
+    assert.deepEqual(ask(h, GRACE.name, /death/, "If Grace died?").amounts, [], label);
+  }
+});
+test("gate R4-H3: a page note about a child's benefit elsewhere on the page gives no child share", () => {
+  for (const [cell, note] of [[CELL, "Note: for an insured child the death benefit is limited to GBP 3,000."],
+    [CELL, "Children under 16 are covered for death benefit up to GBP 3,000 only."],
+    // The older main bug: the row's own cell with a mark and the child's limit only in a note below.
+    ["100% of the Sum Insured*", "* For an insured child under 18, limited to 25% of the Sum Insured."]] as const) {
+    const h = schedule([NGOZI, DANIEL, GRACE], [`1\tAccidental death\t${cell}`, PTD, note], [
+      ben({ section: "1", benefit: "Accidental death", pays: "percent", value: 100, percentOf: "sum_insured", quote: cell, conditions: cell === CELL ? [CLAUSE] : [] }),
+      ben({ section: "2", benefit: "Permanent total disablement", pays: "percent", value: 100, percentOf: "sum_insured", quote: PTD })]);
+    assert.equal(h.rows.find((x) => x.person === GRACE.name && /death/i.test(x.benefit))!.childLimit, undefined, note);
+    assert.ok(!death(h, GRACE).amounts.length, note);
+    // The row's own share with no child's sentence in its cell: the adults, whose own lines prove they are not children,
+    // keep it (with the child's sentence read in the cell, the row keeps main's behaviour: no amount for anyone).
+    if (cell !== CELL) {
+      assert.deepEqual(death(h, NGOZI).amounts, ["£100,000"], note);
+      assert.deepEqual(death(h, DANIEL).amounts, ["£80,000"], note);
+    }
+  }
+});
+test("gate R4-H1: a header cell mixing words and a figure is a header, never a row: the walk stops there", () => {
+  const four = [P("Ngozi Okafor", "Policyholder", "", "", 100000, ["Ngozi Okafor", "Policyholder", "01/03/2026", "GBP 100,000"]),
+    P("Daniel Okafor", "Spouse", "", "", 80000, ["Daniel Okafor", "Spouse", "01/03/2026", "GBP 80,000"]),
+    P("Grace Okafor", "Child", "", "", 20000, ["Grace Okafor", "Child", "01/03/2026", "GBP 20,000"])];
+  for (const head of ["Insured person\tRelationship\tCover start\tSum Insured (max GBP 250,000)", "Insured person\tRelationship\tCover start (from 01/03/2026)\tSum Insured",
+    "Insured person\tRelationship\tCover start\tSum Insured, up to £1m"]) {
+    const h = family(four, CELL, { header: `Proposer\tOccupation\tDate of birth\tNationality\nNgozi Okafor\tTeacher\t14/06/1984\tBritish\n${head}` });
+    for (const p of four) assert.deepEqual(death(h, p).amounts, [], `${head} ${p.name}`);
+  }
+  // A date-of-birth cell that repeats another date of the line (the cover start) is not read.
+  const lines = ["Insured person\tRelationship\tCover start\tDate of birth\tSum Insured", "Grace Okafor\tChild\t01/03/2026\t01/03/2026\tGBP 20,000"];
+  assert.equal(printedLife(lines, 1, "Grace Okafor").birth, null);
+  assert.equal(printedLife([lines[0], "Grace Okafor\tChild\t01/03/2026\t09/04/2017\tGBP 20,000"], 1, "Grace Okafor").birth, "09/04/2017");
+});
+test("gate R4-H4: a date-of-birth label followed by more words is not the person's", () => {
+  for (const line of ["Grace Okafor, born 14/06/1984; policyholder's date", "Grace Okafor (DOB 14/06/1984), mother's date", "Grace Okafor, date of birth 14/06/1984, see parent"]) {
+    assert.equal(printedLife([`${line}\tGBP 20,000`], 0, "Grace Okafor").birth, null, line);
+    const g = { ...GRACE, line: `${line}\tGBP 20,000` };
+    assert.deepEqual(death(family([NGOZI, g], CELL, { header: "Insured persons" }), g).amounts, [], line);
+  }
+  assert.equal(printedLife(["Grace Okafor (DOB 09/04/2017)\tGBP 20,000"], 0, "Grace Okafor").birth, "09/04/2017");
+  assert.equal(printedLife(["Grace Okafor, born 09/04/2017"], 0, "Grace Okafor").birth, "09/04/2017");
 });
 test("gate L1: a printed date of birth that crosses the age inside the period is said as such, not as 'not printed'", () => {
   const sam = P("Sam Okafor", "Child", "01/12/2008", "GBP 20,000", 20000);

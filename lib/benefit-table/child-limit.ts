@@ -81,32 +81,42 @@ const BIRTH_HEAD = /^(?:date\s+of\s+birth|birth\s*date|d\.?\s?o\.?\s?b\.?|born)$
 const RELATION_HEAD = /^(?:relationship(?:\s+to\s+(?:the\s+)?(?:policyholder|proposer|insured|policy\s+owner))?|relation)$/i;
 const DATE = String.raw`\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\.?,?\s+\d{4}`;
 const DATES = new RegExp(DATE, "g");
-/** A money figure as a table row prints it: a currency code or sign beside a non-zero figure (a header's "(GBP 000)" is
- * not one). */
-const MONEY = /(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$)\s?[\d,.]*[1-9]|[1-9][\d,.]*\s?(?:\b[A-Z]{3}\b|[£€])/;
+/** A whole cell that is one money figure, as a table row prints it: a currency code or sign beside a non-zero figure and
+ * nothing else (a header's "Sum Insured (max GBP 250,000)" or "(GBP 000)" is not one). */
+const WHOLE_MONEY = /^(?:(?:[A-Z]{3}|[£$€¥₹]|RM|S\$|US\$)\s?(?=[\d,.]*[1-9])\d[\d,]*(?:\.\d+)?|(?=[\d,.]*[1-9])\d[\d,]*(?:\.\d+)?\s?(?:[A-Z]{3}|[£€]))$/;
+/** A whole cell that is one date. */
+const WHOLE_DATE = new RegExp(String.raw`^(?:${DATE})$`);
 /** The date of birth and relationship a page prints on one person's line. `lines`: the page's lines; `at`: the person's
  * line; `person`: their printed name; `others`: the other names the document prints for its insured lives.
- * - By column: the person's line has tab cells; the lines right above it with as many cells, each printing a date or
- *   money, are its table's rows; the first line above them is the only header candidate, never looked past (gates H2,
- *   R3-H1: another table's header is never reached, whatever digits a header prints). Read only when that line has as
- *   many cells as the person's line and names "Date of birth" or "Relationship" exactly once.
+ * - By column: the person's line has tab cells; the lines right above it with as many cells, at least one of them a
+ *   whole date or money cell and none mixing words and digits, are its table's rows; the first line above them is the
+ *   only header candidate, never looked past (gates H2, R3-H1, R4-H1: another table's header is never reached, and a
+ *   header cell such as "Sum Insured (max GBP 250,000)" is a header, not a row). Read only when that line has as many
+ *   cells as the person's line and names "Date of birth" or "Relationship" exactly once, and the birth cell is a whole
+ *   date no other cell of the person's line repeats (R4-H1: never the cover start).
  * - By label: "<the person's name>, date of birth: <date>" / "(DOB <date>)" / "born <date>", the label right after the
  *   person's own name, on a line naming no one else the document names and printing no other date (gate H3: "child of
- *   <parent> (Policyholder date of birth ...)" is never the child's). */
+ *   <parent> (Policyholder date of birth ...)" is never the child's); after the date only an optional ")" and the end of
+ *   the cell (gate R4-H4: "born <date>; policyholder's date" is not theirs). */
 export function printedLife(lines: string[], at: number, person = "", others: string[] = []): PrintedLife {
   const line = lines[at] ?? "";
   const cells = line.split("\t").map((c) => c.trim());
   let birth: string | null = null, relationship: string | null = null;
   if (cells.length >= 2) {
-    // Up through the same table's own rows only: as many cells as the person's line, each printing a date or money.
-    // The first other line is the only header candidate, and it is never looked past (gate R3-H1).
-    const dataRow = (t: string) => t.split("\t").length === cells.length && (new RegExp(DATE).test(t) || MONEY.test(t));
+    // Up through the same table's own rows only: as many cells as the person's line, at least one a whole date or money
+    // cell, and no cell mixing words and digits. The first other line is the only header candidate, and it is never
+    // looked past (gates R3-H1, R4-H1).
+    const whole = (c: string) => WHOLE_DATE.test(c) || WHOLE_MONEY.test(c);
+    const dataRow = (t: string) => {
+      const cs = t.split("\t").map((c) => c.trim());
+      return cs.length === cells.length && cs.some(whole) && cs.every((c) => whole(c) || !/\d/.test(c) || !/\p{L}/u.test(c));
+    };
     let i = at - 1;
     while (i >= 0 && i >= at - 12 && dataRow(lines[i])) i--;
     const head = i >= 0 && i >= at - 12 ? lines[i].split("\t").map((c) => c.trim()) : [];
     if (head.length === cells.length) {
       const b = head.flatMap((h, k) => (BIRTH_HEAD.test(h) ? [k] : [])), r = head.flatMap((h, k) => (RELATION_HEAD.test(h) ? [k] : []));
-      if (b.length === 1 && new RegExp(String.raw`^(?:${DATE})$`).test(cells[b[0]])) birth = cells[b[0]];
+      if (b.length === 1 && WHOLE_DATE.test(cells[b[0]]) && cells.filter((c) => c === cells[b[0]]).length === 1) birth = cells[b[0]];
       if (r.length === 1 && /^[A-Za-z][A-Za-z ()/-]{1,40}$/.test(cells[r[0]])) relationship = cells[r[0]];
     }
   }
@@ -115,12 +125,39 @@ export function printedLife(lines: string[], at: number, person = "", others: st
   const lower = line.toLowerCase();
   const named = (n: string) => { const w = n.trim().toLowerCase(); return !!w && lower.includes(w); };
   if (!birth && own.length && !others.some((o) => o.trim().toLowerCase() !== person.trim().toLowerCase() && named(o))) {
-    const m = new RegExp(String.raw`(?<![\p{L}\p{N}])${own.join(String.raw`\s+`)}\s*[,(\-–]?\s*(?:date\s+of\s+birth|d\.?o\.?b\.?|born(?:\s+on)?)\s*[:\-]?\s*(${DATE})(?=\s*(?:[),;]|\t|$))`, "iu").exec(line);
+    const m = new RegExp(String.raw`(?<![\p{L}\p{N}])${own.join(String.raw`\s+`)}\s*[,(\-–]?\s*(?:date\s+of\s+birth|d\.?o\.?b\.?|born(?:\s+on)?)\s*[:\-]?\s*(${DATE})(?=\s*\)?\s*(?:\t|$))`, "iu").exec(line);
     if (m && (line.match(DATES) ?? []).length === 1) birth = m[1];
   }
   return { birth, relationship };
 }
 
+/** Words that say something about a child's or a young person's benefit: a child, a son or daughter, a minor or
+ * dependant, or an age limit ("under 10", "below the age of 16", "aged 17 or under"). */
+const CHILD_NOTE = /\b(?:child(?:ren)?|minors?|juveniles?|kids?|infants?|juniors?|sons?|daughters?|dependants?|dependents?)\b|\b(?:under|below|younger\s+than)\s+(?:the\s+age\s+of\s+)?\d{1,2}\b|\baged?\s+\d{1,2}\s+(?:years?\s+)?(?:or|and)\s+(?:under|below|younger)\b/i;
+/** Whether a page prints anything else about children than a row's own cell: any line that says child, minor, "under
+ * N" and the like (gate R4-H3: "Note: for an insured child the death benefit is limited to GBP 3,000." or a footnote
+ * under the table), other than
+ * - the row's own line (`from`..`to` in `page`);
+ * - the people table's lines (a line naming an insured person);
+ * - another row of the same table: a line of as many tab cells (three or more) as the row's own, starting with a section
+ *   number as the row's own does ("2\tPermanent total disablement\t...": its words are its own row's).
+ * Such a page gives no child share, and a row's own share only for a person proven not a child. */
+export function childNoteElsewhere(page: string, from: number, to: number, people: string[]): boolean {
+  const names = people.map((n) => n.replace(/\s+/g, " ").trim().toLowerCase()).filter((n) => n.length >= 2);
+  const ownLine = page.slice(from, (page.indexOf("\n", from) + 1 || page.length + 1) - 1);
+  const ownCells = ownLine.split("\t").length, LEAD = /^\s*(?:section\s+)?\d{1,3}[.)]?\t/i;
+  const sameTable = (line: string) => ownCells >= 3 && LEAD.test(ownLine) && LEAD.test(line) && line.split("\t").length === ownCells;
+  let at = 0;
+  for (const line of page.split("\n")) {
+    const start = at, end = at + line.length;
+    at = end + 1;
+    if (end >= from && start <= to) continue;
+    const flat = line.replace(/\s+/g, " ").toLowerCase();
+    if (names.some((n) => flat.includes(n)) || sameTable(line)) continue;
+    if (CHILD_NOTE.test(line)) return true;
+  }
+  return false;
+}
 /** The relationships that make a person an insured child, a closed list: never a step, grand or in-law form, "adult child"
  * or "child (over 18)" (gate H1). */
 const CHILD_RELATION = /^(?:child|son|daughter)$/i;

@@ -16,7 +16,7 @@ import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, personOnlyI
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
-import { childColumn, childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife } from "./child-limit";
+import { childColumn, childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife, childNoteElsewhere } from "./child-limit";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
@@ -233,6 +233,10 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   /** The row's child share was read two ways (its cell and a row of its own under a child column that disagree,
    * foldChildColumns): no amount is worked out for it. */
   childLimitConflict?: boolean;
+  /** A percentage of the sum insured whose page prints other words about an insured child (a note under the table, a
+   * footnote to the row's label: childNoteElsewhere, gate R4-H3): its share is worked out only for a person the
+   * schedule's own line proves is not a child (assemble.ts baseFigure). */
+  childNote?: boolean;
   /** The row is a cover's own printed schedule line, made when the stored reading gave no benefit rows at all (checkStored):
    * it belongs to no heading, so it is placed only by that line (assemble.ts ownLineCovers), never by a section link. */
   coverLine?: boolean };
@@ -874,14 +878,15 @@ export function withoutOwnShareCap(text: string, percent: number | null): string
   return text.replace(new RegExp(String.raw`\blimited\s+to\s+(?<![\d.])${own}(?:\.0+)?\s*(?:%|per\s?cent)\s+of\s+(?:the\s+|your\s+)?sum\s+(?:insured|assured)(?!\s*(?:of|for|applicable|payable|under|in\s+respect|as\s+per|according)\b)(?=\s*(?:$|[.;,)\n]))`, "gi"), " ");
 }
 /** Whether a printed line is a row's own: one of its tab cells is the row's benefit name, whole, after at most a section
- * number ("1\tAccidental death\t...", "1. Accidental death\t...") and before at most a footnote mark ("Accidental
- * death*", "(a)"); a line with no tab cells starts so and goes on with its figure ("1 Accidental death 100% of ...").
+ * number ("1\tAccidental death\t...", "1. Accidental death\t..."); a line with no tab cells starts so and goes on with its
+ * figure ("1 Accidental death 100% of ..."). A label carrying a footnote mark ("Accidental death*", "Accidental death
+ * (a)") is not the row's own name: its note may limit a child's benefit (gate R4-H2), so it gets no child share.
  * Compared without case, spacing or end punctuation. And it is the row's only such line (gate R3-H2): a section or item
  * number the line starts with is the row's own section, and no other line of the page with a figure carries the same
  * label. */
 export function ownLabelLine(line: string, benefit: string, section: string | null = null, page = ""): boolean {
   const n = (t: string) => t.toLowerCase().replace(/\s+/g, " ").replace(/^(?:section\s+)?\d{1,3}[.)]?\s+/, "")
-    .replace(/\s*(?:\*{1,3}|†|‡|\(\s*(?:note\s+)?[a-z0-9]{1,2}\s*\))\s*$/, "").replace(/[\s:.;,-]+$/, "").trim();
+    .replace(/[\s:.;,-]+$/, "").trim();
   const name = n(benefit);
   if (!name) return false;
   const labelled = (l: string) => {
@@ -1381,7 +1386,12 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // A child's share printed in the row's own cell ("100% of the Sum Insured. For an insured child under 18, limited to
     // 25% of the Sum Insured"): read only when the cell prints nothing else beside the row's own share, then the child's
     // sentence is left out of the row's own checks (lib/benefit-table/child-limit.ts). Anything else is as before.
-    let childLimit: ChildLimit | null = null;
+    let childLimit: ChildLimit | null = null, childNote = false;
+    if (pays === "percent" && value != null && percentOf === "sum_insured" && placed.has(source)) {
+      const p = placed.get(source)!, text = pageText(source.page);
+      childNote = childNoteElsewhere(text, text.lastIndexOf("\n", p.start - 1) + 1, lineEndAt(text, p.end),
+        [...out.covers.map((x) => x.person), ...out.namedPeople, ...(doc.people ?? []), ...readCovers.map((x) => str(x?.person) ?? "")]);
+    }
     if (pays === "percent" && value != null && percentOf === "sum_insured" && num(b.cap) == null && placed.has(source)) {
       const p = placed.get(source)!, text = pageText(source.page);
       const cell = text.slice(p.start, p.end) + text.slice(p.end, lineEndAt(text, p.end)).split("\t")[0];
@@ -1389,7 +1399,9 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       // number before it), so a quote such as "100% of the Sum Insured" found first in another row's cell ("Accidental
       // death" for a "Death" row, "Burns (third degree)" for "Burns") is never given that row's child share (gate H4).
       const line = text.slice(text.lastIndexOf("\n", p.start - 1) + 1, lineEndAt(text, p.end));
-      const found = ownLabelLine(line, benefit, str(b.section), text) ? childLimitIn(cell.replace(/\t/g, " "), value) : null;
+      // Nothing else on the page may speak of children (gate R4-H3, childNote): a note under the table limiting a child's
+      // benefit would make the cell's own sentence only half the rule.
+      const found = ownLabelLine(line, benefit, str(b.section), text) && !childNote ? childLimitIn(cell.replace(/\t/g, " "), value) : null;
       if (found) {
         const seg = segmentOf(source);
         const rest = [source.excerpt, cell, seg.text, seg.near, ...conditions].map((t) => withoutChildLimit(t, found));
@@ -1469,7 +1481,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}),
-      ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}),
+      ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}), ...(childNote ? { childNote } : {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}),
       ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
   }

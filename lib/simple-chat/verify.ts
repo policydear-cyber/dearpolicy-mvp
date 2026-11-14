@@ -26,7 +26,7 @@ import type { AnswerStatement, StructuredAnswer } from "@/components/answer-card
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
 import { keepsCapIn, noteMultiple, timesWords } from "@/lib/benefit-table/multiplier";
-import { childCase, childLimitIn, personStatus, printedLife, withoutChildLimit } from "@/lib/benefit-table/child-limit";
+import { childCase, childLimitIn, childNoteElsewhere, personStatus, printedLife, withoutChildLimit } from "@/lib/benefit-table/child-limit";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
@@ -825,7 +825,10 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
    * share (`own`), whether the table found the
    * person is that child, and the days that must hold (today and the printed period of insurance). The checks read the
    * share again from the row's line and the date of birth or relationship again from the person's own line. */
-  child?: { percent: number; belowAge: number | null; own: number; status: "child" | "not_child"; days: number[] } };
+  child?: { percent: number; belowAge: number | null; own: number; status: "child" | "not_child"; days: number[] };
+  /** The row's page prints other words about an insured child (lib/benefit-table/child-limit.ts childNoteElsewhere): the
+   * table found the person is not a child on these days; the checks read their own line again. */
+  adult?: { days: number[] } };
 /** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
  * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
  * sum under a cover heading or on a page that names one life; the benefit table had already tied each row to the person's
@@ -849,6 +852,12 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   // line but the row's own share (lib/benefit-table/child-limit.ts). The card's percentage is the child's share for the
   // child, the row's own for anyone else.
   const child = sf.child ? childLimitIn(rowText.replace(/\t/g, " "), sf.child.own) : null;
+  // Other words about an insured child on the row's page (gate R4-H3: a note or footnote; never the row's own line and what
+  // continues it, or a line naming a household member): no child share, and the row's own share only for a person whose
+  // own line proves they are not a child (read again below).
+  const rpage = household.documents[rf.docIndex].pages.find((p) => p.page === rf.page)!.text, rrow = rowLine(rpage, rf.offset);
+  const childNote = childNoteElsewhere(rpage, rrow.start, rrow.start + rowText.length, household.members.map((m) => m.name));
+  if ((child && childNote) || (childNote && !sf.adult?.days.length)) return null;
   if (sf.child && (!child || child.percent !== sf.child.percent || child.belowAge !== sf.child.belowAge
     || sf.percent !== (sf.child.status === "child" ? child.percent : sf.child.own))) return null;
   const ownText = child ? withoutChildLimit(rowText, child) : rowText;
@@ -876,6 +885,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   // Whom the child's share is for, read again from the person's own line on the base's page.
   const life = child ? printedLife(bpage.text.split("\n"), at, person, household.members.map((m) => m.name)) : null;
   if (child && (!sf.child!.days.length || personStatus(life, child, sf.child!.days) !== sf.child!.status)) return null;
+  if (childNote && personStatus(printedLife(bpage.text.split("\n"), at, person, household.members.map((m) => m.name)), { belowAge: null }, sf.adult!.days) !== "not_child") return null;
   // Two sums for the person are doubt. When the row and the sum are printed in the same document, that document settles it
   // and only its own lines count (a renewal schedule's table and its own sums, whatever last year's schedule printed).
   // Otherwise every live document of the same policy counts (a wording's table with a sum from one of two schedules).

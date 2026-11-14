@@ -81,6 +81,9 @@ export type TableRow = {
   /** A child's share printed in the row's own cell (CheckedBenefit.childLimit), and whether the cover's own line proves the
    * person is that child ("child": `percent` is the child's share), is not ("not_child"), or neither (null: no amount). */
   childLimit?: ChildLimit & { own: number; status: "child" | "not_child" | null; days: number[]; why?: string | null };
+  /** The row's page prints other words about an insured child (CheckedBenefit.childNote): worked out only for a person the
+   * cover's own line proves is not a child, on every one of `days`. */
+  childNote?: { status: "child" | "not_child" | null; days: number[] };
   /** The row is the cover's own line as the schedule prints it (check.ts coverLine): its policy wording is not on file. */
   coverLine?: boolean;
 };
@@ -408,6 +411,12 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
     // A child's share printed in the row's cell ("For an insured child under 18, limited to 25% of the Sum Insured"): the
     // child's share for a person the schedule's own line proves is that child, the row's own share for one it proves is
     // not, and no amount otherwise (never one of the two by guess).
+    // The page prints other words about an insured child (a note or footnote, gate R4-H3): the row's share only for a person
+    // the schedule's own line proves is not a child; no amount for anyone else.
+    if (b.childNote && !b.childLimit) {
+      const r = personStatusWhy(cover.life, { belowAge: null }, statusDays(today, cover.documentPeriodFrom, cover.documentPeriodTo));
+      if (r.status !== "not_child") return withShare(b, { kind: "none", why: `${b.value}% of the sum insured, and its page prints other words for an insured child; ${cover.person}'s own line of the schedule ${r.status === "child" ? "shows they are insured as a child" : "why" in r ? r.why : ""}: see the document` });
+    }
     const child = b.childLimit ? childStatusOf(b, cover, today) : null;
     if (b.childLimit && !child) return { kind: "none", why: `${b.value}% of the sum insured, or ${b.childLimit.percent}% for ${childCase(b.childLimit)}; ${cover.person}'s own line of the schedule ${childWhyOf(b, cover, today) ?? "does not settle which"}: see the document` };
     const percent = child === "child" ? b.childLimit!.percent : b.value!;
@@ -1232,7 +1241,10 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         percent: b.pays !== "percent" ? null : b.childLimit && figure.kind === "worked_out" && childStatusOf(b, named ? named.cover : c, singaporeDay(now)) === "child" ? b.childLimit.percent : b.value,
         ...(b.childLimit && b.pays === "percent" ? { childLimit: { ...b.childLimit, own: b.value!, status: childStatusOf(b, named ? named.cover : c, singaporeDay(now)),
           days: statusDays(singaporeDay(now), (named ? named.cover : c).documentPeriodFrom, (named ? named.cover : c).documentPeriodTo),
-          why: childWhyOf(b, named ? named.cover : c, singaporeDay(now)) } } : {}), percentOf: named ? "sum_insured" : b.pays === "percent" ? b.percentOf : null,
+          why: childWhyOf(b, named ? named.cover : c, singaporeDay(now)) } } : {}),
+        ...(b.childNote && !b.childLimit && b.pays === "percent" ? { childNote: { status: personStatus((named ? named.cover : c).life, { belowAge: null },
+          statusDays(singaporeDay(now), (named ? named.cover : c).documentPeriodFrom, (named ? named.cover : c).documentPeriodTo)),
+          days: statusDays(singaporeDay(now), (named ? named.cover : c).documentPeriodFrom, (named ? named.cover : c).documentPeriodTo) } } : {}), percentOf: named ? "sum_insured" : b.pays === "percent" ? b.percentOf : null,
         base: named ? named.cover.sumInsured : b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
         baseCorrected: named ? named.cover.confirmation?.status === "corrected" : b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null,
         combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), ...(c.holding ? { holding: c.holding } : {}), coverEnded: c.ended ?? null, ...(b.coverLine ? { coverLine: true } : {}) });
