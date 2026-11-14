@@ -77,8 +77,8 @@ test("A: headlineSumShare takes each allow-listed name of the policy's own sum",
   for (const [row, pct] of [
     ["Early-stage critical illness\t25% of the Sum Covered, up to a maximum of\nRM 50,000, once per lifetime", 25],
     ["Terminal illness\t50% of the Sum Assured", 50], ["Loss of sight\t100% of the sum insured.", 100], ["Burns\t10% of the Basic Sum Covered", 10],
-    ["Accidental death\t100% of the Face Amount", 100], ["TPD\t100% of your coverage amount, payable in one lump sum", 100],
-    ["Hilang upaya\t50% daripada Jumlah Dilindungi", 50], ["Kematian\t100% daripada Jumlah Diinsuranskan", 100], ["Angioplasty\t10% of Base Sum Assured; once only", 10],
+    ["Accidental death\t100% of the Face Amount", 100], ["TPD\t100% of your sum assured, payable in one lump sum", 100],
+    ["Hilang upaya\t50% daripada Jumlah Dilindungi", 50], ["Kematian\t100% daripada Jumlah Diinsuranskan", 100], ["Angioplasty\t10% of Base Sum Assured, once only", 10], ["Accidental death\t200% of the Sum Assured", 200],
     ["Early cancer\t25%\nof the Sum Covered", 25], ["Early cancer\t25 per cent of the Sum Covered", 25],
   ] as const) assert.equal(headlineSumShare(row, pct), true, row);
 });
@@ -90,7 +90,7 @@ test("A control: another sum, a kind of life, a reduction or a name left off the
     ["Fracture\t50% of the benefit amount", 50], ["TPD\t100% of the death sum assured", 100], ["Rider\t20% of the rider sum assured", 20],
     ["Early CI\t20% of the Basic Plan Sum Assured", 20], ["Death\t100% of the sum at risk", 100], ["Death\t100% of the insured amount", 100],
     ["Burns\t10%", 10], ["Burns\t10% of the Sum Covered of the basic plan", 10], ["Burns\t10% of the Sum Covered per insured child", 10],
-    ["Burns\t20% of the Sum Covered", 10], ["Carcinoma in situ\t25% of Basic Coverage Amount", 25], ["Death\t100% of the basic face amount", 100],
+    ["Burns\t20% of the Sum Covered", 10], ["Outpatient\t80% of the coverage amount", 80], ["Carcinoma in situ\t25% of Basic Coverage Amount", 25], ["Death\t100% of the basic face amount", 100],
   ] as const) assert.equal(headlineSumShare(row, pct), false, row);
 });
 
@@ -235,6 +235,105 @@ test("B control: two Death covers with different sums leave the TPD row with no 
 test("B control: a bare \"$\" on the Death line names no currency, so no figure", () => {
   const h = TERM({ sumLine: "Death\t$450,000", header: "Policy number: TG-5521\tLife assured: Daniel Tan Wei" });
   assert.deepEqual(ask(h, DANIEL, /permanent/).amounts, []);
+});
+
+// ---------- Gate round 1 (sum-base-gate.md): every repro, all with no amount on main ----------
+test("gate H1/H2/M2: a cell that goes on past the name, takes something off, pays by the day or in instalments, or names a life is not the headline sum", () => {
+  for (const [row, pct] of [
+    ["Waiver\t10% of the sum covered\nunder the rider", 10], ["Burns\t10% of the Sum Covered\nof the basic plan", 10], ["Early CI\t20% of the Sum Assured\nof the Critical Illness Rider", 20],
+    ["Early CI\t20% of the Sum Assured, Critical Illness Rider", 20], ["Early CI\t20% of the Sum Assured, under the CI rider", 20], ["Early CI\t20% of the Sum Assured, for the second life", 20],
+    ["Child\t25% of the Sum Insured, for each insured child", 25], ["Death\t100% of the face amount\nof Policy 2", 100],
+    ["Late CI\t100% daripada Jumlah Dilindungi, ditolak bayaran peringkat awal", 100], ["Late CI\t100% of the Sum Covered. Early-stage payments already made will be subtracted", 100],
+    ["Late CI\t100% of the Sum Covered, excluding any amount previously paid", 100], ["Late CI\t100% of the Sum Covered (early-stage payments are offset)", 100],
+    ["Late CI\t100% of the Sum Covered; the balance after any early payment", 100], ["Plan A\t50% of the Sum Insured\tPlan B\t50% of the Sum Insured", 50],
+    ["Hospital\t10% of the Sum Insured per day", 10], ["Hospital\t1% of the Sum Insured, per day", 1], ["Hospital\t1% of the Sum Insured payable for each day of hospitalisation", 1],
+    ["Hospital\t1% of the Sum Insured. Payable per day, up to 30 days", 1], ["Wife\t50% of the Sum Insured", 50], ["Husband's death\t50% of the Sum Insured", 50],
+    ["Spouse rider\t50% of Sum Insured", 50], ["Juvenile\t25% of the Sum Insured", 25], ["Death (Insured 2)\t50% of the Sum Insured", 50], ["Death (Life 2)\t50% of the Sum Assured", 50],
+    ["TPD\t100% of the Sum Assured, payable in 5 annual instalments of 20%", 100], ["TPD\t100% of the Sum Assured, paid monthly over 10 years", 100],
+    ["Kematian\t100% dari Jumlah Diinsuranskan, dibayar secara ansuran", 100], ["Death\t100% of Sum Assured, multiplied by 3 before age 65", 100],
+    ["Death\t100% of the Sum Assured, or the cash value if higher", 100], ["Death\t100% of the Sum Assured; 50% for deaths in the first year", 100],
+    ["Death\t100% of the Sum Assured, plus bonuses", 100], ["Accident\t100% of the Sum Insured, up to 50% for the left hand", 100],
+  ] as const) assert.equal(headlineSumShare(row, pct), false, row);
+  // A continuation line after the quoted cell, not quoted, is not read past: the share is left as read.
+  assert.equal(headlineSumShare("Late CI\t100% of the Sum Covered,", 100, "\tless any early-stage amount already paid"), false);
+  assert.equal(headlineSumShare("Early CI\t25% of the Sum Covered", 25, "Angioplasty\t10% of the Sum Covered"), true);
+});
+const riderDoc = (line: string, value: number, riderOf: string | null) => build({ person: AINA, others: ["Faris Bin Hassan"], product: "EARLY CI RIDER", insurer: "Ex Takaful", policyNumber: "ECI-1",
+  page1: "Ex Takaful\nEARLY CI RIDER - CERTIFICATE SCHEDULE\nCertificate number: ECI-1\tPerson covered: Nur Aina Binti Hassan\nEarly CI rider\tRM 100,000",
+  page2: `BENEFIT PROVISIONS\nBenefit\tWhat is paid\n${line}`, covers: [{ cover: "Early CI rider", sum: 100000, line: "Early CI rider\tRM 100,000", riderOf }],
+  benefits: [{ section: "BENEFIT PROVISIONS", benefit: line.split("\t")[0], value, quote: line }] });
+for (const line of ["Burns\t10% of the Sum Covered\nof the basic plan", "Burns\t10% of the Sum Covered, basic plan", "Burns\t10% of the Basic Sum Covered"])
+  for (const riderOf of ["Basic plan", null]) test(`gate H1: a rider (riderOf ${riderOf}) gets no amount for ${JSON.stringify(line)}`, () => {
+    const h = riderDoc(line, 10, riderOf);
+    assert.equal(amountOf(h, AINA, /Burns/), null);
+    assert.deepEqual(ask(h, AINA, /Burns/).amounts, []);
+  });
+const lifePlan = (line: string, value: number) => build({ person: "Jane Roe", product: "Life Plan", insurer: "Example Life", policyNumber: "LP-1",
+  page1: "Example Life\nLIFE PLAN - SCHEDULE\nLife assured: Jane Roe\nBenefit\tSum assured\nSum Assured\tS$500,000",
+  page2: `BENEFITS\n${line}`, covers: [{ cover: "Life Plan", sum: 500000, line: "Sum Assured\tS$500,000" }], benefits: [{ section: "BENEFITS", benefit: line.split("\t")[0], value, quote: line }] });
+for (const [line, v] of [["Waiver\t10% of the Sum Assured\nunder the CI rider", 10], ["Late CI\t100% of the Sum Assured, ditolak bayaran awal", 100],
+  ["Late CI\t100% of the Sum Assured, excluding any amount previously paid", 100], ["TPD\t100% of the Sum Assured, payable in 5 annual instalments", 100],
+  ["Death\t100% of the Sum Assured, plus bonuses", 100], ["Hospital\t1% of the Sum Assured, per day", 1], ["Death (Life 2)\t50% of the Sum Assured", 50],
+  ["Accident\t100% of the Sum Assured, up to 50% for the left hand", 100]] as const)
+  test(`gate H1/H2/M2: one-sum schedule, ${JSON.stringify(line)} gets no amount on the table or in the chat`, () => {
+    const name = new RegExp(line.split("\t")[0].replace(/[()]/g, "."));
+    const h = lifePlan(line, v);
+    assert.equal(amountOf(h, "Jane Roe", name), null);
+    assert.deepEqual(ask(h, "Jane Roe", name).amounts, []);
+  });
+test("gate L1: 80% of the coverage amount on a health plan whose coverage amount is its annual limit gets no amount", () => {
+  const h = build({ person: "Jane Roe", product: "Health Shield", insurer: "Example Health", policyNumber: "HS-1", page1: "Example Health\nHEALTH SHIELD - SCHEDULE\nInsured: Jane Roe\nCoverage amount (annual limit)\tS$1,000,000",
+    page2: "BENEFITS\nOutpatient cancer treatment\t80% of the coverage amount", covers: [{ cover: "Health Shield", sum: 1000000, line: "Coverage amount (annual limit)\tS$1,000,000" }],
+    benefits: [{ section: "BENEFITS", benefit: "Outpatient cancer treatment", value: 80, quote: "Outpatient cancer treatment\t80% of the coverage amount" }] });
+  assert.equal(amountOf(h, "Jane Roe", /Outpatient/), null);
+});
+test("gate check: the evidence's CI schedule layout (continuations start with a tab): early-stage RM50,000 on the table and in the chat; late-stage none; no row for the other member", () => {
+  const head = "Serimas Takaful Berhad\nCI PROTECT PLUS - POLICY SCHEDULE\nCertificate number: SCI-2026-04417\tPerson covered: Aisyah Rahman\tCurrency: Ringgit Malaysia (RM)\nBenefit\tAmount\nSum covered (critical illness)\tRM 200,000\nDeath benefit\tRM 200,000\nMonthly contribution\tRM 186.40";
+  const late = "Late-stage critical illness\t100% of the Sum Covered, less any\n\tearly-stage amount already paid";
+  const early = "Early-stage critical illness\t25% of the Sum Covered, up to a maximum of\n\tRM 50,000, once per lifetime";
+  const h = build({ person: "Aisyah Rahman", others: ["Hafiz Rahman"], product: "CI PROTECT PLUS", insurer: "Serimas Takaful Berhad", policyNumber: "SCI-2026-04417",
+    page1: `${head}\nBENEFIT PROVISIONS\nBenefit\tWhat is paid\n${late}\n${early}\nHospital income (ICU)\tRM 300 per day of admission to an intensive\n\tcare unit, up to 30 days per year`,
+    covers: [{ cover: "Sum covered (critical illness)", sum: 200000, line: "Sum covered (critical illness)\tRM 200,000" }, { cover: "Death benefit", sum: 200000, line: "Death benefit\tRM 200,000" }],
+    benefits: [{ section: "BENEFIT PROVISIONS", page: 1, benefit: "Late-stage critical illness", value: 100, quote: late },
+      { section: "BENEFIT PROVISIONS", page: 1, benefit: "Early-stage critical illness", value: 25, cap: 50000, capQuote: "up to a maximum of\n\tRM 50,000", quote: early }] });
+  assert.equal(amountOf(h, "Aisyah Rahman", /Early/), 50000);
+  assert.deepEqual(ask(h, "Aisyah Rahman", /Early/).amounts, ["RM50,000"]);
+  assert.equal(amountOf(h, "Aisyah Rahman", /Late/), null);
+  assert.equal(rowOf(h, "Hafiz Rahman", /Early/), undefined);
+});
+// B: the table put another life's line on Daniel's Death cover; the chat must not show it.
+const TPD_LINE = "Total and permanent disability\t100% of the death sum assured";
+const otherLifeDoc = (p1: string, sumLine: string, sum: number, p2?: string) => build({ person: DANIEL, others: ["Grace Tan Mei"], product: "TERM GUARD", insurer: "Example Life", policyNumber: "TG-5521",
+  page1: p1, page2: p2, covers: [{ cover: "Death", sum, line: sumLine }, { cover: "Total and permanent disability", sum: null, line: TPD_LINE }],
+  benefits: [{ section: "TERM GUARD - POLICY SCHEDULE", benefit: "Total and permanent disability", value: 100, percentOf: "sum_insured", page: 1, quote: TPD_LINE }], link: "Total and permanent disability" });
+for (const [name, p1, sumLine, sum, p2] of [
+  ["Life 1 / Life 2 blocks", `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\nLife 1: Daniel Tan Wei\nDeath\tS$450,000\n${TPD_LINE}\nLife 2: Lim Bee Hoon\nDeath benefit\tS$200,000`, "Death benefit\tS$200,000", 200000],
+  ["Life 2 on its own page", `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\nLife 1: Daniel Tan Wei\nDeath\tS$450,000\n${TPD_LINE}`, "Death\tS$200,000", 200000, "Life 2: Lim Bee Hoon\nDeath\tS$200,000"],
+  ["Mr & Mrs joint cover", `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\nJoint cover for Mr & Mrs Tan\nDeath\tS$450,000\n${TPD_LINE}`, "Death\tS$450,000", 450000],
+  ["an empty second page", `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\nDeath\tS$450,000\n${TPD_LINE}`, "Death\tS$450,000", 450000, ""],
+  ["a header naming two people, the line naming the other", `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\nBenefit\tDaniel Tan Wei\tLim Bee Hoon\nDeath (Lim Bee Hoon)\tS$200,000\nDeath\tS$450,000\n${TPD_LINE}`, "Death (Lim Bee Hoon)\tS$200,000", 200000],
+  ["an insured persons table", `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\nInsured Name\tDOB\tSum assured\nDaniel Tan Wei\t01/01/1980\tS$450,000\nLim Bee Hoon\t02/02/1982\tS$200,000\n${TPD_LINE}`, "Lim Bee Hoon\t02/02/1982\tS$200,000", 200000],
+  ["LA1 / LA2 lines", "TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tPolicy owner: Daniel Tan Wei", "LA2\tS$200,000", 200000, `Sum assured\nLA1\tS$450,000\nLA2\tS$200,000\n${TPD_LINE}`],
+  ["a Member 2 block", `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\nDeath\tS$450,000\n${TPD_LINE}\nMember 2: Lim Bee Hoon\nDeath cover\tS$200,000`, "Death cover\tS$200,000", 200000],
+  ["the household spouse in short form", `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\nLife 1: Daniel Tan Wei\nDeath\tS$450,000\n${TPD_LINE}\nLife 2: Grace Tan\nDeath benefit\tS$200,000`, "Death benefit\tS$200,000", 200000],
+  ["a Malay Isteri block", `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\nHayat diinsuranskan: Daniel Tan Wei\nKematian\tS$450,000\n${TPD_LINE}\nIsteri: Lim Bee Hoon\nKematian (isteri)\tS$200,000`, "Kematian (isteri)\tS$200,000", 200000],
+  ["lives assured X and Y with initials", `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\nLives assured: Daniel Tan Wei and Lim Bee Hoon\nDeath - DTW\tS$450,000\nDeath - LBH\tS$200,000\n${TPD_LINE}`, "Death - LBH\tS$200,000", 200000],
+  ["a rider's second Death line", `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\nDeath\tS$450,000\n${TPD_LINE}\nAccidental death rider\nDeath\tS$100,000`, "Death\tS$450,000", 450000],
+] as [string, string, string, number, string?][]) test(`gate H3: ${name}: no TPD figure in the chat`, () => {
+  const a = ask(otherLifeDoc(p1, sumLine, sum, p2), DANIEL, /permanent/);
+  assert.deepEqual(a.amounts, []);
+  assert.doesNotMatch(JSON.stringify(a.kept), /200,000|450,000/);
+});
+const lion = (person: string, header: string, others = ["Aisyah Rahman"]) => build({ person, others, product: "LIONSGATE TERM SHIELD", insurer: "Lionsgate Life Singapore Ltd", policyNumber: "LTS-90311",
+  page1: `Lionsgate Life Singapore Ltd\nLIONSGATE TERM SHIELD - POLICY SCHEDULE\n${header}\nBenefit\tSum assured / amount\nDeath\tS$300,000\n${TPD_LINE}\nHospital income rider\tS$100 per day in hospital, up to 365 days per\n\tpolicy year`,
+  covers: [{ cover: "Death", sum: 300000, line: "Death\tS$300,000" }, { cover: "Total and permanent disability", sum: null, line: TPD_LINE }],
+  benefits: [{ section: "LIONSGATE TERM SHIELD - POLICY SCHEDULE", benefit: "Total and permanent disability", value: 100, percentOf: "sum_insured", page: 1, quote: TPD_LINE }], link: "Total and permanent disability" });
+test("gate check: the evidence's term schedule layout still shows TPD S$300,000 in the chat, with the life assured printed with or without 'bin'", () => {
+  assert.deepEqual(ask(lion("Hafiz Rahman", "Policy number: LTS-90311\tLife assured: Hafiz Rahman\tPolicy currency: Singapore dollars\n(SGD)"), "Hafiz Rahman", /permanent/).amounts, ["S$300,000"]);
+  assert.deepEqual(ask(lion("Hafiz Rahman", "Policy number: LTS-90311\tLife assured: Hafiz bin Rahman\tPolicy currency: Singapore dollars (SGD)"), "Hafiz Rahman", /permanent/).amounts, ["S$300,000"]);
+});
+test("gate check: a household name shorter than the printed life assured is not settled as theirs, so no figure", () => {
+  assert.deepEqual(ask(lion("Hafiz", "Policy number: LTS-90311\tLife assured: Hafiz bin Rahman\tPolicy currency: SGD"), "Hafiz", /permanent/).amounts, []);
 });
 
 if (failures.length) {

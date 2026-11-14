@@ -395,7 +395,7 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
 }
 
 /** The names of the policy's own headline sum on a cover's line (check.ts HEADLINE_SUM). */
-const HEADLINE_LABEL = /\b(?:sum\s+(?:insured|assured|covered)|face\s+amount|coverage\s+amount|jumlah\s+(?:diinsuranskan|dilindungi))\b/i;
+const HEADLINE_LABEL = /\b(?:sum\s+(?:insured|assured|covered)|face\s+amount|jumlah\s+(?:diinsuranskan|dilindungi))\b/i;
 /** Why a share the reading left unsettled, and its row's words name as of the policy's own headline sum (check.ts
  * baseFromWords), is not worked out on this cover's sum; null when it may be. It may only when this person's covers of the
  * same product and policy on the cover's own document print one such sum: the covers whose lines name the headline sum
@@ -404,7 +404,9 @@ const HEADLINE_LABEL = /\b(?:sum\s+(?:insured|assured|covered)|face\s+amount|cov
  * the basic plan's sum is never worked out on the rider's own sum. */
 function headlineSumProblem(b: CheckedBenefit, cover: PersonCover, personCovers: PersonCover[]): string | null {
   if (!b.baseFromWords || b.percentOf !== "sum_insured" || cover.sumInsured == null) return null;
-  if (cover.riderOf && /\b(?:basic|base)\s+(?:sum|face|coverage|jumlah)\b/i.test(b.source.excerpt)) return `${b.value}% of the basic plan's sum, which is not this rider's own sum insured`;
+  // "Basic"/"base" names the basic plan's sum: only on a cover that is the basic plan (no riderOf, no rider words).
+  if (/\b(?:basic|base)\b/i.test(`${b.source.excerpt}\n${b.rowText ?? ""}`) && (cover.riderOf || /\b(?:riders?|add-?ons?|supplementary|optional|tambahan)\b/i.test(`${cover.cover ?? ""} ${cover.product ?? ""}`)))
+    return `${b.value}% of the basic plan's sum, which is not this rider's own sum insured`;
   const samePolicy = (x: PersonCover) => !x.policyNumber && !cover.policyNumber || !!x.policyNumber && !!cover.policyNumber && samePolicyNumber(x.policyNumber, cover.policyNumber);
   const policy = personCovers.filter((x) => x.personId === cover.personId && x.source.documentId === cover.source.documentId && norm(x.product) === norm(cover.product)
     && samePolicy(x) && x.sumInsured != null);

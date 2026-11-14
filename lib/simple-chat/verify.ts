@@ -820,6 +820,61 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
    * own words (`own`), `section` and the benefit names of the person's other rows (`others`). When it checks, the card's
    * basis adds the multiple as a condition in the note's own words with its figure; the card's amount stays `value`. */
   times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null; others: string; docNames: string; perDay: boolean } | null };
+/** The field that names the one insured life on a schedule or certificate, by a closed list of labels in any of its
+ * languages, with its value after a colon or a tab: "Life assured: Hafiz Rahman", "Person covered: Aisyah Rahman",
+ * "Tertanggung: ...", "Hayat diinsuranskan: ...". */
+const INSURED_FIELD = /(?:^|\t)[ \t]*(?:(?:the\s+)?life\s+(?:assured|insured)|insured(?:\s+person)?|person\s+(?:insured|covered)|covered\s+person|assured|participant|peserta|tertanggung|orang\s+(?:yang\s+)?dilindungi|hayat\s+diinsuranskan)(?:\s+name)?[ \t]*(?::[ \t]*|\t[ \t]*)([^\t\n]+)/gim;
+/** Words that may stand in an insured-person field beside the person's own name: titles and Malay/Indian name particles. */
+const NAME_PARTICLES = new Set(["bin", "binti", "bte", "bt", "mr", "mrs", "ms", "miss", "mdm", "madam", "dr", "encik", "en", "puan", "pn", "cik", "tuan", "haji", "hajah", "al", "ap"]);
+/** Any sign of a second insured life, anywhere on a document: numbered lives ("Life 2", "Insured 2", "Member 2", "LA2",
+ * "Tertanggung 2"), "lives assured", joint or co-lives, partners and spouses in any listed language, a main or additional
+ * life, "Mr & Mrs", and the general other-insured words (lib/benefit-table/lives.ts otherLife). */
+const SECOND_LIFE = /\b(?:life|lives|insured|assured|member|participant|peserta|tertanggung|person)[ ]?[-#(]?[ ]?(?:[2-9](?![\d,.])|i{2,3}\b|iv\b|two\b|three\b|kedua\b)|\bLA\s*\d|\blives\b|\binsureds\b|\bjoint\b|\bco-?(?:life|lives|insured|assured|owner)\b|\bpartners?\b|\b(?:isteri|suami|pasangan|anak)\b|\b(?:main|first|second|third|additional|other)\s+(?:life|lives|insured|assured|person|member|participant)s?\b|\bmrs?\.?\s*(?:&|and)\s*mrs?\b|\bcovered\s+(?:persons|members|lives)\b/i;
+/** Whether a document is printed for this person alone, so that a line on it need not repeat their name: true, or why not.
+ * ALL of these must hold, else main's rule (the line names the person) stands:
+ * - it is linked to this person and no one else;
+ * - every page has text and none was left unread or unchecked (an empty page may be the other life's);
+ * - it prints at least one insured-person field (INSURED_FIELD), and every such field names this person in full and only
+ *   them (their words, plus titles and name particles), with the same words each time;
+ * - no page shows a sign of a second life (SECOND_LIFE, lives.ts otherLife), and no other household member's full name
+ *   or first name with another word of their name appears anywhere. */
+function soleLifeDocument(d: HouseholdDocument, person: string, household: Household): true | string {
+  if (!d.linkedPeople.length || d.linkedPeople.some((p) => baseName(p) !== person)) return "linked to someone else";
+  if (!d.pages.length || d.pages.some((pg) => !pg.text.trim()) || d.uncheckedPages?.length || d.unreadablePages?.length || d.partCheckedPages?.length) return "a page has no checked text";
+  const own = tokens(person);
+  const values = d.pages.flatMap((pg) => [...pg.text.matchAll(INSURED_FIELD)].map((m) => tokens(m[1])));
+  if (!values.length) return "no insured-person field";
+  for (const v of values) if (!own.every((w) => v.includes(w)) || v.some((w) => !own.includes(w) && !NAME_PARTICLES.has(w))) return "an insured-person field names someone else";
+  if (new Set(values.map((v) => v.join(" "))).size !== 1) return "two insured-person fields";
+  const people = household.members.map((m) => m.name.replace(/\s*\(.*\)\s*$/, ""));
+  for (const pg of d.pages) {
+    if (SECOND_LIFE.test(pg.text) || otherLife(pg.text, person, people)) return "a page names a second life";
+    const words = new Set(tokens(pg.text));
+    for (const m of people) {
+      const t = tokens(m);
+      if (baseName(m) === person || !t.length || t.every((w) => own.includes(w))) continue;
+      if (nameOnPage(m, pg.text) || (t.length > 1 && words.has(t[0]) && t.slice(1).some((w) => words.has(w) && !own.includes(w)))) return "a page names another household member";
+    }
+  }
+  return true;
+}
+/** Words a sum's own line may print besides its figure on a document for one life, with the row's own words: the names of
+ * the sum and of a cover. */
+const SUM_LINE_WORDS = new Set(["sum", "insured", "assured", "covered", "amount", "basic", "base", "benefit", "benefits", "cover", "coverage", "plan", "policy", "the", "of", "and",
+  "rm", "sgd", "myr", "usd", "gbp", "eur", "hkd", "aud", "nzd", "jumlah", "dilindungi", "diinsuranskan", "face", "value"]);
+/** Why the sum's line on a one-life document could be another life's or another cover's, or null: it must print no person
+ * and no word for a life, and every word of its label must be the row's own (`row`: "Total and permanent disability 100%
+ * of the death sum assured" for "Death  S$300,000") or a name of a sum (SUM_LINE_WORDS). */
+function sumLineIsRows(line: string, row: string, person: string, household: Household): string | null {
+  const label = moneyFiguresIn(line).reduce((t, f) => t.split(f.raw).join(" "), line);
+  if (SECOND_LIFE.test(label) || /\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|spouses?|wi(?:fe|ves)|husbands?|dependants?|dependents?|juveniles?|policy\s*holders?)\b/i.test(label)) return "names a life";
+  const others = new Set(household.members.flatMap((m) => tokens(m.name)).concat(tokens(person)));
+  const rowWords = new Set(tokens(row));
+  const words = tokens(label);
+  if (words.some((w) => others.has(w) && !rowWords.has(w))) return "names a person";
+  if (words.some((w) => !rowWords.has(w) && !SUM_LINE_WORDS.has(w))) return "prints words that are not the row's own or a sum's name";
+  return null;
+}
 /** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
  * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
  * sum under a cover heading or on a page that names one life; the benefit table had already tied each row to the person's
@@ -860,15 +915,15 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const longer = household.members.map((m) => tokens(m.name)).filter((t) => t.length > who.length && who.every((w) => t.includes(w)));
   const namesPerson = (lt: Set<string>) => who.every((w) => lt.has(w)) && !longer.some((t) => t.every((w) => lt.has(w)));
   const onLine = moneyFiguresIn(line);
-  // A document printed for this person alone (linked to no one else, naming them, and naming no other life on any page:
-  // a single-life schedule's "Death  S$300,000") needs no name on the sum's own line: every line of it is theirs
-  // (TE-ACC-20261114-R3 failure 4: "100% of the death sum assured" was worked out on the table and refused here because
-  // "Death  S$300,000" does not repeat the life assured's name).
-  const people = household.members.map((m) => m.name.replace(/\s*\(.*\)\s*$/, ""));
-  const oneLife = (d: HouseholdDocument) => d.linkedPeople.length > 0 && d.linkedPeople.every((p) => baseName(p) === person)
-    && d.pages.some((pg) => nameOnPage(person, pg.text)) && !d.pages.some((pg) => otherLife(pg.text, person, people));
-  const ownDocument = oneLife(bdoc);
-  if (!namesPerson(have) && !ownDocument) return no("the sum's line does not name the person, and its document is not printed for them alone");
+  // A document printed for this person alone needs no name on the sum's own line (TE-ACC-20261114-R3 failure 4: "100% of
+  // the death sum assured" was worked out on the table and refused here because "Death  S$300,000" does not repeat the
+  // life assured's name). ALLOW-list, all of it or main's rule (soleLifeDocument, sumLineIsRows).
+  const ownDocument = soleLifeDocument(bdoc, person, household);
+  if (!namesPerson(have)) {
+    if (ownDocument !== true) return no(`the sum's line does not name the person, and its document is not printed for them alone (${ownDocument})`);
+    const lineWhy = sumLineIsRows(line, `${sf.row.quote}\n${st.text}`, person, household);
+    if (lineWhy) return no(`the sum's line ${lineWhy}`);
+  }
   if (onLine.length !== 1) return no("the sum's line prints no money figure or more than one");
   if (onLine[0].currency !== sf.currency || !sameValue(onLine[0].value, sf.base.value)) return no("the sum's line prints another figure or currency");
   // On a document for one life, the sum's line is known by its label ("Death"): the same label printing another sum is doubt.
@@ -886,7 +941,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
       const figs = moneyFiguresIn(l).filter((f) => f.currency === sf.currency);
       if (figs.length !== 1 || sameValue(figs[0].value, sf.base.value)) continue;
       if (namesPerson(new Set(tokens(l)))) return no("another line naming the person prints a different sum");
-      if (ownDocument && baseLabel && oneLife(d) && labelOf(l) === baseLabel) return no("another line with the sum's own label prints a different sum");
+      if (ownDocument === true && baseLabel && soleLifeDocument(d, person, household) === true && labelOf(l) === baseLabel) return no("another line with the sum's own label prints a different sum");
     }
   }
   // The maximum, from its own printed words; a row that prints a cap word but none was given is never worked out.
