@@ -728,6 +728,34 @@ const OWNER_TIE = new RegExp(String.raw`\b(?:per\s+(?:famil(?:y|ies)|households?
 /** A clause about the premium or payment, a dispute between the lives and the insurer, or a cap per event or conveyance:
  * never a limit shared by the lives (each person's own limit still applies). */
 const NOT_A_TIE_CLAUSE = /\b(?:between\s+(?:you|the\s+insured|insured\s+persons?|the\s+insured\s+persons?)\s+and\s+us|per\s+(?:event|occurrence|incident|accident|conveyance)|any\s+one\s+(?:event|conveyance|occurrence|accident|incident))\b/i;
+/** Travel or admin "together" that puts no limit together (per-person-shared gate round 11): travelling together, on the same
+ * trip, buying or submitting something together, under one policy or certificate. These words are taken out before any tie
+ * is looked for, and no row is named from inside them. */
+const TRAVEL_TOGETHER = new RegExp(String.raw`\b(?:(?:travel(?:s|led|ed|ling|ing)?|depart(?:s|ed|ing)?|journey(?:s|ed|ing)?)\s+together(?:\s+with\s+(?:an?\s+|the\s+)?(?:insured\s+)?(?:adults?|parents?|persons?))?`
+  + String.raw`|(?:on|for)\s+the\s+same\s+(?:trip|journey|booking)(?:\s+and\s+(?:the\s+same\s+)?(?:booking|trip|journey))?`
+  + String.raw`|(?:buy|buys|bought|buying|purchase[sd]?|purchasing|take\s+out|takes\s+out)\s+(?:\w+\s+){0,3}?together`
+  + String.raw`|submit(?:s|ted|ting)?\s+(?:\w+\s+){0,2}?together|under\s+(?:one|a\s+single|the\s+same)\s+(?:policy|certificate|plan))\b`, "gi");
+export const withoutTravelTogether = (text: string) => text.replace(TRAVEL_TOGETHER, " ");
+/** A clause saying each insured person keeps their own limit ("apply to each insured person", "for each of the insured
+ * persons", "can still claim their own limit"), with no word putting the lives together left in it: no tie, as "Limits
+ * apply per insured person" (per-person-shared gate round 11). */
+const EACH_OWN = /\b(?:(?:to|for)\s+each\s+(?:of\s+(?:the\s+)?)?(?:insured\s+)?(?:persons?|travell?ers?|of\s+you)|each\s+insured\s+(?:person|traveller|traveler)|each\s+of\s+the\s+insured(?:\s+persons)?|(?:their|his\s+or\s+her|your)\s+own\s+(?:\w+\s+)?limits?)\b/i;
+const SHARE_WORD = /\b(?:shared?|shares|sharing|jointly|pool(?:ed|s)?|combined|together|collectively|in\s+aggregate|aggregate|between|as\s+a\s+(?:whole|unit)|whole|not\s+(?:per|for\s+each)|in\s+total)\b/i;
+const MOST_FOR_LIVES = /\b(?:most|maximum|total|limits?|sum)\b[^.;]*?\bfor\s+(?:the\s+|your\s+|all\s+(?:the\s+)?)(?:whole\s+)?(?:famil|household|couple|group|party|insured\s+persons|travell)/i;
+const eachOwnClause = (clause: string) => EACH_OWN.test(clause) && !SHARE_WORD.test(clause) && !MOST_FOR_LIVES.test(clause) && !new RegExp(OWNER_TIE.source, "i").test(clause);
+/** A clause that ties nothing to the lives together: a dispute with us, a cap per event or conveyance, or each person's own limit. */
+const noTieClause = (clause: string) => NOT_A_TIE_CLAUSE.test(clause) || eachOwnClause(clause);
+/** Whether a note sentence, read clause by clause with the travel-together phrases out, ties something to the lives together
+ * (a sharing note: assemble.ts withholds the rows it names, or every row when it names none). */
+export const sharesWithLives = (sentence: string) => sentence.split(/[.;!?](?=\s|$)/).some((clause) => {
+  const c = withoutTravelTogether(clause);
+  if (noTieClause(c)) return false;
+  if (livesTogether(c)) return true;
+  // In a clause about travelling, buying or submitting together, "for the family" says whose the trip or the claims are,
+  // not that a limit is shared: only a sharing word left in it ties ("Baggage claims for the family must be submitted
+  // together." ties nothing).
+  return TIED_TO_LIVES.test(c) && (c === clause || SHARE_WORD.test(c));
+});
 const wordAt = (text: string, re: RegExp) => [...text.matchAll(re)].map((m) => text.slice(0, m.index).split(/\s+/).filter(Boolean).length);
 /** Whether the words name the lives taken together ("combined for all insured", "in total for the travellers", "insured
  * persons share"): a lives word and a together word within six words. */
@@ -799,8 +827,8 @@ export function tiesLimitToLives(line: string, open = false): boolean {
  * no shared benefit (every word OWNER_TIE, TOGETHER, LIVES, TIED_TO_LIVES and KEEP_SHAPES need starts here). */
 const TIE_HINT = /(?:famil|household|couple|part(?:y|ies)|group|shar|joint|together|combined|total|aggregate|collectiv|pool|every|\ball\b|both|two\s+of\s+you|however|whole|unit|regardless|whatever|travell?er|insured\s+(?:persons|people|lives|members)|not\s+(?:per|for)|same|between|\bone\b|single|certificate|polic|booking|schedule)/i;
 function tiesInClauses(line: string): boolean {
-  for (const clause of line.split(/[.;!?](?=\s|$)/)) {
-    if (NOT_A_TIE_CLAUSE.test(clause)) continue;
+  for (const clause of withoutTravelTogether(line).split(/[.;!?](?=\s|$)/)) {
+    if (noTieClause(clause)) continue;
     // Each person's own limit named in a clause about the lives together, in any shape but the closed family-cap ones: one
     // limit, or some share of one, for all of them (per-person-shared gate round 6).
     if (OF_OWN_LIMIT.test(clause) && aboutLivesTogether(clause)) return true;
@@ -980,8 +1008,9 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
           else if (tiesInClauses(sentence)) add(out.tiedNotes, sentence);
           // A sentence that ties something to the lives together, printed for one benefit ("Personal liability is shared by
           // the family."): that row is no one's own (assemble.ts, by the row's label).
-          // Never a kept family cap, nor a cap per event or conveyance or a dispute with us (each person's own limit stands).
-          if (!keep && !NOT_A_TIE_CLAUSE.test(sentence) && (TIED_TO_LIVES.test(sentence) || livesTogether(sentence))) add(out.tieLines, sentence);
+          // Never a kept family cap, nor a cap per event or conveyance or a dispute with us, nor travelling together or each
+          // person's own limit (each person's own limit stands; gate round 11).
+          if (!keep && !NOT_A_TIE_CLAUSE.test(sentence) && sharesWithLives(sentence)) add(out.tieLines, sentence);
         }
       }
       // A note printed on a row's own line about every row ("All benefits for children are half the amounts shown").

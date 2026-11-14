@@ -637,6 +637,44 @@ for (const line of ["Hotel rooms shared with a travel companion are covered.", "
   test(`gate PPS-10: '${line}' keeps every row of the long evacuation label too`, () =>
     assert.deepEqual(sixWith({ rows: EVAC_LONG, extra: [line] }), each(EVAC_LONG.map(([b]) => b))));
 }
+// Per-person-shared gate round 11: travelling together, the same trip, buying or submitting together and one policy put no
+// limit together, and a clause saying each insured person keeps their own limit ties nothing; no row is named from inside
+// such words. Each keeps every figure, as main does.
+const SEVEN: [string, string, number][] = [...SIX, ["Loss of baggage", "S$3,000", 3000]];
+for (const line of ["All insured persons must travel together on the same trip.",
+  "Benefits are payable to each insured person, even when the family travels together.",
+  "Both of you must travel together for the couple plan to apply.",
+  "The limits shown apply to each insured person, whether or not the family travels together.",
+  "If the family travels together, each insured person can still claim their own limit.",
+  "The total sum insured for each of the insured persons is shown above.",
+  "Couples and families can buy cover together under one policy.",
+  "Insured persons travelling together may claim travel delay once each.",
+  "Baggage claims for the family must be submitted together.",
+  "Our liability to all insured persons together for any one event is limited to the amounts shown.",
+  "Medical expenses are covered for all insured persons.", "Each insured person has their own limit.",
+  "Family plan covers you, your spouse and children travelling together.", "Family members travelling together are covered under one certificate.",
+  "Children travelling together with an insured adult are covered at no extra cost.", "Medical expenses for all insured persons are payable in Singapore dollars.",
+  "Your family is covered for medical expenses wherever you travel together.", "Insured persons must be travelling together.",
+  "The family must depart from and return to Singapore together.", "All insured persons must be on the same trip and booking.",
+  "Family plan: you, your spouse and your children travelling together on the same trip.",
+  "Lost passports for all travellers are covered in total up to S$500."]) {
+  test(`gate PPS-11: '${line}' keeps every per-person row`, () =>
+    assert.deepEqual(sixWith({ rows: SEVEN, extra: [line] }), each(SEVEN.map(([b]) => b))));
+}
+for (const [line, gone] of [
+  ["The family shares one limit for doctors' fees.", SEVEN.map(([b]) => b)],
+  ["Physician and surgeon fees for the family are pooled.", SEVEN.map(([b]) => b)],
+  ["Accidents are shared by the family.", SEVEN.map(([b]) => b)],
+  ["The excess is shared by the family.", SEVEN.map(([b]) => b)],
+  ["Insured persons travelling together share one limit for travel delay.", ["Travel delay"]],
+  ["The most we pay for the whole family is the limit shown for each insured person.", SEVEN.map(([b]) => b)],
+  ["Each insured person shares the family's limit.", SEVEN.map(([b]) => b)],
+  ["Baggage claims for the family must be submitted together and are limited to S$3,000 in total for all insured persons.", ["Loss of baggage"]]] as [string, string[]][]) {
+  test(`gate PPS-11: '${line}' still withholds ${gone.length === SEVEN.length ? "every per-person row" : gone.join(", ")}`, () => {
+    const got = sixWith({ rows: SEVEN, extra: [line] });
+    for (const id of ["a", "b", "k"] as const) for (const b of gone) assert.ok(!got[id].includes(b), `${id} ${b}: ${got[id].join(", ")}`);
+  });
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),
