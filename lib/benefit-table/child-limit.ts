@@ -14,7 +14,9 @@ import { printedDay } from "./dates";
  * "Policyholder", "Spouse"). Otherwise no amount, and the row's printed words are quoted with the condition. Pure. */
 export type ChildLimit = { percent: number; belowAge: number | null; words: string;
   /** The document's other read rows, as decision (1) accounted for them (childShareAllowed): the chat's checks read again. */
-  others?: { benefit: string; section: string | null }[] };
+  others?: { benefit: string; section: string | null }[];
+  /** Each person's sum insured as read, which a people line's sum insured must equal (gate R10-L1). */
+  sums?: { person: string; sum: number }[] };
 
 const CHILD = String.raw`(?:(?:an?|the|each|any|every)\s+)?(?:(?:insured|covered|dependent|dependant|eligible)\s+)?(?:child(?:ren)?|minors?|juveniles?)`;
 /** "under 18", "below the age of 16", "aged under 18 years", "younger than 18 years of age", "(under 18)", "aged 17 or
@@ -241,21 +243,48 @@ const EXCLUSION_WORDS = /\b(?:excluded|excludes?|exclusions?|does\s+not\s+apply|
 const MONTH = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)`;
 /** A currency sign or code just before a number: what follows is always a figure. */
 const CURRENCY_BEFORE = String.raw`(?<!(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$|\bUS\$)[\s-]?)`;
-/** The text without what is never a figure, each only in its own narrow context (gate R9-H1): dates and a month with its
- * year; a telephone number beside "tel", "phone", "call" or "line"; a time with am/pm or as hh:mm; a reference code after
- * a policy, reference or certificate label; a day count ("30 days") only in a sentence with no money and no limiting
- * word; a page number. A number beside a currency sign or code is never taken out. */
-function withoutNonFigures(text: string): string {
+/** A group of people, or a person, named in a sentence: such a sentence keeps every number as a figure (gate R10-H2). */
+const PERSON_GROUP = /\b(?:persons?|people|lives|life|members?|insureds?|family|families|spouses?|partners?|relatives?|dependants?|dependents?|policyholders?|proposers?|principals?|holders?|participants?|individuals?|beneficiar(?:y|ies)|anyone|everyone|nobody|whoever|they|them|those|he|she|his|her|hers)\b/i;
+/** An explicit number label before a reference code: "Policy number:", "Certificate no.", "Claim #", "Account number"
+ * (never a bare plan, scheme or member, never "ref" alone: plan and scheme codes often carry the level). */
+const CODE_LABEL = String.raw`\b(?:policy|certificate|reference|member|claim|account)\s*(?:no\.?|number|#)\s*:?\s*`;
+/** A numeric date, as a real calendar date (day and month, either order; a year 1900-2100). */
+function calendarDate(m: string): boolean {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(m);
+  const parts = iso ? [Number(iso[3]), Number(iso[2]), Number(iso[1])] : (/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(m)?.slice(1).map(Number) ?? null);
+  if (!parts) return true; // a date with its month in words ("1 March 2026"): checked by its own shape
+  const [a, b2, y] = parts;
+  if (y < 1900 || y > 2100) return false;
+  const ok = (d: number, mo: number) => mo >= 1 && mo <= 12 && d >= 1 && d <= new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  return ok(a, b2) || ok(b2, a);
+}
+/** Words that make a numeric date read as a date: a date, period, birth, issue or start/end word near it. */
+const DATE_CONTEXT = /\b(?:dated?|dates|period|from|to|until|till|on|born|birth|d\.?o\.?b\.?|issued?|effective|commenc\w*|start\w*|end\w*|expir\w*|renewal|renews?|valid|inception|cover\s+start|signed)\b/i;
+/** The text without what is never a figure, each only in its own narrow context (gates R9-H1, R10-H2): a real calendar
+ * date (a numeric one only with a date word before it), a month with its year; a telephone number beside "tel", "phone",
+ * "call" or "line"; a time with am/pm or o'clock, or hh:mm right after "time" or "at"; a reference code right after an
+ * explicit number label (CODE_LABEL); a day count ("30 days") only in a sentence with no money, no limiting or benefit
+ * word, nothing naming a person or a group of people and nothing naming this row; a page number. In a sentence that names
+ * a person or a group of people, or this row, only dates, telephone numbers and page numbers are taken out. A number
+ * beside a currency sign or code is never taken out. */
+function withoutNonFigures(text: string, thisNamed: RegExp): string {
   const money = /(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$)\s?-?\d|\d\s?(?:\b[A-Z]{3}\b|[£€])|\b(?:pounds?|dollars?|euros?|ringgit|rupees?)\b/;
   let t = text
-    .replace(new RegExp(DATE, "gi"), " ")
-    .replace(new RegExp(String.raw`\b${MONTH}\.?\s+\d{4}\b`, "gi"), " ")
+    .replace(new RegExp(DATE, "gi"), (m, off: number, all: string) => {
+      if (!calendarDate(m)) return m;
+      if (/^\d/.test(m) && !/[A-Za-z]/.test(m) && !DATE_CONTEXT.test(all.slice(Math.max(0, off - 40), off))) return m;
+      return " ";
+    })
+    .replace(new RegExp(String.raw`\b${MONTH}\.?\s+(?:19|20)\d{2}\b`, "gi"), " ")
     .replace(new RegExp(String.raw`(\b(?:tel(?:ephone)?|phone|call|helpline|hotline|line)\b\.?:?\s*(?:on\s+|us\s+on\s+)?)${CURRENCY_BEFORE}(?:\+|0)\d[\d\s()-]{6,}\d`, "gi"), "$1 ")
     .replace(new RegExp(String.raw`${CURRENCY_BEFORE}(?<![\d,.])(?:\+|0)\d[\d\s-]{6,}\d(?=\s*\(\s*(?:[a-z]+\s+)?(?:line|helpline|hotline|telephone|phone)\s*\))`, "gi"), " ")
-    .replace(/\b\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.|o['’]clock)(?![a-z])/gi, " ")
-    .replace(new RegExp(String.raw`${CURRENCY_BEFORE}\b\d{1,2}:\d{2}\b`, "g"), " ")
-    .replace(/(\b(?:policy|reference|ref|certificate|cert|member|claim|account|plan|scheme)\b\.?\s*(?:no\.?|number|#|ref\.?)?\s*:?\s*)[A-Z]{1,6}(?:-?[A-Z0-9]+)*-?\d[A-Z0-9-]*\b/gi, "$1 ")
     .replace(/\bpages?\s+\d+(?:\s*(?:of|-|to)\s*\d+)?\b/gi, " ");
+  // A sentence about a person, a group of people or this row: every other number there is a figure.
+  if (PERSON_GROUP.test(t.replace(new RegExp(CODE_LABEL, "gi"), " ")) || thisNamed.test(t)) return t;
+  t = t
+    .replace(/\b\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.|o['’]clock)(?![a-z])/gi, " ")
+    .replace(new RegExp(String.raw`(\b(?:time|at)\b\s*:?\s*)${CURRENCY_BEFORE}\b(?:[01]?\d|2[0-3]):[0-5]\d\b(?![:.]\d)`, "gi"), "$1 ")
+    .replace(new RegExp(String.raw`(${CODE_LABEL})[A-Z]{1,6}(?:-?[A-Z0-9]+)*-?\d[A-Z0-9-]*\b`, "gi"), "$1 ");
   if (!money.test(t) && !LIMIT_WORDS.test(t) && !/\b(?:benefits?|pa(?:id|ys?|yable)|cover(?:ed)?|equal|worth|amounts?|sums?|value)\b/i.test(t))
     t = t.replace(/\b(?:\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fourteen|thirty|sixty|ninety)\s*(?:consecutive\s+|calendar\s+|working\s+|business\s+|clear\s+)?(?:days?|nights?|weeks?|months?|hours?)\b/gi, " ");
   return t;
@@ -278,17 +307,17 @@ function rowNamedAny(row: ReadRow): RegExp {
 /** Whether a piece of text needs accounting for (gate R9-H1): it carries a figure (digits, a percentage, a figure in
  * words), a limiting word, an exclusion or negation, or anything that names this row. */
 function needsAccount(t: string, thisNamed: RegExp): boolean {
-  const x = withoutNonFigures(t);
+  const x = withoutNonFigures(t, thisNamed);
   return /\d/.test(x) || /%/.test(x) || FIGURE_WORDS.test(x) || LIMIT_WORDS.test(x) || EXCLUSION_WORDS.test(x) || thisNamed.test(x);
 }
 /** The people table's own columns, a closed list (gate R9-H1): a name, a relationship, a date of birth or age, a gender, a
  * sum insured, a premium or an identity number. Money only under a sum insured or a premium. */
-const PEOPLE_HEAD: { re: RegExp; money: boolean }[] = [
+const PEOPLE_HEAD: { re: RegExp; money: boolean; sum?: boolean }[] = [
   { re: /^(?:(?:name\s+of\s+)?(?:the\s+)?(?:insured|covered)\s+(?:person|life|member)s?|insured|name|full\s+name|life\s+insured|lives?\s+insured|member|person|insured\s+name|participant)$/i, money: false },
   { re: /^(?:relationship(?:\s+to\s+(?:the\s+)?(?:policyholder|proposer|insured|policy\s+owner|principal))?|relation)$/i, money: false },
   { re: /^(?:date\s+of\s+birth|birth\s*date|d\.?\s?o\.?\s?b\.?|born|age(?:\s+next\s+birthday)?|age\s+at\s+entry)$/i, money: false },
   { re: /^(?:gender|sex)$/i, money: false },
-  { re: /^(?:sum\s+(?:insured|assured)|amount\s+insured)$/i, money: true },
+  { re: /^(?:sum\s+(?:insured|assured)|amount\s+insured)$/i, money: true, sum: true },
   { re: /^(?:(?:annual|monthly|yearly)\s+)?premium|contribution$/i, money: true },
   { re: /^(?:id|i\.?d\.?\s+(?:no\.?|number)|nric(?:\s+no\.?)?|passport(?:\s+no\.?)?|identity\s+(?:card\s+)?(?:no\.?|number)|member\s+(?:no\.?|number|id)|certificate\s+(?:no\.?|number))$/i, money: false },
 ];
@@ -298,9 +327,10 @@ const peopleColumn = (h: string) => { const t = h.trim().replace(/\s*\((?:[A-Z]{
  * every cell a column of the closed list, and each cell fits its column: a name with nothing else that needs accounting,
  * a whole date, a whole money figure only under a sum insured or a premium, or a few plain words under a relationship or
  * gender column. Anything else is not accounted for. */
-function peopleLine(cells: string[], names: string[], header: string[] | null, thisNamed: RegExp): boolean {
+function peopleLine(cells: string[], names: string[], header: string[] | null, thisNamed: RegExp, sums: PersonSum[]): boolean {
   const lower = cells.map((c) => c.toLowerCase());
-  if (!names.some((n) => lower.some((c) => c.includes(n)))) return false;
+  const named = names.filter((n) => lower.some((c) => c.includes(n)));
+  if (!named.length) return false;
   if (!header || header.length !== cells.length) return false;
   const cols = header.map(peopleColumn);
   if (cols.some((c) => !c)) return false;
@@ -309,9 +339,22 @@ function peopleLine(cells: string[], names: string[], header: string[] | null, t
     if (!t) return true;
     if (names.some((n) => lower[i].includes(n))) return !needsAccount(t.replace(/\b(?:date\s+of\s+birth|d\.?o\.?b\.?|born(?:\s+on)?)\b/gi, " "), thisNamed);
     if (WHOLE_DATE.test(t)) return true;
-    if (WHOLE_MONEY.test(t)) return col.money;
+    // A sum insured only when it is the one read for the person the line names (gate R10-L1).
+    if (WHOLE_MONEY.test(t)) return col.money && (!col.sum || sumIsRead(t, named, sums));
     if (col.money) return false;
     return /^[\p{L} ()/'’-]{1,40}$/u.test(t) && t.split(/\s+/).length <= 4 && !needsAccount(t, thisNamed);
+  });
+}
+/** A person's sum insured as the reading read it. */
+export type PersonSum = { person: string; sum: number };
+const moneyValue = (t: string) => Number(t.replace(/[^\d.]/g, ""));
+/** Every person the line names has exactly this sum insured read, and no other. */
+function sumIsRead(cell: string, named: string[], sums: PersonSum[]): boolean {
+  const v = moneyValue(cell);
+  if (!Number.isFinite(v)) return false;
+  return named.every((n) => {
+    const own = sums.filter((x) => x.person.replace(/\s+/g, " ").trim().toLowerCase() === n).map((x) => x.sum);
+    return own.length > 0 && own.every((x) => Math.abs(x - v) < 0.005);
   });
 }
 /** Collective or pointing words a line or a note may use to reach this row without naming it (gate R9-H1), spelled
@@ -325,7 +368,7 @@ function pluralUnlisted(t: string): boolean {
 /** Another read row's own table line: a cell is that row's label, a leading number is that row's section, and nothing on
  * the line names this row or reaches it collectively. */
 function otherRowLine(line: string, others: ReadRow[], thisNamed: RegExp): boolean {
-  const plain = withoutNonFigures(line);
+  const plain = withoutNonFigures(line, thisNamed);
   if (thisNamed.test(plain) || COLLECTIVE.test(plain) || pluralUnlisted(plain)) return false;
   const cells = line.split("\t").map((c) => flatLabel(c));
   const lead = /^\s*(?:section\s+)?([0-9]{1,3}(?:\.[0-9]{1,2})?|[A-Z]{1,4})[.)]?\t/i.exec(line)?.[1] ?? null;
@@ -334,7 +377,7 @@ function otherRowLine(line: string, others: ReadRow[], thisNamed: RegExp): boole
 /** A note that names a different read row (its section in any form, or its whole label) and nothing of this row, with no
  * collective or pointing words and no plural sections not listed by number. */
 function otherRowNote(sentence: string, others: ReadRow[], thisNamed: RegExp): boolean {
-  const plain = withoutNonFigures(sentence);
+  const plain = withoutNonFigures(sentence, thisNamed);
   if (thisNamed.test(plain) || COLLECTIVE.test(plain) || pluralUnlisted(plain) || EXCLUSION_WORDS.test(plain)) return false;
   return others.some((o) => {
     const n = sectionNo(o.section), l = flatLabel(o.benefit);
@@ -345,7 +388,7 @@ function otherRowNote(sentence: string, others: ReadRow[], thisNamed: RegExp): b
 /** A premium or instalment line: no limiting, exclusion or cover word, nothing of this row, and every money figure
  * right after premium, instalment, debit or fee wording (gate R9-H1). */
 function premiumLine(t: string, thisNamed: RegExp): boolean {
-  const plain = withoutNonFigures(t);
+  const plain = withoutNonFigures(t, thisNamed);
   if (!/\b(?:premiums?|contributions?|instal(?:l)?ments?|direct\s+debit)\b/i.test(plain)) return false;
   if (LIMIT_WORDS.test(plain) || EXCLUSION_WORDS.test(plain) || /\b(?:cover|covered|covers|benefits?|sum\s+(?:insured|assured))\b/i.test(plain) || thisNamed.test(plain)
     || FIGURE_WORDS.test(plain) || /%/.test(plain)) return false;
@@ -353,13 +396,25 @@ function premiumLine(t: string, thisNamed: RegExp): boolean {
   const left = plain.replace(PREMIUM_MONEY, " ");
   return !/\d/.test(left);
 }
-/** A general exclusion of causes: "Exclusions: ..." naming no group of people, no figure, nothing of this row and no
- * limiting word (it is the same for every insured person). */
+/** The causes a general exclusion may name, a closed list (gate R10-H1). */
+const CAUSE = /\b(?:wars?|warlike|invasion|act\s+of\s+(?:a\s+)?foreign\s+enem(?:y|ies)|hostilities|terroris[mt]s?|terrorist\s+acts?|riots?|civil\s+commotion|civil\s+unrest|nuclear|radioactiv\w*|radiation|ionising\s+radiation|self[\s-]inflicted|suicide|attempted\s+suicide|alcohol|drugs?|intoxicat\w*|influence\s+of|motor\s+racing|motor\s+sport|(?:professional|hazardous|dangerous)\s+(?:sports?|activities)|aviation|flying|diving|mountaineering|criminal\s+acts?|illegal\s+acts?|unlawful\s+acts?|diseases?|illness(?:es)?|sickness(?:es)?|pre[\s-]existing|pregnancy|childbirth|hiv)\b/i;
+/** What makes an exclusion item about whom or when rather than about a cause (gate R10-H1): a time or status word, an age
+ * or any number. */
+const NOT_CAUSE = /\b(?:before|after|until|till|prior\s+to|during|while\s+(?:in|still|a|an|being|of)|still|birthdays?|\w*hood|minority|majority|infancy|adolescen\w*|school\w*|wards?|issue|generations?|ages?d?|years?|old|young\w*|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\w+teenth|\w+tieth|one|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|born|birth|grand\w*|step\w*|descendants?|heirs?|guardians?|care\s+of|custody|parents?|mothers?|fathers?|siblings?|brothers?|sisters?|relatives?|household)\b/i;
+/** A general exclusion of causes (gate R10-H1, an allow-list): "Exclusions: ..." or "General exclusions - ..." whose every
+ * item (split on ";", ",", "or" and "and") names a cause from a closed list, and no item has a time or status word, an
+ * age, a number, a figure, a group of people, a limiting word or anything of this row. "except as a (fare-paying)
+ * passenger" after flying is the only exception words allowed. The same exclusion for every insured person. */
 function causeExclusion(t: string, thisNamed: RegExp): boolean {
-  const plain = withoutNonFigures(t);
-  return /^\s*(?:general\s+)?exclusions?\s*[:-]/i.test(plain) && !thisNamed.test(plain) && !/\d|%/.test(plain) && !FIGURE_WORDS.test(plain) && !LIMIT_WORDS.test(plain)
-    && !/\b(?:except|other\s+than|unless|only\s+if)\b/i.test(plain)
-    && !/\b(?:persons?|people|lives|life|members?|insureds?|family|families|spouses?|partners?|relatives?|dependants?|dependents?|policyholders?|proposers?|ages?d?|years?|born|further|additional|named)\b/i.test(plain);
+  const plain = withoutNonFigures(t, thisNamed);
+  const head = /^\s*(?:general\s+)?exclusions?\s*[:-]\s*/i.exec(plain);
+  if (!head) return false;
+  const body = plain.slice(head[0].length).replace(/[.\s]+$/, "")
+    .replace(/\b(flying|aviation)\s*\(?\s*(?:except|other\s+than)\s+as\s+an?\s+(?:fare[\s-]paying\s+)?passenger(?:\s+(?:in|on)\s+an?\s+(?:licensed|scheduled|commercial)\s+(?:aircraft|airline|flight))?\s*\)?/gi, "$1");
+  if (!body || thisNamed.test(body) || /\d|%/.test(body) || FIGURE_WORDS.test(body) || LIMIT_WORDS.test(body) || PERSON_GROUP.test(body)
+    || /\b(?:except|other\s+than|unless|only\s+if|if|when|where|whilst)\b/i.test(body)) return false;
+  const items = body.split(/\s*(?:;|,|\bor\b|\band\b|\/)\s*/i).map((x) => x.trim()).filter((x) => x && !/^(?:any|the|a|an)$/i.test(x));
+  return items.length > 0 && items.every((x) => CAUSE.test(x) && !NOT_CAUSE.test(x));
 }
 /** Decision (1), an allow-list (gates R8-H1, R9-H1): the cell's child share is given only when nothing else in the document
  * could change it. Every sentence or line outside the row's own cell (`own`) that carries a figure (digits, a percentage,
@@ -368,7 +423,7 @@ function causeExclusion(t: string, thisNamed: RegExp): boolean {
  * row; a general exclusion of causes. A tab line straight after the row's own line with an empty first cell continues its
  * cell: anything there that needs accounting means no share. The word backstop (childWordsElsewhere: child and age words,
  * this row's benefit named with a figure, another language) still applies. Anything else: no share. */
-export function childShareAllowed(pages: { page: number; text: string }[], own: { page: number; from: number; to: number } | null, people: string[], row: ReadRow, others: ReadRow[]): boolean {
+export function childShareAllowed(pages: { page: number; text: string }[], own: { page: number; from: number; to: number } | null, people: string[], row: ReadRow, others: ReadRow[], sums: PersonSum[]): boolean {
   if (childWordsElsewhere(pages, own, people, row)) return false;
   const names = people.map((n) => n.replace(/\s+/g, " ").trim().toLowerCase()).filter((n) => n.length >= 3);
   const thisNamed = rowNamedAny(row);
@@ -396,7 +451,7 @@ export function childShareAllowed(pages: { page: number; text: string }[], own: 
       const lower = line.toLowerCase();
       const namesPerson = names.some((n) => lower.includes(n));
       // A people-table line, whatever it carries, must fit its header's columns.
-      if (namesPerson ? !peopleLine(cells, names, header, thisNamed) : need(line) && !otherRowLine(line, rest, thisNamed)) return false;
+      if (namesPerson ? !peopleLine(cells, names, header, thisNamed, sums) : need(line) && !otherRowLine(line, rest, thisNamed)) return false;
       // The header a people line is read under: the last tab line naming no one.
       if (!namesPerson) header = cells;
     }
