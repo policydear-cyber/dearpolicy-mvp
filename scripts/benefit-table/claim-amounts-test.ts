@@ -454,9 +454,19 @@ test("a person whose name is part of another member's name still gets their own 
   assert.deepEqual(ask(h, "Wei Ling Tan", /Burns/).amounts, ["RM10,000"]);
 });
 
-test("control: a row whose line prints another share for a kind of life gives no chat amount (Critic #449 round 4, F6)", () => {
-  for (const line of ["Burns\t10% of the Sum Insured. For an insured child, 5% of the Sum Insured.", "Burns\t10% of the Sum Insured. Children: 5%."]) {
+test("a row whose line prints another share for a kind of life: each person's share only by the schedule's printed relationship (Critic #449 round 4, F6; TE-ACC-20261113 R2 H1-B)", () => {
+  // The schedule prints each person's relationship in its own column: the child's share for "Child", the row's own for
+  // "Policyholder" and "Spouse" (lib/benefit-table/child-limit.ts).
+  for (const line of ["Burns\t10% of the Sum Insured. For an insured child, 5% of the Sum Insured.", "Burns\t10% of the Sum Insured. Children: 5% of the Sum Insured."]) {
     const h = schedule({ people: MYR.people, page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\n${line}`, benefits: [ben({ benefit: "Burns", pays: "percent", value: 10, percentOf: "sum_insured", quote: "Burns\t10% of the Sum Insured" })] });
+    assert.deepEqual(MYR.people.map((p) => ask(h, p.name, /Burns/).amounts), [["RM15,000"], ["RM10,000"], ["RM2,000"]], line);
+  }
+  // Control: "Children: 5%" on a 10% row (5% of the sum or of the benefit is not said), an age in the condition and no date
+  // of birth column, or no relationship column: no amount for anyone, as before.
+  const noDob = MYR.people.map((p) => ({ ...p, line: p.line.split("\t").filter((_, i) => i !== 2).join("\t") }));
+  for (const [people, line] of [[MYR.people, "Burns\t10% of the Sum Insured. Children: 5%."], [noDob, "Burns\t10% of the Sum Insured. For an insured child under 18, 5% of the Sum Insured."],
+    [MYR.people.map((p) => ({ ...p, line: p.line.split("\t").filter((_, i) => i !== 1).join("\t") })), "Burns\t10% of the Sum Insured. Children: 5%."]] as const) {
+    const h = schedule({ people: [...people], page2: `TABLE OF BENEFITS\nBenefit\tAmount payable\n${line}`, benefits: [ben({ benefit: "Burns", pays: "percent", value: 10, percentOf: "sum_insured", quote: "Burns\t10% of the Sum Insured" })] });
     for (const p of MYR.people) assert.deepEqual(ask(h, p.name, /Burns/).amounts, [], `${line}: ${p.name}`);
   }
 });

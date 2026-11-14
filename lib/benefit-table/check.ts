@@ -16,6 +16,7 @@ import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, personOnlyI
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
+import { childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife } from "./child-limit";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
@@ -110,7 +111,10 @@ export type CheckedCover = ReadCover & { source: Source; currency: string | null
   /** The premium's parts as the cover's own schedule line prints them: the benefit's own premium on its line, then each
    * extra charged on it on the lines below ("- Health Extra --- 201.80"). Set only when the parts add up exactly to the
    * premium (premiumPartsOf). */
-  premiumParts?: { label: string | null; amount: number; source: Source }[] | null };
+  premiumParts?: { label: string | null; amount: number; source: Source }[] | null;
+  /** The date of birth and relationship the cover's own line prints under its table's "Date of birth" and "Relationship"
+   * columns (lib/benefit-table/child-limit.ts printedLife), when it prints either: who a row's child share is for. */
+  life?: PrintedLife };
 
 /** A premium line the table may use on its own: a plain premium for the whole policy ("Premium", "Instalment Premium",
  * "Premium paid", "Total Premium"). A line that qualifies it ("First Year Instalment Premium *", "Rider Premium",
@@ -220,7 +224,12 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   /** The whole printed line or lines the row's quote is on, and the line after them, as the page prints them (assemble.ts
    * perPersonRow: a row whose own line or the next prints another figure, such as an age or a child's rate, is not every
    * named insured's). Unset when the quote was not placed on its page. */
-  rowText?: string; nextLine?: string; prevLine?: string };
+  rowText?: string; nextLine?: string; prevLine?: string;
+  /** A child's share printed in the row's own amount cell ("100% of the Sum Insured. For an insured child under 18,
+   * limited to 25% of the Sum Insured.", lib/benefit-table/child-limit.ts): the row's own share is for everyone else, and
+   * this one only for a person the schedule's own line proves is that child (assemble.ts baseFigure). Set only when the
+   * cell prints nothing else but the row's own share (no cap, no money, no other percentage). */
+  childLimit?: ChildLimit };
 export type Dropped = { what: string; why: string };
 /** periodFrom and periodTo: the document's own period of cover, each kept only when the document prints it. */
 export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
@@ -970,6 +979,18 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       c.premiumParts = parts.map((p, i) => ({ label: p.label, amount: p.amount, source: sources[i]! }));
   }
 
+  // The date of birth and relationship each cover's own line prints in its table's columns (who a child's share is for):
+  // only from a line that names the person.
+  for (const c of out.covers) {
+    const p = placed.get(c.source);
+    if (!p) continue;
+    const text = pageText(c.source.page), index = text.slice(0, p.start).split("\n").length - 1;
+    const lines = text.split("\n");
+    const have = new Set((lines[index] ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u));
+    if (!normalizePersonName(c.person).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).every((w) => have.has(w))) continue;
+    const life = printedLife(lines, index);
+    if (life.birth || life.relationship) c.life = life;
+  }
   // A document printed for one life: every cover and every named person is the same person.
   const lives = new Set([...out.covers.map((c) => c.person), ...out.namedPeople].map((n) => normalizePersonName(n)).filter(Boolean));
   const oneLife = lives.size === 1;
@@ -1042,14 +1063,32 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
     // A percentage in the row's own label ("Burns: greater than 2% but less than 5%") is the label's, not another row's.
     const percents = (t: string) => (t.match(/\d+(?:\.\d+)?\s*%/g) ?? []).length;
     // The row itself stays, as words with no figure: its quote cannot tell which percentage is its own.
-    if (pays === "percent" && percents(source.excerpt) > percents(benefit) + 1) {
+    // A child's share printed in the row's own cell ("100% of the Sum Insured. For an insured child under 18, limited to
+    // 25% of the Sum Insured"): read only when the cell prints nothing else beside the row's own share, then the child's
+    // sentence is left out of the row's own checks (lib/benefit-table/child-limit.ts). Anything else is as before.
+    let childLimit: ChildLimit | null = null;
+    if (pays === "percent" && value != null && percentOf === "sum_insured" && num(b.cap) == null && placed.has(source)) {
+      const p = placed.get(source)!, text = pageText(source.page);
+      const cell = text.slice(p.start, p.end) + text.slice(p.end, lineEndAt(text, p.end)).split("\t")[0];
+      // Only on the row's own line: the line the quote is on prints the row's own benefit name (a quote such as "100% of
+      // the Sum Insured" found first in another row's cell is never given that row's child share).
+      const line = text.slice(text.lastIndexOf("\n", p.start - 1) + 1, lineEndAt(text, p.end)).replace(/\s+/g, " ").toLowerCase();
+      const found = line.includes(benefit.replace(/\s+/g, " ").toLowerCase()) ? childLimitIn(cell.replace(/\t/g, " "), value) : null;
+      if (found) {
+        const seg = segmentOf(source);
+        const rest = [source.excerpt, cell, seg.text, seg.near, ...conditions].map((t) => withoutChildLimit(t, found));
+        const ownOnly = (t: string) => [...t.matchAll(/(\d+(?:\.\d+)?)\s*(?:%|per\s?cent)/gi)].every((m) => Math.abs(Number(m[1]) - value!) < 1e-9);
+        if (rest.every((t) => ownOnly(t) && !NEAR_CAP.test(t) && !moneyIn(t).length && !/\bwhichever\b/i.test(t))) childLimit = found;
+      }
+    }
+    if (pays === "percent" && percents(childLimit ? withoutChildLimit(source.excerpt, childLimit) : source.excerpt) > percents(benefit) + 1) {
       out.dropped.push({ what: label, why: "quote holds more than one percentage; kept the row with no figure" });
       out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays: "words", value: null, period: null, basis, asOf: null, percentOf: null, baseAmount: null,
         baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions, page: source.page, quote, source, currency: null, baseSource: null, capSource: null,
         capUnread: false, droppedConditions, combinedLimit: false, limitsHeading: LIMITS_HEADING.test(str(b.section) ?? "") });
       continue;
     }
-    if (pays === "percent") {
+    if (pays === "percent" && !childLimit) {
       const { text: row, near, otherPercent } = segmentOf(source);
       const claimed = num(b.cap);
       const s = claimed != null && claimed > 0 ? find(str(b.capQuote), source.page) : null;
@@ -1114,7 +1153,7 @@ export function checkReading(doc: SourceDoc, raw: unknown): CheckedReading {
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}),
-      ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}),
+      ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}) });
   }
   return out;
