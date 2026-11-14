@@ -7,6 +7,7 @@
  * printed, so the same upload is always read the same way.
  */
 import type { PdfPage } from "./pdf";
+import { maskPrefixLetterMisreads } from "./currency-misread";
 
 // ---------------------------------------------------------------------------
 // What kind of paper this is
@@ -374,6 +375,12 @@ export function settleOcrFigures(pages: PdfPage[]): { pages: PdfPage[]; notes: s
         unclear.push(f);
         notes.push(`On page ${page.pageNumber} the scan prints “${f.token}”, which can’t be read with certainty, so DearPolicy does not use it as a figure. Check it against the paper copy.`);
       }
+    }
+    // A currency letter a scan printed as a digit ("S$20,000" read as "$520,000"): marked as not checked, never repaired.
+    const misread = maskPrefixLetterMisreads(text);
+    if (misread.masked.length) {
+      text = misread.text;
+      notes.push(`On page ${page.pageNumber} the scan shows ${misread.masked.length === 1 ? "an amount" : `${misread.masked.length} amounts`} (${[...new Set(misread.masked)].slice(0, 3).map((t) => `“${t}”`).join(", ")}) whose first digit may be the currency’s letter misread, so DearPolicy does not use ${misread.masked.length === 1 ? "it" : "them"} as a figure. Check against the paper copy.`);
     }
     return text === page.text ? page : { ...page, text };
   });
