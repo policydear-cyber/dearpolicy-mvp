@@ -495,13 +495,31 @@ test("gate R6B control: the evidence's term schedule shape with its annual premi
   const p1 = `Example Life\nTERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\tPolicy currency: Singapore dollars\n(SGD)\nBenefit\tSum assured / amount\nDeath\tS$450,000\n${TPD_LINE}\nHospital income rider\tS$100 per day in hospital, up to 365 days per\n\tpolicy year\nAnnual premium: S$1,148.00`;
   assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, ["S$450,000"]);
 });
-test("gate R6B-L1: a premium column's figure, labelled by its column header, is no second sum", () => {
+test("gate R6B-L1 / R7B: a column header is never a figure's label, so a premium column's figure counts and the chat gives none (as main)", () => {
   const p1 = `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\nBenefit\tSum assured\tPremium\nDeath\tS$450,000\tS$1,148.00\n${TPD_LINE}`;
-  assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$450,000\tS$1,148.00", 450000), DANIEL, /permanent/).amounts, ["S$450,000"]);
+  assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$450,000\tS$1,148.00", 450000), DANIEL, /permanent/).amounts, []);
 });
 test("gate R6B control: a 'Premium' header over the sum's own column does not hide another sum", () => {
   const p1 = `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\nBenefit\tSum assured\tPremium\nDeath\tS$450,000\tS$1,148.00\n${TPD_LINE}\n${R5N}\nDeath\tS$200,000`;
   assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
+});
+
+// ---------- Gate round 7B (sum-base-gate.md "Round 7B"): every repro gives none ----------
+for (const blk of ["Payment\tMonthly premium\nSum assured\tS$450,000", "Item\tPremium\nAnnual premium\tS$1,148.00\nSum assured\tS$450,000", "Benefit\tPremium\tSum assured\nLife cover\tS$450,000\t",
+  "Cover\tContribution\nSum covered\tS$450,000", "Premium details\tPremium\nLife cover\tS$450,000"])
+  test(`gate R7B: a charge-word line above the person's own sum (${JSON.stringify(blk)}) never hides it, so a second life's 'Death' line gives no TPD figure`, () => {
+    assert.deepEqual(ask(otherLifeDoc(`${R2H}\n${blk}\n${TPD_LINE}\n${R5N}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
+  });
+test("gate R7B: premium-column tables give no TPD figure in the chat, whichever row or figure the table took", () => {
+  const cases: [string, string, number][] = [
+    [`${R2H}\nBenefit\tSum assured\tPremium\nDeath\tS$450,000\tS$200,000\n${TPD_LINE}`, "Death\tS$450,000\tS$200,000", 450000],
+    [`${R2H}\nLife\tSum assured\tPremium\nDaniel\tS$450,000\tS$1,148.00\nLim\tS$200,000\tS$900.00\n${TPD_LINE}`, "Daniel\tS$450,000\tS$1,148.00", 450000],
+    [`${R2H}\nLife\tSum assured\tPremium\nDaniel\tS$450,000\tS$1,148.00\nLim\tS$200,000\tS$900.00\n${TPD_LINE}`, "Lim\tS$200,000\tS$900.00", 200000],
+    [`${R2H}\nBenefit\tPremium\tSum assured\nDeath\tS$1,148.00\tS$450,000\n${TPD_LINE}`, "Death\tS$1,148.00\tS$450,000", 450000],
+    [`${R2H}\nBenefit\tSum assured\tPremium\nDeath\tS$200,000\tS$450,000\n${TPD_LINE}`, "Death\tS$200,000\tS$450,000", 200000],
+  ];
+  for (const [p1, line, sum] of cases) assert.deepEqual(ask(otherLifeDoc(p1, line, sum), DANIEL, /permanent/).amounts, [], line);
+  assert.deepEqual(ask(otherLifeDoc(`${R2H}\nBenefit\tSum assured\tPremium`, "Death\tS$450,000\tS$1,148.00", 450000, `Death\tS$450,000\tS$1,148.00\n${TPD_LINE}`), DANIEL, /permanent/).amounts, []);
 });
 
 if (failures.length) {

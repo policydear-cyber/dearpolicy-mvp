@@ -962,8 +962,8 @@ function sumLineInOwnBlock(text: string, lineAt: number): string | null {
  * - it is in this row's own quoted words or its maximum's, or in the stored maximum of another row the table worked out
  *   (`caps`), each located on its stored page;
  * - its WHOLE label is a premium, contribution, fee or charge item ("Annual premium", "Monthly contribution", "Policy
- *   fee"), the label being the words before it in its cell or, when it opens its cell, the cell before it or its column's
- *   header (a table's "Premium" column). "Return of premium" and "Waiver of premium" are covers, so they count;
+ *   fee"), the label being the words before it in its cell or, when it opens its cell, the cell before it. A column's
+ *   header is never its label. "Return of premium" and "Waiver of premium" are covers, so they count;
  * - the words right after it in its cell tie it to a day, a week or a month ("S$100 per day in hospital");
  * - it is the first figure on a line whose line above prints a percentage and ends with a cap word: the wrap of a
  *   percentage cell ("25% of the Sum Covered, up to a maximum of" / "RM 50,000").
@@ -976,17 +976,6 @@ const PERCENT_IN_LINE = /\d\s?(?:%|per\s?cent)/i;
 const CAP_WORD_END = /\b(?:up\s+to|maximum(?:\s+of)?|max\.?|not\s+exceeding|limited\s+to|capped\s+at)\s*:?\s*$/i;
 /** A sum written out in words: a number word with a currency word ("two hundred thousand Singapore dollars"). */
 const SUM_IN_WORDS = /\b(?:hundred|thousand|million|billion|ratus|ribu|juta)\b[^\n]*\b(?:dollars?|ringgit|pounds?|euros?|rupiah|pesos?|baht|yuan|rupees?)\b/i;
-/** The header over a table cell: the nearest line above with as many cells and no money figure, across only the table's
- * own rows (lines with as many cells); null when there is none. */
-function columnHeader(lines: string[], i: number, column: number): string | null {
-  const width = lines[i].split("\t").length;
-  for (let j = i - 1; j >= 0; j--) {
-    const cells = lines[j].split("\t");
-    if (cells.length !== width) return null;
-    if (!moneyFiguresIn(lines[j]).length) return cells[column]?.trim() || null;
-  }
-  return null;
-}
 /** The stored maximums of the other rows the table worked out for this answer. */
 const otherCaps = (all: readonly ServerFigure[], sf: ServerFigure) => all.filter((f) => f !== sf && f.cap).map((f) => ({ quote: f.cap!.quote, docIndex: f.cap!.docIndex }));
 /** Each money figure on line `i`, where it stands, and whether a closed reason marks it as no sum (oneSumOnDocument's
@@ -1002,12 +991,11 @@ function lineFigures(lines: string[], i: number): { f: StatedFigure; at: number;
     from = at + f.raw.length;
     const cellStart = l.lastIndexOf("\t", at - 1) + 1;
     const before = l.slice(cellStart, at);
-    // Its labels: the words before it in its cell or, when it opens its cell, the cell before it and its column's header.
-    const labels = before.trim() ? [before.trim()] : [l.slice(0, Math.max(0, cellStart - 1)).split("\t").map((c) => c.trim()).filter(Boolean).at(-1) ?? "",
-      columnHeader(lines, i, l.slice(0, cellStart).split("\t").length - 1) ?? ""];
+    // Its label: the words before it in its cell or, when it opens its cell, the cell before it.
+    const label = before.trim() ? before.trim() : (l.slice(0, Math.max(0, cellStart - 1)).split("\t").map((c) => c.trim()).filter(Boolean).at(-1) ?? "");
     const nextTab = l.indexOf("\t", from);
     const after = l.slice(from, nextTab < 0 ? l.length : nextTab);
-    const notSum = labels.some((x) => CHARGE_LABEL.test(x)) || SHORT_PERIOD_AFTER.test(after)
+    const notSum = CHARGE_LABEL.test(label) || SHORT_PERIOD_AFTER.test(after)
       || (n === 0 && i > 0 && PERCENT_IN_LINE.test(lines[i - 1]) && CAP_WORD_END.test(lines[i - 1].trimEnd()));
     out.push({ f, at, notSum });
   });
@@ -1094,7 +1082,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   // not "Wei Tan"'s line, Critic #449 F8).
   const longer = household.members.map((m) => tokens(m.name)).filter((t) => t.length > who.length && who.every((w) => t.includes(w)));
   const namesPerson = (lt: Set<string>) => who.every((w) => lt.has(w)) && !longer.some((t) => t.every((w) => lt.has(w)));
-  let onLine = moneyFiguresIn(line);
+  const onLine = moneyFiguresIn(line);
   // A document printed for this person alone needs no name on the sum's own line (TE-ACC-20261114-R3 failure 4: "100% of
   // the death sum assured" was worked out on the table and refused here because "Death  S$450,000" does not repeat the
   // life assured's name). ALLOW-list, all of it or main's rule (soleLifeDocument, sumLineIsRows).
@@ -1104,8 +1092,6 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
     const rowWords = `${sf.row.quote}\n${st.text}`;
     const lineWhy = sumLineIsRows(line, rowWords, person, household) ?? oneSumOnDocument(bdoc, sf.base.docIndex, sf, household, caps) ?? sumLineInOwnBlock(bpage.text, at);
     if (lineWhy) return no(`the sum's line ${lineWhy}`);
-    // On such a document a figure on the sum's line that the closed list marks as no sum (a "Premium" column's) is left out.
-    onLine = lineFigures(bpage.text.split("\n"), at).filter((x) => !x.notSum).map((x) => x.f);
   }
   if (onLine.length !== 1) return no("the sum's line prints no money figure or more than one");
   if (onLine[0].currency !== sf.currency || !sameValue(onLine[0].value, sf.base.value)) return no("the sum's line prints another figure or currency");
