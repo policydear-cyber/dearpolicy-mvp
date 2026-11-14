@@ -399,7 +399,7 @@ const HEADLINE_LABEL = /\b(?:sum\s+(?:insured|assured|covered)|face\s+amount|jum
 /** Why a share the reading left unsettled, and its row's words name as of the policy's own headline sum (check.ts
  * baseFromWords), is not worked out on this cover's sum; null when it may be. It may only when this person's covers of the
  * same product and policy on the cover's own document print one such sum: the covers whose lines name the headline sum
- * ("Sum covered (critical illness)  RM 200,000"), or, when none does, every cover there that prints a sum. Two different
+ * ("Sum covered (critical illness)  RM 150,000"), or, when none does, every cover there that prints a sum. Two different
  * sums (a basic plan's and a rider's, two plans) or one in another currency are doubt, so no amount. A rider's row naming
  * the basic plan's sum is never worked out on the rider's own sum. */
 function headlineSumProblem(b: CheckedBenefit, cover: PersonCover, personCovers: PersonCover[]): string | null {

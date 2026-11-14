@@ -634,8 +634,9 @@ const SPELLED_PERCENT = /^\(\s*[\p{L}\s-]*\bper\s*cent\s*\)\s*/iu;
  * benefit's, plan's or life's words before it ("death sum assured", "rider sum assured", "Basic Coverage Amount"). */
 const KIND_OF_LIFE_WORDS = String.raw`\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?|principal|parents?)\b`;
 const HEADLINE_SUM_NAME = String.raw`(?:(?:the|your|its)\s+)?(?:(?:(?:basic|base)\s+)?sum\s+(?:insured|assured|covered)|face\s+amount|jumlah\s+(?:diinsuranskan|dilindungi))`;
-/** A money figure with its currency printed (a code or a sign; "$" with or without letters before it). */
-const CELL_MONEY = String.raw`(?:(?:[A-Z]{1,3}\s?)?\$\s?|RM\s?|£\s?|€\s?|(?:SGD|USD|MYR|HKD|GBP|EUR|AUD|NZD|IDR|PHP|THB|CNY|INR)\s?)\d[\d,]*(?:\.\d+)?`;
+/** A money figure with its currency printed: a code or a sign, "$" only with its letters ("S$", "US$"). A bare "$" never
+ * sets a currency, so a maximum printed with one leaves the share as read. */
+const CELL_MONEY = String.raw`(?:[A-Z]{1,3}\$\s?|RM\s?|£\s?|€\s?|(?:SGD|USD|MYR|HKD|GBP|EUR|AUD|NZD|IDR|PHP|THB|CNY|INR)\s?)\d[\d,]*(?:\.\d+)?`;
 /** What may follow the name, each a closed phrase: a printed maximum with its figure, "whichever is lower", "once per
  * lifetime", "payable in one lump sum". Nothing else: "per day", "in instalments", "plus bonuses", "under the rider",
  * "for each child", "of the basic plan", "less any amount already paid", "ditolak ..." all leave the share as read. */
@@ -647,15 +648,20 @@ const HEADLINE_CELL = new RegExp(String.raw`^\d+(?:[.,]\d+)?\s*(?:%|per\s?cent)\
 const SHARE_LIFE = new RegExp(String.raw`${KIND_OF_LIFE_WORDS}|\b(?:wi(?:fe|ves)|husbands?|partners?|juveniles?|policy\s*holders?|bab(?:y|ies)|students?|aged|isteri|suami|pasangan|anak|joint|co-?(?:life|insured|assured)|second|additional|other\s+(?:life|insured))\b|\b(?:life|lives|insured|assured|member|person|participant|peserta|tertanggung)[ ]?[-#(]?[ ]?(?:\d(?![\d,.])|i{1,3}\b|iv\b|two\b|kedua\b)|\bLA\s*\d`, "i");
 /** Words that take something off what is paid, in any cell or condition: never settled as a share of the sum. */
 const TAKES_OFF = /\b(?:less|minus|deduct\w*|reduc\w*|net\s+of|exclud\w*|subtract\w*|balance|offset\w*|previously\s+paid|already\s+paid|paid\s+earlier|after\s+deducting|ditolak|tolak|potong\w*)\b/i;
+/** A line that starts a new table row: a label starting with a capital, a tab, and its own figure, percentage or words for
+ * not covered. */
+const NEW_ROW = new RegExp(String.raw`^\p{Lu}[^\t]*\t\s*(?:\d|${CELL_MONEY}|(?:not\s+covered|nil|n\/a|no\s+cover)\b)`, "u");
 /** Whether a row whose reading did not settle its percentage's base prints it, in its WHOLE cell, as exactly "<n>% of
  * <the policy's headline sum>" with only closed phrases after it (HEADLINE_CELL). `cell` is every printed line the row's
  * quote is on; `next` is the line after it, which must start a new row (a label before a tab) or be empty; `words` are the
  * row's name, section, column and conditions, which must name no life (SHARE_LIFE) and take nothing off (TAKES_OFF). */
 export function headlineSumShare(cell: string, value: number, next = "", words = ""): boolean {
   const all = cell.normalize("NFKC");
-  if (SHARE_LIFE.test(`${all}\n${words}`) || TAKES_OFF.test(`${all}\n${next}\n${words}`)) return false;
-  // The line after the cell continues it unless it starts a new labelled row: a continuation not quoted is not read.
-  if (next.trim() && !/^[^\t\s][^\t]*\t\s*\S/.test(next)) return false;
+  if (SHARE_LIFE.test(`${all}\n${next}\n${words}`) || TAKES_OFF.test(`${all}\n${next}\n${words}`)) return false;
+  // The line after the cell is a new row only when it reads like one: a left cell starting with a capital and a right cell
+  // starting with its own figure, percentage or "not covered" (NEW_ROW). Anything else may continue the cell, unquoted
+  // ("for deaths abroad<TAB>under the rider"), so the share is left as read.
+  if (next.trim() && !NEW_ROW.test(next)) return false;
   const pcts = [...all.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent\b)/gi)];
   if (pcts.length !== 1 || Math.abs(Number(pcts[0][1].replace(",", ".")) - value) > 0.0001) return false;
   // Only the label may come before the share; every later line is the share's own (continuations start with a tab or are
