@@ -161,6 +161,45 @@ function folded(line: Token[]): Token[] {
 }
 const sameTokens = (a: Token[], b: Token[]) => a.length === b.length && a.every((t, i) => (typeof t === "number" ? typeof b[i] === "number" && Math.abs(t - (b[i] as number)) < 0.005 : t === b[i]));
 const sameLine = (a: Token[], b: Token[]) => sameTokens(a, b) || sameTokens(folded(a), folded(b));
+/** One letter an image reader is known to misread in running text, and only that: "l" for "I" (tokens are lower case, so
+ * i and l), a stroke read twice beside another ("PrulInvestor" for "PruInvestor"), or "rn" for "m". Never a digit (a
+ * figure is its own token and must match exactly), never any other letter ("plan" and "pan" differ). */
+function oneSlip(a: string, b: string): boolean {
+  if (a === b) return false;
+  const stroke = (c: string | undefined) => c === "i" || c === "l";
+  if (a.length === b.length) {
+    const at = [...a].flatMap((c, k) => (c === b[k] ? [] : [k]));
+    return at.length === 1 && stroke(a[at[0]]) && stroke(b[at[0]]);
+  }
+  const [long, short] = a.length > b.length ? [a, b] : [b, a];
+  if (long.length - short.length !== 1) return false;
+  for (let p = 0; p < long.length; p++) {
+    if (stroke(long[p]) && (stroke(long[p - 1]) || stroke(long[p + 1])) && long.slice(0, p) + long.slice(p + 1) === short) return true;
+    if (long.slice(p, p + 2) === "rn" && long.slice(0, p) + "m" + long.slice(p + 2) === short) return true;
+  }
+  return false;
+}
+/** Running text, not a table row: no tab cells and at least six words. */
+const prose = (raw: string) => !raw.includes("\t") && lineTokens(raw).filter((t) => typeof t === "string" && !isDate(t)).length >= 6;
+/** Two readings of one sentence (callers pass prose only; tables stay word for word): every figure and date the same and
+ * in place, every word the same but for at most one known letter slip in one word (oneSlip). Live 13 Nov: a schedule's
+ * footnote held back its years because the image reader printed one product name with a doubled stroke. */
+function sameSentence(a: Token[], b: Token[]): boolean {
+  if (sameLine(a, b)) return true;
+  const x = folded(a), y = folded(b);
+  if (x.length !== y.length) return false;
+  let slips = 0;
+  for (let k = 0; k < x.length; k++) {
+    const s = x[k], t = y[k];
+    if (typeof s === "number" || typeof t === "number") {
+      if (typeof s !== "number" || typeof t !== "number" || Math.abs(s - t) >= 0.005) return false;
+      continue;
+    }
+    if (s === t) continue;
+    if (isDate(s) || isDate(t) || !oneSlip(s, t) || ++slips > 1) return false;
+  }
+  return slips === 1;
+}
 const sameFigures = (a: number[], b: number[]) => a.length === b.length && a.every((n, i) => Math.abs(n - b[i]) < 0.005);
 const figuresOf = (l: Token[]) => l.filter((t): t is number => typeof t === "number");
 const labelOf = (l: Token[]) => l.filter((t) => typeof t === "string" && !isDate(t)).join(" ");
@@ -806,15 +845,44 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     }
     return null;
   };
+  // Sentences the text layer breaks over several lines and an image reader prints as one paragraph ("... year 3 onwards
+  // (if applicable)." over "Note: ... before the year 2015 ..."). The lines are confirmed, each kept as the text prints it
+  // (nothing is joined or moved), when the image prints one line that is exactly their words and figures in the same
+  // order, under the same heading (sameSentence: one known letter slip at most). Running text only: no line of the group
+  // and not the image line has tab cells, so a table's rows are never confirmed this way, and a group that could be
+  // made two ways at the same size is no evidence.
+  const confirmedAlone = new Set<number>(), sentenced = new Set<number>();
+  const sentenceGroup = (i: number): number[] | null => {
+    const k = filledText.indexOf(i);
+    const fits = (j: number) => j === i || (free(j) && !confirmedAlone.has(j) && !sentenced.has(j) && !skipText.has(j) && !lines[j].includes("\t") && textUnder[j] === textUnder[i]);
+    if (k < 0 || lines[i].includes("\t")) return null;
+    for (let size = 2; size <= 6; size++) {
+      let found: { group: number[]; at: number } | null = null, ways = 0;
+      for (let up = Math.min(k, size - 1); up >= 0; up--) {
+        const group = filledText.slice(k - up, k - up + size);
+        if (group.length !== size || !group.every(fits)) continue;
+        const text = group.map((j) => lines[j].trim()).join(" "), tokens = lineTokens(text);
+        if (!prose(text)) continue;
+        const at = pool.findIndex((o) => o.h === textUnder[i] && prose(o.l) && sameSentence(tokens, o.t));
+        if (at >= 0) { ways++; found ??= { group, at }; }
+      }
+      if (found) {
+        if (ways !== 1) return null;
+        pool.splice(found.at, 1);
+        return found.group;
+      }
+    }
+    return null;
+  };
   let figureLines = 0, noLabel = -1, why = "";
   lines.forEach((line, i) => {
     if (skipText.has(i)) return;
     const tokens = lineTokens(line);
     if (!figureLine(tokens)) return;
     figureLines++;
-    if (pre?.confirmed.has(i) || tableRows.has(i) || joinedAway.has(i)) return;
-    const at = labelOf(tokens) ? pool.findIndex((o) => sameLine(tokens, o.t) && o.h === textUnder[i]) : -1;
-    if (at >= 0) { pool.splice(at, 1); return; }
+    if (pre?.confirmed.has(i) || tableRows.has(i) || joinedAway.has(i) || sentenced.has(i)) return;
+    const at = labelOf(tokens) ? pool.findIndex((o) => (sameLine(tokens, o.t) || (prose(line) && prose(o.l) && sameSentence(tokens, o.t))) && o.h === textUnder[i]) : -1;
+    if (at >= 0) { pool.splice(at, 1); confirmedAlone.add(i); return; }
     const wrap = labelOf(tokens) ? wrapped(i, tokens) : null;
     if (wrap) {
       rebuilt.set(i, rebuild(line, lines[wrap.j].trim().replace(/\s+/g, " "), wrap.joined, pool[wrap.at].l));
@@ -829,6 +897,8 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
       if (head !== i) joinedAway.add(i);
       pool.splice(joined.at, 1); return;
     }
+    const sentence = labelOf(tokens) ? sentenceGroup(i) : null;
+    if (sentence) { for (const j of sentence) sentenced.add(j); return; }
     unconfirmed.push(i);
     if (!labelOf(tokens) && noLabel < 0) noLabel = i;
     why ||= labelOf(tokens) ? `the image reading does not print ${figuresOf(tokens).join(", ")} beside "${labelOf(tokens)}" in that order` : `the text reading prints ${figuresOf(tokens).join(", ")} with no label beside it`;
