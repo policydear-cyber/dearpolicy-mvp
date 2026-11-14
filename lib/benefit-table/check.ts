@@ -22,6 +22,7 @@ import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency, type Found } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
+import { moneyCapPrinted, ownRowText, printedOnlyAsCount } from "./own-row";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
 /** A money figure with its sign; a sign is never the end of a word ("FORM 2", "ARM 2"). */
@@ -721,21 +722,82 @@ export function limitKind(b: { benefit: string; section?: string | null; quote?:
 /** The currency of the row's own figure ("Up to S$8,000, capped at US$200 per day": S$ for 8,000), never another figure's on
  * the line (TE pr157 F1, F3). A figure printed without one (a bare "$") or not found takes the page's declared currency; a figure
  * printed in more than one way ("S$8,000 (US$8,000 if overseas)", or "$8,000" beside "S$8,000") has none. */
-function figureCurrency(excerpt: string, value: number, page: string): string | null {
+function figureCurrency(excerpt: string, value: number, bare: string | null): string | null {
   const text = plainText(excerpt);
   const codes = new Set(anyMoneyFigures(text).filter((f) => Math.abs(f.value - value) < 0.005).map((f) => statedCurrencyCode(text.slice(f.index, f.index + f.length))));
   if (codes.size > 1) return null;
-  return [...codes][0] ?? declaredCurrency(page);
+  return [...codes][0] ?? bare;
 }
-/** The currency of a cap figure: the one printed with it in the excerpt; for a bare "$", the currency its page declares
- * (Critic B2); otherwise null. Two different ones printed with it give null. */
-function capFigureCurrency(excerpt: string, value: number, page: string): string | null {
+/** Currencies a page names: signs and codes (a dollar sign counts with or without a figure after it: "bills in US$") ("S$", "US$", "RM", "£", "USD") and currency names ("Singapore dollars"). */
+const NAMED_SIGN = /(?<![A-Za-z])(SG?\$|US\$|HK\$|AU?\$|NZ\$|RM(?=[ \u00a0]?\d|[ \u00a0]*\)))|(?<![A-Za-z])(SGD|USD|MYR|HKD|AUD|NZD|GBP|EUR|IDR|THB|PHP|CNY|JPY|INR)(?![A-Za-z])|([£€])/g;
+const NAMED_WORD = /\b(singapore\s+dollars?|u\.?s\.?\s+dollars?|united\s+states\s+dollars?|hong\s+kong\s+dollars?|australian\s+dollars?|ringgit|pounds?\s+sterling|euros?)\b/gi;
+const SIGN_CODE: Record<string, string> = { "S$": "SGD", "SG$": "SGD", "US$": "USD", "HK$": "HKD", "A$": "AUD", "AU$": "AUD", "NZ$": "NZD", RM: "MYR", "£": "GBP", "€": "EUR" };
+const WORD_CODE = (w: string) => /^sing/i.test(w) ? "SGD" : /^(?:u\.?s|united)/i.test(w) ? "USD" : /^hong/i.test(w) ? "HKD" : /^austr/i.test(w) ? "AUD" : /^ring/i.test(w) ? "MYR" : /^pound/i.test(w) ? "GBP" : "EUR";
+/** A cell that is only a premium-type label before its figure: premium (annual, monthly, modal or total; "payable"),
+ * contribution, instalment, levy, tax, GST, VAT, stamp duty or policy fee ("Premium: USD 120", "Policy fee - USD 25").
+ * Any other fee or charge ("Service charge", "Surgical fees") is a benefit (cross-row gate round 6). */
+const PREMIUM_LABEL_CELL = /^[ \t(]*(?:(?:annual|monthly|modal|total)\s+)?(?:premiums?|contributions?|instal(?:l)?ments?|levy|tax(?:es)?|gst|vat|stamp\s+duty|policy\s+fees?)(?:\s+payable)?[ \t]*[:\-–]?[ \t]*$/i;
+/** "paid-up capital", "issued capital" or "share capital" (optionally "of") directly before the currency. */
+const CAPITAL_BEFORE = /\b(?:paid[\s-]*up|issued|share)\s+capital\s+(?:of\s+)?$/i;
+/** A word that makes a cell a benefit, whatever its label: a refund, a waiver, a benefit, a reimbursement. */
+const BENEFIT_WORD = /\b(?:refunds?|refunded|refundable|waiver|waive[ds]?|benefits?|reimburs\w*)\b/i;
+/** A currency printed with a figure right after it ("US$1,000", "USD 120", "RM 100"). */
+const WITH_FIGURE = /^(?:[A-Z]{3}|[A-Z]{0,3}\$|RM|[£€])[  ]?\d/;
+/** Whether a currency mention at `index` on a line counts as one the page's benefits may be in (cross-row gate rounds 5
+ * and 6: every mention counts but two closed shapes, and only on a line outside the benefit table, before its first
+ * heading or row or after its last row; between them every mention counts):
+ * (a) a figure in a cell that is only a premium-type label before it (PREMIUM_LABEL_CELL), with no refund, waiver or
+ *     benefit word anywhere on the line;
+ * (b) a figure directly after "paid-up / issued / share capital (of)".
+ * A currency named without a figure ("(USD)", "in USD", "Limit (USD)") always counts. */
+function mentionCounts(line: string, index: number, outsideTable: boolean): boolean {
+  if (!outsideTable || !WITH_FIGURE.test(line.slice(index))) return true;
+  const before = line.slice(0, index), cellFrom = before.lastIndexOf("\t") + 1;
+  if (BENEFIT_WORD.test(line)) return true;
+  if (PREMIUM_LABEL_CELL.test(before.slice(cellFrom))) return false;
+  if (CAPITAL_BEFORE.test(before)) return false;
+  return true;
+}
+/** A heading that starts a benefit table ("TABLE OF BENEFITS", "Schedule of Benefits", "Benefits", "Benefit limits"). */
+export const BENEFIT_HEADING = /\b(?:table|schedule|summary)\s+of\s+(?:benefits?|cover(?:age)?)\b|\bbenefits?\s+(?:table|schedule|summary|limits?)\b|^\s*(?:benefits?|cover(?:age)?)\s*(?:\(|:|\t|$)/i;
+const pageCurrencyCache = new Map<string, { declared: string | null; mixed: boolean }>();
+/** The page's declared currency, and whether the page also names another one in a mention that counts (mentionCounts).
+ * `table`: where the page's benefit rows are printed (first start, last end), from the reading; the table starts at the
+ * first benefit heading if one comes before them. On a mixed page a bare figure or a bare cap gets no currency, and so no
+ * amount: which currency it is in is never inferred from a heading (cross-row gate round 2, R2-H3). Only figures printed
+ * with their own currency keep it. */
+export function pageCurrencyOf(page: string, table: [number, number] | null = null): { declared: string | null; mixed: boolean } {
+  const key = `${table?.[0] ?? ""},${table?.[1] ?? ""}\u0000${page}`;
+  const hit = pageCurrencyCache.get(key);
+  if (hit) return hit;
+  let from = table?.[0] ?? Infinity, to = table?.[1] ?? -1;
+  for (let at = 0; at < page.length;) {
+    const e = page.indexOf("\n", at), end = e < 0 ? page.length : e;
+    if (BENEFIT_HEADING.test(page.slice(at, end))) { from = Math.min(from, at); to = Math.max(to, end); break; }
+    at = end + 1;
+  }
+  const declared = declaredCurrency(page);
+  const named = new Set<string>();
+  for (let at = 0; at <= page.length;) {
+    const e = page.indexOf("\n", at), end = e < 0 ? page.length : e, line = page.slice(at, end);
+    const outside = end < from || at > to;
+    for (const m of line.matchAll(NAMED_SIGN)) if (mentionCounts(line, m.index!, outside)) named.add(m[2] ?? SIGN_CODE[m[1] ?? m[3]] ?? "");
+    for (const m of line.matchAll(NAMED_WORD)) if (mentionCounts(line, m.index!, outside)) named.add(WORD_CODE(m[1]));
+    at = end + 1;
+  }
+  named.delete("");
+  const out = { declared, mixed: !!declared && [...named].some((c) => c !== declared) };
+  if (pageCurrencyCache.size > 200) pageCurrencyCache.clear();
+  pageCurrencyCache.set(key, out);
+  return out;
+}
+function capFigureCurrency(excerpt: string, value: number, bare: string | null): string | null {
   const text = plainText(excerpt);
   const figures = anyMoneyFigures(text).filter((f) => Math.abs(f.value - value) < 0.005);
   const codes = new Set(figures.map((f) => statedCurrencyCode(text.slice(f.index, f.index + f.length))).filter((c): c is string => !!c));
   if (codes.size === 1) return [...codes][0];
   if (codes.size > 1) return null;
-  return figures.some((f) => /\$/.test(text.slice(f.index, f.index + f.length))) ? declaredCurrency(page) : null;
+  return figures.some((f) => /\$/.test(text.slice(f.index, f.index + f.length))) ? bare : null;
 }
 /** What a percentage is of may be the sum insured only when the row says so, read with ALLOW-lists in any wording (Critic
  * audit of 5c1075d7, A1 and B1: a list of other bases leaks, "10% Basic Premium", "5% Initial Investment Amount"). After
@@ -1590,6 +1652,23 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     const p = placed.get(src);
     return printsNumber(p ? cellsApart(pageText(src.page).slice(p.start, p.end)) : src.excerpt, value);
   };
+  // The row's own lines inside its quote (own-row.ts): rows 1 is the whole quote, as before; with two or more rows, the
+  // text of the one whose label is the benefit's, or null when that is not told (wrapped-quote gate P1).
+  const ownRowOf = (src: Source, benefit: string, column: string | null) => {
+    const p = placed.get(src);
+    return p ? ownRowText(pageText(src.page), p.start, p.end, benefit, column) : { rows: 1, text: src.excerpt };
+  };
+  // A cap's words in their cell, with the page words printed right after them: a cap quote that stops at its number ("up to a maximum of
+  // 2") is read with what follows it on the page ("procedures per year", also on the next line when that line goes on in
+  // lower case: cross-row gate round 2, P2).
+  const withWordsAfter = (src: Source, words: string) => {
+    const p = placed.get(src);
+    if (!p) return words;
+    const text = pageText(src.page), cellStart = Math.max(text.lastIndexOf("\t", p.start - 1), text.lastIndexOf("\n", p.start - 1)) + 1;
+    const after = text.slice(p.end, p.end + 60).replace(/[ \t]*\n[ \t]*(?=[a-z])/g, " ");
+    return plainText(`${text.slice(cellStart, p.start)}${words.replace(/\s+/g, " ")}${after}`).replace(/[ \t]+/g, " ").trim();
+  };
+  const printedOnOwnRow = (own: { rows: number; text: string | null }, value: number) => own.rows <= 1 || (own.text != null && printsNumber(cellsApart(own.text), value));
   const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, near: "", otherPercent: false }; };
 
   const readCovers = Array.isArray(r.covers) ? r.covers : [];
@@ -1761,6 +1840,17 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       return row;
     });
   const flatLine = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
+  // Where each page's benefit rows are printed (the first start and the last end of their quotes), so a premium or capital
+  // line is told from a line of the benefit table (pageCurrencyOf, cross-row gate round 6).
+  const tableSpan = new Map<number, [number, number]>();
+  for (const b of [...readRows, ...coverLineRows]) {
+    const at = str(b?.quote) ? find(str(b.quote), int(b.page)) : null, p = at ? placed.get(at) : null;
+    if (!at || !p) continue;
+    const t = tableSpan.get(at.page);
+    tableSpan.set(at.page, t ? [Math.min(t[0], p.start), Math.max(t[1], p.end)] : [p.start, p.end]);
+  }
+  const curOf = (page: number) => pageCurrencyOf(pageText(page), tableSpan.get(page) ?? null);
+  const bareOf = (page: number) => { const c = curOf(page); return c.mixed ? null : c.declared; };
   for (const b of [...readRows, ...coverLineRows]) {
     const label = `benefit "${b?.benefit}"${b?.column ? ` [${b.column}]` : ""}`;
     const benefit = str(b?.benefit), quote = str(b?.quote);
@@ -1771,6 +1861,23 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     if (fromCoverLine.has(b) && out.benefits.some((x) => x.source.page === source.page && flatLine(x.source.excerpt).includes(flatLine(source.excerpt)))) continue;
     let value = num(b.value);
     if (value != null && !printedIn(source, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
+    // A quote that runs over two rows prints the other row's figure too: a figure printed only on another row's line is
+    // never this row's. The row stays, paid as its words say, with no figure (wrapped-quote gate P1).
+    const ownRow = ownRowOf(source, benefit, str(b.column));
+    if (value != null && !printedOnOwnRow(ownRow, value)) {
+      out.dropped.push({ what: label, why: `figure ${value} is printed on another row's line in the quote, not this row's; kept the row without it` }); pays = "words"; value = null;
+    }
+    // A figure printed with no currency of its own, on a page that declares one currency and names another, is in neither
+    // for sure: the row stays with no figure (cross-row gate round 2, R2-H3). A figure printed with its currency keeps it.
+    if (value != null && pays !== "percent" && curOf(source.page).mixed
+      && !anyMoneyFigures(plainText(ownRow.text ?? source.excerpt)).some((f) => Math.abs(f.value - value!) < 0.005 && !!statedCurrencyCode(plainText(ownRow.text ?? source.excerpt).slice(f.index, f.index + f.length)))) {
+      out.dropped.push({ what: label, why: `figure ${value} is printed with no currency on a page that names more than one; kept the row without it` }); pays = "words"; value = null;
+    }
+    // A number printed only before a count noun ("up to a maximum of 2 procedures", "10 sessions") is a count, never an
+    // amount (wrapped-quote gate P2).
+    if (value != null && pays !== "percent" && printedOnlyAsCount(ownRow.text ?? source.excerpt, value, (({ declared, mixed }) => !!declared && !mixed)(curOf(source.page)))) {
+      out.dropped.push({ what: label, why: `figure ${value} is printed only as a count, not an amount; kept the row without it` }); pays = "words"; value = null;
+    }
     // Every quote on a tabbed table row, however much of the row it copies: when the header above the row names the column
     // the reader read it under (columnCell), the figure must be printed in that column's own cell, not a neighbour's
     // ("Trip cancellation\t50%" read under Mary Tan, whose cell is 100%: TE #481 W1). With no header naming the column,
@@ -1833,7 +1940,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     }
     const currency = pays === "percent"
       ? (baseSource ? statedCurrencyCode(baseSource.excerpt) ?? declaredCurrency(pageText(source.page)) : null)
-      : value == null ? null : figureCurrency(source.excerpt, value, pageText(source.page));
+      : value == null ? null : figureCurrency(source.excerpt, value, bareOf(source.page));
     const conditions: string[] = [], droppedConditions: string[] = [];
     for (const cond of Array.isArray(b.conditions) ? b.conditions : []) {
       const words = str(cond);
@@ -1882,7 +1989,8 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       const ownCap = !!capRun && !!capWords && claimed != null && squashCell(capWords).length >= 4 && capRun.includes(squashCell(capWords))
         && printsNumber(capWords, claimed) && CAP_WORDS.test(capWords);
       const s = claimed == null || claimed <= 0 ? null : ownCap ? source : find(capWords, source.page);
-      const tied = s && claimed != null && s.page === source.page && printedIn(s, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt));
+      const tied = s && claimed != null && s.page === source.page && printedIn(s, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt))
+        && moneyCapPrinted(ownCap ? capWords! : withWordsAfter(s, s.excerpt), claimed, curOf(s.page).declared, curOf(s.page).mixed) && printedOnOwnRow(ownRow, claimed);
       // Another money figure in the row besides its cap ("up to S$50,000 or S$500 per day, whichever is lower") is a second
       // limit too (Critic R102-1).
       const otherMoney = moneyIn(row).some((m) => m.value !== claimed);
@@ -1896,12 +2004,15 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       } else if (tied) {
         cap = claimed; capSource = s;
       } else if (claimed == null && capInRow(row) != null && !otherPercent && !otherMoneyThan(row, capInRow(row)!) && !NEAR_CAP.test(near)
+        && moneyCapPrinted(withWordsAfter(source, plainText(row)), capInRow(row)!, curOf(source.page).declared, curOf(source.page).mixed) && printedOnOwnRow(ownRow, capInRow(row)!)
         && !(/\bwhichever\b/i.test(`${row}\n${near}`) && [...`${row.replace(ITEM_MARKER, "")}\n${near}`.matchAll(/\d[\d,]*(?:\.\d+)?/g)].some((m) => ![capInRow(row), value].includes(Number(m[0].replace(/,/g, "")))))) {
         // No cap read, but the row's own words print exactly one money figure right after a cap word ("100% Sum Insured (up
         // to S$400,000)", "subject to a maximum amount of S$25,000"): that is its cap (overnight run 23 Oct, N016, N083).
         cap = capInRow(row); capSource = source;
       } else {
-        if (claimed != null) out.dropped.push({ what: label, why: `cap ${claimed} not printed in the row; no amount is worked out for it` });
+        if (claimed != null) out.dropped.push({ what: label, why: s && printedIn(s, claimed) && !moneyCapPrinted(withWordsAfter(s, s.excerpt), claimed, curOf(s.page).declared, curOf(s.page).mixed)
+          ? `cap ${claimed} is not printed as money (a count, or a bare figure on a page that declares no currency); no amount is worked out for it`
+          : `cap ${claimed} not printed in the row; no amount is worked out for it` });
         // "Limited to 25%" names the share only when the row prints no money beside it ("limited to 25% of the Sum Insured
         // or AUD 15,000" is capped, whatever words join them: Critic #449 round 3).
         // Only on a document printed for one life (one person's covers): on a family or joint schedule the share's life is
@@ -1921,9 +2032,9 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       out.dropped.push({ what: label, why: `${value}% is not printed as a share of the sum insured; no amount is worked out for it` });
       percentOf = null;
     }
-    const capCurrency = cap != null && capSource ? capFigureCurrency(capSource.excerpt, cap, pageText(capSource.page)) : null;
+    const capCurrency = cap != null && capSource ? capFigureCurrency(capSource.excerpt, cap, bareOf(capSource.page)) : null;
     // Day counts are figures too: one the quote does not print is not kept.
-    const day = (v: unknown) => { const n = int(v); return n != null && printedIn(source, n) ? n : null; };
+    const day = (v: unknown) => { const n = int(v); return n != null && printedIn(source, n) && printedOnOwnRow(ownRow, n) ? n : null; };
     // "Payable after the 10th day" is first paid on day 11: the same day, worded from the day before (live run 23 Oct, B3).
     // The first paid day the quote states, parsed once as a number, is the row's: "after the 10th day" is day 11, "from day
     // 1" is day 1, whatever the reading said (live run 23 Oct, B3; TE #108 B2, B4). A quote that states two is none; one
