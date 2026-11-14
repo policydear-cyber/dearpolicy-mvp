@@ -164,7 +164,9 @@ async function main() {
     for (const f of ["app/api/auth/signup/route.ts", "app/api/auth/signin/route.ts", "app/api/household/start/route.ts"]) {
       const src = readFileSync(f, "utf8");
       assert.doesNotMatch(src, /emailProven/, f + " never takes the address as proven");
-      assert.match(src, /signInWithOtp\(\{ email[^}]*emailRedirectTo: `\$\{[^`]*\}\/api\/auth\/callback`, shouldCreateUser: false \} \}\)/, f + " emails a link that proves the address and makes no account");
+      // 13 Nov 2026: the link may also carry an invitation's join page (`${carry}`, lib/auth/invite-return.ts) so an invited
+      // person returns to join; it still goes to the callback, and still makes no account.
+      assert.match(src, /signInWithOtp\(\{ email[^}]*emailRedirectTo: `\$\{[^`]*\}\/api\/auth\/callback(?:\$\{carry\})?`, shouldCreateUser: false \} \}\)/, f + " emails a link that proves the address and makes no account");
     }
     for (const f of ["app/api/auth/signup/route.ts", "app/api/auth/signin/route.ts"]) assert.match(readFileSync(f, "utf8"), /signOut\(/, f + " leaves no session for an unproven address");
   });

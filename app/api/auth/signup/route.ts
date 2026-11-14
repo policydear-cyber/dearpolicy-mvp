@@ -4,6 +4,7 @@ import { ensureDefaultHousehold } from "@/lib/household/repo";
 import { invitedToSignUp } from "@/lib/auth/signup-invited";
 import { clientKey } from "@/lib/http/rate-limit";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
+import { safeInviteNext } from "@/lib/auth/invite-return";
 import { CONFIRM_EMAIL_MESSAGE, signupMode, SIGNUP_CLOSED_MESSAGE, SignupClosedError } from "@/lib/auth/signup-gate";
 
 export const runtime = "nodejs";
@@ -43,11 +44,15 @@ export async function POST(request: Request) {
   }
 
   const origin = new URL(request.url).origin;
+  // An invited person signing up from the invitation link comes back to its join page after confirming their email.
+  // Only that exact shape is carried (lib/auth/invite-return.ts); the callback checks it again.
+  const inviteNext = safeInviteNext(body.next);
+  const carry = inviteNext ? `?next=${encodeURIComponent(inviteNext)}` : "";
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${origin}/api/auth/callback` },
+    options: { emailRedirectTo: `${origin}/api/auth/callback${carry}` },
   });
 
   if (error) {
@@ -75,7 +80,7 @@ export async function POST(request: Request) {
       // off), leave no session and email a sign-in link: opening it proves the address (app/api/auth/callback).
       if (data.session) {
         await supabase.auth.signOut().catch(() => {});
-        await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${origin}/api/auth/callback`, shouldCreateUser: false } }).catch(() => {});
+        await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${origin}/api/auth/callback${carry}`, shouldCreateUser: false } }).catch(() => {});
       }
       return NextResponse.json({ ok: true, needsEmailConfirmation: true, message: CONFIRM_EMAIL_MESSAGE });
     }

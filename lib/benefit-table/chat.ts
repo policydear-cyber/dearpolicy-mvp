@@ -7,16 +7,20 @@
  * household sees in the chat is an amount on their Coverage page, checked twice. */
 import type { BenefitTable, Figure, PersonCover, TableRow } from "./assemble";
 import type { Source } from "./check";
-import { figureText, periodWords } from "./assemble";
+import { benefitNamesRead, figureText, periodWords } from "./assemble";
 import { benefitName, benefitNames, qualifierText } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
+import { noteMultiple, sameNote, type Multiplier, type RowFacts } from "./multiplier";
 import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN, anyMoneyFigures, statedCurrencyCode } from "@/lib/format/currency";
 import { PREMIUM } from "@/lib/coverage/table-figures";
+/** Every benefit name the reading of a row's document named (assemble.ts benefitNamesRead), also rows no person's table
+ * shows: what a row multiple's case may not name (multipleFacts). Kept beside the rows, never on them. */
+const READ_NAMES = new WeakMap<object, string[]>();
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null;
   /** The limit's own line, or the same benefit's line for the same figure in another of the person's documents, says the
@@ -100,6 +104,7 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
     const row: ChatRow = { ...r, id: `R${rows.length + 1}`, docIndex, baseDocIndex: r.baseSource ? index.get(r.baseSource.documentId) ?? null : null };
     // Only a premium line coverRows made is a premium; a row copied from one (a rate, an intensive-care row) is not.
     if (PREMIUM_LINES.has(r)) row.premium = true; else delete row.premium;
+    READ_NAMES.set(row, benefitNamesRead(table, r.source.documentId));
     rows.push(row);
   };
   for (const p of table.people) for (const r of p.rows) add(r);
@@ -653,6 +658,7 @@ export function renderTable(rows: ChatRow[]): string {
   return `\n<benefit_table>
 Each person's benefit table, as their Coverage page shows it. One row per line: id | person | cover | benefit | qualifier | figure | conditions | where printed.
 For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list and pays on the event itself; "not_described" when the row pays only if a further thing happened that the household has not said happened, even one that often follows such an event (an ambulance was used, a hospital or intensive care stay, equipment bought, a death: that card is never shown either, so say in a fact what it needs); "no_event" when the question names no event (asking what a benefit is, or what a person has, is no event). For an event, give every row that pays on it, also one paid for a family member (per child, for a spouse), saying its condition. For a statement about an event ("on_list" or "any_event"), set "waiting" when a waiting period printed for the row's cover could apply to it: {"applies": "yes", "unsure" or "no" (whether it covers this event), "days": its length in days as printed (3 months is 90), "from": the date it runs from as printed for this person (the policy's issue, start or cover date, as DD/MM/YYYY)}; null when the cover prints no waiting period. The app compares those dates with today and never shows a card inside a waiting period that applies or may apply, so say why in a fact. Set "period" for every statement; for an amount whose cover prints its own period of cover (a trip's dates, a policy's start and end): {"from": its first day, "to": its last day, as printed (DD/MM/YYYY, "" when not printed), "eventOn": the date the event happened as the household said it (DD/MM/YYYY; today's date when they say it is happening now; "" when they did not say when)}; all three "" when no period is printed for the cover. Every policy on file is treated as in force: never say a cover has ended, expired, lapsed or not started because of a printed date or period, and never leave an amount out for that reason. Set "row" to the id of the row it gives and "rowBenefit" to that row's benefit name, copied exactly from the table ("" for a statement with no row; the app leaves out a card whose name is not its row's), and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here, always with its id, also when you read the figure in another document (a premium on a tax invoice is the premium row); an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
+On an amount statement, set "multiplierNote" to "" unless one of the row's own conditions pays a multiple of its amount in one case (paid at double, doubled, twice, treble, N times, 150% of the amount) and the household's words about the event asked about now speak of that case (said it happened, or asked whether it pays more); then copy that one condition exactly as the row's conditions print it. The app keeps the row's single amount on the card and adds beside it, in the condition's own printed words, what is paid if that case applies, worked out within the row's maximum; never write that multiplied amount yourself, and never say whose case it is or that it applies. Example: a row's conditions print "Note: loss of sight in both eyes is paid at twice the amount" and the household writes "Tomas lost the sight in both eyes in the accident": set it to that note on Tomas's card. Leave it "" on every other statement.
 ${rows.map((r) => escapeText(line(r))).join("\n")}
 </benefit_table>`;
 }
@@ -971,6 +977,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       && !o.qualifier && !row.qualifier && sameBenefit(o.benefit, row.benefit) && !o.premium && !row.premium
       && !rows.some((x) => x.personId === o.personId && given.has(x.id) && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))
       && !modelRows.some((x) => x.personId === o.personId && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))) : [];
+    // The row condition the model names as paying a multiple in the case asked about ("" or missing: none; old answers parse).
+    const noteSaid = typeof raw.multiplierNote === "string" ? raw.multiplierNote.trim() : "";
     for (const r of [row, ...companions, ...firstYear, ...others]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
@@ -986,9 +994,19 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // The row's own printed conditions ride with it, so a total is never worked out past a cap the model left out
       // (Critic R275 M1).
       if (st) st.rowConditions = r.conditions;
+      // A row condition paying a multiple of the amount in one case ("a compound fracture is paid at double the Section 3
+      // amount"), named by the model in "multiplierNote": the card keeps the row's single amount, and the chat's checks add
+      // the multiple as a condition in the note's own printed words with its figure worked out within the printed maximum
+      // (lib/simple-chat/verify.ts serverFigureChecked). The line is true whoever the case is, so the household's words are
+      // not read for it (PR #472 round 7). Only a note that is one of the row's own conditions and pays one plain multiple
+      // (lib/benefit-table/multiplier.ts noteMultiple), on the named row's own person; anything else is the card as before
+      // (Harbourline test, 13 Nov).
+      const facts = st && noteSaid && r.personId === row.personId ? multipleFacts(r, rows) : null;
+      const printed = facts ? r.conditions.find((c) => sameNote(noteSaid, c)) : undefined;
+      const times = facts && printed ? noteMultiple(printed, facts) : null;
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
-        const sf = serverFigureOf(r, st, household);
+        const sf = (times && serverFigureOf(r, st, household, times, facts)) || serverFigureOf(r, st, household);
         if (sf) (report.figures ??= []).push(sf);
         report.cards![r.id] = { text: String(st.text), person: baseName(r.person) };
         if (r.combinedLimit && (raw.eventFit === "on_list" || raw.eventFit === "any_event")) limitsOnEvent.push({ row: r, st });
@@ -1590,6 +1608,21 @@ export function noteLeftOutAmounts<T extends { id: string; kind: string; text: s
     ...(missing ? [make("left-out-amount", LEFT_OUT_AMOUNT)] : [])];
 }
 
+/** What a row brings to a multiple the model names (lib/benefit-table/multiplier.ts noteMultiple): its own words (benefit
+ * and quote), its section, its printed maximum, and the benefit names of the person's other rows (W4). */
+function multipleFacts(row: ChatRow, rows: readonly ChatRow[]): RowFacts {
+  const cap = row.figure.kind === "worked_out" && row.figure.capped ? row.figure.amount
+    : row.capSource ? (moneyFiguresIn(row.capSource.excerpt).find((m) => row.base == null || Math.abs(m.value - row.base) >= 0.005)?.value ?? null) : null;
+  const others = [...new Set(rows.filter((o) => o.personId === row.personId && !sameBenefit(o.benefit, row.benefit)).map((o) => benefitName(o.benefit)))].join("\n");
+  // Every other benefit read from the same document, whoever's row (gate round 10: a note's case naming one is that
+  // benefit's, "hospital cash for a compound fracture is paid at double").
+  // Read from the document's reading too (READ_NAMES), so a fixed-amount row a family schedule shows for no one counts.
+  const docNames = [...new Set([...rows.filter((o) => o.docIndex === row.docIndex).map((o) => o.benefit), ...(READ_NAMES.get(row) ?? [])]
+    .filter((b) => !sameBenefit(b, row.benefit)).map((b) => benefitName(b)))].join("\n");
+  const perDay = row.figure.kind === "printed" && row.figure.unit === "per_day";
+  return { own: `${row.benefit}\n${row.source.excerpt}`, section: row.section ?? null, cap, others, docNames, perDay };
+}
+
 /** A percentage row worked out on the person's own printed sum insured (not a corrected one), with where that sum is. */
 const sumInsuredShare = (row: ChatRow) => row.figure.kind === "worked_out" && row.percentOf === "sum_insured" && row.percent != null && row.percent > 0
   && row.base != null && !row.baseCorrected && !!row.baseSource && row.baseDocIndex != null && !!row.figure.currency;
@@ -1597,7 +1630,7 @@ const sumInsuredShare = (row: ChatRow) => row.figure.kind === "worked_out" && ro
  * row's percentage, the person's own sum insured line and the row's printed maximum. The checks find each in the stored pages
  * and work the amount out again; nothing here is shown as it is. Null for any other row, or when the row's maximum cannot
  * be read as one figure. */
-export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, household: Household): ServerFigure | null {
+export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, household: Household, times: Multiplier | null = null, facts: RowFacts | null = null): ServerFigure | null {
   if (!sumInsuredShare(row) || row.figure.kind !== "worked_out" || typeof st.quote !== "string") return null;
   const currency = row.figure.currency!;
   let cap: ServerFigure["cap"] = null;
@@ -1614,11 +1647,29 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
   for (const c of row.conditions) {
     const figs = moneyFiguresIn(c);
     if (figs.some((f) => !cap || f.currency !== currency || Math.abs(f.value - cap.value) >= 0.005)) return null;
+    // The multiple's own condition saying the same maximum still applies ("subject to the same limit") is that cap.
+    if (!figs.length && times && c === times.condition && times.keepsCap) continue;
     if (!figs.length && (statesMoney(c) || CAP_WORDS.test(c) || /\b(?:no\s+more\s+than|not\s+more\s+than|at\s+most|limit|reduc)/i.test(c))) return null;
+  }
+  // A named note's multiple, said beside the single amount as a condition (the card's figure is still the row's own): the
+  // share of the sum times the multiple, never past the printed maximum; above it only when the condition keeps that
+  // maximum (otherwise whether the maximum is multiplied too is not said: null, and the card is as before). The condition
+  // must be printed in the row's own document, where the checks read the multiple again.
+  let multiple: ServerFigure["times"] = null;
+  if (times) {
+    if (!facts) return null;
+    const worked = Math.round(row.base! * row.percent! * times.times) / 100;
+    if ((cap && worked > cap.value + 0.005 && !times.keepsCap) || (!cap && row.figure.capped)) return null;
+    // A fraction of a share already above the maximum: of the share or of what is paid is not said (gate round 9).
+    if (times.times < 1 && (row.figure.capped || (cap && row.base! * row.percent! / 100 > cap.value + 0.005))) return null;
+    const at = locateQuote(household, times.condition, row.docIndex);
+    if (!at || at.docIndex !== row.docIndex) return null;
+    multiple = { times: times.times, docIndex: at.docIndex, page: at.page, quote: times.condition, own: facts.own, section: facts.section, others: facts.others ?? "",
+      docNames: facts.docNames ?? "", perDay: !!facts.perDay };
   }
   return { text: String(st.text), person: baseName(row.person), quote: st.quote, percent: row.percent!, currency, value: row.figure.amount,
     row: { docIndex: row.docIndex, page: row.source.page, quote: row.source.excerpt },
-    base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap };
+    base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap, times: multiple };
 }
 
 /** One row as a statement the simple chat's checks understand: the figure as printed with the row's own words, or the

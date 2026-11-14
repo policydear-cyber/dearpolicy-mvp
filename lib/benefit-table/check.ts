@@ -18,6 +18,7 @@ import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/curr
 import { printedDay } from "./dates";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
+import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
@@ -1553,6 +1554,9 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { notesKind?: Chec
     // of Premium Benefit up to S$5,000 of future premiums") keeps them.
     if (value != null && (waiverLines.get(lineAt(source)) ?? []).some((w) => Math.abs(w - value!) < 0.005)) { out.dropped.push({ what: label, why: `figure ${value} is on a premium-waiver rider's line: the premium it waives, not an amount it pays; kept the row without it` }); pays = "words"; value = null; }
     const FIGURED = ["amount", "up_to", "per_day", "per_period", "percent", "value"];
+    // A row whose figures the page check held back ("[amount not checked]") stays, with no figure, as its cover does: a sum
+    // not proved never costs the row (live 13 Nov: two riders' rows vanished from Benefits after a re-read, 5 rows to 3).
+    if (FIGURED.includes(pays) && value == null && source.excerpt.includes(NOT_CHECKED_MARK)) { out.dropped.push({ what: label, why: "its figure was not checked against the page; kept the row without it" }); pays = "words"; }
     if (FIGURED.includes(pays) && value == null) { out.dropped.push({ what: label, why: `"${pays}" row with no figure` }); continue; }
     if (!FIGURED.includes(pays)) value = null;
     const period = pays === "per_period" && (PERIODS as readonly string[]).includes(b.period as string) ? b.period! : null;
