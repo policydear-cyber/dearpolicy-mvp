@@ -35,7 +35,7 @@ if (!listPath || !outDir || !(capUsd > 0)) throw new Error("usage: pipeline.ts <
 const checkers = (modelsArg ?? "claude-sonnet-5-5,claude-haiku-4-5,claude-opus-5-5").split(",");
 mkdirSync(outDir, { recursive: true });
 const ledgerPath = join(outDir, "spend.json");
-const ledger: { spentUsd: number; worstAdmittedUsd: number; calls: number; stopped: string | null } =
+const ledger: { spentUsd: number; worstAdmittedUsd: number; calls: number; stopped: string | null; byModel?: Record<string, { calls: number; input: number; output: number; usd: number }> } =
   existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, "utf8")) : { spentUsd: 0, worstAdmittedUsd: 0, calls: 0, stopped: null };
 const saveLedger = () => writeFileSync(ledgerPath, JSON.stringify(ledger, null, 1));
 class CapReached extends Error {}
@@ -54,7 +54,10 @@ function admit(model: string, chars: number, imageTokens: number, maxTokens: num
 }
 const book = (model: string, input: number, output: number, cacheRead = 0, cacheWrite = 0) => {
   const p = price(model);
-  ledger.spentUsd += (input * p.input + output * p.output + cacheRead * (p.cachedInput ?? p.input) + cacheWrite * p.input * 1.25) / 1e6;
+  const usd = (input * p.input + output * p.output + cacheRead * (p.cachedInput ?? p.input) + cacheWrite * p.input * 1.25) / 1e6;
+  ledger.spentUsd += usd;
+  const m = ((ledger.byModel ??= {})[model] ??= { calls: 0, input: 0, output: 0, usd: 0 });
+  m.calls++; m.input += input + cacheRead + cacheWrite; m.output += output; m.usd += usd;
   saveLedger();
 };
 
@@ -97,7 +100,12 @@ async function onePage(doc: string, page: number) {
   const reader = admitted(anthropicTableModel(benefitTableModel()));
   await readDocument(db, reader, ACC, DOC, undefined, {});
   const sdoc: SourceDoc = { id: DOC, name: `${doc}.pdf`, readable: true, pages };
-  const benefits = stored ? checkStored(sdoc, stored as StoredReading).benefits : [];
+  const checked = stored ? checkStored(sdoc, stored as StoredReading) : null;
+  const benefits = checked?.benefits ?? [];
+  // What reader 1 returned and what the app's own checks kept or dropped (and why), so a figure not read can be traced
+  // to the model or to the server's rules.
+  const reader1 = { raw: stored, kept: benefits.map((b) => ({ benefit: b.benefit, section: b.section, column: b.column, pays: b.pays, value: b.value, cap: b.cap })),
+    dropped: checked?.dropped ?? [], plan: checked?.plan ?? null, kind: checked?.kind ?? null };
 
   // Ground-truth cells with a figure on this page.
   let header: string[] = [];
@@ -131,7 +139,7 @@ async function onePage(doc: string, page: number) {
     const r1 = same.map((b) => b.value).find((v) => v === c.value) ?? same.map((b) => b.value ?? b.cap).find((v) => v != null) ?? null;
     return { ...c, ocrExact: ocrT.includes(tight(c.text)), reader1: r1, copies: Object.fromEntries(checkers.map((m) => [m, copies[m][i]])) };
   });
-  writeFileSync(out, JSON.stringify({ doc, page, mode: truth.mode, seconds: Math.round((Date.now() - t0) / 1000), checkers, rows }, null, 1));
+  writeFileSync(out, JSON.stringify({ doc, page, mode: truth.mode, seconds: Math.round((Date.now() - t0) / 1000), checkers, rows, reader1 }, null, 1));
   console.log(doc, page, `${rows.length} cells`, `spent US$${ledger.spentUsd.toFixed(4)}`);
 }
 
