@@ -7,7 +7,7 @@
  * checks, a re-read, a removed document or a removed person shows at once, and no stored row can go stale. */
 import { assembleTable, coverKeyOf, coversOf, sectionsOf, type BenefitTable, type Confirmation, type FamilyMember } from "./assemble";
 import { createHash } from "node:crypto";
-import { checkReading, type CheckedReading, type SourceDoc } from "./check";
+import { checkReading, foldChildColumns, type CheckedReading, type SourceDoc } from "./check";
 import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
 import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePage } from "@/lib/documents/messy";
@@ -339,6 +339,8 @@ export function checkStored(doc: SourceDoc, stored: Pick<StoredReading, "documen
   // A part's notes are worked out as the whole document's (its kind), never skipped for the part's own kind: mergeReadings
   // keeps only the notes both readings find (#474 perf gate, P474-H1).
   for (const p of stored.pages ?? []) reading = mergeReadings(reading, checkReading(doc, p.json, { coverLineRows, notesKind: reading.kind }));
+  // A child's share read as a row of its own in one part and its parent in another is folded once merged (check.ts).
+  if (stored.pages?.length) { const dropped = [...reading.dropped]; reading = { ...reading, benefits: foldChildColumns(reading.benefits, dropped), dropped }; }
   return reading;
 }
 

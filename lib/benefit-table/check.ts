@@ -16,6 +16,7 @@ import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, personOnlyI
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
+import { childColumn, childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife, childLimitNotes, childShareAllowed } from "./child-limit";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
@@ -110,7 +111,10 @@ export type CheckedCover = ReadCover & { source: Source; currency: string | null
   /** The premium's parts as the cover's own schedule line prints them: the benefit's own premium on its line, then each
    * extra charged on it on the lines below ("- Health Extra --- 201.80"). Set only when the parts add up exactly to the
    * premium (premiumPartsOf). */
-  premiumParts?: { label: string | null; amount: number; source: Source }[] | null };
+  premiumParts?: { label: string | null; amount: number; source: Source }[] | null;
+  /** The date of birth and relationship the cover's own line prints under its table's "Date of birth" and "Relationship"
+   * columns (lib/benefit-table/child-limit.ts printedLife), when it prints either: who a row's child share is for. */
+  life?: PrintedLife };
 
 /** A premium line the table may use on its own: a plain premium for the whole policy ("Premium", "Instalment Premium",
  * "Premium paid", "Total Premium"). A line that qualifies it ("First Year Instalment Premium *", "Rider Premium",
@@ -221,6 +225,19 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
    * perPersonRow: a row whose own line or the next prints another figure, such as an age or a child's rate, is not every
    * named insured's). Unset when the quote was not placed on its page. */
   rowText?: string; nextLine?: string; prevLine?: string;
+  /** A child's share printed in the row's own amount cell ("100% of the Sum Insured. For an insured child under 18,
+   * limited to 25% of the Sum Insured.", lib/benefit-table/child-limit.ts): the row's own share is for everyone else, and
+   * this one only for a person the schedule's own line proves is that child (assemble.ts baseFigure). Set only when the
+   * cell prints nothing else but the row's own share (no cap, no money, no other percentage). */
+  childLimit?: ChildLimit;
+  /** The row's child share was read two ways (its cell and a row of its own under a child column that disagree,
+   * foldChildColumns): no amount is worked out for it. */
+  childLimitConflict?: boolean;
+  /** A percentage of the sum insured whose document prints a child-limit sentence outside the row's own cell (a note, a
+   * footnote, another row: child-limit.ts childLimitNotes, gates R4-H3, R5-H1): no child share, and its own share is worked
+   * out only for a person the schedule's own line proves is not that child (assemble.ts baseFigure). `age`: the highest
+   * age those sentences print, or null. */
+  childNote?: { age: number | null };
   /** The footnote marks printed on the row's column heading ("Limit per insured person*"), on its own words or where the
    * page prints it (headingMarks): assemble.ts reads a per-person column with its note (plain-table gate round 5, R5-H2). */
   columnMarks?: string[];
@@ -1320,6 +1337,72 @@ export function withoutOwnShareCap(text: string, percent: number | null): string
   // Insured", "applicable to the Insured Parent": Critic #449 round 4).
   return text.replace(new RegExp(String.raw`\blimited\s+to\s+(?<![\d.])${own}(?:\.0+)?\s*(?:%|per\s?cent)\s+of\s+(?:the\s+|your\s+)?sum\s+(?:insured|assured)(?!\s*(?:of|for|applicable|payable|under|in\s+respect|as\s+per|according)\b)(?=\s*(?:$|[.;,)\n]))`, "gi"), " ");
 }
+/** Whether a printed line is a row's own: one of its tab cells is the row's benefit name, whole, after at most a section
+ * number ("1\tAccidental death\t...", "1. Accidental death\t..."); a line with no tab cells starts so and goes on with its
+ * figure ("1 Accidental death 100% of ..."). A label carrying a footnote mark ("Accidental death*", "Accidental death
+ * (a)") is not the row's own name: its note may limit a child's benefit (gate R4-H2), so it gets no child share.
+ * Compared without case, spacing or end punctuation. And it is the row's only such line (gate R3-H2): a section or item
+ * number the line starts with is the row's own section, and no other line of the page with a figure carries the same
+ * label. */
+export function ownLabelLine(line: string, benefit: string, section: string | null = null, page = ""): boolean {
+  const n = (t: string) => t.toLowerCase().replace(/\s+/g, " ").replace(/^(?:section\s+)?\d{1,3}[.)]?\s+/, "")
+    .replace(/[\s:.;,-]+$/, "").trim();
+  const name = n(benefit);
+  if (!name) return false;
+  const labelled = (l: string) => {
+    const cells = l.split("\t");
+    if (cells.length >= 2) return cells.some((c) => n(c) === name);
+    const flatLine = n(l);
+    return flatLine.startsWith(`${name} `) && /^\s*\d/.test(flatLine.slice(name.length));
+  };
+  if (!labelled(line)) return false;
+  const lead = /^\s*(?:section\s+)?(\d{1,3})[.)]?(?:\t|\s)/i.exec(line)?.[1];
+  const own = /^\s*(?:section\s+)?(\d{1,3})[.)]?\s*$/i.exec(section ?? "")?.[1];
+  if (lead != null && lead !== own) return false;
+  return page.split("\n").filter((l) => /\d/.test(l) && labelled(l)).length <= 1;
+}
+/** A child's share the reader put in a row of its own (TE-ACC-20261114-R3: the cell "100% of the Sum Insured. For an
+ * insured child under 18, limited to 25% of the Sum Insured." read as that row plus a second "Accidental death" row with
+ * column "Insured child under 18" and 25%). Folded into its parent, so the parent's child share decides each person's
+ * amount (assemble.ts baseFigure) and no column is left to block the document's plain table (assemble.ts plainTable).
+ * Folded only when all hold: the column names only a child class (child-limit.ts childColumn); exactly one row has the
+ * same benefit name and section, no column, and the same page; that parent's own cell was read with a child share
+ * (childLimit) for the same age; the column row pays that same percentage of the sum insured with no cap; and its quote
+ * is part of the parent's printed child sentence. A column row that disagrees with the parent's printed sentence also
+ * takes the child share off the parent, which then has no amount (the reading is in doubt). Anything else is kept as
+ * read. Applied again after a stored reading's parts are merged (service.ts checkStored). */
+export function foldChildColumns(benefits: CheckedBenefit[], dropped: Dropped[]): CheckedBenefit[] {
+  const key = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  // Every child column row's parent first, then each parent's verdict on all of its rows together (order-independent).
+  const parentOf = new Map<CheckedBenefit, CheckedBenefit>();
+  for (const x of benefits) {
+    const col = key(x.column) ? childColumn(x.column) : undefined;
+    const parents = col ? benefits.filter((p) => p !== x && !key(p.column) && key(p.benefit) === key(x.benefit) && key(p.section) === key(x.section) && p.source.page === x.source.page) : [];
+    if (col && parents.length === 1 && parents[0].childLimit) parentOf.set(x, parents[0]);
+  }
+  const agrees = (x: CheckedBenefit, p: CheckedBenefit) => {
+    const limit = p.childLimit!, col = childColumn(x.column)!;
+    const words = flat(limit.words), quote = flat(x.source.excerpt);
+    return col.belowAge === limit.belowAge && x.pays === "percent" && x.value != null && Math.abs(x.value - limit.percent) < 1e-9
+      && x.percentOf === "sum_insured" && x.cap == null && quote.length >= 10 && words.includes(quote);
+  };
+  const conflict = new Set([...parentOf].filter(([x, p]) => !agrees(x, p)).map(([, p]) => p));
+  const out: CheckedBenefit[] = [];
+  for (const b of benefits) {
+    const p = parentOf.get(b);
+    if (p && !conflict.has(p)) { dropped.push({ what: `benefit "${b.benefit}" [${b.column}]`, why: "the child's share printed in its parent row's own cell; folded into that row" }); continue; }
+    if (conflict.has(b)) {
+      // Its child share was read two ways: a copy with no child share and no amount (the parent object is never changed).
+      const rest: CheckedBenefit = { ...b };
+      delete rest.childLimit;
+      dropped.push({ what: `benefit "${b.benefit}"`, why: "its child's share was read two ways (its own cell and a row under a child column); no amount is worked out for it" });
+      out.push({ ...rest, childLimitConflict: true });
+      continue;
+    }
+    out.push(b);
+  }
+  return out;
+}
 /** The money figures of a row, in any currency (S$, RM, £, € or a code such as MYR or GBP, and a bare "$"), with where
  * each starts in flat(row). A row in ringgit or pounds is read as one in Singapore dollars is: its cap, and a second
  * limit beside it, count the same way (parity test, 25 Oct: "up to RM 200,000 or RM 100,000 after age 65" kept the
@@ -1743,6 +1826,18 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       c.premiumParts = parts.map((p, i) => ({ label: p.label, amount: p.amount, source: sources[i]! }));
   }
 
+  // The date of birth and relationship each cover's own line prints in its table's columns (who a child's share is for):
+  // only from a line that names the person.
+  for (const c of out.covers) {
+    const p = placed.get(c.source);
+    if (!p) continue;
+    const text = pageText(c.source.page), index = text.slice(0, p.start).split("\n").length - 1;
+    const lines = text.split("\n");
+    const have = new Set((lines[index] ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u));
+    if (!normalizePersonName(c.person).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).every((w) => have.has(w))) continue;
+    const life = printedLife(lines, index, c.person, [...out.covers.map((x) => x.person), ...out.namedPeople, ...(doc.people ?? [])]);
+    if (life.birth || life.relationship) c.life = life;
+  }
   // A document printed for one life: every cover and every named person is the same person.
   const lives = new Set([...out.covers.map((c) => c.person), ...out.namedPeople].map((n) => normalizePersonName(n)).filter(Boolean));
   const oneLife = lives.size === 1;
@@ -1848,6 +1943,43 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // A percentage in the row's own label ("Burns: greater than 2% but less than 5%") is the label's, not another row's.
     const percents = (t: string) => (t.match(/\d+(?:\.\d+)?\s*%/g) ?? []).length;
     // The row itself stays, as words with no figure: its quote cannot tell which percentage is its own.
+    // A child's share printed in the row's own cell ("100% of the Sum Insured. For an insured child under 18, limited to
+    // 25% of the Sum Insured"): read only when the cell prints nothing else beside the row's own share, then the child's
+    // sentence is left out of the row's own checks (lib/benefit-table/child-limit.ts). Anything else is as before.
+    let childLimit: ChildLimit | null = null, childNote: { age: number | null } | null = null, childDoubt = false;
+    let childOthers: { benefit: string; section: string | null }[] = [], childSums: { person: string; sum: number }[] = [];
+    if (pays === "percent" && value != null && percentOf === "sum_insured" && placed.has(source)) {
+      // Every page of the document, leaving out only the row's own cell (its line, from the quote's start to the end of
+      // the line its quote ends on) and the people table's relationship cells.
+      const p = placed.get(source)!, text = pageText(source.page);
+      const pages = doc.pages.map((x) => ({ page: x.page, text: x.text })), ownCell = { page: source.page, from: text.lastIndexOf("\n", p.start - 1) + 1, to: lineEndAt(text, p.end) };
+      const people = [...out.covers.map((x) => x.person), ...out.namedPeople, ...(doc.people ?? []), ...readCovers.map((x) => str(x?.person) ?? "")];
+      const notes = childLimitNotes(pages, ownCell, people);
+      if (notes.found) childNote = { age: notes.age };
+      // Decision (1): a child's share from the cell only when everything else in the document that carries a figure or a
+      // limiting word is accounted for (child-limit.ts childShareAllowed, gate R8-H1).
+      childOthers = readRows.map((x) => ({ benefit: str(x?.benefit) ?? "", section: str(x?.section) })).filter((x) => x.benefit);
+      // Each person's sum insured as read: a people line's sum insured must be that one (gate R10-L1).
+      childSums = out.covers.flatMap((x) => x.sumInsured != null && x.person ? [{ person: x.person, sum: x.sumInsured }] : []);
+      childDoubt = !childShareAllowed(pages, ownCell, people, { benefit, section: str(b.section) }, childOthers, childSums);
+    }
+    if (pays === "percent" && value != null && percentOf === "sum_insured" && num(b.cap) == null && placed.has(source)) {
+      const p = placed.get(source)!, text = pageText(source.page);
+      const cell = text.slice(p.start, p.end) + text.slice(p.end, lineEndAt(text, p.end)).split("\t")[0];
+      // Only on the row's own line: one of the line's own cells is the row's benefit name, whole (with at most a section
+      // number before it), so a quote such as "100% of the Sum Insured" found first in another row's cell ("Accidental
+      // death" for a "Death" row, "Burns (third degree)" for "Burns") is never given that row's child share (gate H4).
+      const line = text.slice(text.lastIndexOf("\n", p.start - 1) + 1, lineEndAt(text, p.end));
+      // Nothing else on the page may speak of children (gate R4-H3, childNote): a note under the table limiting a child's
+      // benefit would make the cell's own sentence only half the rule.
+      const found = ownLabelLine(line, benefit, str(b.section), text) && !childNote && !childDoubt ? childLimitIn(cell.replace(/\t/g, " "), value) : null;
+      if (found) {
+        const seg = segmentOf(source);
+        const rest = [source.excerpt, cell, seg.text, seg.near, ...conditions].map((t) => withoutChildLimit(t, found));
+        const ownOnly = (t: string) => [...t.matchAll(/(\d+(?:\.\d+)?)\s*(?:%|per\s?cent)/gi)].every((m) => Math.abs(Number(m[1]) - value!) < 1e-9);
+        if (rest.every((t) => ownOnly(t) && !NEAR_CAP.test(t) && !moneyIn(t).length && !/\bwhichever\b/i.test(t))) childLimit = { ...found, others: childOthers, sums: childSums };
+      }
+    }
     // One printed table row, its cells parted by tabs, read under a named column, whose percentage is a whole cell of that
     // row ("Missed connection\t30%\t20%", column "Basic", 30): the quote runs into no other row, and the column says which
     // cell is its own, as it does for a row of plan amounts (plansOnValueLine). Not a quote of two lines, nor a figure
@@ -1865,14 +1997,14 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       const cellEnd = lineStart + cells.slice(0, col + 1).join("\t").length;
       return span.start <= lineStart + line.length - line.trimStart().length && span.end >= cellEnd - (cells[col].length - cells[col].trimEnd().length);
     })();
-    if (pays === "percent" && !oneTableRow && percents(source.excerpt) > percents(benefit) + 1) {
+    if (pays === "percent" && !oneTableRow && percents(childLimit ? withoutChildLimit(source.excerpt, childLimit) : source.excerpt) > percents(benefit) + 1) {
       out.dropped.push({ what: label, why: "quote holds more than one percentage; kept the row with no figure" });
       out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays: "words", value: null, period: null, basis, asOf: null, percentOf: null, baseAmount: null,
         baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions, page: source.page, quote, source, currency: null, baseSource: null, capSource: null,
         capUnread: false, droppedConditions, combinedLimit: false, limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
       continue;
     }
-    if (pays === "percent") {
+    if (pays === "percent" && !childLimit) {
       const { text: row, near, otherPercent } = segmentOf(source);
       const claimed = num(b.cap);
       // A wrapped row's cap is one run of the row read column by column ("up to a maximum of" over "RM 25,000"): it is
@@ -1944,10 +2076,11 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}), ...(columnMarks.length ? { columnMarks } : {}),
-      ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}),
+      ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}), ...(childNote ? { childNote } : {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}),
       ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
   }
+  out.benefits = foldChildColumns(out.benefits, out.dropped);
   Object.assign(out, lifeNotesOf(doc.pages, { ...out, kind: o.notesKind ?? out.kind, insurer: str(d.insurer) }));
   return out;
 }

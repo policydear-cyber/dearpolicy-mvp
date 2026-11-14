@@ -14,6 +14,7 @@ import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { noteMultiple, sameNote, type Multiplier, type RowFacts } from "./multiplier";
+import { withoutChildLimit } from "./child-limit";
 import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN, anyMoneyFigures, statedCurrencyCode } from "@/lib/format/currency";
@@ -1016,7 +1017,16 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")
           (report.days![String(st.text)] ??= []).push({ fromDay: r.fromDay, maxDays: r.maxDays, alone: dailyRateAlone(r, household) });
       }
-      else if (r === row) report.dropped.push({ why: `row ${row.id} has no amount (${figureText(row.figure)})`, text });
+      else if (r === row) {
+        report.dropped.push({ why: `row ${row.id} has no amount (${figureText(row.figure)})`, text });
+        // A child's share printed in the row's cell for a person the schedule does not prove is or is not that child: no
+        // amount, and the printed condition is quoted, so the household sees what decides it (lib/benefit-table/child-limit.ts).
+        if (r.childLimit && !r.childLimit.status && r.figure.kind === "none") {
+          const said = `${names(r)} pays ${r.childLimit.own}% of the sum insured, and the policy says: "${r.childLimit.words.replace(/[.;]+$/, "")}". ${baseName(r.person)}'s own line of the schedule ${r.childLimit.why ?? "does not settle whether this applies"}, so no amount is worked out.`;
+          points.push({ kind: "fact", text: said, person: baseName(r.person), document: documentId(r.docIndex), quote: r.childLimit.words, amount: null, percentOf: null,
+            conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
+        }
+      }
     }
     statements.push(...points);
   }
@@ -1797,7 +1807,10 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
   // A row whose own conditions print money other than its own cap, or limit words with no figure ("No more than S$1,000 is
   // paid for any one fracture"; "a reduced amount applies") is never given this way: the worked-out share could be more
   // than it pays. A note that repeats the row's own cap ("still subject to the GBP 1,500 maximum") is the same limit.
-  for (const c of row.conditions) {
+  // The row's own child share ("For an insured child under 18, limited to 25% of the Sum Insured") is the share itself, never
+  // a cap on it (lib/benefit-table/child-limit.ts); the chat's checks read it again from the row's line.
+  if (row.childLimit && !row.childLimit.status) return null;
+  for (const c of row.conditions.map((x) => withoutChildLimit(x, row.childLimit)).filter((x) => x.trim())) {
     const figs = moneyFiguresIn(c);
     if (figs.some((f) => !cap || f.currency !== currency || Math.abs(f.value - cap.value) >= 0.005)) return null;
     // The multiple's own condition saying the same maximum still applies ("subject to the same limit") is that cap.
@@ -1822,7 +1835,10 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
   }
   return { text: String(st.text), person: baseName(row.person), quote: st.quote, percent: row.percent!, currency, value: row.figure.amount,
     row: { docIndex: row.docIndex, page: row.source.page, quote: row.source.excerpt },
-    base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap, times: multiple };
+    base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap, times: multiple,
+    ...(row.childLimit ? { child: { percent: row.childLimit.percent, belowAge: row.childLimit.belowAge, own: row.childLimit.own,
+      status: row.childLimit.status!, days: row.childLimit.days, benefit: row.benefit, section: row.section ?? null, others: row.childLimit.others ?? [], sums: row.childLimit.sums ?? [] } } : {}),
+    ...(row.childNote?.adult ? { adult: { days: row.childNote.days, age: row.childNote.age } } : {}) };
 }
 
 /** One row as a statement the simple chat's checks understand: the figure as printed with the row's own words, or the
