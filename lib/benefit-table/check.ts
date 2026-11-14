@@ -214,6 +214,10 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   /** "Limited to N% of the Sum Insured" on a document printed for one life names the row's share, not a money cap
    * (ownShareNamed in checkReading): the table may work it out like any other share (assemble.ts baseFigure). */
   ownShareNamed?: boolean;
+  /** The reading did not say the share is of the sum insured ("other"), but the row's own words print it as a share of the
+   * policy's own headline sum by one of HEADLINE_SUM's names ("25% of the Sum Covered"): percentOf is "sum_insured", and
+   * the table works it out only when the person's policy prints one such sum (assemble.ts headlineSumProblem). */
+  baseFromWords?: boolean;
   /** The currency the row's cap itself prints ("up to S$15,000"), when it prints one: a cap in another currency than the
    * amount it limits cannot be compared with it, so no amount is worked out (assemble.ts). */
   capCurrency?: string | null;
@@ -614,6 +618,41 @@ const NEUTRAL_AFTER = /^(?:$|[\d$£€¥₱)*^]|\.(?:\s|$)|(?:s|us|hk|nz|a|sg)\$
 const SEPARATOR = /^(?:[-–—:;,/|]|(?:and|or|but)\b)\s*/iu;
 /** A bracket that only spells the percentage out ("(one hundred per cent)") is read through. */
 const SPELLED_PERCENT = /^\(\s*[\p{L}\s-]*\bper\s*cent\s*\)\s*/iu;
+/** The policy's own headline sum, by name: a closed ALLOW-list of the words that can only mean the one sum the plan insures
+ * (Failure 3 of TE-ACC-20261114-R3: a takaful schedule's "25% of the Sum Covered" was read as a share of "other", so no
+ * amount was shown although the certificate prints its Sum Covered). Each name, and why it is here:
+ * - "sum insured", "sum assured": the general and life-insurance names of the plan's own sum;
+ * - "sum covered": the takaful name for the same sum (a takaful certificate covers, it does not insure or assure);
+ * - "basic"/"base" before any of them: the basic plan's own sum (a rider's row naming it is refused in assemble.ts);
+ * - "face amount": the life-insurance name of the policy's own death sum, printed on its face;
+ * - "coverage amount": the plan's own amount of cover;
+ * - Malay "jumlah diinsuranskan" (sum insured) and "jumlah dilindungi" (sum covered), as printed on Malaysian documents.
+ * Left out on purpose: "amount covered" (on a medical card it is the eligible bill), "benefit amount" (every benefit has
+ * one), "sum at risk" (less than the sum insured on a policy with a cash value), "insured amount", "annual limit" and any
+ * name with another benefit's or life's words before it ("death sum assured", "rider sum assured").
+ * The name must end the share or be followed only by punctuation or words that say how it is paid ("up to ...",
+ * "payable ..."): "the sum covered under the rider", "for each child", "of the basic plan" name another sum. A row that
+ * takes something off the share ("less any early-stage amount already paid", "minus", "net of", "reduced") is left as
+ * the reading had it: what it pays is not the share. */
+const HEADLINE_SUM = /^(?:(?:the|your|its)\s+)?(?:(?:basic|base)\s+)?(?:sum\s+(?:insured|assured|covered)|face\s+amount|coverage\s+amount|jumlah\s+(?:diinsuranskan|dilindungi))(?=\s*$|\s*[,.;)]|\s+(?:up\s+to|subject\s+to|payable|paid|whichever|once|to\s+a\s+maximum|in\s+(?:one|a)\s+lump\s+sum|as\s+a\s+lump\s+sum)\b)/iu;
+const TAKES_OFF = /\b(?:less|minus|deduct\w*|reduc\w*|net\s+of|after\s+deducting)\b/i;
+/** Whether a row whose reading did not settle its percentage's base prints every percentage equal to `value` as a share
+ * "of" the policy's own headline sum (HEADLINE_SUM), and names no kind of life (a child's or a spouse's share is another
+ * life's sum). False when no such percentage is printed. */
+export function headlineSumShare(row: string, value: number): boolean {
+  const t = row.normalize("NFKC").replace(/[ \t]+/g, " ");
+  if (KIND_OF_LIFE.test(t) || TAKES_OFF.test(t)) return false;
+  let seen = 0;
+  for (const m of t.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent\b)/g)) {
+    if (Math.abs(Number(m[1].replace(",", ".")) - value) > 0.0001) continue;
+    const lines = t.slice(m.index! + m[0].length).split("\n");
+    const after = (!lines[0].trim() && /^\s*(?:of|daripada|dari)\s/iu.test(lines[1] ?? "") ? lines[1] : lines[0]).trim();
+    const of = after.match(/^(?:of|daripada|dari)\s+/iu);
+    if (!of || !HEADLINE_SUM.test(after.slice(of[0].length))) return false;
+    seen++;
+  }
+  return seen > 0;
+}
 /** Whether the row leaves its percentage's base unsettled (anything but the sum insured, a neutral continuation or the
  * row's end follows it). False when no percentage equal to the value is printed. */
 function percentBaseUnsettled(row: string, value: number): boolean {
@@ -1241,6 +1280,10 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { notesKind?: Chec
     if (pays === "per_period" && !period) { out.dropped.push({ what: label, why: "payment with no period" }); continue; }
     const basis = (BASES as readonly string[]).includes(b.basis as string) ? b.basis! : null;
     let percentOf = pays === "percent" && (PERCENT_OF as readonly string[]).includes(b.percentOf as string) ? b.percentOf! : null;
+    // A share the reading left unsettled ("other", or none) whose own words print it as a share of the policy's own headline
+    // sum ("25% of the Sum Covered") is of the sum insured (HEADLINE_SUM): stored readings are settled here too, unread.
+    const baseFromWords = pays === "percent" && value != null && (percentOf === "other" || percentOf == null) && headlineSumShare(segmentOf(source).text, value);
+    if (baseFromWords) percentOf = "sum_insured";
     let baseAmount: number | null = null, baseSource: Source | null = null;
     if (percentOf === "fixed_amount") {
       baseAmount = num(b.baseAmount);
@@ -1340,7 +1383,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { notesKind?: Chec
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}),
-      ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}),
+      ...(ownShareNamed ? { ownShareNamed } : {}), ...(baseFromWords && percentOf === "sum_insured" ? { baseFromWords } : {}), ...(lines ?? {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}) });
   }
   Object.assign(out, lifeNotesOf(doc.pages, { ...out, kind: o.notesKind ?? out.kind, insurer: str(d.insurer) }));

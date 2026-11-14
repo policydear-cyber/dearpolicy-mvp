@@ -19,7 +19,7 @@ import { runGuards, type GuardReader } from "./guard-run";
 import { figureGuardsEnabled } from "./guard-flag";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type CoverType, type SectionLink, type SectionRef } from "./reading";
 
-export const PROMPT_VERSION = "2026-11-13.1";
+export const PROMPT_VERSION = "2026-11-14.1";
 export const READ_MAX_OUTPUT = 24_000;
 export const PAGE_MAX_OUTPUT = 8_000;
 /** Output room for one linking call. Live, 12 Nov: a household with 150 sections asked in one call used all of 8,000
