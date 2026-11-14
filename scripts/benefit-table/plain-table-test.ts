@@ -675,6 +675,60 @@ for (const [line, gone] of [
     for (const id of ["a", "b", "k"] as const) for (const b of gone) assert.ok(!got[id].includes(b), `${id} ${b}: ${got[id].join(", ")}`);
   });
 }
+// Per-person-shared gate round 12 (R12-H1): with the travel-together words out, every other sharing word still ties: one
+// limit / amount / benefit, paid once, for all of them / everyone, between them, as a family, combined, in total. A clause
+// naming each person's own limit and a sharing word shares. Each sentence follows a valid family-cap note.
+const CAP_NOTE = `${SHAPE_OPEN}.`;
+const SEVEN_NAMES = SEVEN.map(([b]) => b);
+const withheld = (line: string, gone: string[]) => {
+  const got = sixWith({ rows: SEVEN, extra: [CAP_NOTE, line] });
+  for (const id of ["a", "b", "k"] as const) for (const b of gone) assert.ok(!got[id].includes(b), `${id} ${b}: ${got[id].join(", ")}`);
+};
+for (const [line, gone] of [
+  ["Family members travelling together are limited to one limit.", SEVEN_NAMES],
+  ["Insured persons travelling together are covered up to the limit shown for all of them.", SEVEN_NAMES],
+  ["Travelling together, the family has one limit for medical expenses.", ["Overseas medical expenses"]],
+  ["The family, if travelling together, is covered for one medical expenses limit.", ["Overseas medical expenses"]],
+  ["Personal liability for insured persons travelling together is limited to one claim amount.", ["Personal liability"]],
+  ["For each insured person, the limit shown is the most we pay for everyone on the certificate.", SEVEN_NAMES],
+  ["Insured persons on the same trip are covered by one limit.", SEVEN_NAMES],
+  ["Under one certificate the limit shown is paid once.", SEVEN_NAMES],
+  ["The limit applies to each insured person and to all of you as a family.", SEVEN_NAMES]] as [string, string[]][]) {
+  test(`gate PPS-12 R12-H1: '${line}' withholds ${gone.length === SEVEN.length ? "every per-person row" : gone.join(", ")}`, () => withheld(line, gone));
+}
+// The gate's combined attacks: each withholds every per-person row it names, or every row when it names none.
+for (const [line, gone] of [
+  ["Family members travelling together share one limit of S$50,000 for medical expenses.", ["Overseas medical expenses"]],
+  ["Under one policy, the limit is for all insured persons combined.", SEVEN_NAMES],
+  ["Insured persons on the same trip share the baggage limit.", ["Baggage delay", "Loss of baggage"]],
+  ["Each insured person's claims count towards the family limit.", SEVEN_NAMES],
+  ["Each insured person has their own limit, subject to the family aggregate.", SEVEN_NAMES],
+  ["The limit shown for each insured person applies to the family in total.", SEVEN_NAMES],
+  ["Each insured person's claims are deducted from one family limit.", SEVEN_NAMES],
+  ["Claims by each insured person reduce the amount available to the others.", SEVEN_NAMES],
+  ["Each insured person is covered up to the family limit shown.", SEVEN_NAMES],
+  ["Your own limit is reduced by any amount paid to other insured persons.", SEVEN_NAMES],
+  ["Each of you may claim, but the most we pay for all of you is the limit shown.", SEVEN_NAMES],
+  ["Family members travelling together are covered up to the limit shown.", SEVEN_NAMES],
+  ["Under one policy, one limit applies to all insured persons.", SEVEN_NAMES],
+  ["Claims for the family are submitted together and paid from one limit.", SEVEN_NAMES],
+  ["Insured persons travelling together receive one benefit between them.", SEVEN_NAMES],
+  ["Each insured person is covered up to the limit shown, but not more than the limit shown for the whole family.", SEVEN_NAMES],
+  ["Each insured person has their own limit, except that medical expenses are one limit for the family.", ["Overseas medical expenses"]],
+  ["When travelling together, insured persons share the limits shown.", SEVEN_NAMES],
+  ["Insured persons who buy cover together have one limit for all of them.", SEVEN_NAMES],
+  ["Your own limit applies, but the family's total claims cannot exceed the limit shown.", SEVEN_NAMES],
+  ["Each insured person's limit is part of a single limit for the household.", SEVEN_NAMES],
+  ["Each traveller can claim up to the limit shown, which is the limit for everyone on this certificate.", SEVEN_NAMES],
+  ["Medical expenses: one limit for everyone on the same booking.", ["Overseas medical expenses"]],
+  ["Each insured person has their own limit, except personal liability, which is one limit for all.", ["Personal liability"]]] as [string, string[]][]) {
+  test(`gate PPS-12 attack: '${line}' withholds ${gone.length === SEVEN.length ? "every per-person row" : gone.join(", ")}`, () => withheld(line, gone));
+}
+// Still no sharing: each person's own, once each, one limit for each insured person.
+for (const line of ["Insured persons travelling together may claim travel delay once each.", "Medical: one limit applies for each insured person.",
+  "Travel delay is paid once per insured person.", "Each insured person may claim one benefit for each trip."]) {
+  test(`gate PPS-12: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: SEVEN, extra: [line] }), each(SEVEN_NAMES)));
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),
