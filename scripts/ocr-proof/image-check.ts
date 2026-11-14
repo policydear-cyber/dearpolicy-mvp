@@ -4,8 +4,11 @@
  * told only the row's label and column, never a figure, and copies the cell exactly as printed on the image. Its answer is
  * scored against the ground truth and against what Baidu's text says on that row.
  *
- *   NODE_USE_ENV_PROXY=1 npx tsx scripts/ocr-proof/image-check.ts <doc.pdf> <truth.json> <pages.json> <out.json> <firstPage> <lastPage> [model,model]
- * Uses DEARPOLICY_ANTHROPIC_KEY; spend counted from the API's token counts at the listed prices.
+ *   NODE_USE_ENV_PROXY=1 npx tsx scripts/ocr-proof/image-check.ts <doc.pdf> <truth.json> <pages.json> <out.json> <firstPage> <lastPage> [model,model] [capUsd]
+ * Uses DEARPOLICY_ANTHROPIC_KEY; spend counted from the API's token counts at the listed prices. Cap (default US$0.5):
+ * before each call its worst case (prompt at ~3.5 characters a token and the image at about 1,600 tokens, at the uncached
+ * input price, plus every output token allowed) is added to the spend so far; a call that could pass the cap is not made,
+ * and what was done so far is written.
  */
 import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -14,7 +17,9 @@ import { tmpdir } from "node:os";
 import Anthropic from "@anthropic-ai/sdk";
 import { priceFor } from "@/lib/ai/providers";
 
-const [pdf, truthPath, pagesPath, outPath, a, b, modelsArg] = process.argv.slice(2);
+const [pdf, truthPath, pagesPath, outPath, a, b, modelsArg, capArg] = process.argv.slice(2);
+const capUsd = Number(capArg ?? 0.5);
+if (!(capUsd > 0)) throw new Error("capUsd must be a positive number");
 const truth = JSON.parse(readFileSync(truthPath, "utf8"));
 const ocr: string[] = JSON.parse(readFileSync(pagesPath, "utf8"));
 const first = Number(a), last = Number(b);
@@ -30,7 +35,8 @@ const schema = { type: "object", additionalProperties: false, required: ["cells"
   const dir = mkdtempSync(join(tmpdir(), "imgchk-"));
   const results: unknown[] = []; let usd = 0;
   const tally: Record<string, { cells: number; right: number; wrong: number; none: number; caughtOcrErrors: number; ocrErrors: number }> = {};
-  for (let p = first; p <= last; p++) {
+  let stopped: string | null = null;
+  pages: for (let p = first; p <= last; p++) {
     const pg = truth.page_lines[p - 1];
     let header: string[] = [];
     const cells: { label: string; column: string; text: string }[] = [];
@@ -44,6 +50,9 @@ const schema = { type: "object", additionalProperties: false, required: ["cells"
     const ocrT = tight(ocr[p - 1] ?? "");
     const questions = cells.map((c, i) => `${i + 1}. row "${c.label}", column "${c.column}"`).join("\n");
     for (const model of models) {
+      const pw = priceFor({ provider: "anthropic", model }) ?? { input: 5, output: 25 };
+      const worst = ((Math.ceil((SYSTEM.length + questions.length + 60 + JSON.stringify(schema).length) / 3.5) + 1600) * pw.input + 4000 * pw.output) / 1e6;
+      if (usd + worst > capUsd) { stopped = `page ${p} ${model}: worst case US$${worst.toFixed(4)} would pass the US$${capUsd} cap`; break pages; }
       const r = await api.messages.create({ model, max_tokens: 4000, system: SYSTEM,
         messages: [{ role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: img } },
           { type: "text", text: `Page ${p}. Copy these cells exactly as printed:\n${questions}` }] }],
@@ -62,6 +71,7 @@ const schema = { type: "object", additionalProperties: false, required: ["cells"
       });
     }
   }
-  writeFileSync(outPath, JSON.stringify({ pages: [first, last], models, usd: Math.round(usd * 10000) / 10000, tally, results }, null, 1));
+  if (stopped) console.log("STOPPED:", stopped);
+  writeFileSync(outPath, JSON.stringify({ pages: [first, last], models, stopped, capUsd, usd: Math.round(usd * 10000) / 10000, tally, results }, null, 1));
   console.log(JSON.stringify({ usd: Math.round(usd * 10000) / 10000, tally }));
 })();

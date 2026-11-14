@@ -8,11 +8,14 @@
  *
  * pages.json: an array of page texts (page 1 first), e.g. run-baidu.ts's parsed-pages.json (what our parser kept from
  * Baidu). Uses DEARPOLICY_ANTHROPIC_KEY. Spend is counted from the API's own token counts at the listed prices.
+ * Cap: before each reader-1 call its worst case (whole prompt at the uncached input price, ~3.5 characters a token, plus
+ * every output token allowed) is added to the spend so far; a call that could pass capUsd is not made and the run stops.
+ * The guards keep their own cap (readDocument's guard budget, the same capUsd).
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { readDocument, checkStored, type Db, type StoredReading } from "@/lib/benefit-table/service";
 import { applyGuards } from "@/lib/benefit-table/guards";
-import { anthropicTableModel, type TableReply } from "@/lib/benefit-table/model";
+import { anthropicTableModel, type TableModel, type TableReply } from "@/lib/benefit-table/model";
 import { benefitTableModel } from "@/lib/benefit-table/flag";
 import { guardRoster, supportsEffort } from "@/lib/benefit-table/guard-flag";
 import { priceFor, type ModelChoice } from "@/lib/ai/providers";
@@ -45,10 +48,21 @@ const usage = (choice: ModelChoice) => (what: string, r: TableReply) => {
   s.usd += (r.input * p.input + r.output * p.output + (r.cacheRead ?? 0) * (p.cachedInput ?? p.input) + (r.cacheWrite ?? 0) * p.input * 1.25) / 1e6;
 };
 
+const spentSoFar = () => Object.values(spend).reduce((a, s) => a + s.usd, 0);
+/** Reader 1 admitted on its worst case before every call (see the note at the top). */
+function capped(m: TableModel): TableModel {
+  return { choice: m.choice, async call(c) {
+    const p = priceFor(m.choice) ?? { input: 5, output: 25 };
+    const worst = (Math.ceil((c.system.length + c.user.length + JSON.stringify(c.schema).length) / 3.5) * p.input + c.maxTokens * p.output) / 1e6;
+    if (spentSoFar() + worst > capUsd) throw new Error(`stopped: a reader call's worst case US$${worst.toFixed(4)} would pass the US$${capUsd} cap`);
+    return m.call(c);
+  } };
+}
+
 (async () => {
   const t0 = Date.now();
   const readerChoice = benefitTableModel();
-  const reader = anthropicTableModel(readerChoice);
+  const reader = capped(anthropicTableModel(readerChoice));
   const guards = { readers: [{ model: reader, prompt: "direct" as const, onUsage: usage(readerChoice) },
     ...guardRoster().map((g) => ({ model: anthropicTableModel(g.choice, undefined, { effort: supportsEffort(g.choice.model) }), prompt: g.prompt, onUsage: usage(g.choice) }))], capUsd };
   const result = await readDocument(db, reader, ACC, DOC, usage(readerChoice), {}, guards);

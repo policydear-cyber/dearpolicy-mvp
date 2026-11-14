@@ -471,11 +471,20 @@ export function layoutSummary(list: unknown): string {
  * one line, TAB between, from Baidu's own boxes. Only two plain text blocks next to each other in the layout list, each a
  * short single line (label up to 40 characters, value up to 80), the value to the right of the label and sharing most of
  * its height, and each standing as a whole paragraph of its own, one straight after the other in the text: running text in
- * two columns (a column's block is many lines) is never joined. Nothing is added, dropped or reworded. */
+ * two columns (a column's block is many lines) is never joined. Allow-listed only (Critic 2 #479 H1): no other block of
+ * the page's layout list sits on that row (a row of plan columns, a sidebar at the same height), the label holds no digit,
+ * and the value is one figure in a closed shape (VALUE_CELL): currency, figure, then at most a % or a "per ..." unit.
+ * Nothing is added, dropped or reworded. */
+const VALUE_CELL = /^(?:(?:[A-Z]{1,3}\s?\$|\$|€|£|¥|₹|[A-Z]{2,3})\s?)?\d{1,3}(?:,\d{3})*(?:\.\d+)?(?:\s?(?:[A-Z]{3}))?(?:\s?%|\s(?:per|a)\s(?:day|night|week|month|year|annum|visit|trip|claim|accident|policy year|person))?$/;
 export function sameRowPairsJoined(list: unknown, text: string): { text: string; joined: number } {
   const none = { text, joined: 0 };
   if (!Array.isArray(list) || !text) return none;
-  type Box = { key: string; x1: number; y1: number; x2: number; y2: number; len: number };
+  type Box = { key: string; x1: number; y1: number; x2: number; y2: number; len: number; text: string };
+  // Every block's height on the page, whatever its label, to tell a two-cell row from a wider one.
+  const bands = list.map((block) => {
+    const v = (block as { block_bbox?: unknown } | null)?.block_bbox;
+    return Array.isArray(v) && v.length === 4 && v.every((n) => typeof n === "number" && Number.isFinite(n)) ? { y1: v[1] as number, y2: v[3] as number } : null;
+  });
   const boxes: (Box | null)[] = list.map((block) => {
     const b = (block ?? {}) as { block_label?: unknown; block_content?: unknown; block_bbox?: unknown };
     const bb = b.block_bbox;
@@ -483,7 +492,7 @@ export function sameRowPairsJoined(list: unknown, text: string): { text: string;
     if (!Array.isArray(bb) || bb.length !== 4 || !bb.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
     const clean = baiduMarkdownToText(b.block_content);
     const [x1, y1, x2, y2] = bb as number[];
-    return x2 > x1 && y2 > y1 ? { key: blockKey(clean), x1, y1, x2, y2, len: clean.length } : null;
+    return x2 > x1 && y2 > y1 ? { key: blockKey(clean), x1, y1, x2, y2, len: clean.length, text: clean.trim() } : null;
   });
   const paras = text.split(/\n{2,}/);
   const keys = paras.map(blockKey);
@@ -494,6 +503,11 @@ export function sameRowPairsJoined(list: unknown, text: string): { text: string;
     const ha = a.y2 - a.y1, hb = b.y2 - b.y1, overlap = Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1);
     // One line each (neither more than about twice the other's height), side by side, the value to the right.
     if (ha > 2 * hb || hb > 2 * ha || overlap < 0.6 * Math.min(ha, hb) || b.x1 <= a.x2) continue;
+    if (/\d/.test(a.text) || !VALUE_CELL.test(b.text)) continue;
+    // No third block on the row: any other block sharing more than a sliver of either one's height is a wider row.
+    const sharesRow = (k: number) => { const o = bands[k]; if (!o) return false;
+      return [a, b].some((x) => Math.min(x.y2, o.y2) - Math.max(x.y1, o.y1) > 0.2 * (x.y2 - x.y1)); };
+    if (bands.some((_, k) => k !== i && k !== i + 1 && sharesRow(k))) continue;
     const k = keys.findIndex((x, n) => x === a.key && keys[n + 1] === b.key);
     if (k < 0) continue;
     paras.splice(k, 2, `${paras[k].trim()}\t${paras[k + 1].trim()}`);

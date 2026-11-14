@@ -789,6 +789,22 @@ async function main() {
     keep([blk("Sum Insured", [89, 348, 222, 375], "paragraph_title"), blk("USD 980,000", [451, 347, 577, 372])], "Sum Insured\n\nUSD 980,000");
     keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372])], "Sum Insured USD 980,000 and more");
     keep([], "Sum Insured\n\nUSD 980,000");
+    // Critic 2 #479 H1: a row of two plan figures (and its header row), a sidebar at the same height, two figures side by
+    // side, and a label beside a condition cell with the amount further along: nothing joined, so no label is ever bound
+    // to one plan's figure.
+    keep([blk("Benefit", [80, 300, 200, 325]), blk("Plan A", [450, 300, 540, 325]), blk("Plan B", [650, 300, 740, 325]),
+      blk("Death", [80, 348, 160, 375]), blk("USD 980,000", [450, 347, 577, 372]), blk("USD 490,000", [650, 347, 777, 372])],
+      "Benefit\n\nPlan A\n\nPlan B\n\nDeath\n\nUSD 980,000\n\nUSD 490,000");
+    keep([blk("Medical expenses", [80, 348, 260, 375]), blk("Premium S$120 per year", [700, 348, 960, 375])], "Medical expenses\n\nPremium S$120 per year");
+    keep([blk("S$100,000", [80, 348, 200, 375]), blk("S$50,000", [450, 348, 560, 375])], "S$100,000\n\nS$50,000");
+    keep([blk("Hospital cash", [80, 348, 230, 375]), blk("per day, max 30 days", [300, 348, 520, 375]), blk("S$200", [650, 348, 720, 375])],
+      "Hospital cash\n\nper day, max 30 days\n\nS$200");
+    // A third block of any label on the row (a table or figure beside it) also stops the join; a label with a digit too.
+    keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372]), blk("<table></table>", [700, 340, 900, 380], "table")], "Sum Insured\n\nUSD 980,000");
+    keep([blk("Plan 2 sum", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372])], "Plan 2 sum\n\nUSD 980,000");
+    // Closed value shapes that do join: a percentage and a daily amount.
+    assert.equal(bd.sameRowPairsJoined([blk("Co-insurance", [89, 348, 222, 375]), blk("20%", [451, 347, 500, 372])], "Co-insurance\n\n20%").joined, 1);
+    assert.equal(bd.sameRowPairsJoined([blk("Hospital cash", [89, 348, 222, 375]), blk("RM200 per day", [451, 347, 600, 372])], "Hospital cash\n\nRM200 per day").joined, 1);
   }
 
   console.log("DearPolicy Baidu PaddleOCR (mocked contract): request shape, token handling, polling, result parsing, per-page, weak-page and whole-job fallback to the AI reader, ledger row, verified provenance, result-host allow-list, function deadline, cache only of full readings, no cap on reading, not-read marking, switch-off, ledger fail-closed, signed-link submit with staged copy removal, connection retry only before anything is sent, background reading that waits for Baidu instead of handing pages to the AI reader -- passed. Live Baidu behaviour is NOT covered by this test.");
