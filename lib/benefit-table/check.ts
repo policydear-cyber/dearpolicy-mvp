@@ -552,6 +552,126 @@ const CROSSABLE = (line: string) => !!line.trim() && !line.includes("\t") && !/\
  * "on the same life for\nTI and CI claims": TE pr180 A18, A19). */
 const CONTINUES = (above: string, line: string) => !/[.!?:]\s*$/.test(above)
   && (/^\s*[a-z(]/.test(line) || /\b(?:by|for|of|on|in|to|with|under|from|at|and|or|the|a|an|any|all|other|our|your|its|their|which|that|than|is|are|be)\s*$/.test(above));
+/** A table cell that carries on the cell printed above it in the same column: CONTINUES, or a cell above that stops on a
+ * comma, an ampersand, a slash or a hyphen ("10% of the Sum Covered," over "up to RM 5,000"). */
+const CELL_CONTINUES = (above: string, cell: string) => CONTINUES(above, cell) || /[,&/–-]\s*$/.test(above);
+/** Words compared as locateQuote compares them: no spaces, one case, one kind of quote mark and dash. */
+const squashCell = (s: string) => !/[^\x20-\x7e]|&/.test(s) ? s.toLowerCase().replace(/\s+/g, "").replace(/`/g, "'") : s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").toLowerCase()
+  .replace(/\s+/g, "").replace(/[“”„"]/g, "\"").replace(/[‘’‚`´]/g, "'").replace(/[‐‑‒–—―−]/g, "-");
+const WRAP_LINES = 4;
+/** A page's lines with their table cells, and the lines of two or more cells by the first three characters of their first
+ * cell (squashed; a shorter first cell under itself), made once per page text: every quote not found otherwise is looked for here, on every page. Emptied
+ * once it holds about 8 million characters. */
+type TableLines = { lines: { from: number; text: string; cells: string[]; head: string }[]; byStart: Map<string, number[]> };
+const tableLines = new Map<string, TableLines>();
+const NO_CELLS: string[] = [];
+let tableLineChars = 0;
+function tableLinesOf(pageText: string): TableLines {
+  const hit = tableLines.get(pageText);
+  if (hit) return hit;
+  if (tableLineChars + pageText.length > 8_000_000) { tableLines.clear(); tableLineChars = 0; }
+  const lines: TableLines["lines"] = [], byStart = new Map<string, number[]>();
+  let at = 0;
+  for (const text of pageText.split("\n")) {
+    const tab = text.indexOf("\t");
+    const cells = tab >= 0 ? text.split("\t").map((c) => c.trim()).filter(Boolean) : NO_CELLS;
+    const head = cells.length >= 2 ? squashCell(cells[0]) : "";
+    // A first cell of one or two characters ("5", "2a") is kept under itself.
+    if (head) { const key = head.slice(0, 3), list = byStart.get(key); if (list) list.push(lines.length); else byStart.set(key, [lines.length]); }
+    lines.push({ from: at, text, cells: tab >= 0 ? cells : text.trim() ? [text.trim()] : NO_CELLS, head });
+    at += text.length + 1;
+  }
+  const made = { lines, byStart };
+  tableLines.set(pageText, made); tableLineChars += pageText.length;
+  return made;
+}
+/** A table row whose cells wrap over two to four printed lines ("Angioplasty and other invasive treatment for\t10% of the
+ * Sum Covered, up to a maximum of" over "coronary artery\tRM 25,000"), quoted in reading order: each column's parts
+ * together, column by column ("Angioplasty … for\tcoronary artery\t10% … maximum of\nRM 25,000"), which is not the
+ * page's order, so locateQuote does not find it (TE R3 H2-A t2). An allow-list, every test needed:
+ * - the quote, spacing aside, is exactly every cell of the printed lines, column by column and top to bottom within a
+ *   column: every part of the page is used once, nothing is left out, repeated or added (no other figure or percentage
+ *   enters), and no part moves to another column, so a figure stays with the benefit and plan it is printed under;
+ * - the lines are consecutive; the first prints at least two cells and no later one prints more; a later line with fewer
+ *   cells prints no digit (which column it is in is not printed, so no figure is placed by guess) and puts its cells in
+ *   the first or the last columns, and only one such placement may give the quote;
+ * - every cell after the first line carries on the cell above it in its column (CELL_CONTINUES: the cell above does not
+ *   end a sentence, and the cell starts in lower case or the one above stops on a joining word or a comma): one row's
+ *   wrapped parts, never the next row's label or figure;
+ * - the row starts on its first line and ends on its last: no cell of the first line carries on the line before it, and
+ *   no cell of the line after carries on the last, so a part of the row is never left out of the quote;
+ * - no ellipsis in the quote (locateQuote's gaps are never taken here).
+ * Returns each place on the page that gives the quote: the start and end of its lines, and the row read column by column
+ * (squashed), in which a part of the row (its cap) can be looked for. */
+export function wrappedRowsAt(pageText: string, quote: string): { start: number; end: number; reading: string }[] {
+  if (/\.{3}|…/.test(quote)) return [];
+  const want = squashCell(quote);
+  return wrappedRowsOf(want, startsFor(want, wrapStartsOf([{ page: 1, text: pageText }]))).map(({ start, end, reading }) => ({ start, end, reading }));
+}
+/** The lines of two or more cells of every page of a document, by the first three characters of their first cell (as
+ * tableLinesOf), made once per document's pages: a quote not found otherwise is looked up once, not on every page. */
+type WrapStart = { page: number; tl: TableLines; i: number };
+const wrapStarts = new WeakMap<object, { texts: string[]; byStart: Map<string, WrapStart[]> }>();
+function wrapStartsOf(pages: { page: number; text: string }[]): Map<string, WrapStart[]> {
+  // The same pages, with the same texts: a page edited in place is read afresh.
+  const hit = wrapStarts.get(pages);
+  if (hit && hit.texts.length === pages.length && hit.texts.every((t, k) => t === pages[k].text)) return hit.byStart;
+  const byStart = new Map<string, WrapStart[]>();
+  for (const p of pages) {
+    const tl = tableLinesOf(p.text);
+    for (const [key, is] of tl.byStart) {
+      const list = byStart.get(key) ?? [];
+      for (const i of is) list.push({ page: p.page, tl, i });
+      byStart.set(key, list);
+    }
+  }
+  wrapStarts.set(pages, { texts: pages.map((p) => p.text), byStart });
+  return byStart;
+}
+/** The places that give a squashed quote (wrappedRowsAt), among the lines it may start on. */
+function wrappedRowsOf(want: string, starts: WrapStart[]): (WrapStart & { start: number; end: number; reading: string })[] {
+  if (want.length < 8) return [];
+  // Any cell of `line` carries on a cell of `above`: the same column when both print as many cells, else any of them.
+  const runsOn = (above: string[], line: string[]) => !!above.length && !!line.length && (above.length === line.length
+    ? line.some((c, x) => CELL_CONTINUES(above[x], c)) : line.some((c) => above.some((a) => CELL_CONTINUES(a, c))));
+  const hits: (WrapStart & { start: number; end: number; reading: string })[] = [];
+  for (const at of starts) {
+    const { tl: { lines }, i } = at;
+    const first = lines[i].cells, c = first.length;
+    if (!want.startsWith(lines[i].head)) continue;
+    if (i > 0 && runsOn(lines[i - 1].cells, first)) continue;
+    // Each later line's cells, placed in the first or the last columns: every way to place them, built line by line.
+    let ways: number[][][] = [[first.map((_, x) => x)]];
+    for (let k = 1; k < WRAP_LINES && i + k < lines.length; k++) {
+      const cells = lines[i + k].cells, m = cells.length;
+      // A line of fewer cells does not show which columns they are in: it may carry only words, never a figure, so no
+      // figure is ever placed under a column by guess.
+      if (!m || m > c || (m < c && /\d/.test(lines[i + k].text))) break;
+      const places = m === c ? [cells.map((_, x) => x)] : [cells.map((_, x) => x), cells.map((_, x) => c - m + x)];
+      ways = ways.flatMap((w) => places.map((p) => [...w, p]));
+      const block = lines.slice(i, i + k + 1);
+      const readings = ways.map((w) => {
+        const columns: string[][] = Array.from({ length: c }, () => []);
+        for (let j = 0; j < block.length; j++) {
+          for (let x = 0; x < block[j].cells.length; x++) {
+            const col = columns[w[j][x]], cell = block[j].cells[x];
+            if (j > 0 && (!col.length || !CELL_CONTINUES(col[col.length - 1], cell))) return null;
+            col.push(cell);
+          }
+        }
+        return squashCell(columns.flat().join(""));
+      }).filter((r): r is string => r != null);
+      const fits = readings.filter((r) => r === want);
+      if (!fits.length) continue;
+      const last = lines[i + k], after = lines[i + k + 1];
+      if (fits.length === 1 && !(after && runsOn(last.cells, after.cells)))
+        hits.push({ ...at, start: lines[i].from + (lines[i].text.length - lines[i].text.trimStart().length), end: last.from + last.text.trimEnd().length, reading: fits[0] });
+      break;
+    }
+  }
+  return hits;
+}
+const startsFor = (want: string, byStart: Map<string, WrapStart[]>) => [1, 2, 3].flatMap((n) => byStart.get(want.slice(0, n)) ?? []);
 /** The sentence of its page a quote is printed in, with the one before it when it opens by pointing back. It is read
  * only on the quote's own lines and the lines its sentence runs over (each in lower case after one that does not end, no
  * table cell, no figure): a heading, a table row or another clause beside the quote is never its sentence. */
@@ -1362,10 +1482,27 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     }
     return hits.length === 1 ? hits[0] : null;
   };
+  // A row whose cells wrap over several lines, quoted column by column (wrappedRowsAt): one place on the page the model
+  // gave, else one place in the whole document. Its reading is kept, so the row's cap can be found in it.
+  const wrappedReadings = new Map<Source, string>();
+  const wrappedRow = (quote: string, page: number | null): Source | null => {
+    if (!doc.readable) return null;
+    if (/\.{3}|…/.test(quote)) return null;
+    const want = squashCell(quote);
+    const hits = wrappedRowsOf(want, startsFor(want, wrapStartsOf(doc.pages)));
+    const onStated = page != null ? hits.filter((h) => h.page === page) : [];
+    const one = onStated.length ? onStated : hits;
+    if (one.length !== 1) return null;
+    const { start, end, reading } = one[0];
+    const src: Source = { documentId: doc.id, document: doc.name, page: one[0].page, excerpt: pageText(one[0].page).slice(start, end).replace(/[ \t]+/g, " ").trim() };
+    placed.set(src, { start, end });
+    wrappedReadings.set(src, reading);
+    return src;
+  };
   const find = (quote: string | null, page: number | null): Source | null => {
     if (!quote) return null;
     const f = locateQuote(household, quote, 0) ?? wrappedLabel(quote);
-    if (!f) return null;
+    if (!f) return wrappedRow(quote, page);
     const at = (g: { page: number; excerpt: string; offset: number; end?: number }) => {
       const src: Source = { documentId: doc.id, document: doc.name, page: g.page, excerpt: g.excerpt };
       placed.set(src, { start: g.offset, end: g.end ?? lineEndAt(pageText(g.page), g.offset) });
@@ -1638,7 +1775,13 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     if (pays === "percent") {
       const { text: row, near, otherPercent } = segmentOf(source);
       const claimed = num(b.cap);
-      const s = claimed != null && claimed > 0 ? find(str(b.capQuote), source.page) : null;
+      // A wrapped row's cap is one run of the row read column by column ("up to a maximum of" over "RM 25,000"): it is
+      // printed in the row itself, so the row is its source, as a cap read from the row's own words is below. Looked for
+      // there first: the same words printed in another row are that row's cap.
+      const capRun = wrappedReadings.get(source), capWords = str(b.capQuote);
+      const ownCap = !!capRun && !!capWords && claimed != null && squashCell(capWords).length >= 4 && capRun.includes(squashCell(capWords))
+        && printsNumber(capWords, claimed) && CAP_WORDS.test(capWords);
+      const s = claimed == null || claimed <= 0 ? null : ownCap ? source : find(capWords, source.page);
       const tied = s && claimed != null && s.page === source.page && printedIn(s, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt));
       // Another money figure in the row besides its cap ("up to S$50,000 or S$500 per day, whichever is lower") is a second
       // limit too (Critic R102-1).
