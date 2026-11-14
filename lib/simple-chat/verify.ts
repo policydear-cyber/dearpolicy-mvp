@@ -962,9 +962,8 @@ function sumLineInOwnBlock(text: string, lineAt: number): string | null {
  * - it is in this row's own quoted words or its maximum's, or in the stored maximum of another row the table worked out
  *   (`caps`), each located on its stored page;
  * - its WHOLE label is a premium, contribution, fee or charge item ("Annual premium", "Monthly contribution", "Policy
- *   fee"), the label being the words before it in its own cell or, when it opens its cell, the line's first cell right
- *   before it; and neither its own cell nor the line's first cell names a sum or a cover (NAMES_SUM_OR_COVER). A column's
- *   header is never its label. "Return of premium" and "Waiver of premium" are covers, so they count;
+ *   fee"), the label being the line's first cell (its own cell, or the single cell before it), and nothing on the whole
+ *   line names a sum or a cover (NAMES_SUM_OR_COVER). A column's header is never its label. "Return of premium" and "Waiver of premium" are covers, so they count;
  * - the words right after it in its cell tie it to a day, a week or a month ("S$100 per day in hospital");
  * - it is the first figure on a line whose line above prints a percentage and ends with a cap word: the wrap of a
  *   percentage cell ("25% of the Sum Covered, up to a maximum of" / "RM 50,000").
@@ -994,16 +993,17 @@ function lineFigures(lines: string[], i: number): { f: StatedFigure; at: number;
     from = at + f.raw.length;
     const cellStart = l.lastIndexOf("\t", at - 1) + 1;
     const before = l.slice(cellStart, at);
-    // Its charge label: the words before it in its own cell or, when it opens its cell, the line's first cell when that is
-    // the cell right before it (the row's own label). It is a charge only when neither its own cell nor the line's first
-    // cell names a sum or a cover ("Sum assured<TAB>Premium<TAB>S$450,000", "Contribution: S$450,000 sum covered").
+    // Its charge label: the words before it in its own cell or, when it opens its cell, the cell right before it. It is a
+    // charge only when that label is the line's FIRST cell (the row's own label) and nothing on the whole line names a sum
+    // or a cover ("TPD<TAB>Annual premium S$450,000", "Premium<TAB>S$450,000<TAB>Sum assured").
     const cellsBefore = l.slice(0, Math.max(0, cellStart - 1)).split("\t").map((c) => c.trim()).filter(Boolean);
     const label = before.trim() ? before.trim() : cellsBefore.length === 1 ? cellsBefore[0] : "";
     const nextTab = l.indexOf("\t", from);
     const after = l.slice(from, nextTab < 0 ? l.length : nextTab);
     const ownCell = l.slice(cellStart, nextTab < 0 ? l.length : nextTab);
-    const firstCell = l.split("\t").map((c) => c.trim()).find(Boolean) ?? "";
-    const charge = CHARGE_LABEL.test(label) && !NAMES_SUM_OR_COVER.test(ownCell) && !NAMES_SUM_OR_COVER.test(firstCell);
+    const cells = l.split("\t").map((c) => c.trim()).filter(Boolean);
+    const labelIsFirstCell = before.trim() ? cells[0] === ownCell.trim() : cellsBefore.length === 1;
+    const charge = CHARGE_LABEL.test(label) && labelIsFirstCell && !NAMES_SUM_OR_COVER.test(l);
     const notSum = charge || SHORT_PERIOD_AFTER.test(after)
       || (n === 0 && i > 0 && PERCENT_IN_LINE.test(lines[i - 1]) && CAP_WORD_END.test(lines[i - 1].trimEnd()));
     out.push({ f, at, notSum });

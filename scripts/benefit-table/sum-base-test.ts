@@ -531,6 +531,17 @@ for (const blk of ["Death\tAnnual premium\tS$450,000", "Sum assured\tPremium\tS$
     assert.deepEqual(ask(otherLifeDoc(`${R2H}\n${blk}\n${TPD_LINE}\n${R5N}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
   });
 
+// ---------- Gate round 9B (sum-base-gate.md "Round 9B"): every one-line shape gives none ----------
+// Known gaps (gate LOW, not asserted): two-line shapes where the sum's name is on the line above or below and the document's
+// own line labels the person's sum as a premium ("Sum assured" / "<TAB>Premium<TAB>S$450,000", "Premium<TAB>S$450,000" /
+// "Sum assured") still skip it as a charge.
+for (const blk of ["TPD\tAnnual premium S$450,000", "Face amount\tAnnual premium S$450,000", "Amount insured\tPremium S$450,000", "Life\tAnnual premium S$450,000",
+  "Basic\tSum insured\tPremium S$450,000", "Contribution: S$450,000\t(sum covered)", "Premium\tS$450,000\tSum assured", "Manfaat kematian\tCaruman S$450,000",
+  "Jumlah perlindungan\tCaruman S$450,000", "Amount covered\tPremium S$450,000", " Death \tAnnual premium S$450,000", "Annual premium\tS$450,000 sum assured"])
+  test(`gate R9B: a charge word is no charge unless it is the line's first cell on a line naming no sum or cover (${JSON.stringify(blk)}): no TPD figure`, () => {
+    assert.deepEqual(ask(otherLifeDoc(`${R2H}\n${blk}\n${TPD_LINE}\n${R5N}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
+  });
+
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.error(`benefit-table sum base: ${passed} passed, ${failures.length} failed`);
