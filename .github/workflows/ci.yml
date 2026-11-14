@@ -152,6 +152,9 @@ jobs:
       - name: Scanned pages mark an amount whose first digit may be a misread currency letter ($520,000 for S$20,000; negative controls)
         run: npm run documents:currency-misread-test
 
+      - name: Scanned pages mark a thousands comma read as a dot (S$935.542 for S$935,542; the document's own style; negative controls)
+        run: npm run documents:dot-grouped-figure-test
+
       - name: V1.1 source-verified answers, quota failure, usage attribution
         run: npm run v11:answer-test
 
