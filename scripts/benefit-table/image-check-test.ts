@@ -144,6 +144,8 @@ async function main() {
     assert.equal(copyConfirms("S$1,000 half-yearly", 1000, money("SGD", "year")), false, "half-yearly is not yearly");
     assert.equal(copyConfirms("S$150 x 30 days", 30, money("SGD", "once")), false, "another number in the cell is not its amount");
     assert.equal(copyConfirms("S$150 x 30 days", 150, money("SGD", "once")), true);
+    assert.equal(copyConfirms("S$100 per day (S$50 for children)", 50, money("SGD", "day")), false, "TE2 F1: a second figure in the cell is not its own");
+    assert.equal(copyConfirms("S$100 per day (S$50 for children)", 100, money("SGD", "day")), true);
     assert.equal(copyConfirms("$520,000", 520000, money("SGD")), false, "a bare $ never establishes a currency");
     assert.equal(copyConfirms("$520,000", 520000, money(null)), true);
     assert.deepEqual(periodsIn("S$120.50 (monthly)"), ["month"]);

@@ -14,7 +14,9 @@ export type PageFileTools = {
 
 /** Pages whose stored words came from the file's own text layer (extraction method "native"). Every other page (OCR, a
  * part-checked page, a page stored before the method was recorded, or a page with no record at all) is checked against
- * the page, to be safe (Critic 2, R485 N1). */
+ * the page, to be safe (Critic 2, R485 N1). Ingest reads a missing method as "native" (ingest.ts, same-schedule check),
+ * where the worst case is a wrong tie-break; here the worst case would be an OCR misread used unchecked, so a page with no
+ * method is checked: a right figure on it is confirmed by the check, never hidden, at about US$0.01 a page (TE2, R485). */
 export async function nativePagesOf(db: Db, accountId: string, policyId: string): Promise<number[]> {
   const rows = await db("SELECT page_number FROM policy_pages pp WHERE account_id=$1 AND policy_id=$2 AND to_jsonb(pp)->>'extraction_method' = 'native' ORDER BY page_number", [accountId, policyId]);
   return rows.map((r) => Number(r.page_number)).filter((n) => Number.isInteger(n) && n > 0);
