@@ -47,7 +47,7 @@ const OCR_MODELS = new Set(["PP-OCRv5", "PP-OCRv5-latin", "PP-OCRv6"]);
 // was submitted with (BAIDU_IDENTITY_EXCEPTION), so an alias is refused before anything is sent.
 const DOC_MODELS = new Set(["PP-StructureV3", "PaddleOCR-VL-1.5", "PaddleOCR-VL-1.6"]);
 /** Bumped whenever the way a Baidu result is turned into page text changes, so an older cached reading is not reused. */
-const TEXT_VERSION = "baidu-md-v5"; // v4: headers, footers and footnotes kept (#441); v5: blocks only in the layout list added
+const TEXT_VERSION = "baidu-md-v6"; // v4: headers, footers and footnotes kept (#441); v5: blocks only in the layout list added; v6: read again once so each page logs its layout list
 
 type Env = NodeJS.ProcessEnv;
 const intEnv = (v: string | undefined, fallback: number, min: number, max: number) => {
@@ -392,6 +392,16 @@ export function baiduMarkdownToText(markdown: string): string {
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+/** The layout labels Baidu's document models (PaddleOCR-VL, PP-StructureV3) are known to print. Only these are ever
+ * written to a log; any other label is counted as "other", so nothing a document says can reach a log through a label. */
+const BAIDU_LAYOUT_LABELS = new Set([
+  "text", "paragraph_title", "doc_title", "abstract", "content", "reference", "reference_content", "footnote",
+  "vision_footnote", "header", "footer", "header_image", "footer_image", "number", "page_number", "aside_text",
+  "vertical_text", "image", "figure", "chart", "table", "seal", "formula", "display_formula", "inline_formula",
+  "formula_number", "algorithm", "figure_title", "table_title", "chart_title",
+]);
+const loggedLabel = (label: unknown) => (typeof label === "string" && BAIDU_LAYOUT_LABELS.has(label) ? label : "other");
+
 /** Letters and digits only, lower case: how a block's text is looked for in the page's Markdown text. */
 const blockKey = (s: string) => s.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 /** Labels whose blocks are pictures, tables or formulas: never added as text from the layout list (a table is already in
@@ -418,7 +428,7 @@ export function blocksMissingFromText(list: unknown, text: string): { text: stri
     const clean = baiduMarkdownToText(b.block_content), key = blockKey(clean);
     if (key.length < 2) return [];
     const order = typeof b.block_order === "number" && Number.isFinite(b.block_order) ? b.block_order : null;
-    return [{ clean, key, label: /^[a-z_]{1,32}$/.test(label) ? label : "other", order, at }];
+    return [{ clean, key, label: loggedLabel(label), order, at }];
   });
   // Reading order: Baidu's block_order where every block has one, else the list's own order.
   if (blocks.every((b) => b.order !== null)) blocks.sort((a, b) => a.order! - b.order! || a.at - b.at);
@@ -441,8 +451,23 @@ export function blocksMissingFromText(list: unknown, text: string): { text: stri
   return labels.length ? { text: paras.join("\n\n"), added: labels.length, labels } : none;
 }
 
-/** Each page's text, in page order, from the result JSONL. */
-export function baiduPagesFromJsonl(jsonl: string, model: string): string[] {
+/** What a page's layout list holds, in fixed words and Baidu's own labels: "no list", or the block count with each label's
+ * count ("12 blocks: text 7, footer 2, table 1"). A label not on BAIDU_LAYOUT_LABELS is counted as "other". */
+export function layoutSummary(list: unknown): string {
+  if (!Array.isArray(list)) return "no list";
+  const counts = new Map<string, number>();
+  for (const block of list) {
+    const label = loggedLabel(block && typeof block === "object" ? (block as { block_label?: unknown }).block_label : undefined);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const parts = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([l, n]) => `${l} ${n}`);
+  return `${list.length} block${list.length === 1 ? "" : "s"}${parts.length ? `: ${parts.join(", ")}` : ""}`;
+}
+
+/** Each page's text, in page order, from the result JSONL. `pageNumbers` are the document's own numbers of the pages the
+ * job held, in order, so a log names the document page; without them a log names the page's place in the job. */
+export function baiduPagesFromJsonl(jsonl: string, model: string, pageNumbers?: number[]): string[] {
+  const pageName = (i: number) => (pageNumbers?.[i] !== undefined ? `page ${pageNumbers[i]}` : `job page ${i + 1}`);
   const pages: string[] = [];
   for (const line of jsonl.split(/\r?\n/)) {
     if (!line.trim()) continue;
@@ -461,10 +486,15 @@ export function baiduPagesFromJsonl(jsonl: string, model: string): string[] {
       for (const item of result.layoutParsingResults as { markdown?: { text?: unknown }; prunedResult?: { parsing_res_list?: unknown } }[]) {
         const md = item?.markdown?.text;
         const text = typeof md === "string" ? baiduMarkdownToText(md) : "";
-        const missing = blocksMissingFromText(item?.prunedResult?.parsing_res_list, text);
+        const list = item?.prunedResult?.parsing_res_list;
+        const missing = blocksMissingFromText(list, text);
+        // Every page, fixed words and Baidu's own layout labels only (never a block's text): whether Baidu returned a
+        // layout list and what it holds, so a line that is in neither the Markdown nor the reading can be told apart from
+        // one Baidu never detected (13 Nov 2026: a schedule's last line missing, with no layout list seen).
+        console.info(`[baidu-ocr] ${pageName(pages.length)} layout: ${layoutSummary(list)}; added ${missing.added}`);
         if (missing.added) {
           // Fixed words and Baidu's own layout labels only: never a block's text.
-          console.warn(`[baidu-ocr] page ${pages.length + 1}: ${missing.added} block(s) not in Baidu's Markdown added from its layout list (labels: ${missing.labels.join(", ")})`);
+          console.warn(`[baidu-ocr] ${pageName(pages.length)}: ${missing.added} block(s) not in Baidu's Markdown added from its layout list (labels: ${missing.labels.join(", ")})`);
         }
         pages.push(missing.text);
       }
@@ -510,11 +540,11 @@ export type BaiduJobResult = { pages: string[]; jobId: string; model: string | n
 
 /** One job: the given PDF (already only the pages to read) in, one text per page out, in the PDF's page order.
  * `deadline` (ms since 1970) bounds the whole job, every HTTP call included. */
-export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, deadline?: number, opts: { fileUrl?: string } = {}): Promise<BaiduJobResult> {
+export async function readPdfWithBaidu(pdf: Uint8Array, env: Env = process.env, deadline?: number, opts: { fileUrl?: string; pageNumbers?: number[] } = {}): Promise<BaiduJobResult> {
   const end = Math.min(deadline ?? Infinity, Date.now() + baiduOcrSettings(env).maxWaitMs);
   return withBaiduConnection(async () => {
-    const { jobId, submitted } = await submitBaiduJob(pdf, env, end, opts);
-    return awaitBaiduJob(jobId, env, end, submitted);
+    const { jobId, submitted } = await submitBaiduJob(pdf, env, end, opts.fileUrl ? { fileUrl: opts.fileUrl } : {});
+    return awaitBaiduJob(jobId, env, end, submitted, undefined, opts.pageNumbers);
   });
 }
 
@@ -584,7 +614,7 @@ const BAIDU_JOB_ID = /^[A-Za-z0-9_.-]{1,128}$/;
 
 /** Waits for a submitted job until `end` (ms since 1970) and returns its pages. A job still pending or running at `end`
  * is a "timeout". `onState` hears each state Baidu reports ("pending", "running", "done", "failed"). */
-export async function awaitBaiduJob(jobId: string, env: Env, end: number, submitted: Record<string, unknown> = {}, onState?: (state: string) => void): Promise<BaiduJobResult> {
+export async function awaitBaiduJob(jobId: string, env: Env, end: number, submitted: Record<string, unknown> = {}, onState?: (state: string) => void, pageNumbers?: number[]): Promise<BaiduJobResult> {
   const { s, auth, jobsUrl, timeout, retry } = jobContext(env, end);
   if (!BAIDU_JOB_ID.test(jobId)) throw new BaiduOcrError("format");
   let interval = s.pollIntervalMs;
@@ -606,7 +636,7 @@ export async function awaitBaiduJob(jobId: string, env: Env, end: number, submit
       const jsonl = await res.text();
       let first: { model?: unknown; result?: { model?: unknown; dataInfo?: unknown } } | null = null;
       try { first = JSON.parse(jsonl.split(/\r?\n/).find((l) => l.trim()) ?? "null"); } catch { /* parsed (and refused) below */ }
-      const pages = baiduPagesFromJsonl(jsonl, s.model);
+      const pages = baiduPagesFromJsonl(jsonl, s.model, pageNumbers);
       return { pages, jobId, model: reportedModel(data, submitted, first, first?.result, first?.result?.dataInfo) };
     }
     if (state === "failed") throw new BaiduOcrError("job_failed");
@@ -665,19 +695,19 @@ export function setBaiduHandoffForTests(h: Handoff | null) { handoff = h ?? stor
 /** Reads one chunk with Baidu: through a signed link to a staged copy when "link" is on and storage can make one,
  * otherwise by uploading the file. The staged copy is removed when the job ends, whatever the outcome; if that
  * removal fails it is queued for the storage purge, so no copy is left behind. */
-async function readChunkWithBaidu(accountId: string, pdf: Uint8Array, deadline: number, via: { used: "link" | "upload" }): Promise<BaiduJobResult> {
+async function readChunkWithBaidu(accountId: string, pdf: Uint8Array, deadline: number, via: { used: "link" | "upload" }, pageNumbers: number[]): Promise<BaiduJobResult> {
   const s = baiduOcrSettings();
-  if (s.submitVia !== "link") { via.used = "upload"; return readPdfWithBaidu(pdf, process.env, deadline); }
+  if (s.submitVia !== "link") { via.used = "upload"; return readPdfWithBaidu(pdf, process.env, deadline, { pageNumbers }); }
   let staged: { storageKey: string; url: string } | null;
   try {
     staged = await handoff.stage({ accountId, handoffId: randomUUID(), bytes: pdf, ttlSeconds: s.linkTtlSeconds });
   } catch {
     throw new BaiduOcrError("handoff_failed");
   }
-  if (!staged) { via.used = "upload"; return readPdfWithBaidu(pdf, process.env, deadline); }
+  if (!staged) { via.used = "upload"; return readPdfWithBaidu(pdf, process.env, deadline, { pageNumbers }); }
   via.used = "link";
   try {
-    return await readPdfWithBaidu(pdf, process.env, deadline, { fileUrl: staged.url });
+    return await readPdfWithBaidu(pdf, process.env, deadline, { fileUrl: staged.url, pageNumbers });
   } finally {
     const key = staged.storageKey;
     await handoff.remove(key).catch(() => enqueueStoragePurge([{ domain: "policy", storageKey: key }], "ocr_handoff").catch(() => undefined));
@@ -844,7 +874,7 @@ async function completeWithBaidu(args: {
           let lastState: string | undefined;
           try {
             if (!state) {
-              job = await readChunkWithBaidu(args.accountId, await subsetPdf(args.bytes, chunk, undefined, args.password), deadline, via);
+              job = await readChunkWithBaidu(args.accountId, await subsetPdf(args.bytes, chunk, undefined, args.password), deadline, via, chunk);
             } else {
               // Background: look at the job a previous run submitted, or submit one now and keep its id for later runs.
               let entry = known ?? state.jobs.find((j) => samePages(j.pages, chunk)), submitted: Record<string, unknown> = {};
@@ -855,7 +885,7 @@ async function completeWithBaidu(args: {
                 state.jobs.push(entry);
                 submitted = sent.submitted;
               }
-              job = await awaitBaiduJob(entry.jobId, process.env, deadline, submitted, (st) => { lastState = st; });
+              job = await awaitBaiduJob(entry.jobId, process.env, deadline, submitted, (st) => { lastState = st; }, chunk);
             }
             // One entry per page sent, in order. A reply with a different count cannot be mapped to pages safely.
             if (job.pages.length !== chunk.length) throw new BaiduOcrError("format");
