@@ -494,15 +494,15 @@ function rowBase(pageText: string, rowOffset: number): { value: number; raw: str
   const heads: Head[] = [];
   for (const re of [new RegExp(String.raw`%\s*of\s*(${MONEY_SIGN}\s?\d[\d,]*(?:\.\d+)?)`, "gi"), new RegExp(String.raw`\blimit\s*:?\s*(${MONEY_SIGN}\s?\d[\d,]*(?:\.\d+)?)`, "gi")])
     for (const m of above.matchAll(re)) heads.push({ at: m.index ?? 0, base: { value: valueOf(m[1]), raw: m[1] } });
-  for (const m of above.matchAll(/\(\s*%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\s*\)/gi)) heads.push({ at: m.index ?? 0, base: "sum_insured" });
+  for (const m of above.matchAll(/\(\s*%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured|covered)\s*\)/gi)) heads.push({ at: m.index ?? 0, base: "sum_insured" });
   // "percentage of Comatose State Sum Insured", "% of the Benefit Amount": a base this check cannot know.
-  for (const m of above.matchAll(new RegExp(String.raw`(?:%|percentage|per\s?cent)\s+of\s+(?!(?:the\s+)?sum\s+(?:insured|assured)\b)(?!${MONEY_SIGN})([A-Za-z][^\n]{0,60}?)\b(?:sum\s+(?:insured|assured)|amount|limit)\b`, "gi"))) heads.push({ at: m.index ?? 0, base: null });
+  for (const m of above.matchAll(new RegExp(String.raw`(?:%|percentage|per\s?cent)\s+of\s+(?!(?:the\s+)?sum\s+(?:insured|assured|covered)\b)(?!${MONEY_SIGN})([A-Za-z][^\n]{0,60}?)\b(?:sum\s+(?:insured|assured|covered)|amount|limit)\b`, "gi"))) heads.push({ at: m.index ?? 0, base: null });
   const nearest = heads.sort((a, b) => b.at - a.at)[0];
   const whole = rowWithContinuation(pageText, rowOffset);
   if (CAPPED.test(whole)) return null;
-  if (/\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\b/i.test(row.text)) {
+  if (/\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured|covered)\b/i.test(row.text)) {
     // A table line such as "Death due to Accident	100% of Sum Insured" names its own base; it never takes the table's.
-    return /\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\s*$/i.test(row.text.trim()) && row.text.length <= 90 ? "sum_insured" : null;
+    return /\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured|covered)\s*$/i.test(row.text.trim()) && row.text.length <= 90 ? "sum_insured" : null;
   }
   if (!nearest) return null;
   return nearest.base;
@@ -534,7 +534,7 @@ function rowFor(st: ModelStatement, found: Found, household: Household): Found |
         const pcts = [...line.matchAll(PCTS)];
         const last = pcts.at(-1);
         if (!last || Number(last[1]) !== pct) continue;
-        if (!/^\s*(?:of\s+(?:the\s+)?sum\s+(?:insured|assured))?\s*$/i.test(line.slice((last.index ?? 0) + last[0].length))) continue;
+        if (!/^\s*(?:of\s+(?:the\s+)?sum\s+(?:insured|assured|covered))?\s*$/i.test(line.slice((last.index ?? 0) + last[0].length))) continue;
         const words = [...new Set(labelWords(line.slice(0, last.index)))];
         if (!words.length || !words.every((w) => said.has(w))) continue;
         const lead = line.length - line.trimStart().length;
@@ -642,7 +642,7 @@ const WHOLE_FALLBACK = new Set([NOT_ROW_FIGURE, NO_PRINTED_BASE]);
  * The cap is then checked as a plain amount (plainAmount) on that row. Fail-safe: anything else gives null and the
  * percentage stays a fact with no amount. */
 /** What a cap's percentage may be of: the benefit's own sum (closed list, in the languages households' documents use). */
-const PCT_BASE = /^(?:(?:basic\s+|plan\s+|policy\s+|benefit\s+)?(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)|(?:the\s+)?capital\s+assur[ée])\b/i;
+const PCT_BASE = /^(?:(?:basic\s+|plan\s+|policy\s+|benefit\s+)?(?:sum\s+(?:assured|insured|covered)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)|(?:the\s+)?capital\s+assur[ée])\b/i;
 /** A row that is a share the household pays or a charge, never a cap on what the policy pays (closed list). */
 const CHARGE_ROW = /\b(?:co-?insurance|co-?pay(?:ment)?s?|excess(?:es)?|deductibles?|premiums?|loading|contributions?|fees?|charges?|levy|tax)\b/i;
 /** Words that may follow a row's cap figure: what it is per, and the lesser-of rule (closed list). */
@@ -929,7 +929,7 @@ function timesLine(sf: ServerFigure, household: Household, cap: { value: number;
 /** The cover a row's percentage is of, by name ("20% of the Critical Illness sum assured" -> ["critical", "illness"]); empty
  * when the row says only "of (the) Sum Assured". */
 function coverOfPercent(rowText: string): string[] {
-  const m = /\d+(?:\.\d+)?\s*%\s*of\s+(?:the\s+|your\s+|its\s+)?((?:[A-Za-z]+\s+){0,5}?)(?:sum\s+(?:assured|insured)|amount\s+of\s+cover)\b/i.exec(rowText);
+  const m = /\d+(?:\.\d+)?\s*%\s*of\s+(?:the\s+|your\s+|its\s+)?((?:[A-Za-z]+\s+){0,5}?)(?:sum\s+(?:assured|insured|covered)|amount\s+of\s+cover)\b/i.exec(rowText);
   return m ? tokens(m[1]).filter((w) => !COVER_FILLER.has(w)) : [];
 }
 const sameWords = (a: string[], b: string[]) => a.length === b.length && a.every((w) => b.includes(w));
@@ -939,10 +939,10 @@ const COVER_FILLER = new Set(["cover", "benefit", "benefits", "plan", "basic", "
 function percentOfRow(rowText: string): number | null {
   const pcts = new Set([...rowText.matchAll(PCTS)].map((m) => Number(m[1])));
   if (pcts.size !== 1) return null;
-  if (!/\d\s*%\s*of\s+(?:the\s+|your\s+|its\s+)?(?:[A-Za-z]+\s+){0,5}?(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)\b/i.test(rowText)) return null;
+  if (!/\d\s*%\s*of\s+(?:the\s+|your\s+|its\s+)?(?:[A-Za-z]+\s+){0,5}?(?:sum\s+(?:assured|insured|covered)|amount\s+of\s+cover|cover\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)\b/i.test(rowText)) return null;
   return [...pcts][0];
 }
-const SUM_WORDS = /\b(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)\b/i;
+const SUM_WORDS = /\b(?:sum\s+(?:assured|insured|covered)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)\b/i;
 const CAP_WORD = /\b(?:up\s+to|maximum|max\.?|not\s+exceeding|limited\s+to|capped\s+at)\b/i;
 /** Where a 100% statement's quoted sum insured is the person's own for the policy the wording is from, or null. The base
  * is printed with its currency, or on a page that settles it (plainAmount checks that), and:
@@ -981,7 +981,7 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
  * a tab) may come between the header and the row: an amount, or a line with no tab (a row's name printed above its cells,
  * "Early" over "Critical Illness\t50,000.00"), makes it no first row (TE #104 P1). A rider's row is never the plan's. The row's name is its first cell and the lines right after it that continue the
  * name ("Comprehensive Critical" / "Illness Benefit"). */
-const SA_HEAD = /^\s*sum\s*(?:assured|insured)\b/i;
+const SA_HEAD = /^\s*sum\s*(?:assured|insured|covered)\b/i;
 const RIDER_PART = /\b(?:with|riders?|plus|supplementary|add-?ons?)\b|[+&]/i;
 const SA_CELL = new RegExp(String.raw`^${MONEY_SIGN}?\s?(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})$`);
 function planRow(lines: string[], i: number): { name: string; value: number; line: string } | null {
@@ -991,7 +991,7 @@ function planRow(lines: string[], i: number): { name: string; value: number; lin
     if (AMOUNT.test(lines[j]) || !/\t/.test(lines[j])) return null;
     const head = lines[j].split("\t").map((c) => c.trim());
     if (head.length !== cells.length) continue;
-    const k = head.flatMap((c, n) => SA_HEAD.test(c) || (/^sum$/i.test(c) && /^\s*(?:assured|insured)\b/i.test(lines[j + 1] ?? "")) ? [n] : []);
+    const k = head.flatMap((c, n) => SA_HEAD.test(c) || (/^sum$/i.test(c) && /^\s*(?:assured|insured|covered)\b/i.test(lines[j + 1] ?? "")) ? [n] : []);
     if (k.length !== 1 || k[0] === 0) return null;
     const cell = SA_CELL.exec(cells[k[0]]);
     if (!cell) return null;
@@ -1058,11 +1058,11 @@ function quotedLineIsWhole(bf: Found, wording: Found, household: Household, pers
   // not a limit or an expense amount ("Medical Expenses limit S$15,000", TE #103 A10b).
   const own = lines.slice(at, at + bf.excerpt.split("\n").length).join("\n");
   if (/\b(?:limits?|up\s+to|max(?:imum)?|expenses?|per\s+(?:claim|day|event|visit|trip|accident|incident))\b/i.test(own)) return false;
-  if (!/\bsum\s+(?:insured|assured)\b/i.test(lines.slice(Math.max(0, at - 10), at + bf.excerpt.split("\n").length).join("\n"))) return false;
+  if (!/\bsum\s+(?:insured|assured|covered)\b/i.test(lines.slice(Math.max(0, at - 10), at + bf.excerpt.split("\n").length).join("\n"))) return false;
   // Fail-safe: once the heading's benefit words, "sum insured" or "sum assured", the amount and its currency are taken out,
   // nothing may be left on the base's lines. Any other word ("Hospital Income", a plan code, another column's figure) may
   // make it another benefit's amount, so it is refused (TE #103 A10c).
-  const rest = own.replace(/\bsum\s+(?:insured|assured)\b/gi, " ").replace(new RegExp(String.raw`${MONEY_SIGN}?\s*\d[\d,]*(?:\.\d+)?`, "gi"), " ").replace(new RegExp(String.raw`(?<![A-Za-z])(?:SGD|USD|MYR|HKD|AUD|NZD|EUR|GBP)(?![A-Za-z])`, "gi"), " ");
+  const rest = own.replace(/\bsum\s+(?:insured|assured|covered)\b/gi, " ").replace(new RegExp(String.raw`${MONEY_SIGN}?\s*\d[\d,]*(?:\.\d+)?`, "gi"), " ").replace(new RegExp(String.raw`(?<![A-Za-z])(?:SGD|USD|MYR|HKD|AUD|NZD|EUR|GBP)(?![A-Za-z])`, "gi"), " ");
   if (tokens(rest).some((w) => !name.includes(w) && !HEADING_STOP.has(w)) || /\d/.test(rest)) return false;
   return true;
 }

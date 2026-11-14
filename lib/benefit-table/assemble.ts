@@ -394,6 +394,29 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
   return withShare(b, { kind: "none", why: `${b.value}% of a base the page does not state` });
 }
 
+/** The names of the policy's own headline sum on a cover's line (check.ts HEADLINE_SUM). */
+const HEADLINE_LABEL = /\b(?:sum\s+(?:insured|assured|covered)|face\s+amount|jumlah\s+(?:diinsuranskan|dilindungi))\b/i;
+/** Why a share the reading left unsettled, and its row's words name as of the policy's own headline sum (check.ts
+ * baseFromWords), is not worked out on this cover's sum; null when it may be. It may only when this person's covers of the
+ * same product and policy on the cover's own document print one such sum: the covers whose lines name the headline sum
+ * ("Sum covered (critical illness)  RM 150,000"), or, when none does, every cover there that prints a sum. Two different
+ * sums (a basic plan's and a rider's, two plans) or one in another currency are doubt, so no amount. A rider's row naming
+ * the basic plan's sum is never worked out on the rider's own sum. */
+function headlineSumProblem(b: CheckedBenefit, cover: PersonCover, personCovers: PersonCover[]): string | null {
+  if (!b.baseFromWords || b.percentOf !== "sum_insured" || cover.sumInsured == null) return null;
+  // "Basic"/"base" names the basic plan's sum: only on a cover that is the basic plan (no riderOf, no rider words).
+  if (/\b(?:basic|base)\b/i.test(`${b.source.excerpt}\n${b.rowText ?? ""}`) && (cover.riderOf || /\b(?:riders?|add-?ons?|supplementary|optional|tambahan)\b/i.test(`${cover.cover ?? ""} ${cover.product ?? ""}`)))
+    return `${b.value}% of the basic plan's sum, which is not this rider's own sum insured`;
+  const samePolicy = (x: PersonCover) => !x.policyNumber && !cover.policyNumber || !!x.policyNumber && !!cover.policyNumber && samePolicyNumber(x.policyNumber, cover.policyNumber);
+  const policy = personCovers.filter((x) => x.personId === cover.personId && x.source.documentId === cover.source.documentId && norm(x.product) === norm(cover.product)
+    && samePolicy(x) && x.sumInsured != null);
+  const labelled = policy.filter((x) => HEADLINE_LABEL.test(`${x.cover ?? ""}\n${x.source.excerpt}`));
+  const sums = new Set((labelled.length ? labelled : policy).map((x) => `${x.sumInsured}|${x.currency ?? ""}`));
+  if (sums.size !== 1 || !sums.has(`${cover.sumInsured}|${cover.currency ?? ""}`))
+    return `${b.value}% of the policy's sum, but ${cover.cover ?? "this policy"} prints more than one sum for this person, so which one is not settled`;
+  return null;
+}
+
 /** The cover whose sum a percentage row is a share of when the row names it ("Total and permanent disability: 100% of the
  * death sum assured"): another cover of the same person, printed on the same document, of the same product and policy
  * number, whose own name is exactly the words before "sum assured" / "sum insured" / "sum covered" (filler words and
@@ -1576,7 +1599,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
       if (tier) notForPerson.push({ personId: p.id, benefit: b.benefit, section: b.section, column: b.column, why: tier, source: b.source });
       // A cover the person's own schedule prints as not covered shows no amount from another document (a wording's figure
       // for an optional cover they did not buy).
-      const figure: Figure = tier ? { kind: "none", why: tier }
+      const headline = named ? null : headlineSumProblem(b, c, p.covers);
+      const figure: Figure = tier ? { kind: "none", why: tier } : headline ? withShare(b, { kind: "none", why: headline })
         : r.documentId !== c.source.documentId && b.pays !== "not_covered" && printedNotCovered(b, notCoveredOn(c, readings))
           ? { kind: "none", why: "the person's own schedule prints this cover as not covered" } : named ? figureFor(named.b, named.cover, r.kind === "illustration") : figureFor(b, c, r.kind === "illustration");
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
