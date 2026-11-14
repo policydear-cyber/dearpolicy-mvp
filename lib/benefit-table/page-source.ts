@@ -2,6 +2,7 @@
  * one page of the stored file as the checker is shown it (a one-page PDF cut from the stored PDF, or from the PDF an image
  * upload is turned into, exactly as the reading saw it). The file is read once per check, only when a page is asked for.
  * A page the file cannot give (file gone, unreadable, a Word document) gives null: its figures are not confirmed. */
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { Db } from "./service";
 import type { PageSource } from "./image-check";
 
@@ -26,7 +27,7 @@ export async function pageSourceFor(db: Db, accountId: string, policyId: string,
   const nativePages = await nativePagesOf(db, accountId, policyId);
   let pdf: Promise<Uint8Array | null> | null = null;
   const file = () => pdf ??= (async () => {
-    const rows = await db(`SELECT storage_key FROM policies WHERE id=$1 AND account_id=$2`, [policyId, accountId]);
+    const rows = await db(`SELECT storage_key FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [policyId, accountId]);
     const key = rows[0]?.storage_key == null ? "" : String(rows[0].storage_key);
     if (!key) return null;
     return tools.asPdf(await tools.readFile(key));
