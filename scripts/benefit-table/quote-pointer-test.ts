@@ -117,6 +117,15 @@ async function main() {
       ["Angioplasty is covered, but only as a share of the Sum Covered (the wording is quoted below), not as a fixed amount.", "Angioplasty is covered, but only as a share of the Sum Covered, not as a fixed amount."],
       ["The angioplasty wording is quoted below and the amount is shown on the card.", "The amount is shown on the card."],
       ["The terms are quoted below and are the same for Hafiz.", "The terms are the same for Hafiz."],
+      // Gate round 2: a clause after "and" with a subject of its own keeps it, and only it; a verb keeps the words' verb.
+      ["The wording is quoted below and angioplasty pays RM 20,000.", "Angioplasty pays RM 20,000."],
+      ["The terms are quoted below and Hafiz is not named in them.", "Hafiz is not named in them."],
+      ["The terms are quoted below and were changed in 2026.", "The terms were changed in 2026."],
+      ["The terms are quoted below and pay out once per illness.", "The terms pay out once per illness."],
+      ["The policy terms are quoted below and the amount depends on the stage.", "The amount depends on the stage."],
+      // Unsure what follows "and": the sentence stays as it is.
+      ["The wording is quoted below and in Malay.", "The wording is quoted below and in Malay."],
+      ["Angioplasty is covered and the wording is quoted below and angioplasty pays RM 20,000.", "Angioplasty is covered and the wording is quoted below and angioplasty pays RM 20,000."],
       ["Angioplasty is covered; see the wording below for what counts.", "Angioplasty is covered."],
       ["The angioplasty terms are quoted below and apply only to treatment in Malaysia.", "The angioplasty terms apply only to treatment in Malaysia."],
       ["The angioplasty wording is quoted below and does not mention day surgery.", "The angioplasty wording does not mention day surgery."],

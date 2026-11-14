@@ -1176,6 +1176,17 @@ export const WORDING_POINTER = new RegExp(String.raw`\b${WORDING_NOUN}\s+(?:(?:i
   + String.raw`|\bI(?:['’]ve|\s+have)\s+(?:quoted|set\s+out|reproduced)\b[^.!?]{0,60}\bbelow\b|\b(?:listed|set\s+out|shown)\s+below\s+with\s+(?:its|their)\s+(?:terms|wording)\b`, "iu");
 /** A word that opens a clause with its own subject ("and the amount is shown on the card", "and they say nothing"). */
 const OWN_SUBJECT = /^(?:the|this|that|these|those|it|its|they|their|he|she|his|her|we|our|you|your|i|a|an|there|each|every|no|any)\b/i;
+/** Verbs said of printed words or of a benefit, in either form: a clause starting with one has no subject of its own
+ * ("and are the same", "and does not mention", "and were changed", "and pay ..."); a clause with one within its first
+ * five words, after words of its own, has one ("and angioplasty pays RM 20,000", "and Hafiz is not named in them"). */
+const WORD_VERB = String.raw`(?:is|are|was|were|be|been|has|have|had|does|do|did|doesn['’]t|don['’]t|didn['’]t|isn['’]t|aren['’]t|can|cannot|can['’]t|will|won['’]t|would|may|might|must|should|`
+  + String.raw`says?|states?|mentions?|excludes?|includes?|explains?|describes?|defines?|means?|lists?|sets?|shows?|gives?|covers?|pays?|appl(?:y|ies)|needs?|requires?|limits?|names?|refers?|allows?|matches?|counts?|differs?|vary|varies|stops?|ends?|starts?|depends?|follows?|reduces?|exceeds?|remains?|changes?)`;
+const VERB_START = new RegExp(String.raw`^(?:${WORD_VERB}|not|also|only|still|both|all|[a-z]+ed)\b`, "i");
+const OWN_CLAUSE = new RegExp(String.raw`^(?:(?!(?:and|but|or|so)\b)[\p{L}\d'’-]+\s+){1,4}?${WORD_VERB}\b`, "iu");
+const hasOwnSubject = (rest: string) => OWN_SUBJECT.test(rest) || (!VERB_START.test(rest) && OWN_CLAUSE.test(rest));
+/** "The wording is quoted below and angioplasty pays RM 20,000.", "The words are quoted below, and they say …": a leading
+ * promise before a clause with a subject of its own goes; the clause stays. */
+const LEADING_AND = new RegExp(String.raw`^\s*${PROMISE}\s*,?\s+(?:and|but|so)\s+`, "iu");
 const STEPS: [RegExp, string | ((...m: string[]) => string)][] = [
   // "(the wording is quoted below)", "(see the quote below)": the aside goes.
   [new RegExp(String.raw`\s*\(\s*${PROMISE}\s*\)`, "giu"), ""],
@@ -1188,13 +1199,12 @@ const STEPS: [RegExp, string | ((...m: string[]) => string)][] = [
   [new RegExp(String.raw`(?:,?\s+(?:and|but|so)\s+|\s*;\s+|\s+[-–—]\s+|,\s+)${PROMISE}(?=\s*[.!?]?\s*$)`, "giu"), ""],
   // ", quoted below", ", as quoted below", ", with the clause set out below": where, said beside a point.
   [new RegExp(String.raw`,\s*(?:with\s+(?:the|its|their)\s+(?:[\p{L}'’-]+\s+){0,2}${WORDING_NOUN}\s+${WORDING_WORDS}|(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?quoted\s+(?:in\s+full\s+)?below\b)(?:\s+(?:from|in)\s+the\s+(?:policy|schedule|document))?(?=\s*[,.!?;]|\s*$)`, "giu"), ""],
-  // "The policy words are quoted below: angioplasty is …", "The words are quoted below, and they say …": the clause after
-  // it, when it has a subject of its own.
-  [new RegExp(String.raw`^\s*${PROMISE}\s*(?::\s+|,?\s+(?:and|but|so)\s+(?=(?:the|this|that|these|those|it|its|they|their|he|she|his|her|we|our|you|your|i|a|an|there|each|every|no|any)\b))`, "iu"), ""],
+  // "The policy words are quoted below: angioplasty is …": the clause after the colon.
+  [new RegExp(String.raw`^\s*${PROMISE}\s*:\s+`, "iu"), ""],
 ];
 /** "The terms are quoted below and are the same …", "the clause is quoted below but has no figure": the promise goes and
- * the words keep their verb ("The terms are the same …", "the clause has no figure"); only when what follows has no
- * subject of its own. */
+ * the words keep their verb ("The terms are the same …", "the clause has no figure"); only when what follows starts with
+ * a verb (VERB_START). */
 const WORDING_AND = new RegExp(String.raw`\b(${WORDING_NOUN})\s+(is|are)\s+${WORDING_WORDS}(?:\s+(?:from|in|as)\s+the\s+(?:policy|schedule|document|table))?\s+(?:and|but)\s+`, "giu");
 /** The same words used as a name ("the wording quoted below says ..."): the name stays without the promise. */
 const WORDING_AS_NAME = new RegExp(String.raw`\b(${WORDING_NOUN})\s+${WORDING_WORDS}(?=\s+[a-z])`, "gu");
@@ -1215,9 +1225,13 @@ function withoutWordingPointer(sentence: string): string | null {
     const next = t.replace(re, by as string);
     if (next !== t && /[\p{L}\d]/u.test(next)) t = next;
   }
+  const lead = LEADING_AND.exec(t);
+  if (lead && hasOwnSubject(t.slice(lead[0].length))) t = t.slice(lead[0].length);
+  // Only before a verb of its own does the promise go with the words keeping their verb; else (a subject of its own not
+  // at the start, or unsure) it stays.
   t = t.replace(WORDING_AND, (m, noun: string, verb: string, at: number, all: string) => {
     const rest = all.slice(at + m.length);
-    if (OWN_SUBJECT.test(rest)) return m;
+    if (!VERB_START.test(rest)) return m;
     return /^(?:is|are|was|were)\b/i.test(rest) || dropsVerb(verb, rest) ? `${noun} ` : `${noun} ${verb.toLowerCase()} `;
   }).replace(WORDING_AS_NAME, (_m, noun: string) => noun);
   if (t === text) return sentence;
