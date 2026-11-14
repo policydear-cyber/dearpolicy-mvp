@@ -14,7 +14,8 @@ import { MIN_CALL_MS, OPERATOR_FLAG_AFTER, SAVE_MARGIN_MS, linkRetryDelayMs, rea
 import { enqueueFigureCheck, figureCheckPayload } from "./figure-check-job";
 import { MAX_TABLE_READING_RUNS, enqueueTableLink, enqueueTableReading, tableReadingPayload } from "./table-reading-job";
 import { checkingCount } from "./guards";
-import { figureGuardsEnabled, guardCapUsd, guardRoster, supportsEffort } from "./guard-flag";
+import { figureCheckMode, guardCapUsd, guardRoster, imageCheckModels, supportsEffort } from "./guard-flag";
+import { pageSourceFor, realPageFileTools } from "./page-source";
 
 export const appDb: Db = async (sql, params) => (await query(sql, params)).rows;
 
@@ -125,10 +126,11 @@ export async function readIntoBenefitTable(accountId: string, policyId: string, 
   const strongChoice = benefitTableStrongModel();
   const strongModel = anthropicTableModel(strongChoice, undefined, { effort: supportsEffort(strongChoice.model) });
   const strong = { model: strongModel, onUsage: priced(usage(accountId, strongChoice), strongChoice) };
-  const guarded = figureGuardsEnabled(process.env, accountId);
+  const mode = figureCheckMode(process.env, accountId);
+  const guarded = mode != null;
   const result = await readIntoTable(appDb, model, accountId, policyId, { ...opts, strong, continueLater: (id, run, delayMs) => enqueueTableReading(pool, accountId, policyId, id, run, delayMs).then(() => undefined),
     linkLater: (id, attempt, delayMs) => enqueueTableLink(pool, accountId, policyId, id, attempt, delayMs).then(() => undefined),
-    ...(guarded ? { guards: guardSetup(accountId, model, onUsage) } : {}) }, onUsage);
+    ...(mode ? { guards: figureCheckSetup(mode, accountId, model, onUsage) } : {}) }, onUsage);
   // A figure check the time limit cut off is finished by a background job (figure-check-job.ts).
   if (guarded && result.figuresChecking && result.guardsAt) await enqueueFigureCheck(pool, accountId, policyId, result.guardsAt, 1);
   if (calls) console.info(`benefit table reading for policy ${policyId}: this run made ${calls} call(s), about US$${spent.toFixed(2)}${result.carried ? " (goes on next run)" : ""}`);
@@ -139,10 +141,11 @@ export async function readIntoBenefitTable(accountId: string, policyId: string, 
 export const processFigureCheckJob = async (job: { account_id: string | null; payload: unknown }) => {
   const p = figureCheckPayload(job.payload);
   const accountId = job.account_id;
-  if (!accountId || !figureGuardsEnabled(process.env, accountId) || !(await benefitTableLive(accountId))) return;
+  const mode = accountId ? figureCheckMode(process.env, accountId) : null;
+  if (!accountId || !mode || !(await benefitTableLive(accountId))) return;
   const model = anthropicTableModel(benefitTableModel());
   const { functionDeadline } = await import("@/lib/jobs/function-time");
-  const r = await guardStoredReading(appDb, accountId, p.policyId, guardSetup(accountId, model, usage(accountId, model.choice)), { deadline: functionDeadline(Date.now()) }, p.at);
+  const r = await guardStoredReading(appDb, accountId, p.policyId, figureCheckSetup(mode, accountId, model, usage(accountId, model.choice)), { deadline: functionDeadline(Date.now()) }, p.at);
   if (r.record && checkingCount(r.record) > 0) await enqueueFigureCheck(pool, accountId, p.policyId, p.at, p.run + 1);
 };
 /** A table reading's continuation job (table-reading-job.ts): goes on with the reading the payload names, in a run of its
@@ -240,6 +243,16 @@ export async function requeueStuckTableWorkEverywhere(db: Db = appDb, live: (acc
 export function guardSetup(accountId: string, reader: TableModel, onUsage: OnUsage, env: NodeJS.ProcessEnv = process.env): GuardSetup {
   const guards = guardRoster(env).map((g) => { const m = anthropicTableModel(g.choice, undefined, { effort: supportsEffort(g.choice.model) }); return { model: m, prompt: g.prompt, onUsage: usage(accountId, m.choice) }; });
   return { readers: [{ model: reader, prompt: "direct", onUsage }, ...guards], capUsd: guardCapUsd(env) };
+}
+/** The page-image figure check (image-check.ts): Sonnet 5.5 first, Opus 5.5 on a figure it did not confirm, each booked
+ * at its own price; the page comes from the stored file. */
+export function imageCheckSetup(accountId: string, env: NodeJS.ProcessEnv = process.env): GuardSetup {
+  const [a, b] = imageCheckModels(env).map((c) => anthropicTableModel(c, undefined, { effort: supportsEffort(c.model) }));
+  return { kind: "image", first: { model: a, onUsage: usage(accountId, a.choice) }, second: { model: b, onUsage: usage(accountId, b.choice) }, capUsd: guardCapUsd(env),
+    source: (policyId) => pageSourceFor(appDb, accountId, policyId, realPageFileTools) };
+}
+export function figureCheckSetup(mode: "image" | "guards", accountId: string, reader: TableModel, onUsage: OnUsage, env: NodeJS.ProcessEnv = process.env): GuardSetup {
+  return mode === "image" ? imageCheckSetup(accountId, env) : guardSetup(accountId, reader, onUsage, env);
 }
 /** Whether a document job's run is a retry for the table reading: attempt 2 or later of its job, or the deferred re-read a
  * reading-service failure schedules (a fresh job at attempt 1, lib/rag/ingest.ts). Neither pays for a table reading. */

@@ -16,7 +16,8 @@ import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { GUARDS_VERSION, applyGuards, claimsOf, unfinishedCount, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
 import { runGuards, type GuardReader } from "./guard-run";
-import { figureGuardsEnabled } from "./guard-flag";
+import { figureChecksOn } from "./guard-flag";
+import { IMAGE_CHECK_VERSION, runImageCheck, type ImageCheckSetup } from "./image-check";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type CoverType, type SectionLink, type SectionRef } from "./reading";
 
 export const PROMPT_VERSION = "2026-11-13.1";
@@ -125,7 +126,13 @@ export type Db = (sql: string, params: unknown[]) => Promise<Row[]>;
  * document is "read_in_part" and says which pages (Critic and TE #404). */
 export type StoredReading = { document: unknown; pages: { page: number; json: unknown }[]; guards?: GuardRecord; skippedPages?: number[] };
 /** The figure guards for one reading (guard-run.ts): five readers, reader 1 first, and the most the check may spend. */
-export type GuardSetup = { readers: GuardReader[]; capUsd: number };
+/** The figure check a reading gets: the text guards (readers), or the page-image check (kind "image", image-check.ts). */
+export type GuardSetup = { kind?: "guards"; readers: GuardReader[]; capUsd: number } | ImageCheckSetup;
+type CheckRunOptions = { capUsd: number; callTime?: () => number | null; minCallMs?: number; previous?: GuardRecord | null; spentBefore?: number };
+async function runFigureCheck(doc: Parameters<typeof runGuards>[0], checked: Parameters<typeof runGuards>[1], setup: GuardSetup, o: CheckRunOptions): Promise<GuardRecord> {
+  if (setup.kind === "image") return runImageCheck(checked, await setup.source(doc.id), setup.first, setup.second, o);
+  return runGuards(doc, checked, setup.readers, o);
+}
 export type OnUsage = (what: string, reply: TableReply) => Promise<void> | void;
 
 /** Once the tables exist they stay: a yes is remembered for this server instance, a no is checked again next time. */
@@ -524,10 +531,10 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     const before = await db("SELECT reading FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [doc.id, accountId]).catch(() => []);
     const old = before.length ? (typeof before[0].reading === "string" ? JSON.parse(before[0].reading) : before[0].reading) as StoredReading : null;
     const spentBefore = Number(old?.guards?.spentUsd ?? 0) || 0;
-    try { stored.guards = await runGuards(doc, checkStored(doc, stored), guards.readers, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS, spentBefore }); }
+    try { stored.guards = await runFigureCheck(doc, checkStored(doc, stored), guards, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS, spentBefore }); }
     catch (error) {
       console.error(`Figure check failed for ${doc.id}:`, error instanceof Error ? error.message : String(error));
-      stored.guards = { version: GUARDS_VERSION, at: new Date(now()).toISOString(), verdicts: {}, spentUsd: spentBefore, calls: 0, stopped: "error" };
+      stored.guards = { version: guards.kind === "image" ? IMAGE_CHECK_VERSION : GUARDS_VERSION, at: new Date(now()).toISOString(), verdicts: {}, spentUsd: spentBefore, calls: 0, stopped: "error" };
     }
   }
   await db(`INSERT INTO benefit_readings(policy_id, account_id, reading, model, prompt_version, read_at) VALUES($1,$2,$3::jsonb,$4,$5,now())
@@ -671,7 +678,7 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
   const stored = await storedOnce;
   const checked = docs.flatMap((d) => (stored.has(d.id) && d.readable ? [remembered.get(d.id) ?? checkedOnce(d, stored.get(d.id)!)] : []));
   // The figure guards (switch on only): a figure is used only when five readers agreed on it or the household confirmed it.
-  const guarded = figureGuardsEnabled(process.env, accountId);
+  const guarded = figureChecksOn(process.env, accountId);
   const figureConfirmations = guarded ? await figureConfirmationsOf(db, accountId) : [];
   const readings = guarded ? checked.map((r) => applyGuards(r, stored.get(r.documentId)?.guards, figureConfirmations)) : checked;
   const links = (await db("SELECT section_key, cover_key, why, chosen_by FROM benefit_links WHERE account_id=$1", [accountId]))
@@ -709,7 +716,7 @@ export async function tableFor(db: Db, accountId: string): Promise<{ table: Bene
 /** The household gives the figure for one check the guards did not settle, or takes it back (value null). Final: no
  * re-read or check overwrites it; only the household changes it. Only for a figure the document's current reading uses. */
 export async function setFigureConfirmation(db: Db, accountId: string, userId: string | null, documentId: string, claimKey: string, value: number | null): Promise<void> {
-  if (!figureGuardsEnabled(process.env, accountId)) throw new TableInputError("Figure checks are not switched on.");
+  if (!figureChecksOn(process.env, accountId)) throw new TableInputError("Figure checks are not switched on.");
   const ok = await db("SELECT to_regclass('public.benefit_figure_confirmations') IS NOT NULL AS ok", []);
   if (ok[0]?.ok !== true) throw new TableInputError("Figure checks are not set up yet.");
   if (value == null) { await db("DELETE FROM benefit_figure_confirmations WHERE account_id=$1 AND policy_id=$2 AND claim_key=$3", [accountId, documentId, claimKey]); return; }
@@ -739,7 +746,7 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
     if (!unfinishedCount(checkStored(doc, stored), stored.guards)) return { checked: false, why: "nothing is left to check" };
   }
   // Same reading: what an earlier run settled is kept, and only what it left unchecked is checked now.
-  const record = await runGuards(doc, checkStored(doc, stored), guards.readers, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS, previous: stored.guards ?? null });
+  const record = await runFigureCheck(doc, checkStored(doc, stored), guards, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS, previous: stored.guards ?? null });
   // Only onto the reading this check was made on: a Read again stored meanwhile keeps its own check (Critic R389b-2).
   const saved = await db("UPDATE benefit_readings SET reading=jsonb_set(reading, '{guards}', $3::jsonb) WHERE policy_id=$1 AND account_id=$2 AND read_at::text=$4 RETURNING 1 AS ok",
     [policyId, accountId, JSON.stringify(record), String(rows[0].read_at)]);
