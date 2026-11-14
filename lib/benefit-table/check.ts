@@ -1138,14 +1138,16 @@ const SAME_FIGURE = /\b(?:the\s+)?same\s+(?:\w+\s+)?(?:limits?|cover|benefits?|a
 const OTHER_THAN_SAME = /\b(?:half|halved|double[ds]?|reduc\w*|less|lower|higher|only|except|but|not|instead|up\s+to|maximum)\b|%|per\s*cent/i;
 /** A sentence that refers back to the one before it, or carries its point on: judged with it (gate round 16). */
 const REFERS_BACK = /^\s*(?:this|these|that|those|it|they|everything|the\s+(?:rest|remainder|others?|same)|all\s+(?:the\s+)?others?|all\s+other|each\s+other|every\s+other|same|so|likewise|similarly|also|as\s+(?:is|are|do|does)|or|and|but|except|unless|other\s+than|apart\s+from)\b|\b(?:too|as\s+well|also|likewise)\b/i;
+/** A sentence saying the rest are each person's: the per-person part, judged on its own (gate round 18). */
+const REST_PER_PERSON = /^\s*(?:the\s+(?:rest|remainder|others?)|all\s+(?:the\s+)?others?|(?:all\s+)?other\s+(?:limits|benefits|sections))\s+(?:apply|are|is)\s+(?:paid\s+)?(?:per|for\s+each|to\s+each)\s+(?:insured\s+)?(?:person|traveller|traveler)\b/i;
 /** Neutral admin sentences that may follow a family-cap sentence on its line without changing it. */
-const NEUTRAL_ADMIN = /^\s*(?:terms\s+and\s+conditions\s+apply|exclusions\s+apply|claims\s+must\s+be\s+(?:made|submitted|notified)\s+within\s+\d+\s+days|(?:or\s+)?call\s+us|(?:or\s+)?call\s+(?:us\s+)?(?:on\s+)?\+?\d[\d\s-]{5,}\d(?:\s+for\s+help)?|(?:also\s+)?see\s+(?:page|section|the\s+policy\s+wording)\b[^.]*|please\s+read\b[^.]*|page\s+\d+(?:\s+of\s+\d+)?|(?:all\s+)?(?:limits|amounts|figures)\s+(?:are\s+)?(?:shown\s+)?in\s+(?:singapore\s+)?dollars|(?:the\s+)?(?:policy|certificate)\s+(?:wording|schedule)\s+applies)\s*\.?\s*$/i;
+const NEUTRAL_ADMIN = /^\s*(?:terms\s+and\s+conditions\s+apply|exclusions\s+apply|claims\s+must\s+be\s+(?:made|submitted|notified)\s+within\s+\d+\s+days|(?:or\s+)?call\s+us|(?:or\s+)?call\s+(?:us\s+)?(?:on\s+)?\+?\d[\d\s-]{5,}\d(?:\s+for\s+help)?|(?:(?:also|or)\s+)?see\s+(?:page|section|the\s+(?:policy\s+)?wording)\b[^.]*|please\s+read\b[^.]*|page\s+\d+(?:\s+of\s+\d+)?|(?:all\s+)?(?:limits|amounts|figures)\s+(?:are\s+)?(?:shown\s+)?in\s+(?:singapore\s+)?dollars|(?:the\s+)?(?:policy|certificate)\s+(?:wording|schedule)\s+applies)\s*\.?\s*$/i;
 /** The sentences of a note line: split at a full stop before a capital, each sentence that refers back joined to the one
  * before it; a family-cap sentence with anything but neutral admin sentences beside it leaves the line whole. */
 function noteSentences(text: string): string[] {
   const out: string[] = [];
   for (const one of text.split(/(?<=[.!?])\s+(?=[A-Z])/)) {
-    if (out.length && REFERS_BACK.test(one) && !NEUTRAL_ADMIN.test(one)) out[out.length - 1] = `${out[out.length - 1]} ${one}`;
+    if (out.length && REFERS_BACK.test(one) && !NEUTRAL_ADMIN.test(one) && !REST_PER_PERSON.test(one)) out[out.length - 1] = `${out[out.length - 1]} ${one}`;
     else out.push(one);
   }
   if (out.length > 1 && out.some((x) => capsAsMultiple(x)) && out.some((x) => !capsAsMultiple(x) && !NEUTRAL_ADMIN.test(x))) return [text];
