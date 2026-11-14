@@ -12,15 +12,16 @@ export type PageFileTools = {
   onePage(pdf: Uint8Array, page: number): Promise<Uint8Array>;
 };
 
-/** Pages whose stored words did not come from the file's own text layer: OCR, a part-checked page, or a page stored
- * before the method was recorded (checked, to be safe). */
-export async function ocrPagesOf(db: Db, accountId: string, policyId: string): Promise<number[]> {
-  const rows = await db("SELECT page_number, coalesce(to_jsonb(pp)->>'extraction_method', '') AS m FROM policy_pages pp WHERE account_id=$1 AND policy_id=$2 ORDER BY page_number", [accountId, policyId]);
-  return rows.filter((r) => String(r.m) !== "native").map((r) => Number(r.page_number)).filter((n) => Number.isInteger(n) && n > 0);
+/** Pages whose stored words came from the file's own text layer (extraction method "native"). Every other page (OCR, a
+ * part-checked page, a page stored before the method was recorded, or a page with no record at all) is checked against
+ * the page, to be safe (Critic 2, R485 N1). */
+export async function nativePagesOf(db: Db, accountId: string, policyId: string): Promise<number[]> {
+  const rows = await db("SELECT page_number FROM policy_pages pp WHERE account_id=$1 AND policy_id=$2 AND to_jsonb(pp)->>'extraction_method' = 'native' ORDER BY page_number", [accountId, policyId]);
+  return rows.map((r) => Number(r.page_number)).filter((n) => Number.isInteger(n) && n > 0);
 }
 
 export async function pageSourceFor(db: Db, accountId: string, policyId: string, tools: PageFileTools): Promise<PageSource> {
-  const imagePages = await ocrPagesOf(db, accountId, policyId);
+  const nativePages = await nativePagesOf(db, accountId, policyId);
   let pdf: Promise<Uint8Array | null> | null = null;
   const file = () => pdf ??= (async () => {
     const rows = await db(`SELECT storage_key FROM policies WHERE id=$1 AND account_id=$2`, [policyId, accountId]);
@@ -29,7 +30,7 @@ export async function pageSourceFor(db: Db, accountId: string, policyId: string,
     return tools.asPdf(await tools.readFile(key));
   })().catch(() => null);
   return {
-    imagePages,
+    nativePages,
     async page(n) {
       const whole = await file();
       if (!whole) return null;

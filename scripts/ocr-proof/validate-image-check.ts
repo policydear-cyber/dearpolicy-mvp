@@ -145,7 +145,7 @@ async function oneDoc(doc: string) {
   };
   const pdf = new Uint8Array(readFileSync(join(ROOT, "pdf", `${doc}.pdf`)));
   // Every page here was read by Baidu: all of them are checked against the page, as scans are in production.
-  const source = async () => ({ imagePages: figurePages, page: async (n: number) => ({ kind: "pdf" as const, mediaType: "application/pdf", data: Buffer.from(await realPageFileTools.onePage(pdf, n)).toString("base64") }) });
+  const source = async () => ({ nativePages: [] as number[], page: async (n: number) => ({ kind: "pdf" as const, mediaType: "application/pdf", data: Buffer.from(await realPageFileTools.onePage(pdf, n)).toString("base64") }) });
   const [c1, c2] = imageCheckModels();
   const fake = mode === "fake";
   const checker = (choice: typeof c1, role: string) => admitted(fake ? fakeChecker(cells) : anthropicTableModel(choice, undefined, { effort: supportsEffort(choice.model) }), PAGE_TOKENS, role);

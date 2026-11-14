@@ -6,12 +6,12 @@
 import assert from "node:assert/strict";
 import { checkReading, type CheckedReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { applyGuards, claimsOf, type GuardRecord } from "@/lib/benefit-table/guards";
-import { IMAGE_BATCH, IMAGE_CHECK_PROMPT, IMAGE_CHECK_VERSION, copyConfirms, readCopies, runImageCheck, type ImageChecker, type PageSource } from "@/lib/benefit-table/image-check";
+import { IMAGE_BATCH, IMAGE_CHECK_PROMPT, IMAGE_CHECK_VERSION, blindWhere, copyConfirms, imageQuestions, periodsIn, readCopies, runImageCheck, type ImageChecker, type PageSource } from "@/lib/benefit-table/image-check";
 import { figureCheckMode, figureChecksOn, imageCheckEnabled, imageCheckModels } from "@/lib/benefit-table/guard-flag";
 import { userContent, type Attachment, type TableCall, type TableModel } from "@/lib/benefit-table/model";
 import { coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
 import { guardStoredReading, readDocument, setFigureConfirmation, tableFor, type Db, type GuardSetup } from "@/lib/benefit-table/service";
-import { ocrPagesOf, pageSourceFor } from "@/lib/benefit-table/page-source";
+import { nativePagesOf, pageSourceFor } from "@/lib/benefit-table/page-source";
 
 let passed = 0;
 const failures: string[] = [];
@@ -59,7 +59,8 @@ function checker(name: string, copy?: (q: string) => string | null | undefined, 
   return { model, calls, checker: { model } as ImageChecker };
 }
 const PAGE: Attachment = { kind: "pdf", mediaType: "application/pdf", data: "JVBERi0=" };
-const source = (imagePages: number[], page: (n: number) => Promise<Attachment | null> = async () => PAGE): PageSource => ({ imagePages, page });
+/** ocrPages: the pages read by OCR; the document's other pages (of 1 and 2) are known to have their own text layer. */
+const source = (ocrPages: number[], page: (n: number) => Promise<Attachment | null> = async () => PAGE): PageSource => ({ nativePages: [1, 2].filter((n) => !ocrPages.includes(n)), page });
 const run = (r: CheckedReading, src: PageSource, a: ReturnType<typeof checker>, b: ReturnType<typeof checker>, o: Partial<Parameters<typeof runImageCheck>[4]> = {}) =>
   runImageCheck(r, src, a.checker, b.checker, { capUsd: 1, now: () => new Date("2026-11-14T00:00:00Z"), ...o });
 const keyOf = (r: CheckedReading, where: RegExp, field = "value") => claimsOf(r).find((c) => c.field === field && where.test(c.where))!.key;
@@ -120,16 +121,50 @@ async function main() {
     assert.equal(g.verdicts[keyOf(r, /"Trip postponement".*"Classic"/)].status, "confirm");
   });
 
-  await test("copyConfirms: same number, and no other currency named", () => {
-    assert.equal(copyConfirms("S$20,000", 20000, "SGD"), true);
-    assert.equal(copyConfirms("S$20,000", 520000, null), false, "the $5 misread");
-    assert.equal(copyConfirms("S$1,372,820", 1372.82, "SGD"), false, "dot thousands read as decimals");
-    assert.equal(copyConfirms("RM20,000", 20000, "SGD"), false);
-    assert.equal(copyConfirms("S$20,000", 20000, null), true, "a currency the reading lost confirms the number only");
-    assert.equal(copyConfirms("20,000", 20000, "SGD"), true);
-    assert.equal(copyConfirms("25%", 25, null), true);
-    assert.equal(copyConfirms("S$200 per day", 200, "SGD"), true);
-    assert.equal(copyConfirms(null, 200, "SGD"), false);
+  await test("copyConfirms: the copy's own amount, the same kind and period, and no other currency", () => {
+    const money = (currency: string | null, per: "once" | "day" | "year" | "month" | null = "once") => ({ currency, per });
+    const pct = { currency: null, per: "percent" as const };
+    assert.equal(copyConfirms("S$20,000", 20000, money("SGD")), true);
+    assert.equal(copyConfirms("S$20,000", 520000, money(null)), false, "the $5 misread");
+    assert.equal(copyConfirms("S$1,372,820", 1372.82, money("SGD")), false, "dot thousands read as decimals");
+    assert.equal(copyConfirms("RM20,000", 20000, money("SGD")), false);
+    assert.equal(copyConfirms("S$20,000", 20000, money(null)), true, "a currency the reading lost confirms the number only");
+    assert.equal(copyConfirms("20,000", 20000, money("SGD")), true);
+    assert.equal(copyConfirms(null, 200, money("SGD")), false);
+    // Critic 2, R485 H1.
+    assert.equal(copyConfirms("25%", 25, pct), true);
+    assert.equal(copyConfirms("25%", 25, money("SGD")), false, "a percentage never confirms money");
+    assert.equal(copyConfirms("S$25", 25, pct), false, "money never confirms a percentage");
+    assert.equal(copyConfirms("80% up to S$500", 80, pct), true);
+    assert.equal(copyConfirms("80% up to S$500", 500, money("SGD", null)), true, "a cap: the money figure, past the percentage");
+    assert.equal(copyConfirms("S$200 per day", 200, money("SGD", "day")), true);
+    assert.equal(copyConfirms("S$200 per day", 200, money("SGD", "year")), false, "per day is not per year");
+    assert.equal(copyConfirms("S$200 per day", 200, money("SGD", "once")), false, "per day is not a lump sum");
+    assert.equal(copyConfirms("S$1,000 per year", 1000, money("SGD", "year")), true);
+    assert.equal(copyConfirms("S$1,000 half-yearly", 1000, money("SGD", "year")), false, "half-yearly is not yearly");
+    assert.equal(copyConfirms("S$150 x 30 days", 30, money("SGD", "once")), false, "another number in the cell is not its amount");
+    assert.equal(copyConfirms("S$150 x 30 days", 150, money("SGD", "once")), true);
+    assert.equal(copyConfirms("$520,000", 520000, money("SGD")), false, "a bare $ never establishes a currency");
+    assert.equal(copyConfirms("$520,000", 520000, money(null)), true);
+    assert.deepEqual(periodsIn("S$120.50 (monthly)"), ["month"]);
+    assert.deepEqual(periodsIn("S$100 a day, up to S$3,000 per year"), ["day", "year"]);
+    assert.deepEqual(periodsIn("S$500 per trip"), []);
+  });
+
+  await test("the question never prints the figure, even when the OCR'd row, column or plan name carries it (Critic 2, R485 H2)", () => {
+    assert.equal(blindWhere('Page 3: the row "Hospital cash S$520 per day", in the column "Plan B (S$520,000)"', 520000), 'Page 3: the row "Hospital cash S$520 per day", in the column "Plan B (S$…)"');
+    assert.equal(blindWhere('Page 3: the row "Hospital cash S$520 per day", in the column "Plan 2"', 520), 'Page 3: the row "Hospital cash S$… per day", in the column "Plan 2"');
+    assert.equal(blindWhere('Page 3: in the column "Plan 1"', 520), 'Page 3: in the column "Plan 1"', "other numbers stay");
+    const r = checked();
+    const q = imageQuestions([{ ...claimsOf(r)[0], where: 'Page 2: the row "Trip postponement", in the column "Plan S$500"' }]);
+    assert.ok(!/500/.test(q));
+  });
+
+  await test("a figure on a page with no record of its own text layer is checked, never agreed unchecked (Critic 2, R485 N1)", async () => {
+    const a = checker("first");
+    const g = await run(checked(), { nativePages: [], page: async () => PAGE }, a, checker("second"));
+    assert.equal(a.calls.length, 2);
+    assert.ok(Object.values(g.verdicts).every((v) => v.rounds >= 1));
   });
 
   await test("readCopies: a malformed, missing or doubled answer is no copy", () => {
@@ -219,11 +254,11 @@ async function main() {
   await test("page source: only pages without their own text layer are checked; the file is read once; a file with no pages to show gives none", async () => {
     const rows = [{ page_number: 1, m: "native" }, { page_number: 2, m: "ocr" }, { page_number: 3, m: "part_checked" }, { page_number: 4, m: "" }];
     let reads = 0;
-    const db: Db = async (sql) => sql.includes("FROM policy_pages") ? rows : sql.includes("FROM policies") ? [{ storage_key: "k" }] : [];
-    assert.deepEqual(await ocrPagesOf(db, "a", "p"), [2, 3, 4]);
+    const db: Db = async (sql) => sql.includes("FROM policy_pages") ? (sql.includes("= 'native'") ? rows.filter((r) => r.m === "native") : rows) : sql.includes("FROM policies") ? [{ storage_key: "k" }] : [];
+    assert.deepEqual(await nativePagesOf(db, "a", "p"), [1]);
     const tools = { readFile: async () => { reads++; return new Uint8Array([1]); }, asPdf: async (b: Uint8Array) => b, onePage: async (_pdf: Uint8Array, n: number) => new Uint8Array([n]) };
     const s = await pageSourceFor(db, "a", "p", tools);
-    assert.deepEqual(s.imagePages, [2, 3, 4]);
+    assert.deepEqual(s.nativePages, [1]);
     assert.deepEqual(await s.page(2), { kind: "pdf", mediaType: "application/pdf", data: Buffer.from([2]).toString("base64") });
     await s.page(3);
     assert.equal(reads, 1);
@@ -308,6 +343,17 @@ async function main() {
     assert.equal(a.calls.length, 1);
     const after = JSON.parse(f.s.readings.get(DOC.id)!.reading).guards as GuardRecord;
     assert.equal(Object.values(after.verdicts).filter((v) => v.status === "checking").length, 0);
+  });
+
+  await test("the last continuation run sends whatever it could not check to the household, never left 'checking' for ever (Critic 2, R485 N2)", async () => {
+    envOff();
+    const f = fakeDb(), r1 = readerModel();
+    await readDocument(f.db, r1.model, A, DOC.id, undefined, {}, setup(checker("first", undefined, { throws: true }), checker("second")));
+    const at = (JSON.parse(f.s.readings.get(DOC.id)!.reading).guards as GuardRecord).at;
+    await guardStoredReading(f.db, A, DOC.id, setup(checker("first", undefined, { throws: true }), checker("second")), {}, at, true);
+    const after = JSON.parse(f.s.readings.get(DOC.id)!.reading).guards as GuardRecord;
+    assert.equal(Object.values(after.verdicts).filter((v) => v.status === "checking").length, 0);
+    assert.ok(Object.values(after.verdicts).filter((v) => v.page === 2).every((v) => v.status === "confirm" && v.value == null));
   });
 
   await test("a source that cannot be opened (a database error) stores the reading, with its figures left to the continuation", async () => {

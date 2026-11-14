@@ -733,7 +733,9 @@ export async function setFigureConfirmation(db: Db, accountId: string, userId: s
  * switched on, or one whose check was cut off by its time limit (figures left "checking"). Paid: the caller decides when. The stored reading itself is kept; only its guards are replaced. */
 /** continuing: the start time of the check a continuation job is finishing (GuardRecord.at). The job does nothing (and pays
  * nothing) when the document's reading has since been replaced or its check has nothing left "checking". */
-export async function guardStoredReading(db: Db, accountId: string, policyId: string, guards: GuardSetup, time: ReadTime = {}, continuing?: string): Promise<{ checked: boolean; why?: string; record?: GuardRecord }> {
+/** final: this is the last run the continuation may make (MAX_FIGURE_CHECK_RUNS): whatever it leaves unchecked goes to the
+ * household instead of staying "checking" for ever, never shown and never asked (Critic 2, R485 N2). */
+export async function guardStoredReading(db: Db, accountId: string, policyId: string, guards: GuardSetup, time: ReadTime = {}, continuing?: string, final = false): Promise<{ checked: boolean; why?: string; record?: GuardRecord }> {
   const now = time.now ?? Date.now;
   const callTime = () => time.deadline == null ? null : Math.max(0, time.deadline - SAVE_MARGIN_MS - now());
   const [doc] = await documents(db, accountId, policyId);
@@ -747,6 +749,7 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
   }
   // Same reading: what an earlier run settled is kept, and only what it left unchecked is checked now.
   const record = await runFigureCheck(doc, checkStored(doc, stored), guards, { capUsd: guards.capUsd, callTime, minCallMs: MIN_CALL_MS, previous: stored.guards ?? null });
+  if (final) for (const [k, v] of Object.entries(record.verdicts)) if (v.status === "checking") record.verdicts[k] = { ...v, status: "confirm", value: null };
   // Only onto the reading this check was made on: a Read again stored meanwhile keeps its own check (Critic R389b-2).
   const saved = await db("UPDATE benefit_readings SET reading=jsonb_set(reading, '{guards}', $3::jsonb) WHERE policy_id=$1 AND account_id=$2 AND read_at::text=$4 RETURNING 1 AS ok",
     [policyId, accountId, JSON.stringify(record), String(rows[0].read_at)]);

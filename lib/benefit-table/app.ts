@@ -11,7 +11,7 @@ import { anthropicTableModel, type TableModel } from "./model";
 import { policyJobLive, tableReadingJobLive, tableReadingJobPending } from "@/lib/rag/live-job";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import { MIN_CALL_MS, OPERATOR_FLAG_AFTER, SAVE_MARGIN_MS, linkRetryDelayMs, readingRetryDelayMs, guardStoredReading, noteUnreadTable, readDocument, relink, tableReady, type Db, type GuardSetup, type OnUsage, type ReadTime, type ReadingProgress } from "./service";
-import { enqueueFigureCheck, figureCheckPayload } from "./figure-check-job";
+import { MAX_FIGURE_CHECK_RUNS, enqueueFigureCheck, figureCheckPayload } from "./figure-check-job";
 import { MAX_TABLE_READING_RUNS, enqueueTableLink, enqueueTableReading, tableReadingPayload } from "./table-reading-job";
 import { checkingCount } from "./guards";
 import { figureCheckMode, guardCapUsd, guardRoster, imageCheckModels, supportsEffort } from "./guard-flag";
@@ -145,7 +145,7 @@ export const processFigureCheckJob = async (job: { account_id: string | null; pa
   if (!accountId || !mode || !(await benefitTableLive(accountId))) return;
   const model = anthropicTableModel(benefitTableModel());
   const { functionDeadline } = await import("@/lib/jobs/function-time");
-  const r = await guardStoredReading(appDb, accountId, p.policyId, figureCheckSetup(mode, accountId, model, usage(accountId, model.choice)), { deadline: functionDeadline(Date.now()) }, p.at);
+  const r = await guardStoredReading(appDb, accountId, p.policyId, figureCheckSetup(mode, accountId, model, usage(accountId, model.choice)), { deadline: functionDeadline(Date.now()) }, p.at, p.run >= MAX_FIGURE_CHECK_RUNS);
   if (r.record && checkingCount(r.record) > 0) await enqueueFigureCheck(pool, accountId, p.policyId, p.at, p.run + 1);
 };
 /** A table reading's continuation job (table-reading-job.ts): goes on with the reading the payload names, in a run of its

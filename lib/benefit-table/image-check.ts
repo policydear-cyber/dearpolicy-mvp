@@ -24,7 +24,7 @@ import type { CheckedReading } from "./check";
 import { numbersIn, printsNumber } from "./check";
 import type { OnUsage } from "./service";
 import type { Attachment, TableModel, TableReply } from "./model";
-import { claimsOf, type Claim, type GuardRecord, type Verdict } from "./guards";
+import { claimsOf, type Claim, type GuardRecord, type Per, type Verdict } from "./guards";
 
 export const IMAGE_CHECK_VERSION = "image-2026-11-14.1";
 /** At most this many figures are asked about in one call (a page with more is asked in several calls). */
@@ -38,10 +38,11 @@ const UNKNOWN_PRICE = { input: 5, output: 25 };
 
 /** A checker: a model that is shown the page, and where its spend is booked. */
 export type ImageChecker = { model: TableModel; onUsage?: OnUsage };
-/** What the check needs to know about the stored file: the pages whose words came from OCR (every other page has its own
- * text layer), and the page itself as the model is shown it. page() returns null when the stored file cannot give that
- * page (gone, unreadable, or not a PDF or picture): its figures are then not confirmed. */
-export type PageSource = { imagePages: number[]; page(n: number): Promise<Attachment | null> };
+/** What the check needs to know about the stored file: the pages known to carry their own text layer (extraction method
+ * "native"; every other page, a page with no record included, is checked against the page), and the page itself as the
+ * model is shown it. page() returns null when the stored file cannot give that page (gone, unreadable, or not a PDF or
+ * picture): its figures are then not confirmed. */
+export type PageSource = { nativePages: number[]; page(n: number): Promise<Attachment | null> };
 /** first: the checker every OCR figure goes to; second: the stronger checker a figure goes to when the first one's copy
  * does not confirm it. capUsd: the most the check may spend on this document (earlier checks of it included). */
 export type ImageCheckSetup = { kind: "image"; first: ImageChecker; second: ImageChecker; capUsd: number; source: (policyId: string) => Promise<PageSource> };
@@ -60,9 +61,15 @@ export const IMAGE_CHECK_SCHEMA = {
 };
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/** Where to look, with any number in it that prints the figure masked: the row, column, heading, product and plan names
+ * come from the OCR text and can print the figure itself ("Plan B (S$520,000)"), an OCR misread included, which the
+ * checker must never be shown (Critic 2, R485 H2). Other numbers stay, so "Plan 1" and "Plan 2" are still told apart. */
+export function blindWhere(where: string, value: number): string {
+  return where.replace(/\d[\d,.]*(?:\s*(?:million|mil|billion|bn|thousand|k|m)\b)?/gi, (tok) => numbersIn(tok).some((n) => Math.abs(n - value) < 0.005) ? "…" : tok);
+}
 /** The questions: where to look and what to copy; never the figure. */
 export function imageQuestions(claims: Claim[]): string {
-  return `<questions>\n${claims.map((c, i) => `<q id="q${i + 1}">${esc(c.where)}. Copy ${esc(c.ask)}, exactly as printed.</q>`).join("\n")}\n</questions>`;
+  return `<questions>\n${claims.map((c, i) => `<q id="q${i + 1}">${esc(blindWhere(c.where, c.value))}. Copy ${esc(c.ask)}, exactly as printed.</q>`).join("\n")}\n</questions>`;
 }
 /** A checker's reply read back to each claim by id: the copied cell, or null (not found, unreadable or malformed). */
 export function readCopies(json: unknown, claims: Claim[]): (string | null)[] {
@@ -76,8 +83,14 @@ export function readCopies(json: unknown, claims: Claim[]): (string | null)[] {
   return claims.map((_, i) => byId.get(`q${i + 1}`) ?? null);
 }
 
-/** The currency each claim's figure is read in (the table's own currency for that row or cover), in claimsOf's order. */
-export function claimCurrencies(r: CheckedReading): (string | null)[] {
+/** What each claim's figure is, in claimsOf's order: the currency it is read in (the table's own for that row or cover),
+ * and what it is per (a percentage is per "percent"; a cap, a money limit, has none). */
+export type ClaimFacts = { currency: string | null; per: Per | null };
+export function claimFacts(r: CheckedReading): ClaimFacts[] {
+  const cur = currencies(r);
+  return claimsOf(r).map((c, i) => ({ currency: cur[i] ?? null, per: c.field === "cap" ? null : c.per }));
+}
+function currencies(r: CheckedReading): (string | null)[] {
   const out: (string | null)[] = [];
   for (const b of r.benefits) {
     if (b.value != null) out.push(b.currency ?? null);
@@ -90,13 +103,47 @@ export function claimCurrencies(r: CheckedReading): (string | null)[] {
   return out;
 }
 
-/** Whether a copy of the cell confirms the figure: the copy prints the same number, and names no currency other than the
- * one the figure is read in. A copy that names a currency the reading does not know confirms the number only: the table
- * keeps the currency it had (none, when it had none). */
-export function copyConfirms(copy: string | null, value: number, currency: string | null): boolean {
-  if (copy == null || !printsNumber(copy, value)) return false;
+const PERCENT_TOKEN = /\d[\d,.]*\s*(?:%|per\s?cent\b)/gi;
+/** The periods a copied cell prints (an allow-list of plain wordings). "Half-yearly" is a half year, never also a year. */
+export function periodsIn(copy: string): Per[] {
+  const halfYear = /\bhalf[-\s]?year(?:ly)?\b|\bsemi[-\s]?annual(?:ly)?\b|\b(?:per|a|each|every)\s+half[-\s]year\b/i;
+  const rest = copy.replace(new RegExp(halfYear.source, "gi"), " ");
+  const out: Per[] = [];
+  if (halfYear.test(copy)) out.push("half_year");
+  const words: [RegExp, Per][] = [
+    [/\b(?:per|a|each|every)\s+day\b|\bdaily\b|\/\s*day\b|\bper\s+diem\b/i, "day"],
+    [/\b(?:per|a|each|every)\s+week\b|\bweekly\b|\/\s*week\b/i, "week"],
+    [/\b(?:per|a|each|every)\s+month\b|\bmonthly\b|\/\s*month\b/i, "month"],
+    [/\b(?:per|a|each|every)\s+quarter\b|\bquarterly\b/i, "quarter"],
+    [/\b(?:per|a|each|every)\s+(?:year|annum)\b|\bannual(?:ly)?\b|\byearly\b|\/\s*year\b|\bp\.a\.?(?![a-z])/i, "year"],
+  ];
+  for (const [re, per] of words) if (re.test(rest)) out.push(per);
+  return out;
+}
+
+/** Whether a copy of the cell confirms the figure (an allow-list; Critic 2, R485 H1):
+ * - the copy's OWN amount is the figure: for a percentage, the first figure printed with "%"; for money, the first figure
+ *   printed without one. Another number in the cell ("S$150 x 30 days": 30) confirms nothing;
+ * - a percentage is never confirmed by a money copy, nor money by a percentage copy;
+ * - a period the copy prints ("per day", "yearly") must be the figure's own; money with no period of its own (a cap) is
+ *   confirmed whatever the cell prints after it;
+ * - the copy names no other currency, and a bare "$" (which never establishes a currency) does not confirm a figure read
+ *   in one. A copy that names a currency the reading does not know confirms the number only: the table keeps the currency
+ *   it had (none, when it had none). */
+export function copyConfirms(copy: string | null, value: number, facts: ClaimFacts): boolean {
+  if (copy == null) return false;
+  const percents = [...copy.matchAll(PERCENT_TOKEN)].map((m) => m[0]);
+  const percent = facts.per === "percent";
+  const own = percent ? (percents.length ? numbersIn(percents[0])[0] : undefined) : numbersIn(copy.replace(PERCENT_TOKEN, " "))[0];
+  if (own == null || Math.abs(own - value) >= 0.005 || !printsNumber(copy, value)) return false;
+  if (!percent && facts.per != null) {
+    const periods = periodsIn(copy);
+    if (periods.length && !periods.includes(facts.per)) return false;
+  }
   const named = statedCurrencyCode(copy);
-  return !(named && currency && named !== currency);
+  if (named && facts.currency && named !== facts.currency) return false;
+  if (!named && facts.currency && /\$/.test(copy)) return false;
+  return true;
 }
 
 /** The figures a checker copied from the page, for the household to choose from. */
@@ -123,16 +170,16 @@ export async function runImageCheck(checked: CheckedReading, source: PageSource,
   const record: GuardRecord = { version: IMAGE_CHECK_VERSION, at: o.previous?.at ?? (o.now?.() ?? new Date()).toISOString(), verdicts: {},
     spentUsd: o.previous?.spentUsd ?? o.spentBefore ?? 0, calls: o.previous?.calls ?? 0, stopped: null };
   const all = claimsOf(checked);
-  const currencies = claimCurrencies(checked);
-  const currencyOf = new Map(all.map((c, i) => [c.key, currencies[i] ?? null]));
+  const facts = claimFacts(checked);
+  const factsOf = new Map(all.map((c, i) => [c.key, facts[i]]));
   // An earlier run on this same reading (cut off by its time limit): what it settled stays.
   for (const c of all) {
     const v = o.previous?.version === IMAGE_CHECK_VERSION ? o.previous.verdicts?.[c.key] : undefined;
     if (v && v.status !== "checking") record.verdicts[c.key] = v;
   }
-  const ocr = new Set(source.imagePages);
+  const native = new Set(source.nativePages);
   const agreed = (c: Claim): Verdict => ({ status: "agreed", value: c.value, per: c.per, page: c.page, line: c.excerpt, candidates: [], rounds: 0 });
-  for (const c of all) if (!record.verdicts[c.key] && !ocr.has(c.page)) record.verdicts[c.key] = agreed(c);
+  for (const c of all) if (!record.verdicts[c.key] && native.has(c.page)) record.verdicts[c.key] = agreed(c);
 
   const minCall = o.minCallMs ?? 45_000;
   let stop: "spend" | "time" | "error" | null = null;
@@ -167,12 +214,12 @@ export async function runImageCheck(checked: CheckedReading, source: PageSource,
     // The page cannot be shown: its figures are not confirmed (the household is asked), never used unchecked.
     if (!file) { for (const c of claims) record.verdicts[c.key] = { status: "confirm", value: null, per: null, page, line: c.excerpt, candidates: [], rounds: 0 }; continue; }
     if (!(await ask(first, page, claims, file))) break;
-    const doubted = claims.filter((c) => !copyConfirms(copies.get(c.key)![0] ?? null, c.value, currencyOf.get(c.key) ?? null));
+    const doubted = claims.filter((c) => !copyConfirms(copies.get(c.key)![0] ?? null, c.value, factsOf.get(c.key)!));
     for (const c of claims) if (!doubted.includes(c)) record.verdicts[c.key] = { ...agreed(c), rounds: 1 };
     if (doubted.length && !(await ask(second, page, doubted, file))) break;
     for (const c of doubted) {
       const got = copies.get(c.key)!;
-      record.verdicts[c.key] = copyConfirms(got[1] ?? null, c.value, currencyOf.get(c.key) ?? null)
+      record.verdicts[c.key] = copyConfirms(got[1] ?? null, c.value, factsOf.get(c.key)!)
         ? { ...agreed(c), rounds: 2 }
         : { status: "confirm", value: null, per: null, page, line: c.excerpt, candidates: copiedFigures(got), rounds: 2 };
     }
