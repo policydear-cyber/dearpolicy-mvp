@@ -34,6 +34,14 @@ const MIGRATIONS = [
   "sql/storage-purge.sql",
   "sql/v11-ingestion-evidence.sql",
   "sql/household-rls.sql",
+  // docs/migration-runbook.md section 3 continues after household-rls.sql: the infrastructure tables' RLS, then the
+  // optional household tables (each sets its own RLS, policies and grants). Without benefit-table.sql a local database
+  // has no benefit table, so the chat quietly answers on the older path instead of the one production uses.
+  "sql/infrastructure-rls.sql",
+  "sql/policy-member-exclusions.sql",
+  "sql/detected-name-dismissals.sql",
+  "sql/benefit-table.sql",
+  "sql/benefit-figure-confirmations.sql",
 ];
 
 async function main() {
