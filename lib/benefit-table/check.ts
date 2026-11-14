@@ -945,6 +945,9 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   if (reading.kind != null && reading.kind !== "personal_proof") return { tieLines: [], capNotes: [], tiedNotes: [], lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
   // Invisible characters inside a word ("sha\u00ADred") are no character of it (gate round 23).
   pages = pages.map((p) => /[\u200B-\u200D\u2060\uFEFF\u00AD]/.test(p.text) ? { ...p, text: p.text.replace(INVISIBLE, "") } : p);
+  // List items printed on their own lines under "The following (limits) are (not) shared [by <group>]:", each starting with
+  // a list marker, are read as one line with it (gate round 25).
+  pages = pages.map((p) => LIST_LEAD.test(p.text) ? { ...p, text: joinListItems(p.text) } : p);
   const own = new Set<string>();
   for (const b of reading.benefits) for (const l of (b.rowText ?? "").split("\n")) if (flat(l)) own.add(flat(l));
   // A row kept as words, whose line was not read around it (a percentage quote holding two percentages): its own table
@@ -1170,6 +1173,18 @@ function noteSentences(text: string): string[] {
 }
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
+/** A list lead line and the marked item lines after it (gate round 25). */
+const LIST_LEAD = /^[ \t]*(?:the\s+following\s+(?:limits\s+|benefits\s+)?(?:is|are)\s+(?:not\s+)?(?:shared|pooled|joint|per\s+(?:insured\s+)?person)\b|(?:shared|pooled|joint)\s+(?:by|between|among(?:st)?|for|with)\b)[^:\n]*:[ \t]*$/im;
+const LIST_ITEM = /^[ \t]*(?:\(\s*(?:[a-z]|i{1,3}|iv|vi{0,3}|ix|x|\d{1,2})\s*\)|(?:[a-z]|i{1,3}|iv|vi{0,3}|ix|x|\d{1,2})[).]|[\u2022\-\u2013])\s+\S/i;
+const joinListItems = (text: string) => {
+  const lines = text.split("\n"), out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    let l = lines[i];
+    if (new RegExp(LIST_LEAD.source, "i").test(l)) while (i + 1 < lines.length && LIST_ITEM.test(lines[i + 1])) l = `${l} ${lines[++i].trim()}`;
+    out.push(l);
+  }
+  return out.join("\n");
+};
 const flat = (s: string) => s.replace(INVISIBLE, "").toLowerCase().replace(/\s+/g, " ").trim();
 /** Characters a page may hold inside a word that print nothing (zero-width space, soft hyphen; gate round 23). */
 const INVISIBLE = /[\u200B-\u200D\u2060\uFEFF\u00AD]/g;
