@@ -28,7 +28,7 @@ const nav: NavItem[] = [
   { href: "/chat", label: "Ask DearPolicy", icon: "ask", tab: 3, short: "Ask", also: ["/claims"] },
   { href: "/records", label: "Payments", icon: "payments", tab: 4 },
   { href: "/learn", label: "Learn", icon: "book" },
-  { href: "/family", label: "Account settings", icon: "household", also: ["/household", "/usage"] },
+  { href: "/family", label: "Account settings", icon: "family", also: ["/household", "/usage"] },
 ];
 
 /** DearPolicy's operator area (diagnostics, extraction review, model usage
