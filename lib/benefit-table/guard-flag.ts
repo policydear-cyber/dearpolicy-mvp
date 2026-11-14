@@ -48,3 +48,33 @@ export function guardCapUsd(env: NodeJS.ProcessEnv = process.env): number {
   const n = Number(raw);
   return raw && Number.isFinite(n) && n > 0 ? n : Infinity;
 }
+
+/** The page-image figure check (image-check.ts), the general check that replaces the text guards when switched on.
+ * Default OFF. DEARPOLICY_IMAGE_FIGURE_CHECK=1 switches it on, with the same production and account gates as the guards
+ * (DEARPOLICY_FIGURE_GUARDS_ALLOW_PRODUCTION, DEARPOLICY_ALPHA_ACCOUNTS or DEARPOLICY_FIGURE_GUARDS_ALL_ACCOUNTS). When both
+ * switches are on, the image check runs and the text guards do not. Spend limit: DEARPOLICY_FIGURE_GUARD_CAP_USD, as for
+ * the guards.
+ * - DEARPOLICY_IMAGE_CHECK_MODELS: "<first>,<second>" Anthropic models. Default Sonnet 5.5 first (every figure on a page
+ *   read by OCR), Opus 5.5 second (only a figure the first checker's copy did not confirm). */
+export function imageCheckEnabled(env: NodeJS.ProcessEnv = process.env, accountId?: string | null): boolean {
+  if (!truthy(env.DEARPOLICY_IMAGE_FIGURE_CHECK)) return false;
+  if (productionBuild(env) && !truthy(env.DEARPOLICY_FIGURE_GUARDS_ALLOW_PRODUCTION)) return false;
+  if (!accountId || !accountId.trim()) return false;
+  return truthy(env.DEARPOLICY_FIGURE_GUARDS_ALL_ACCOUNTS) || alphaAccountAllowed(accountId, env);
+}
+/** Which figure check runs for an account: the image check, the text guards, or none. */
+export function figureCheckMode(env: NodeJS.ProcessEnv = process.env, accountId?: string | null): "image" | "guards" | null {
+  return imageCheckEnabled(env, accountId) ? "image" : figureGuardsEnabled(env, accountId) ? "guards" : null;
+}
+/** Whether any figure check is on for the account: figures are then used only once checked or confirmed. */
+export const figureChecksOn = (env: NodeJS.ProcessEnv = process.env, accountId?: string | null) => figureCheckMode(env, accountId) != null;
+export const DEFAULT_IMAGE_CHECKERS: [ModelChoice, ModelChoice] = [
+  { provider: "anthropic", model: "claude-sonnet-5-5" }, { provider: "anthropic", model: "claude-opus-5-5" },
+];
+export function imageCheckModels(env: NodeJS.ProcessEnv = process.env): [ModelChoice, ModelChoice] {
+  const raw = (env.DEARPOLICY_IMAGE_CHECK_MODELS ?? "").trim();
+  if (!raw) return DEFAULT_IMAGE_CHECKERS;
+  const list = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (list.length !== 2 || list.some((m) => !/^claude-[\w.-]+$/.test(m))) throw new Error(`DEARPOLICY_IMAGE_CHECK_MODELS must name 2 Anthropic models, "<first>,<second>", not "${raw}"`);
+  return [{ provider: "anthropic", model: list[0] }, { provider: "anthropic", model: list[1] }];
+}

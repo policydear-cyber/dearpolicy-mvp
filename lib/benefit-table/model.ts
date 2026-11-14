@@ -6,7 +6,17 @@ import { API_BASE_URL, apiKeyFromEnv } from "@/lib/simple-chat/model";
 
 /** timeoutMs: the call is stopped after this long and replies with stopReason "timeout" and no reading, so a caller with a
  * time limit (a serverless function) can still say the reading did not finish, instead of being stopped mid-call. */
-export type TableCall = { system: string; user: string; schema: unknown; maxTokens: number; timeoutMs?: number };
+/** A file the model is shown with the prompt: one page of the stored document as a PDF, or a picture upload. data is
+ * base64. */
+export type Attachment = { kind: "pdf" | "image"; mediaType: string; data: string };
+export type TableCall = { system: string; user: string; schema: unknown; maxTokens: number; timeoutMs?: number; attachments?: Attachment[] };
+/** The user turn: the plain prompt, or the attached files first and the prompt after them. */
+export function userContent(c: TableCall): string | unknown[] {
+  if (!c.attachments?.length) return c.user;
+  return [...c.attachments.map((a) => a.kind === "pdf"
+    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: a.data } }
+    : { type: "image", source: { type: "base64", media_type: a.mediaType, data: a.data } }), { type: "text", text: c.user }];
+}
 /** input: uncached prompt tokens; cacheRead/cacheWrite: the prompt tokens served from or written to the prompt cache. */
 export type TableReply = { json: unknown; stopReason: string | null; model: string; input: number; output: number; ms: number; cacheRead?: number; cacheWrite?: number };
 export type TableModel = { choice: ModelChoice; call(c: TableCall): Promise<TableReply> };
@@ -35,7 +45,7 @@ export function anthropicTableModel(choice: ModelChoice, client?: Client, opts: 
       // The prompt is the same for every page of every household's documents, so it is cached for the calls that follow
       // within 5 minutes (a document's page re-reads, the next upload). The document itself comes after it, uncached.
       const system = [{ type: "text" as const, text: c.system, cache_control: { type: "ephemeral" as const, ttl: "5m" as const } }];
-      const stream = api.messages.stream({ model: choice.model, max_tokens: c.maxTokens, system, messages: [{ role: "user", content: c.user }],
+      const stream = api.messages.stream({ model: choice.model, max_tokens: c.maxTokens, system, messages: [{ role: "user", content: userContent(c) }],
         output_config: { ...(opts.effort === false ? {} : { effort: "medium" as const }), format: { type: "json_schema", schema: c.schema } } });
       let timedOut = false, streamedChars = 0;
       stream.on?.("text", (delta) => { streamedChars += delta.length; });
