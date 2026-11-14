@@ -23,7 +23,7 @@
  *    anywhere else are left out. */
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
-import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
+import { moneyFiguresIn, sentencesOf, type StatedFigure } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
 import { keepsCapIn, noteMultiple, timesWords } from "@/lib/benefit-table/multiplier";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
@@ -494,15 +494,15 @@ function rowBase(pageText: string, rowOffset: number): { value: number; raw: str
   const heads: Head[] = [];
   for (const re of [new RegExp(String.raw`%\s*of\s*(${MONEY_SIGN}\s?\d[\d,]*(?:\.\d+)?)`, "gi"), new RegExp(String.raw`\blimit\s*:?\s*(${MONEY_SIGN}\s?\d[\d,]*(?:\.\d+)?)`, "gi")])
     for (const m of above.matchAll(re)) heads.push({ at: m.index ?? 0, base: { value: valueOf(m[1]), raw: m[1] } });
-  for (const m of above.matchAll(/\(\s*%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\s*\)/gi)) heads.push({ at: m.index ?? 0, base: "sum_insured" });
+  for (const m of above.matchAll(/\(\s*%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured|covered)\s*\)/gi)) heads.push({ at: m.index ?? 0, base: "sum_insured" });
   // "percentage of Comatose State Sum Insured", "% of the Benefit Amount": a base this check cannot know.
-  for (const m of above.matchAll(new RegExp(String.raw`(?:%|percentage|per\s?cent)\s+of\s+(?!(?:the\s+)?sum\s+(?:insured|assured)\b)(?!${MONEY_SIGN})([A-Za-z][^\n]{0,60}?)\b(?:sum\s+(?:insured|assured)|amount|limit)\b`, "gi"))) heads.push({ at: m.index ?? 0, base: null });
+  for (const m of above.matchAll(new RegExp(String.raw`(?:%|percentage|per\s?cent)\s+of\s+(?!(?:the\s+)?sum\s+(?:insured|assured|covered)\b)(?!${MONEY_SIGN})([A-Za-z][^\n]{0,60}?)\b(?:sum\s+(?:insured|assured|covered)|amount|limit)\b`, "gi"))) heads.push({ at: m.index ?? 0, base: null });
   const nearest = heads.sort((a, b) => b.at - a.at)[0];
   const whole = rowWithContinuation(pageText, rowOffset);
   if (CAPPED.test(whole)) return null;
-  if (/\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\b/i.test(row.text)) {
+  if (/\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured|covered)\b/i.test(row.text)) {
     // A table line such as "Death due to Accident	100% of Sum Insured" names its own base; it never takes the table's.
-    return /\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured)\s*$/i.test(row.text.trim()) && row.text.length <= 90 ? "sum_insured" : null;
+    return /\d\s?%\s*of\s*(?:the\s*)?sum\s*(?:insured|assured|covered)\s*$/i.test(row.text.trim()) && row.text.length <= 90 ? "sum_insured" : null;
   }
   if (!nearest) return null;
   return nearest.base;
@@ -534,7 +534,7 @@ function rowFor(st: ModelStatement, found: Found, household: Household): Found |
         const pcts = [...line.matchAll(PCTS)];
         const last = pcts.at(-1);
         if (!last || Number(last[1]) !== pct) continue;
-        if (!/^\s*(?:of\s+(?:the\s+)?sum\s+(?:insured|assured))?\s*$/i.test(line.slice((last.index ?? 0) + last[0].length))) continue;
+        if (!/^\s*(?:of\s+(?:the\s+)?sum\s+(?:insured|assured|covered))?\s*$/i.test(line.slice((last.index ?? 0) + last[0].length))) continue;
         const words = [...new Set(labelWords(line.slice(0, last.index)))];
         if (!words.length || !words.every((w) => said.has(w))) continue;
         const lead = line.length - line.trimStart().length;
@@ -642,7 +642,7 @@ const WHOLE_FALLBACK = new Set([NOT_ROW_FIGURE, NO_PRINTED_BASE]);
  * The cap is then checked as a plain amount (plainAmount) on that row. Fail-safe: anything else gives null and the
  * percentage stays a fact with no amount. */
 /** What a cap's percentage may be of: the benefit's own sum (closed list, in the languages households' documents use). */
-const PCT_BASE = /^(?:(?:basic\s+|plan\s+|policy\s+|benefit\s+)?(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)|(?:the\s+)?capital\s+assur[ée])\b/i;
+const PCT_BASE = /^(?:(?:basic\s+|plan\s+|policy\s+|benefit\s+)?(?:sum\s+(?:assured|insured|covered)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)|(?:the\s+)?capital\s+assur[ée])\b/i;
 /** A row that is a share the household pays or a charge, never a cap on what the policy pays (closed list). */
 const CHARGE_ROW = /\b(?:co-?insurance|co-?pay(?:ment)?s?|excess(?:es)?|deductibles?|premiums?|loading|contributions?|fees?|charges?|levy|tax)\b/i;
 /** Words that may follow a row's cap figure: what it is per, and the lesser-of rule (closed list). */
@@ -820,6 +820,238 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
    * own words (`own`), `section` and the benefit names of the person's other rows (`others`). When it checks, the card's
    * basis adds the multiple as a condition in the note's own words with its figure; the card's amount stays `value`. */
   times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null; others: string; docNames: string; perDay: boolean } | null };
+/** The labels of the field that names the insured life or lives on a schedule or certificate, in any of its languages
+ * ("Life assured", "Person covered", "Tertanggung", "Hayat diinsuranskan"), plural ones too ("Insured persons", "Lives
+ * covered"): a plural field names one life only when its whole value is that life. */
+const INSURED_LABEL = String.raw`(?:(?:the\s+)?(?:life|lives)\s+(?:assured|insured|covered)|insured(?:\s+(?:persons?|lives|members?|names?))?|persons?\s+(?:insured|covered)|covered\s+(?:persons?|lives|members?)|also\s+covered|assured|participants?|peserta|tertanggung|orang\s+(?:yang\s+)?dilindungi|hayat\s+diinsuranskan)(?:\s+names?)?`;
+/** An insured-person field: its label at the start of a line or after a tab, a colon or a tab, and the WHOLE rest of the
+ * line ("Life assured: Ana Lee<TAB>Policy currency: SGD", "Insured<TAB>Ana Lee<TAB>Ben Lee"). */
+const INSURED_FIELD = new RegExp(String.raw`(?:^|\t)[ \t]*${INSURED_LABEL}[ \t]*(?::[ \t]*|\t[ \t]*)([^\n]+)`, "gim");
+/** Words that may stand in an insured-person field beside the person's own name: titles and Malay/Indian name particles. */
+const NAME_PARTICLES = new Set(["bin", "binti", "bte", "bt", "mr", "mrs", "ms", "miss", "mdm", "madam", "dr", "encik", "en", "puan", "pn", "cik", "tuan", "haji", "hajah", "al", "ap"]);
+/** Any sign of a second insured life, anywhere on a document: numbered lives ("Life 2", "Insured 2", "Member 2", "LA2",
+ * "Tertanggung 2"), "lives assured", joint or co-lives, partners, spouses and dependants in any listed language, a main or
+ * additional life, "Mr & Mrs", families, adults, "also covered", "+1", and the general other-insured words
+ * (lib/benefit-table/lives.ts otherLife). */
+const SECOND_LIFE = /\b(?:life|lives|insured|assured|member|participant|peserta|tertanggung|person)[ ]?[-#(]?[ ]?(?:[2-9](?![\d,.])|i{2,3}\b|iv\b|two\b|three\b|kedua\b)|\bLA\s*\d|\blives\b|\binsureds\b|\bjoint\b|\bco-?(?:life|lives|insured|assured|owner)\b|\bpartners?\b|\b(?:isteri|suami|pasangan|anak|keluarga)\b|\b(?:main|first|second|third|additional|other)\s+(?:life|lives|insured|assured|person|member|participant)s?\b|\bmrs?\.?\s*(?:&|and)\s*mrs?\b|\bcovered\s+(?:persons|members|lives)\b|\bfamil(?:y|ies)\b|\badults?\b|\balso\s+covered\b|\bplus\s+\d|\+\s*\d|\b(?:spouses?|wi(?:fe|ves)|husbands?|dependants?|dependents?|child(?:ren)?|sons?|daughters?|nominees?\s+insured)\b/i;
+/** Words that make a line a heading, an insurer's or a currency's name rather than a person's (personLikeLine). */
+const NOT_A_NAME = new Set(["benefit", "benefits", "provisions", "schedule", "policy", "certificate", "summary", "table", "plan", "cover", "coverage", "rider", "riders", "notes", "note",
+  "section", "part", "important", "details", "particulars", "contribution", "premium", "premiums", "sum", "insured", "assured", "covered", "life", "term", "critical", "illness",
+  "hospital", "medical", "accident", "accidental", "death", "disability", "income", "takaful", "insurance", "assurance", "berhad", "bhd", "ltd", "limited", "pte", "inc", "plc",
+  "company", "group", "corporation", "bank", "ringgit", "dollars", "dollar", "pounds", "sterling", "euro", "singapore", "malaysia", "endorsement", "amendment", "schedule", "page",
+  "terms", "conditions", "exclusions", "definitions", "general", "provisions", "contact", "us", "customer", "service", "the", "of", "and", "for", "to", "your", "our", "in", "with", "per"]);
+/** A line that may be a person's name: no tab, colon or digit, two to five words outside brackets, every one capitalised,
+ * none a heading, insurer, product or currency word (NOT_A_NAME, the document's own insurer and product), and not the
+ * person's own name. A name printed alone ("Ben Lee") heads another life's block. */
+function personLikeLine(line: string, own: string[], docWords: Set<string>): boolean {
+  const t = line.trim();
+  if (!t || /[\t:\d]/.test(t)) return false;
+  const words = t.replace(/\([^)]*\)/g, " ").split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 5 || !words.every((w) => /^\p{Lu}[\p{L}'’.-]*$/u.test(w))) return false;
+  const lower = words.map((w) => w.toLowerCase().replace(/[^\p{L}]/gu, ""));
+  if (lower.some((w) => NOT_A_NAME.has(w) || docWords.has(w))) return false;
+  return !lower.every((w) => own.includes(w) || NAME_PARTICLES.has(w));
+}
+/** The labels of the person's own particulars that may sit beside the insured-person field on its line, as a label cell and
+ * a value cell ("Life assured<TAB>Ana Lee<TAB>Age<TAB>45"). */
+const PARTICULAR_LABEL = /^(?:age|age next birthday|anb|date of birth|dob|gender|sex|nric(?:\s+no\.?)?|id(?:\s+no\.?)?|passport(?:\s+no\.?)?|occupation|smoker(?:\s+status)?|policy\s+(?:number|no\.?)|certificate\s+(?:number|no\.?)|(?:policy\s+)?currency|class)$/i;
+/** Whether every cell on an insured-person field's line is a "Label: value" field of its own, or the line is label and
+ * value pairs whose other labels are the person's own particulars (PARTICULAR_LABEL). */
+function fieldCells(cells: string[]): boolean {
+  if (cells.every((c) => /^[^:]{1,40}:/.test(c))) return true;
+  const at = cells.findIndex((c) => new RegExp(String.raw`^${INSURED_LABEL}$`, "i").test(c));
+  if (at < 0 || at + 1 >= cells.length) return false;
+  const rest = [...cells.slice(0, at), ...cells.slice(at + 2)];
+  const pairs: string[] = [];
+  for (let i = 0; i < rest.length; i++) {
+    if (/^[^:]{1,40}:/.test(rest[i])) continue;
+    if (!PARTICULAR_LABEL.test(rest[i]) || i + 1 >= rest.length) return false;
+    pairs.push(rest[i + 1]); i++;
+  }
+  return pairs.every(oneParticular);
+}
+/** The closed words a particular may be: a gender, a smoker status, a standard rating. */
+const PARTICULAR_WORDS = new Set(["m", "f", "male", "female", "lelaki", "perempuan", "smoker", "non-smoker", "nonsmoker", "non smoker", "standard"]);
+const PARTICULAR_MONTH = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)`;
+/** Whether a particular's value is exactly ONE value: one number, one date, one ID, one currency code, one class code, or
+ * one word from PARTICULAR_WORDS. "45 / 42", "M/F", "01/01/1980 & 02/02/1982", "S1234567A, S7654321B" or an ID followed
+ * by a name each print two people, so they are refused; so is any other word. */
+function oneParticular(value: string): boolean {
+  const v = value.trim();
+  if (/[&,;+]|\band\b|\bdan\b/i.test(v)) return false;
+  return /^\d{1,3}$/.test(v) // an age
+    || /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(v) // one date
+    || new RegExp(String.raw`^\d{1,2}\s+${PARTICULAR_MONTH}\.?\s+\d{4}$`, "i").test(v)
+    || /^\d{4}-\d{2}-\d{2}$/.test(v)
+    || /^[A-Z]{0,3}-?\d{5,}-?[A-Z0-9]?$/i.test(v) // one ID or policy number
+    || /^\d{6}-\d{2}-\d{4}$/.test(v) // a Malaysian IC number
+    || /^(?:SGD|USD|MYR|HKD|GBP|EUR|AUD|NZD|IDR|PHP|THB|CNY|INR)$/.test(v) // a currency code
+    || /^(?:class\s+)?[A-D]?\d?$/i.test(v) && v.length > 0 && v.length <= 8
+    || PARTICULAR_WORDS.has(v.toLowerCase());
+}
+/** Whether a document is printed for this person alone, so that a line on it need not repeat their name: true, or why not.
+ * An ALLOW-list: ALL of these must hold, else main's rule (the line names the person) stands:
+ * - it is linked to this person and no one else;
+ * - every page has text and none was left unread or unchecked (an empty page may be the other life's);
+ * - it prints at least one insured-person field (INSURED_FIELD), and every such field names this person in full and only
+ *   them (their words, plus titles and name particles), the same each time; any later cell on that line is a field of
+ *   its own ("Policy currency: SGD"), never a bare name;
+ * - no page shows a sign of a second life (SECOND_LIFE, lives.ts otherLife), no line on any page may be another person's
+ *   name (personLikeLine), and no other household member's full name or first name with another word of theirs appears. */
+function soleLifeDocument(d: HouseholdDocument, person: string, household: Household): true | string {
+  if (!d.linkedPeople.length || d.linkedPeople.some((p) => baseName(p) !== person)) return "linked to someone else";
+  if (!d.pages.length || d.pages.some((pg) => !pg.text.trim()) || d.uncheckedPages?.length || d.unreadablePages?.length || d.partCheckedPages?.length) return "a page has no checked text";
+  const own = tokens(person);
+  // Every line holding a field is read whole: each cell is a "Label: value" field of its own, or the line is just the
+  // label and its value in two cells ("Life assured<TAB>Ana Lee"). A bare name in another cell is another life.
+  const fieldLines = d.pages.flatMap((pg) => pg.text.split("\n").filter((l) => new RegExp(INSURED_FIELD.source, "im").test(l)));
+  if (!fieldLines.length) return "no insured-person field";
+  for (const l of fieldLines) {
+    const cells = l.split("\t").map((c) => c.trim()).filter(Boolean);
+    if (!(cells.length === 2 && !cells[0].includes(":")) && !fieldCells(cells)) return "an insured-person field's line prints a cell that is not a field";
+  }
+  const fields = d.pages.flatMap((pg) => [...pg.text.matchAll(INSURED_FIELD)].map((m) => [m[1].split("\t")[0].trim()]));
+  for (const [value] of fields) {
+    const v = tokens(value ?? "");
+    if (!v.length || !own.every((w) => v.includes(w)) || v.some((w) => !own.includes(w) && !NAME_PARTICLES.has(w))) return "an insured-person field names someone else";
+  }
+  if (new Set(fields.map(([value]) => tokens(value ?? "").join(" "))).size !== 1) return "two insured-person fields";
+  const people = household.members.map((m) => m.name.replace(/\s*\(.*\)\s*$/, ""));
+  const docWords = new Set(tokens(`${d.insurer ?? ""} ${d.productName ?? ""}`));
+  for (const pg of d.pages) {
+    if (SECOND_LIFE.test(pg.text) || otherLife(pg.text, person, people)) return "a page names a second life";
+    if (pg.text.split("\n").some((l) => personLikeLine(l, own, docWords))) return "a line may be another person's name";
+    const words = new Set(tokens(pg.text));
+    for (const m of people) {
+      const t = tokens(m);
+      if (baseName(m) === person || !t.length || t.every((w) => own.includes(w))) continue;
+      if (nameOnPage(m, pg.text) || (t.length > 1 && words.has(t[0]) && t.slice(1).some((w) => words.has(w) && !own.includes(w)))) return "a page names another household member";
+    }
+  }
+  return true;
+}
+/** Words that mark a heading or line as a rider's, an add-on's or an optional cover's. */
+const RIDER_WORDS = /\b(?:riders?|add-?ons?|supplementary|optional|tambahan)\b/i;
+/** A heading line: no tab, colon or figure, two or more words outside brackets, all capitals or every word capitalised. */
+const headingLine = (l: string) => {
+  const t = l.trim();
+  if (!t || /[\t:\d]/.test(t)) return false;
+  const words = t.replace(/\([^)]*\)/g, " ").split(/\s+/).filter((w) => /\p{L}/u.test(w));
+  return words.length >= 2 && (t === t.toUpperCase() || words.every((w) => /^\p{Lu}/u.test(w)));
+};
+/** Why the sum's line on a one-life document may be another block's (a rider's, another life's), or null. On the sum's
+ * page, the person's insured-person field must come first, and between it (or the top of the page when it is on an
+ * earlier page) and the sum's line there may be no heading line and no line with a rider's words. */
+/** The words of a heading over the schedule's own table of benefits, not over another cover's or life's block. */
+const TABLE_HEADING_WORDS = new Set(["benefit", "benefits", "summary", "schedule", "table", "of", "the", "policy", "details", "cover", "coverage", "sum", "sums", "assured", "insured", "covered", "amount", "amounts", "your"]);
+function sumLineInOwnBlock(text: string, lineAt: number): string | null {
+  const lines = text.split("\n");
+  let from = -1;
+  lines.forEach((l, i) => { if (i < lineAt && new RegExp(INSURED_FIELD.source, "im").test(l)) from = i; });
+  if (from < 0 && lines.some((l) => new RegExp(INSURED_FIELD.source, "im").test(l))) return "comes before the insured-person field";
+  for (const l of lines.slice(from + 1, lineAt)) {
+    if (RIDER_WORDS.test(l)) return "is below a rider's line";
+    // A heading of the schedule's own table ("BENEFIT SUMMARY") opens no other block.
+    if (headingLine(l) && !tokens(l).every((w) => TABLE_HEADING_WORDS.has(w))) return "is below a heading";
+  }
+  return null;
+}
+/** The structural rule for a document printed for one life (gate rounds 3 to 6): EVERY money figure on the whole document
+ * (and any sum written out in words) is a possible sum, wherever it stands and however its line is labelled, indented or
+ * cased, unless a reason on this closed list points at THAT figure:
+ * - it is in this row's own quoted words or its maximum's, or in the stored maximum of another row the table worked out
+ *   (`caps`), each located on its stored page;
+ * - its WHOLE label is a premium, contribution, fee or charge item ("Annual premium", "Monthly contribution", "Policy
+ *   fee"), the label being the line's first cell (its own cell, or the single cell before it), and nothing on the whole
+ *   line names a sum or a cover (NAMES_SUM_OR_COVER). A column's header is never its label. "Return of premium" and "Waiver of premium" are covers, so they count;
+ * - the words right after it in its cell tie it to a day, a week or a month ("S$100 per day in hospital");
+ * - it is the first figure on a line whose line above prints a percentage and ends with a cap word: the wrap of a
+ *   percentage cell ("25% of the Sum Covered, up to a maximum of" / "RM 50,000").
+ * A figure the list does not place counts. All the figures counted must be one figure, this sum's, in its currency. Two
+ * lines with the same figure agree ("Sum covered  RM 150,000" and "Death benefit  RM 150,000"); two different figures, or
+ * a sum in words, leave main's rule (the line names the person). Per year figures count: a sum may be paid yearly. */
+const CHARGE_LABEL = /^(?:(?:annual|annualised|annualized|yearly|monthly|quarterly|half-yearly|semi-annual|modal|basic|total|first|initial|regular|single|renewal|policy|certificate|admin(?:istration|istrative)?|service|stamp|takaful|wakalah)\s+)*(?:premiums?|contributions?|caruman|fees?|charges?|levy|levies|duty)(?:\s*\((?:annual|yearly|monthly|quarterly|p\.?a\.?)\))?\s*:?$/i;
+const SHORT_PERIOD_AFTER = /^\s*(?:(?:per|a|each|every|setiap)\s+(?:day|week|month|hari|minggu|bulan)\b|sehari\b|daily\b|weekly\b|monthly\b|\/\s?(?:day|week|month)\b)/i;
+/** Words that name a sum or a cover: a line or cell printing one is never a charge's. */
+const NAMES_SUM_OR_COVER = /\b(?:sums?\s+(?:assured|insured|covered)|covers?|coverage|death|benefits?|plans?)\b/i;
+const PERCENT_IN_LINE = /\d\s?(?:%|per\s?cent)/i;
+const CAP_WORD_END = /\b(?:up\s+to|maximum(?:\s+of)?|max\.?|not\s+exceeding|limited\s+to|capped\s+at)\s*:?\s*$/i;
+/** A sum written out in words: a number word with a currency word ("two hundred thousand Singapore dollars"). */
+const SUM_IN_WORDS = /\b(?:hundred|thousand|million|billion|ratus|ribu|juta)\b[^\n]*\b(?:dollars?|ringgit|pounds?|euros?|rupiah|pesos?|baht|yuan|rupees?)\b/i;
+/** The stored maximums of the other rows the table worked out for this answer. */
+const otherCaps = (all: readonly ServerFigure[], sf: ServerFigure) => all.filter((f) => f !== sf && f.cap).map((f) => ({ quote: f.cap!.quote, docIndex: f.cap!.docIndex }));
+/** Each money figure on line `i`, where it stands, and whether a closed reason marks it as no sum (oneSumOnDocument's
+ * list, all but the located quotes): a whole charge label, a day's, week's or month's rate, or a wrapped percentage
+ * cell's maximum. */
+function lineFigures(lines: string[], i: number): { f: StatedFigure; at: number; notSum: boolean }[] {
+  const l = lines[i];
+  const out: { f: StatedFigure; at: number; notSum: boolean }[] = [];
+  let from = 0;
+  moneyFiguresIn(l).forEach((f, n) => {
+    const at = l.indexOf(f.raw, from);
+    if (at < 0) { out.push({ f, at: -1, notSum: false }); return; }
+    from = at + f.raw.length;
+    const cellStart = l.lastIndexOf("\t", at - 1) + 1;
+    const before = l.slice(cellStart, at);
+    // Its charge label: the words before it in its own cell or, when it opens its cell, the cell right before it. It is a
+    // charge only when that label is the line's FIRST cell (the row's own label) and nothing on the whole line names a sum
+    // or a cover ("TPD<TAB>Annual premium S$450,000", "Premium<TAB>S$450,000<TAB>Sum assured").
+    const cellsBefore = l.slice(0, Math.max(0, cellStart - 1)).split("\t").map((c) => c.trim()).filter(Boolean);
+    const label = before.trim() ? before.trim() : cellsBefore.length === 1 ? cellsBefore[0] : "";
+    const nextTab = l.indexOf("\t", from);
+    const after = l.slice(from, nextTab < 0 ? l.length : nextTab);
+    const ownCell = l.slice(cellStart, nextTab < 0 ? l.length : nextTab);
+    const cells = l.split("\t").map((c) => c.trim()).filter(Boolean);
+    const labelIsFirstCell = before.trim() ? cells[0] === ownCell.trim() : cellsBefore.length === 1;
+    const charge = CHARGE_LABEL.test(label) && labelIsFirstCell && !NAMES_SUM_OR_COVER.test(l);
+    const notSum = charge || SHORT_PERIOD_AFTER.test(after)
+      || (n === 0 && i > 0 && PERCENT_IN_LINE.test(lines[i - 1]) && CAP_WORD_END.test(lines[i - 1].trimEnd()));
+    out.push({ f, at, notSum });
+  });
+  return out;
+}
+function oneSumOnDocument(d: HouseholdDocument, docIndex: number, sf: ServerFigure, household: Household, caps: readonly { quote: string; docIndex: number }[]): string | null {
+  // Where the row's own words and its maximum's, and other worked-out rows' maximums, are printed, by their stored place.
+  const own: { page: number; from: number; to: number }[] = [];
+  for (const q of [{ quote: sf.row.quote, doc: sf.row.docIndex }, ...(sf.cap ? [{ quote: sf.cap.quote, doc: sf.cap.docIndex }] : []), ...caps.map((c) => ({ quote: c.quote, doc: c.docIndex }))]) {
+    const f = q.quote ? locateQuote(household, q.quote, q.doc) : null;
+    if (f && f.docIndex === docIndex) own.push({ page: f.page, from: f.offset, to: f.end ?? f.offset + q.quote.length });
+  }
+  const seen = new Set<string>();
+  for (const pg of d.pages) {
+    const lines = pg.text.split("\n");
+    let lineAt = 0;
+    lines.forEach((l, i) => {
+      const start = lineAt;
+      lineAt += l.length + 1;
+      const inOwn = (at: number) => own.some((o) => o.page === pg.page && start + at >= o.from && start + at < o.to);
+      if (SUM_IN_WORDS.test(l) && !inOwn(l.search(SUM_IN_WORDS))) seen.add(`words|${l.trim().toLowerCase()}`);
+      for (const { f, at, notSum } of lineFigures(lines, i)) {
+        if (at < 0) { seen.add(`unplaced|${f.raw}`); continue; }
+        if (inOwn(at) || notSum) continue;
+        seen.add(`${f.currency}|${Math.round(f.value * 100)}`);
+      }
+    });
+  }
+  return seen.size === 1 && seen.has(`${sf.currency}|${Math.round(sf.base.value * 100)}`) ? null : "is one of several sums the document prints";
+}
+/** Words a sum's own line may print besides its figure on a document for one life, with the row's own words: the names of
+ * the sum and of a cover. */
+const SUM_LINE_WORDS = new Set(["sum", "insured", "assured", "covered", "amount", "basic", "base", "benefit", "benefits", "cover", "coverage", "plan", "policy", "the", "of", "and",
+  "rm", "sgd", "myr", "usd", "gbp", "eur", "hkd", "aud", "nzd", "jumlah", "dilindungi", "diinsuranskan", "face", "value"]);
+/** Why the sum's line on a one-life document could be another life's or another cover's, or null: it must print no person
+ * and no word for a life, and every word of its label must be the row's own (`row`: "Total and permanent disability 100%
+ * of the death sum assured" for "Death  S$450,000") or a name of a sum (SUM_LINE_WORDS). */
+function sumLineIsRows(line: string, row: string, person: string, household: Household): string | null {
+  const label = moneyFiguresIn(line).reduce((t, f) => t.split(f.raw).join(" "), line);
+  if (SECOND_LIFE.test(label) || /\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|spouses?|wi(?:fe|ves)|husbands?|dependants?|dependents?|juveniles?|policy\s*holders?)\b/i.test(label)) return "names a life";
+  const others = new Set(household.members.flatMap((m) => tokens(m.name)).concat(tokens(person)));
+  const rowWords = new Set(tokens(row));
+  const words = tokens(label);
+  if (words.some((w) => others.has(w) && !rowWords.has(w))) return "names a person";
+  if (words.some((w) => !rowWords.has(w) && !SUM_LINE_WORDS.has(w))) return "prints words that are not the row's own or a sum's name";
+  return null;
+}
 /** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
  * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
  * sum under a cover heading or on a page that names one life; the benefit table had already tied each row to the person's
@@ -834,22 +1066,23 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
  * - a maximum is printed with its currency right after a cap word in its quoted words, in the same currency, and the row
  *   prints no cap when none is given;
  * - the amount is worked out here: the percentage of the base in cents, and the lesser of that and the maximum. */
-function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found, household: Household, person: string): Checked | null {
-  if (!(sf.percent > 0) || !sf.currency || sf.currency === "$") return null;
+function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found, household: Household, person: string, caps: readonly { quote: string; docIndex: number }[] = []): Checked | { refused: string } {
+  const no = (refused: string) => ({ refused });
+  if (!(sf.percent > 0) || !sf.currency || sf.currency === "$") return no("no percentage, or no currency (a bare \"$\" is none)");
   const rf = locateQuote(household, sf.row.quote, sf.row.docIndex);
-  if (!rf || rf.docIndex !== sf.row.docIndex || rf.page !== sf.row.page) return null;
+  if (!rf || rf.docIndex !== sf.row.docIndex || rf.page !== sf.row.page) return no("the row's own words are not on its stored page");
   const rowText = rowWithContinuation(household.documents[rf.docIndex].pages.find((p) => p.page === rf.page)!.text, rf.offset);
   const pcts = new Set([...rowText.matchAll(PCTS)].map((m) => Number(m[1])));
-  if (!pcts.has(sf.percent)) return null;
+  if (!pcts.has(sf.percent)) return no("the row's line does not print the percentage");
   // One share only: a row whose line or what continues it prints another percentage ("10% ... For an insured child, 5%"),
   // or names a kind of life, is for someone it cannot settle from the line (Critic #449 rounds 4-5).
-  if (pcts.size > 1) return null;
-  if (/\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?)\b/i.test(rowText)) return null;
+  if (pcts.size > 1) return no("the row's line prints another percentage");
+  if (/\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?)\b/i.test(rowText)) return no("the row's line names a kind of life");
   // The base: the person's own line, in a document linked to them.
   const bdoc = household.documents[sf.base.docIndex];
-  if (!bdoc || unreadable(bdoc) || !bdoc.linkedPeople.some((p) => baseName(p) === person)) return null;
+  if (!bdoc || unreadable(bdoc) || !bdoc.linkedPeople.some((p) => baseName(p) === person)) return no("the sum's document is not linked to the person");
   const bf = locateQuote(household, sf.base.quote, sf.base.docIndex);
-  if (!bf || bf.docIndex !== sf.base.docIndex) return null;
+  if (!bf || bf.docIndex !== sf.base.docIndex) return no("the sum's line is not in its stored document");
   const bpage = bdoc.pages.find((p) => p.page === bf.page)!;
   const at = bpage.text.slice(0, bf.offset).split("\n").length - 1;
   const line = bpage.text.split("\n")[at] ?? "";
@@ -859,7 +1092,21 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const longer = household.members.map((m) => tokens(m.name)).filter((t) => t.length > who.length && who.every((w) => t.includes(w)));
   const namesPerson = (lt: Set<string>) => who.every((w) => lt.has(w)) && !longer.some((t) => t.every((w) => lt.has(w)));
   const onLine = moneyFiguresIn(line);
-  if (!namesPerson(have) || onLine.length !== 1 || onLine[0].currency !== sf.currency || !sameValue(onLine[0].value, sf.base.value)) return null;
+  // A document printed for this person alone needs no name on the sum's own line (TE-ACC-20261114-R3 failure 4: "100% of
+  // the death sum assured" was worked out on the table and refused here because "Death  S$450,000" does not repeat the
+  // life assured's name). ALLOW-list, all of it or main's rule (soleLifeDocument, sumLineIsRows).
+  const ownDocument = soleLifeDocument(bdoc, person, household);
+  if (!namesPerson(have)) {
+    if (ownDocument !== true) return no(`the sum's line does not name the person, and its document is not printed for them alone (${ownDocument})`);
+    const rowWords = `${sf.row.quote}\n${st.text}`;
+    const lineWhy = sumLineIsRows(line, rowWords, person, household) ?? oneSumOnDocument(bdoc, sf.base.docIndex, sf, household, caps) ?? sumLineInOwnBlock(bpage.text, at);
+    if (lineWhy) return no(`the sum's line ${lineWhy}`);
+  }
+  if (onLine.length !== 1) return no("the sum's line prints no money figure or more than one");
+  if (onLine[0].currency !== sf.currency || !sameValue(onLine[0].value, sf.base.value)) return no("the sum's line prints another figure or currency");
+  // On a document for one life, the sum's line is known by its label ("Death"): the same label printing another sum is doubt.
+  const labelOf = (l: string) => moneyFiguresIn(l).reduce((t, f) => t.split(f.raw).join(" "), l).toLowerCase().replace(/[^\p{L}\d]+/gu, " ").trim();
+  const baseLabel = labelOf(line);
   // Two sums for the person are doubt. When the row and the sum are printed in the same document, that document settles it
   // and only its own lines count (a renewal schedule's table and its own sums, whatever last year's schedule printed).
   // Otherwise every live document of the same policy counts (a wording's table with a sum from one of two schedules).
@@ -869,9 +1116,10 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   for (const d of household.documents) {
     if (d.supersededAt || unreadable(d) || !samePolicy(d) || !d.linkedPeople.some((p) => baseName(p) === person)) continue;
     for (const pg of d.pages) for (const l of pg.text.split("\n")) {
-      if (!namesPerson(new Set(tokens(l)))) continue;
       const figs = moneyFiguresIn(l).filter((f) => f.currency === sf.currency);
-      if (figs.length === 1 && !sameValue(figs[0].value, sf.base.value)) return null;
+      if (figs.length !== 1 || sameValue(figs[0].value, sf.base.value)) continue;
+      if (namesPerson(new Set(tokens(l)))) return no("another line naming the person prints a different sum");
+      if (ownDocument === true && baseLabel && soleLifeDocument(d, person, household) === true && labelOf(l) === baseLabel) return no("another line with the sum's own label prints a different sum");
     }
   }
   // The maximum, from its own printed words; a row that prints a cap word but none was given is never worked out.
@@ -879,17 +1127,17 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   if (sf.cap) {
     const cdoc = household.documents[sf.cap.docIndex];
     const cf = cdoc ? locateQuote(household, sf.cap.quote, sf.cap.docIndex) : null;
-    if (!cf || cf.docIndex !== sf.cap.docIndex || cf.page !== sf.cap.page) return null;
+    if (!cf || cf.docIndex !== sf.cap.docIndex || cf.page !== sf.cap.page) return no("the maximum's words are not on their stored page");
     const fig = moneyFiguresIn(cf.excerpt).find((f) => sameValue(f.value, sf.cap!.value));
-    if (!fig || fig.currency !== sf.currency) return null;
+    if (!fig || fig.currency !== sf.currency) return no("the maximum is not printed in the row's currency");
     const i = cf.excerpt.indexOf(fig.raw);
-    if (i < 0 || !CAP_BEFORE.test(cf.excerpt.slice(Math.max(0, i - 40), i))) return null;
+    if (i < 0 || !CAP_BEFORE.test(cf.excerpt.slice(Math.max(0, i - 40), i))) return no("the maximum is not printed after a cap word");
     cap = { value: fig.value, found: cf };
-  } else if (CAP_WORD.test(rowText) && moneyFiguresIn(rowText).some((f) => !sameValue(f.value, sf.base.value))) return null;
+  } else if (CAP_WORD.test(rowText) && moneyFiguresIn(rowText).some((f) => !sameValue(f.value, sf.base.value))) return no("the row prints a cap but none was given");
   const worked = Math.round(sf.base.value * sf.percent) / 100;
   const capped = !!cap && worked > cap.value;
   const value = capped ? cap!.value : worked;
-  if (!sameValue(value, sf.value)) return null;
+  if (!sameValue(value, sf.value)) return no("worked out again, the amount differs from the table's");
   const cur = currencyOf(onLine[0].raw, line, bdoc, bf.page);
   const money = (v: number) => formatMoney(cur.sign, v);
   const where = `${docLabel(household, bdoc)}, page ${bf.page}`;
@@ -929,7 +1177,7 @@ function timesLine(sf: ServerFigure, household: Household, cap: { value: number;
 /** The cover a row's percentage is of, by name ("20% of the Critical Illness sum assured" -> ["critical", "illness"]); empty
  * when the row says only "of (the) Sum Assured". */
 function coverOfPercent(rowText: string): string[] {
-  const m = /\d+(?:\.\d+)?\s*%\s*of\s+(?:the\s+|your\s+|its\s+)?((?:[A-Za-z]+\s+){0,5}?)(?:sum\s+(?:assured|insured)|amount\s+of\s+cover)\b/i.exec(rowText);
+  const m = /\d+(?:\.\d+)?\s*%\s*of\s+(?:the\s+|your\s+|its\s+)?((?:[A-Za-z]+\s+){0,5}?)(?:sum\s+(?:assured|insured|covered)|amount\s+of\s+cover)\b/i.exec(rowText);
   return m ? tokens(m[1]).filter((w) => !COVER_FILLER.has(w)) : [];
 }
 const sameWords = (a: string[], b: string[]) => a.length === b.length && a.every((w) => b.includes(w));
@@ -939,10 +1187,10 @@ const COVER_FILLER = new Set(["cover", "benefit", "benefits", "plan", "basic", "
 function percentOfRow(rowText: string): number | null {
   const pcts = new Set([...rowText.matchAll(PCTS)].map((m) => Number(m[1])));
   if (pcts.size !== 1) return null;
-  if (!/\d\s*%\s*of\s+(?:the\s+|your\s+|its\s+)?(?:[A-Za-z]+\s+){0,5}?(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)\b/i.test(rowText)) return null;
+  if (!/\d\s*%\s*of\s+(?:the\s+|your\s+|its\s+)?(?:[A-Za-z]+\s+){0,5}?(?:sum\s+(?:assured|insured|covered)|amount\s+of\s+cover|cover\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)\b/i.test(rowText)) return null;
   return [...pcts][0];
 }
-const SUM_WORDS = /\b(?:sum\s+(?:assured|insured)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)\b/i;
+const SUM_WORDS = /\b(?:sum\s+(?:assured|insured|covered)|amount\s+of\s+cover|cover\s+amount|coverage\s+amount|benefit\s+amount|face\s+amount|insured\s+amount)\b/i;
 const CAP_WORD = /\b(?:up\s+to|maximum|max\.?|not\s+exceeding|limited\s+to|capped\s+at)\b/i;
 /** Where a 100% statement's quoted sum insured is the person's own for the policy the wording is from, or null. The base
  * is printed with its currency, or on a page that settles it (plainAmount checks that), and:
@@ -981,7 +1229,7 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
  * a tab) may come between the header and the row: an amount, or a line with no tab (a row's name printed above its cells,
  * "Early" over "Critical Illness\t50,000.00"), makes it no first row (TE #104 P1). A rider's row is never the plan's. The row's name is its first cell and the lines right after it that continue the
  * name ("Comprehensive Critical" / "Illness Benefit"). */
-const SA_HEAD = /^\s*sum\s*(?:assured|insured)\b/i;
+const SA_HEAD = /^\s*sum\s*(?:assured|insured|covered)\b/i;
 const RIDER_PART = /\b(?:with|riders?|plus|supplementary|add-?ons?)\b|[+&]/i;
 const SA_CELL = new RegExp(String.raw`^${MONEY_SIGN}?\s?(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})$`);
 function planRow(lines: string[], i: number): { name: string; value: number; line: string } | null {
@@ -991,7 +1239,7 @@ function planRow(lines: string[], i: number): { name: string; value: number; lin
     if (AMOUNT.test(lines[j]) || !/\t/.test(lines[j])) return null;
     const head = lines[j].split("\t").map((c) => c.trim());
     if (head.length !== cells.length) continue;
-    const k = head.flatMap((c, n) => SA_HEAD.test(c) || (/^sum$/i.test(c) && /^\s*(?:assured|insured)\b/i.test(lines[j + 1] ?? "")) ? [n] : []);
+    const k = head.flatMap((c, n) => SA_HEAD.test(c) || (/^sum$/i.test(c) && /^\s*(?:assured|insured|covered)\b/i.test(lines[j + 1] ?? "")) ? [n] : []);
     if (k.length !== 1 || k[0] === 0) return null;
     const cell = SA_CELL.exec(cells[k[0]]);
     if (!cell) return null;
@@ -1058,11 +1306,11 @@ function quotedLineIsWhole(bf: Found, wording: Found, household: Household, pers
   // not a limit or an expense amount ("Medical Expenses limit S$15,000", TE #103 A10b).
   const own = lines.slice(at, at + bf.excerpt.split("\n").length).join("\n");
   if (/\b(?:limits?|up\s+to|max(?:imum)?|expenses?|per\s+(?:claim|day|event|visit|trip|accident|incident))\b/i.test(own)) return false;
-  if (!/\bsum\s+(?:insured|assured)\b/i.test(lines.slice(Math.max(0, at - 10), at + bf.excerpt.split("\n").length).join("\n"))) return false;
+  if (!/\bsum\s+(?:insured|assured|covered)\b/i.test(lines.slice(Math.max(0, at - 10), at + bf.excerpt.split("\n").length).join("\n"))) return false;
   // Fail-safe: once the heading's benefit words, "sum insured" or "sum assured", the amount and its currency are taken out,
   // nothing may be left on the base's lines. Any other word ("Hospital Income", a plan code, another column's figure) may
   // make it another benefit's amount, so it is refused (TE #103 A10c).
-  const rest = own.replace(/\bsum\s+(?:insured|assured)\b/gi, " ").replace(new RegExp(String.raw`${MONEY_SIGN}?\s*\d[\d,]*(?:\.\d+)?`, "gi"), " ").replace(new RegExp(String.raw`(?<![A-Za-z])(?:SGD|USD|MYR|HKD|AUD|NZD|EUR|GBP)(?![A-Za-z])`, "gi"), " ");
+  const rest = own.replace(/\bsum\s+(?:insured|assured|covered)\b/gi, " ").replace(new RegExp(String.raw`${MONEY_SIGN}?\s*\d[\d,]*(?:\.\d+)?`, "gi"), " ").replace(new RegExp(String.raw`(?<![A-Za-z])(?:SGD|USD|MYR|HKD|AUD|NZD|EUR|GBP)(?![A-Za-z])`, "gi"), " ");
   if (tokens(rest).some((w) => !name.includes(w) && !HEADING_STOP.has(w)) || /\d/.test(rest)) return false;
   return true;
 }
@@ -1810,7 +2058,9 @@ function oneRow(household: Household, found: Found[]): boolean {
 }
 
 // ------------------------------------------------------------------ the answer
-export type VerifyReport = { dropped: { kind: string; why: string; text: string }[]; sentencesLeftOut: string[]; questionsLeftOut: string[]; conditionsLeftOut: string[]; keptAsFact?: { why: string; text: string }[] };
+export type VerifyReport = { dropped: { kind: string; why: string; text: string }[]; sentencesLeftOut: string[]; questionsLeftOut: string[]; conditionsLeftOut: string[]; keptAsFact?: { why: string; text: string }[];
+  /** A percentage row the benefit table worked out whose figure the checks did not confirm (serverFigureChecked), with why. */
+  serverFigureRefused?: { why: string; text: string }[] };
 
 const asStrings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()) : []);
 const strOrNull = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
@@ -2109,7 +2359,7 @@ const PEOPLE_WORDS = /\b(?:husband|wife|spouse|partner|son|daughter|child|childr
 /** `serverFigures`: percentage rows the server worked out from the benefit table (serverFigureChecked), for statements whose
  * text is one of `serverWords`. */
 export function verifyAnswer(household: Household, model: ModelAnswer, written: string[] = [], serverWords: ReadonlySet<string> = new Set(), serverFigures: readonly ServerFigure[] = []): { answer: StructuredAnswer; report: VerifyReport } {
-  const report: VerifyReport = { dropped: [], sentencesLeftOut: [], questionsLeftOut: [], conditionsLeftOut: [], keptAsFact: [] };
+  const report: VerifyReport = { dropped: [], sentencesLeftOut: [], questionsLeftOut: [], conditionsLeftOut: [], keptAsFact: [], serverFigureRefused: [] };
   const checked: Checked[] = [];
   const read = proseRead(household);
   const library = libraryClaimsRead(household, report.sentencesLeftOut);
@@ -2180,8 +2430,10 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       // Two such rows read the same and are worked on different sums (two policies of one cover): which one this is, is doubt.
       const sfs = person && serverWords.has(st.text) ? serverFigures.filter((f) => f.text === st.text && f.person === person && f.quote === st.quote) : [];
       const sf = new Set(sfs.map((f) => `${f.base.value}|${f.base.docIndex}|${f.cap?.value ?? ""}`)).size === 1 ? sfs[0] : undefined;
-      const served = sf ? serverFigureChecked(sf, st, found, household, person!) : null;
-      if (served) { checked.push(served); continue; }
+      const served = sf ? serverFigureChecked(sf, st, found, household, person!, otherCaps(serverFigures, sf)) : null;
+      if (served && !("refused" in served)) { checked.push(served); continue; }
+      // Why the table's worked-out figure was not shown is kept with the turn's report (never shown to the household).
+      if (served) report.serverFigureRefused!.push({ why: served.refused, text: st.text });
       let r = checkAmount(st, found, household, person);
       // 100% of the sum insured is the sum insured: when the percentage cannot be tied to a table row ("100% of the Sum
       // Assured will be payable in one lump sum"), the amount is the person's sum insured as their own schedule prints it

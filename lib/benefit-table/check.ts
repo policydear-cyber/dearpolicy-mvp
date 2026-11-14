@@ -214,6 +214,10 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   /** "Limited to N% of the Sum Insured" on a document printed for one life names the row's share, not a money cap
    * (ownShareNamed in checkReading): the table may work it out like any other share (assemble.ts baseFigure). */
   ownShareNamed?: boolean;
+  /** The reading did not say the share is of the sum insured ("other"), but the row's own words print it as a share of the
+   * policy's own headline sum by one of HEADLINE_SUM's names ("25% of the Sum Covered"): percentOf is "sum_insured", and
+   * the table works it out only when the person's policy prints one such sum (assemble.ts headlineSumProblem). */
+  baseFromWords?: boolean;
   /** The currency the row's cap itself prints ("up to S$15,000"), when it prints one: a cap in another currency than the
    * amount it limits cannot be compared with it, so no amount is worked out (assemble.ts). */
   capCurrency?: string | null;
@@ -752,6 +756,56 @@ const NEUTRAL_AFTER = /^(?:$|[\d$£€¥₱)*^]|\.(?:\s|$)|(?:s|us|hk|nz|a|sg)\$
 const SEPARATOR = /^(?:[-–—:;,/|]|(?:and|or|but)\b)\s*/iu;
 /** A bracket that only spells the percentage out ("(one hundred per cent)") is read through. */
 const SPELLED_PERCENT = /^\(\s*[\p{L}\s-]*\bper\s*cent\s*\)\s*/iu;
+/** The policy's own headline sum, by name: a closed ALLOW-list of the words that can only mean the one sum the plan insures
+ * (Failure 3 of TE-ACC-20261114-R3: a takaful schedule's "25% of the Sum Covered" was read as a share of "other", so no
+ * amount was shown although the certificate prints its Sum Covered). Each name, and why it is here:
+ * - "sum insured", "sum assured": the general and life-insurance names of the plan's own sum;
+ * - "sum covered": the takaful name for the same sum (a takaful certificate covers, it does not insure or assure);
+ * - "basic"/"base" before those three: the basic plan's own sum (refused on a rider's cover in assemble.ts);
+ * - "face amount": the life-insurance name of the policy's own death sum, printed on its face;
+ * - Malay "jumlah diinsuranskan" (sum insured) and "jumlah dilindungi" (sum covered), as printed on Malaysian documents.
+ * Left out on purpose: "coverage amount" (on a health plan it is the annual limit), "amount covered" (the eligible bill),
+ * "benefit amount" (every benefit has one), "sum at risk", "insured amount", "annual limit", and any name with another
+ * benefit's, plan's or life's words before it ("death sum assured", "rider sum assured", "Basic Coverage Amount"). */
+const KIND_OF_LIFE_WORDS = String.raw`\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?|principal|parents?)\b`;
+const HEADLINE_SUM_NAME = String.raw`(?:(?:the|your|its)\s+)?(?:(?:(?:basic|base)\s+)?sum\s+(?:insured|assured|covered)|face\s+amount|jumlah\s+(?:diinsuranskan|dilindungi))`;
+/** A money figure with its currency printed: a code or a sign, "$" only with its letters ("S$", "US$"). A bare "$" never
+ * sets a currency, so a maximum printed with one leaves the share as read. */
+const CELL_MONEY = String.raw`(?:[A-Z]{1,3}\$\s?|RM\s?|£\s?|€\s?|(?:SGD|USD|MYR|HKD|GBP|EUR|AUD|NZD|IDR|PHP|THB|CNY|INR)\s?)\d[\d,]*(?:\.\d+)?`;
+/** What may follow the name, each a closed phrase: a printed maximum with its figure, "whichever is lower", "once per
+ * lifetime", "payable in one lump sum". Nothing else: "per day", "in instalments", "plus bonuses", "under the rider",
+ * "for each child", "of the basic plan", "less any amount already paid", "ditolak ..." all leave the share as read. */
+const CELL_TAIL = String.raw`(?:(?:up\s+to|subject\s+to|to|not\s+exceeding|limited\s+to|capped\s+at)\s+(?:a\s+)?(?:(?:maximum|max\.?)\s+)?(?:amount\s+)?(?:of\s+)?${CELL_MONEY}|(?:maximum|max\.?)\s+(?:of\s+)?${CELL_MONEY}|whichever\s+is\s+(?:lower|less|lesser|smaller)|once\s+(?:per|in\s+a|in\s+the)\s+lifetime|once\s+only|(?:(?:payable|paid)\s+)?(?:in\s+one|as\s+a|in\s+a)\s+lump\s+sum)`;
+/** The whole cell from the percentage on: "<n>% of <name>", then only closed phrases, each after an optional comma. */
+const HEADLINE_CELL = new RegExp(String.raw`^\d+(?:[.,]\d+)?\s*(?:%|per\s?cent)\s+(?:of|daripada|dari)\s+${HEADLINE_SUM_NAME}(?:\s*,?\s*${CELL_TAIL})*\s*\.?$`, "iu");
+/** Words for one life among several, a second life or a role ("Wife", "Death (Life 2)", "Juvenile", "Isteri"): such a
+ * row's share is of that life's sum, which this rule cannot settle. Wider than KIND_OF_LIFE (assemble.ts's list too). */
+const SHARE_LIFE = new RegExp(String.raw`${KIND_OF_LIFE_WORDS}|\b(?:wi(?:fe|ves)|husbands?|partners?|juveniles?|policy\s*holders?|bab(?:y|ies)|students?|aged|isteri|suami|pasangan|anak|joint|co-?(?:life|insured|assured)|second|additional|other\s+(?:life|insured))\b|\b(?:life|lives|insured|assured|member|person|participant|peserta|tertanggung)[ ]?[-#(]?[ ]?(?:\d(?![\d,.])|i{1,3}\b|iv\b|two\b|kedua\b)|\bLA\s*\d`, "i");
+/** Words that take something off what is paid, in any cell or condition: never settled as a share of the sum. */
+const TAKES_OFF = /\b(?:less|minus|deduct\w*|reduc\w*|net\s+of|exclud\w*|subtract\w*|balance|offset\w*|previously\s+paid|already\s+paid|paid\s+earlier|after\s+deducting|ditolak|tolak|potong\w*)\b/i;
+/** A line that starts a new table row: a label starting with a capital, a tab, and its own figure, percentage or words for
+ * not covered; never one opening with a preposition, an article or a joining word ("Under The Rider", "Per Day"), which
+ * continues the cell above. */
+const ROW_STOP = /^(?:under|of|per|the|for|in|on|with|and|or|less|plus|minus|up|subject|payable|paid|excluding|each|whichever|to|by|from|at|after|before)\b/i;
+const NEW_ROW = new RegExp(String.raw`^\p{Lu}[^\t]*\t\s*(?:\d|${CELL_MONEY}|(?:not\s+covered|nil|n\/a|no\s+cover)\b)`, "u");
+/** Whether a row whose reading did not settle its percentage's base prints it, in its WHOLE cell, as exactly "<n>% of
+ * <the policy's headline sum>" with only closed phrases after it (HEADLINE_CELL). `cell` is every printed line the row's
+ * quote is on; `next` is the line after it, which must start a new row (a label before a tab) or be empty; `words` are the
+ * row's name, section, column and conditions, which must name no life (SHARE_LIFE) and take nothing off (TAKES_OFF). */
+export function headlineSumShare(cell: string, value: number, next = "", words = ""): boolean {
+  const all = cell.normalize("NFKC");
+  if (SHARE_LIFE.test(`${all}\n${next}\n${words}`) || TAKES_OFF.test(`${all}\n${next}\n${words}`)) return false;
+  // The line after the cell is a new row only when it reads like one: a left cell starting with a capital and a right cell
+  // starting with its own figure, percentage or "not covered" (NEW_ROW). Anything else may continue the cell, unquoted
+  // ("for deaths abroad<TAB>under the rider"), so the share is left as read.
+  if (next.trim() && (!NEW_ROW.test(next) || ROW_STOP.test(next))) return false;
+  const pcts = [...all.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent\b)/gi)];
+  if (pcts.length !== 1 || Math.abs(Number(pcts[0][1].replace(",", ".")) - value) > 0.0001) return false;
+  // Only the label may come before the share; every later line is the share's own (continuations start with a tab or are
+  // wrapped words), and is read with it.
+  const from = all.slice(pcts[0].index!).replace(/\s+/g, " ").trim();
+  return HEADLINE_CELL.test(from);
+}
 /** Whether the row leaves its percentage's base unsettled (anything but the sum insured, a neutral continuation or the
  * row's end follows it). False when no percentage equal to the value is printed. */
 function percentBaseUnsettled(row: string, value: number): boolean {
@@ -775,7 +829,7 @@ function percentBaseUnsettled(row: string, value: number): boolean {
   return false;
 }
 /** Words that name one kind of life among several ("an insured child", "adults", "seniors"). */
-export const KIND_OF_LIFE = /\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?|principal|parents?)\b/i;
+export const KIND_OF_LIFE = new RegExp(KIND_OF_LIFE_WORDS, "i");
 /** A line that names a kind of life or an age group: KIND_OF_LIFE, a few more words for one life among several, or a number
  * read as an age ("under 18", "aged 65", "70 years old"; never "over 3 days" or "above 50%"). */
 const LIFE_NOTE = new RegExp(String.raw`${KIND_OF_LIFE.source}|\b(?:infants?|bab(?:y|ies)|juveniles?|students?|elderly|wi(?:fe|ves)|husbands?|partners?|policy\s*holders?|grand(?:children|child|parents?)|(?:first|second|third|fourth|fifth|main|joint|other|additional)\s+(?:insured|life|lives|person|adult|member)s?)\b`
@@ -1821,6 +1875,13 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     if (pays === "per_period" && !period) { out.dropped.push({ what: label, why: "payment with no period" }); continue; }
     const basis = (BASES as readonly string[]).includes(b.basis as string) ? b.basis! : null;
     let percentOf = pays === "percent" && (PERCENT_OF as readonly string[]).includes(b.percentOf as string) ? b.percentOf! : null;
+    // A share the reading left unsettled ("other", or none) whose own words print it as a share of the policy's own headline
+    // sum ("25% of the Sum Covered") is of the sum insured (HEADLINE_SUM): stored readings are settled here too, unread.
+    const cellOf = () => { const p = placed.get(source); if (!p) return null; const text = pageText(source.page), from = text.lastIndexOf("\n", p.start - 1) + 1, to = lineEndAt(text, p.end);
+      return { cell: text.slice(from, to), next: to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "" }; };
+    const cell = pays === "percent" && value != null && (percentOf === "other" || percentOf == null) ? cellOf() : null;
+    const baseFromWords = !!cell && headlineSumShare(cell.cell, value!, cell.next, [benefit, str(b.section) ?? "", str(b.column) ?? "", ...(Array.isArray(b.conditions) ? b.conditions.map((c) => str(c) ?? "") : [])].join("\n"));
+    if (baseFromWords) percentOf = "sum_insured";
     let baseAmount: number | null = null, baseSource: Source | null = null;
     if (percentOf === "fixed_amount") {
       baseAmount = num(b.baseAmount);
@@ -1944,7 +2005,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}), ...(columnMarks.length ? { columnMarks } : {}),
-      ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}),
+      ...(ownShareNamed ? { ownShareNamed } : {}), ...(baseFromWords && percentOf === "sum_insured" ? { baseFromWords } : {}), ...(lines ?? {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}),
       ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
   }
