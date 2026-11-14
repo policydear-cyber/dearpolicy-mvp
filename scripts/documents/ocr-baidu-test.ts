@@ -294,7 +294,7 @@ async function main() {
       assert.deepEqual(bd.baiduPagesFromJsonl(vl(md, list), "PaddleOCR-VL-1.5"),
         ["Schedule\n\nHarbour Shield Plan In Force 25,000.00\n\nNote: cover ends at age 65.\n\nExample Assurance Ltd\n\nCo. Reg. 200412345K (Printed: 03-Mar-2026)"]);
       assert.equal(warned.length, 1);
-      assert.match(warned[0], /^\[baidu-ocr\] page 1: 2 block\(s\) not in Baidu's Markdown added from its layout list \(labels: footnote, footer\)$/);
+      assert.match(warned[0], /^\[baidu-ocr\] job page 1: 2 block\(s\) not in Baidu's Markdown added from its layout list \(labels: footnote, footer\)$/);
       assert.ok(!warned[0].includes("200412345"), "the log never carries a block's text");
       // Baidu's block_order, where every block has one, is the reading order; a missing block before every present one
       // goes first. Titles ("figure_title", "table_title") are text and are put back alike.
@@ -315,6 +315,35 @@ async function main() {
       assert.deepEqual(bd.baiduPagesFromJsonl(vl("", [{ block_label: "text", block_content: "Death S$100,000" }]), "PaddleOCR-VL-1.5"), ["Death S$100,000"]);
       assert.equal(warned.length, 3);
     } finally { console.warn = warn; }
+  }
+  // 9b. Every document-model page logs what Baidu's layout list holds, in fixed words and Baidu's labels only.
+  {
+    const said: string[] = []; const info = console.info; console.info = (m: string) => { said.push(String(m)); };
+    try {
+      const page = (list?: unknown) => ({ markdown: { text: "Death S$100,000" }, ...(list === undefined ? {} : { prunedResult: { parsing_res_list: list } }) });
+      bd.baiduPagesFromJsonl(JSON.stringify({ result: { layoutParsingResults: [
+        page([{ block_label: "text", block_content: "Death S$100,000" }, { block_label: "footer", block_content: "Reg 200412345K" }, { block_label: "text", block_content: "Death S$100,000" }, { block_label: "Weird Label!", block_content: "x" }]),
+        page(), page([]),
+      ] } }), "PaddleOCR-VL-1.5");
+      // Without the document's page numbers, a page is named by its place in the Baidu job, and says so.
+      assert.deepEqual(said.filter((m) => m.startsWith("[baidu-ocr]")), [
+        "[baidu-ocr] job page 1 layout: 4 blocks: text 2, footer 1, other 1; added 1",
+        "[baidu-ocr] job page 2 layout: no list; added 0",
+        "[baidu-ocr] job page 3 layout: 0 blocks; added 0",
+      ]);
+      // With them, the document page is logged. A label not on Baidu's known list (a name, say) is logged as "other".
+      said.length = 0;
+      bd.baiduPagesFromJsonl(JSON.stringify({ result: { layoutParsingResults: [
+        page([{ block_label: "john_tan", block_content: "x" }, { block_label: "text", block_content: "Death S$100,000" }]),
+        page([{ block_label: "footer", block_content: "Reg 200412345K" }]),
+      ] } }), "PaddleOCR-VL-1.5", [7, 9]);
+      assert.deepEqual(said.filter((m) => m.startsWith("[baidu-ocr]")), [
+        "[baidu-ocr] page 7 layout: 2 blocks: other 1, text 1; added 0",
+        "[baidu-ocr] page 9 layout: 1 block: footer 1; added 1",
+      ]);
+      assert.ok(said.every((m) => !m.includes("john")), "an unknown label never prints");
+      assert.ok(said.every((m) => !m.includes("200412345") && !m.includes("Death")), "never a block's text");
+    } finally { console.info = info; }
   }
   process.env.BAIDU_OCR_PAGES_PER_JOB = "1";
   seen = []; baidu = baiduJob([vlLine([PAGE_A])], { states: ["done"] });
@@ -736,6 +765,50 @@ async function main() {
 
   // 10. Markdown clean-up keeps every figure exactly.
   assert.equal(bd.baiduMarkdownToText("# Title\n\n<div style=\"text-align: center;\">Policy No. <b>SYN-1</b></div>\n\nSum &lt;S$1,000&gt; &amp; 25%"), "Title\n\nPolicy No. SYN-1\n\nSum <S$1,000> & 25%");
+
+  // 11. A label and its value printed side by side (two layout blocks, two Markdown paragraphs) go back on one line.
+  {
+    const blk = (content: string, bbox: number[], label = "text") => ({ block_label: label, block_content: content, block_bbox: bbox });
+    const md = "Policy Schedule\n\nSum Insured\n\nUSD 980,000\n\nAnnual premium\n\nUSD 9,000";
+    const list = [blk("Policy Schedule", [76, 76, 300, 124], "paragraph_title"), blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372]),
+      blk("Annual premium", [89, 390, 263, 418]), blk("USD 9,000", [451, 389, 556, 414])];
+    const r = bd.sameRowPairsJoined(list, md);
+    assert.equal(r.joined, 2);
+    assert.equal(r.text, "Policy Schedule\n\nSum Insured\tUSD 980,000\n\nAnnual premium\tUSD 9,000");
+    // Through the result parser too, with the layout list Baidu returns.
+    const jsonl = JSON.stringify({ result: { layoutParsingResults: [{ markdown: { text: md }, prunedResult: { parsing_res_list: list } }] } });
+    assert.equal(bd.baiduPagesFromJsonl(jsonl, "PaddleOCR-VL-1.6")[0], r.text);
+    // Negative controls: a block below (not beside), a value to the left, two columns of running text (many lines),
+    // a long label, a block that is not plain text, and paragraphs that are not each a whole block: nothing joined.
+    const keep = (l: unknown[], t: string) => assert.deepEqual(bd.sameRowPairsJoined(l, t), { text: t, joined: 0 });
+    keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [89, 390, 210, 416])], "Sum Insured\n\nUSD 980,000");
+    keep([blk("Sum Insured", [451, 348, 580, 375]), blk("USD 980,000", [89, 347, 210, 372])], "Sum Insured\n\nUSD 980,000");
+    keep([blk("We will pay the costs incurred\nwithin 30 days of the Accident", [56, 300, 290, 400]), blk("The Insurer may refuse any loss\narising from war for the Insured", [305, 300, 540, 400])],
+      "We will pay the costs incurred\nwithin 30 days of the Accident\n\nThe Insurer may refuse any loss\narising from war for the Insured");
+    keep([blk("Total sum insured for all named persons on this policy", [89, 348, 400, 375]), blk("USD 980,000", [451, 347, 577, 372])], "Total sum insured for all named persons on this policy\n\nUSD 980,000");
+    keep([blk("Sum Insured", [89, 348, 222, 375], "paragraph_title"), blk("USD 980,000", [451, 347, 577, 372])], "Sum Insured\n\nUSD 980,000");
+    keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372])], "Sum Insured USD 980,000 and more");
+    keep([], "Sum Insured\n\nUSD 980,000");
+    // Critic 2 #479 H1: a row of two plan figures (and its header row), a sidebar at the same height, two figures side by
+    // side, and a label beside a condition cell with the amount further along: nothing joined, so no label is ever bound
+    // to one plan's figure.
+    keep([blk("Benefit", [80, 300, 200, 325]), blk("Plan A", [450, 300, 540, 325]), blk("Plan B", [650, 300, 740, 325]),
+      blk("Death", [80, 348, 160, 375]), blk("USD 980,000", [450, 347, 577, 372]), blk("USD 490,000", [650, 347, 777, 372])],
+      "Benefit\n\nPlan A\n\nPlan B\n\nDeath\n\nUSD 980,000\n\nUSD 490,000");
+    keep([blk("Medical expenses", [80, 348, 260, 375]), blk("Premium S$120 per year", [700, 348, 960, 375])], "Medical expenses\n\nPremium S$120 per year");
+    keep([blk("S$100,000", [80, 348, 200, 375]), blk("S$50,000", [450, 348, 560, 375])], "S$100,000\n\nS$50,000");
+    keep([blk("Hospital cash", [80, 348, 230, 375]), blk("per day, max 30 days", [300, 348, 520, 375]), blk("S$200", [650, 348, 720, 375])],
+      "Hospital cash\n\nper day, max 30 days\n\nS$200");
+    // A third block of any label on the row (a table or figure beside it) also stops the join; a label with a digit too.
+    keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372]), blk("<table></table>", [700, 340, 900, 380], "table")], "Sum Insured\n\nUSD 980,000");
+    keep([blk("Plan 2 sum", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372])], "Plan 2 sum\n\nUSD 980,000");
+    // A block with no usable box (it could sit on the row) stops every join on the page (Critic 2 #479 N1, P7).
+    keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372]), { block_label: "text", block_content: "USD 490,000" }], "Sum Insured\n\nUSD 980,000\n\nUSD 490,000");
+    keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372]), blk("x", [700, 340, 650, 380], "image")], "Sum Insured\n\nUSD 980,000");
+    // Closed value shapes that do join: a percentage and a daily amount.
+    assert.equal(bd.sameRowPairsJoined([blk("Co-insurance", [89, 348, 222, 375]), blk("20%", [451, 347, 500, 372])], "Co-insurance\n\n20%").joined, 1);
+    assert.equal(bd.sameRowPairsJoined([blk("Hospital cash", [89, 348, 222, 375]), blk("RM200 per day", [451, 347, 600, 372])], "Hospital cash\n\nRM200 per day").joined, 1);
+  }
 
   console.log("DearPolicy Baidu PaddleOCR (mocked contract): request shape, token handling, polling, result parsing, per-page, weak-page and whole-job fallback to the AI reader, ledger row, verified provenance, result-host allow-list, function deadline, cache only of full readings, no cap on reading, not-read marking, switch-off, ledger fail-closed, signed-link submit with staged copy removal, connection retry only before anything is sent, background reading that waits for Baidu instead of handing pages to the AI reader -- passed. Live Baidu behaviour is NOT covered by this test.");
 }

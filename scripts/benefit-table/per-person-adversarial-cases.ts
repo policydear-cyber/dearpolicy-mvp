@@ -18,7 +18,7 @@ export const NAME: Record<string, string> = { a: "Asha Rao", b: "Ben Rao", k: "K
 export const NOW = new Date("2026-11-13T00:00:00Z");
 
 type R = { benefit: string; value: number | null; quote: string; section?: string | null; column?: string | null; pays?: string; maxDays?: number; cap?: number; period?: string };
-export type Doc = { id: string; product?: string; lives: string[]; text: string; rows: R[]; kind?: string; extraCovers?: string[] };
+export type Doc = { id: string; product?: string; lives: string[]; text: string; rows: R[]; kind?: string; extraCovers?: string[]; page2?: string };
 const cov = (o: Record<string, unknown>) => ({ plan: null, riderOf: null, policyNumber: "C-7", sumInsured: null, premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 1, ...o });
 const row = (o: Record<string, unknown>) => ({ section: null, column: null, value: null, period: null, basis: null, asOf: null, percentOf: null, baseAmount: null, baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, ...o });
 
@@ -28,7 +28,7 @@ export function build(d: Doc) {
   const reading = { document: { kind: d.kind ?? "personal_proof", product, insurer: null, namedPeople: d.lives, plan: null, periodFrom: null, periodTo: null },
     covers: (d.kind ?? "personal_proof") === "personal_proof" ? d.lives.map((person) => cov({ person, product, cover: "Travel", quote: insuredLine, policyNumber: `P-${d.id.slice(-2)}` })) : [],
     benefits: d.rows.map((r) => row({ section: r.section ?? null, column: r.column ?? null, benefit: r.benefit, pays: r.pays ?? "up_to", value: r.value, maxDays: r.maxDays ?? null, cap: r.cap ?? null, capQuote: r.cap ? r.quote.match(/maximum[^\n]*$/)?.[0] ?? null : null, period: r.period ?? null, quote: r.quote })) };
-  const page: SourceDoc = { id: d.id, name: `${d.id}.pdf`, readable: true, pages: [{ page: 1, text: d.text }] };
+  const page: SourceDoc = { id: d.id, name: `${d.id}.pdf`, readable: true, pages: [{ page: 1, text: d.text }, ...(d.page2 != null ? [{ page: 2, text: d.page2 }] : [])] };
   const r = checkReading(page, reading);
   const key = coverKeyOf({ product, cover: "Travel", plan: null });
   const secs = new Set(d.rows.map((x) => sectionKeyOf(d.id, { section: x.section ?? null, column: x.column ?? null })));

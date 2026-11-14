@@ -8,7 +8,7 @@
 import type { BenefitTable, Figure, PersonCover, TableRow } from "./assemble";
 import type { Source } from "./check";
 import { benefitNamesRead, figureText, periodWords } from "./assemble";
-import { benefitName, benefitNames } from "./headline";
+import { benefitName, benefitNames, qualifierText } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
@@ -107,7 +107,9 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
     READ_NAMES.set(row, benefitNamesRead(table, r.source.documentId));
     rows.push(row);
   };
-  for (const p of table.people) for (const r of p.rows) add(r);
+  // A cover's own schedule line (coverLine) is its "Sum insured" row below already (coverRows): never a second card for one
+  // sum (TE #469 F1).
+  for (const p of table.people) for (const r of p.rows) if (!r.coverLine) add(r);
   // One premium per policy and person: a schedule read as two covers (a benefit and its death benefit) prints one premium.
   const premiums = new Set<string>();
   // First-year premiums come last, so the other rows keep their numbers.
@@ -652,7 +654,7 @@ export function noteNarrowedPages<T extends { id: string; kind: string; text: st
 export function renderTable(rows: ChatRow[]): string {
   if (!rows.length) return "";
   const line = (r: ChatRow) => [r.id, r.person, [r.product, r.cover !== r.product ? r.cover : null, r.plan ? `plan ${r.plan}` : null].filter(Boolean).join(" / "),
-    r.benefit, r.qualifier ? `for ${r.qualifier}` : null, figureText(r.figure), r.fromDay != null ? `from day ${r.fromDay}` : null,
+    r.benefit, qualifierText(r.qualifier), figureText(r.figure), r.fromDay != null ? `from day ${r.fromDay}` : null,
     r.maxDays != null ? `for at most ${r.maxDays} days` : null, r.conditions.length ? `conditions: ${r.conditions.join("; ")}` : null,
     `${documentId(r.docIndex)} page ${r.source.page}`].filter(Boolean).join(" | ");
   return `\n<benefit_table>
@@ -1153,6 +1155,157 @@ function withoutQuotePointer(sentence: string): string | null {
 /** A text without what points at an amount. */
 export const withoutPointers = (text: string) => sentences(text ?? "").map(withoutPointer).filter((x): x is string => !!x).join(" ").trim();
 
+/** Words that promise the policy's own words are shown with the answer ("the policy's wording is quoted below", "the terms
+ * are set out below", "see the quote below", "..., quoted below", "I've quoted the wording below"). Only the server shows
+ * what a document prints, as a point's quote: a promise with no quote of that benefit is of nothing (TE R3 H2-A t2: "I
+ * can't show it as an amount benefit, but the policy's wording is quoted below", and nothing followed). An allow-list of
+ * words for printed words (wording, words, terms, text, clause, definition, extract, excerpt, passage, quote). Kept only
+ * when the answer carries a quote of that benefit (dropQuotePointers). */
+const WORDING_NOUN = String.raw`(?:wording|words|terms|text|clauses?|definitions?|extracts?|excerpts?|passages?|quotes?|quotations?)`;
+const WORDING_WORDS = String.raw`(?:(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)|(?:shown|set\s+out|given|printed|included|listed)\s+(?:in\s+full\s+)?below)\b`;
+const SEE_NOUN = String.raw`(?:quotes?|quotations?|wording|words|text|clauses?|extracts?|excerpts?|passages?)`;
+const SEE_QUOTE = String.raw`\bsee\s+(?:the\s+)?(?:policy['’]s\s+|its\s+|their\s+)?${SEE_NOUN}\s+below\b`;
+/** Up to four words before the noun ("the policy's", "the angioplasty"), never across a joining word. */
+const NOUN_WORDS = String.raw`(?:(?!(?:and|but|so|or|as|while|although|though)\b)[\p{L}'’-]+\s+){0,4}?`;
+/** The promise as a clause of its own, and nothing else: "the policy's wording is quoted below", "see the quote below",
+ * "I've quoted the angioplasty wording below", "it is set out below with its terms". */
+const PROMISE = String.raw`(?:${NOUN_WORDS}${WORDING_NOUN}\s+(?:is|are)\s+${WORDING_WORDS}(?:\s+(?:from|in)\s+the\s+(?:policy|schedule|document))?`
+  + String.raw`|${SEE_QUOTE}|I(?:['’]ve|\s+have)\s+(?:quoted|set\s+out|reproduced)\s+${NOUN_WORDS}${WORDING_NOUN}\s+(?:in\s+full\s+)?below\b`
+  + String.raw`|(?:it\s+is|it['’]s|they\s+are)\s+(?:quoted|set\s+out|listed|shown)\s+below(?:\s+with\s+(?:its|their)\s+(?:terms|wording))?\b)`;
+export const WORDING_POINTER = new RegExp(String.raw`\b${WORDING_NOUN}\s+(?:(?:is|are)\s+)?${WORDING_WORDS}|\bquoted\s+(?:in\s+full\s+)?below\b|\b(?:the|a)\s+(?:quotes?|quotations?)\s+below\b|${SEE_QUOTE}`
+  + String.raw`|\bI(?:['’]ve|\s+have)\s+(?:quoted|set\s+out|reproduced)\b[^.!?]{0,60}\bbelow\b|\b(?:listed|set\s+out|shown)\s+below\s+with\s+(?:its|their)\s+(?:terms|wording)\b`, "iu");
+/** After "<words> is/are quoted below and", a closed list of verbs said of printed words (and the auxiliaries "is", "are",
+ * "has", "does", "can", "must" …): the words keep the clause as theirs ("The terms say RM 20,000", "The terms are the same
+ * for Hafiz", "The clause has no figure"). Also after one adverb from a closed list ("The wording therefore pays …",
+ * "The clause only pays …"). Gate round 3: no guessing from a word's ending. */
+const AND_VERB = String.raw`(?:pays?|says?|states?|covers?|excludes?|limits?|mentions?|does|do|doesn['’]t|don['’]t|lists?|sets\s+out|set\s+out|shows?|names?|includes?|appl(?:y|ies)`
+  + String.raw`|is|are|was|were|isn['’]t|aren['’]t|has|have|had|can|cannot|can['’]t|will|won['’]t|may|might|must|should|would|needs?|requires?)`;
+const AND_ADVERB = String.raw`(?:therefore|clearly|expressly|together|also|only|still|never|in\s+turn|in\s+full|between\s+them|on\s+page\s+\d+)`;
+const KEEPS_CLAUSE = new RegExp(String.raw`^(?:${AND_ADVERB}\s+)?${AND_VERB}\b`, "i");
+/** A closed list of past participles said of printed words, before a preposition or a date ("signed by the insurer",
+ * "limited to angioplasty", "dated 1 March 2024"): the words keep "is"/"are" ("The wording is signed by the insurer"). */
+const KEEPS_VERB = /^(?:signed|dated|limited|needed|used|required|attached|printed|written|issued|stamped|endorsed)\s+(?:to|by|for|in|on|at|from|with|under|\d)/i;
+/** A promise that opens the sentence, joined to what follows by "and", "but" or "so". */
+const LEADING_AND = new RegExp(String.raw`^\s*${PROMISE}\s*,?\s+(?:and|but|so)\s+`, "iu");
+const STEPS: [RegExp, string | ((...m: string[]) => string)][] = [
+  // "(the wording is quoted below)", "(see the quote below)": the aside goes.
+  [new RegExp(String.raw`\s*\(\s*${PROMISE}\s*\)`, "giu"), ""],
+  // "— the wording is quoted below —" in the middle: the aside goes.
+  [new RegExp(String.raw`\s+[-–—]\s+${PROMISE}\s+[-–—]\s+`, "giu"), " "],
+  // "; see the wording below for what counts": the whole "see … below …" tail.
+  [new RegExp(String.raw`\s*(?:[;,]\s*|\s+[-–—]\s+)${SEE_QUOTE}[^.!?]*(?=[.!?]?\s*$)`, "giu"), ""],
+  // "…, but the policy's wording is quoted below.", "… and the wording is quoted below.", "… - the policy text is quoted
+  // below.", "…; its wording is quoted below.": the last clause goes.
+  [new RegExp(String.raw`(?:,?\s+(?:and|but|so)\s+|\s*;\s+|\s+[-–—]\s+|,\s+)${PROMISE}(?=\s*[.!?]?\s*$)`, "giu"), ""],
+  // ", quoted below", ", as quoted below", ", with the clause set out below": where, said beside a point.
+  [new RegExp(String.raw`,\s*(?:with\s+(?:the|its|their)\s+(?:[\p{L}'’-]+\s+){0,2}${WORDING_NOUN}\s+${WORDING_WORDS}|(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?quoted\s+(?:in\s+full\s+)?below\b)(?:\s+(?:from|in)\s+the\s+(?:policy|schedule|document))?(?=\s*[,.!?;]|\s*$)`, "giu"), ""],
+  // "The policy words are quoted below: angioplasty is …": the clause after the colon.
+  [new RegExp(String.raw`^\s*${PROMISE}\s*:\s+`, "iu"), ""],
+];
+/** "The terms are quoted below and are the same …", "the clause is quoted below but has no figure": the promise goes and
+ * the words keep the clause ("The terms are the same …", "the clause has no figure"); only before a listed verb or
+ * participle (KEEPS_CLAUSE, KEEPS_VERB). */
+const WORDING_AND = new RegExp(String.raw`\b(${WORDING_NOUN})\s+(is|are)\s+${WORDING_WORDS}(?:\s+(?:from|in|as)\s+the\s+(?:policy|schedule|document|table))?\s+(?:and|but)\s+`, "giu");
+/** The same words used as a name ("the wording quoted below says ..."): the name stays without the promise. */
+const WORDING_AS_NAME = new RegExp(String.raw`\b(${WORDING_NOUN})\s+${WORDING_WORDS}(?=\s+[a-z])`, "gu");
+/** A sentence without its promise of quoted words: only the promise goes, the rest stays word for word; null when the
+ * sentence is only the promise. When no step cuts just the promise, the sentence stays as it is (a promise kept is a small
+ * fault; words or a figure lost are worse). */
+function withoutWordingPointer(sentence: string): string | null {
+  const text = sentence.trim();
+  if (!WORDING_POINTER.test(text)) return sentence;
+  if (new RegExp(String.raw`^\s*\(?\s*${PROMISE}\s*\)?\s*[.!?]?\s*$`, "iu").test(text)) return null;
+  const tidy = (t: string) => {
+    let out = t.replace(/\s{2,}/g, " ").replace(/\s+([.,;:!?)])/g, "$1").replace(/,\s*([.!?])/g, "$1").trim();
+    if (!/[.!?]$/.test(out) && /[.!?]$/.test(text)) out += text.slice(-1);
+    return out.charAt(0).toUpperCase() + out.slice(1);
+  };
+  let t = text;
+  for (const [re, by] of STEPS) {
+    const next = t.replace(re, by as string);
+    if (next !== t && /[\p{L}\d]/u.test(next)) t = next;
+  }
+  // "<words> is/are quoted below and REST": with a listed verb (after a listed adverb or not) the words keep REST as their
+  // clause; with a listed participle they keep "is"/"are" too; else, when the promise opens the sentence, REST stands on
+  // its own ("Bed charges are paid …", "Fred is covered …"), word for word. Anything else stays as it is.
+  const lead = LEADING_AND.exec(t);
+  if (lead) {
+    const rest = t.slice(lead[0].length);
+    if (!KEEPS_CLAUSE.test(rest) && !KEEPS_VERB.test(rest)) t = rest;
+  }
+  t = t.replace(WORDING_AND, (m, noun: string, verb: string, at: number, all: string) => {
+    const rest = all.slice(at + m.length);
+    if (KEEPS_CLAUSE.test(rest)) return `${noun} `;
+    if (KEEPS_VERB.test(rest)) return `${noun} ${verb.toLowerCase()} `;
+    return m;
+  }).replace(WORDING_AS_NAME, (_m, noun: string) => noun);
+  if (t === text) return sentence;
+  const out = tidy(t);
+  return /[\p{L}\d]/u.test(out) ? out : null;
+}
+/** Words of a sentence that say nothing of which benefit it is about: short and common words, the promise's own words,
+ * and general words for a policy, a benefit, an amount, a time or a stay (TE gate on #476: "early", "stage", "maximum",
+ * "year", "hospital", "start", "date" matched another row's quote). */
+const NOT_A_BENEFIT_WORD = new Set(("this that these those with from have will would could should what when where which while there their they them then than "
+  + "into onto about also only just very more most much many some such each every other another separate separately show shown shows quoted quote quotes "
+  + "quotation below here wording words terms text clause clauses definition definitions extract extracts excerpt excerpts passage passages your yours does "
+  + "cannot been being were want need able sure exact exactly full fully same different listed given printed included reproduced cited "
+  + "policy policies plan plans cover covers covered coverage benefit benefits amount amounts figure figures payable paid pays payment payments insurer "
+  + "insured document documents page pages schedule table card cards answer treatment treatments illness illnesses critical insurance under upon after before "
+  + "during because however though although still even either neither whether since until unless stage stages early late maximum minimum lifetime once "
+  + "twice year years yearly month months monthly week weeks days daily within start started starts date dates hospital hospitals period periods waiting "
+  + "wait claim claims claimed share sum sums total limit limits capped up done made make makes give gives gets said says apply applies applied count "
+  + "counts part parts stay stays case cases event events person people life lives time times first second last next under over less below above "
+  + "separate own type kind kinds rider riders basic main extra additional").split(" "));
+const wordsOfText = (text: string) => (text.toLowerCase().replace(/['’]s\b/g, "").match(/[a-z]+/g) ?? []).filter((w) => w.length >= 4 && !NOT_A_BENEFIT_WORD.has(w));
+const hasWord = (text: string, w: string) => new RegExp(String.raw`\b${w}\b`, "i").test(text);
+/** Applied to the checked answer: a promise of the policy's words "quoted below" (WORDING_POINTER) is judged on the
+ * sentence that holds it. It is kept when the point carries its own quote, or when the sentence names a benefit and some
+ * point's quote prints that name: the sentence's words that are words of a table row's benefit name, else its words that
+ * are not common, general or a person's, product's or insurer's name (`names`). A sentence that names no benefit, in a
+ * text with no quote of its own, loses the promise. Only the promise goes (withoutWordingPointer); a sentence no step can
+ * cut stays. A server label is never changed. */
+export function dropQuotePointers<T extends { text: string; fullText?: string; source?: { citationIds?: string[] } | null }>(
+  answer: { summary: string; bottomLine?: string | null; statements?: T[]; citations?: { chunkId: string; excerpt?: string | null }[] | null },
+  labels: readonly string[], names: readonly string[] = [], benefits: readonly string[] = []): string[] {
+  const statements = answer.statements ?? [];
+  const cited = new Map((answer.citations ?? []).map((c) => [c.chunkId, c.excerpt ?? ""]));
+  const quotesOf = (s: T) => (s.source?.citationIds ?? []).map((id) => cited.get(id) ?? "").filter((x) => x.trim());
+  const quotes = statements.flatMap(quotesOf);
+  const named = new Set(names.flatMap((n) => n.toLowerCase().match(/[a-z]+/g) ?? []));
+  const rowWords = new Set(benefits.flatMap((b) => wordsOfText(benefitName(b))));
+  const carried = (sentence: string, own: string[]) => {
+    if (own.length) return true;
+    const words = wordsOfText(sentence).filter((w) => !named.has(w));
+    const ofRows = words.filter((w) => rowWords.has(w));
+    const name = ofRows.length ? ofRows : words;
+    return name.length > 0 && quotes.some((q) => name.some((w) => hasWord(q, w)));
+  };
+  const left: string[] = [];
+  const cut = (text: string, own: string[]) => {
+    const parts = sentences(text);
+    const kept = parts.map((x) => (WORDING_POINTER.test(x) && !carried(x, own) ? withoutWordingPointer(x) : x));
+    left.push(...parts.filter((x, i) => kept[i] !== x));
+    return kept.filter((x): x is string => !!x).join(" ").trim();
+  };
+  const bottom = answer.bottomLine ?? answer.summary;
+  if (bottom && WORDING_POINTER.test(bottom)) {
+    const b = cut(bottom, []);
+    if (b !== bottom.trim()) {
+      answer.summary = b || "Here is what your documents say.";
+      if (answer.bottomLine != null) answer.bottomLine = answer.summary;
+    }
+  }
+  for (const s of [...statements]) {
+    if (labels.includes(s.text) || !WORDING_POINTER.test(s.text)) continue;
+    const text = cut(s.text, quotesOf(s));
+    if (text === s.text.trim()) continue;
+    if (!text) statements.splice(statements.indexOf(s), 1);
+    else { s.text = text; s.fullText = text; }
+  }
+  return left;
+}
+
 /** A point the model wrote about an amount it did not give ("If it is a full break of the spine ... the Product Summary shows
  * this amount", quoting that row's own line, live run 23 Oct, B7) is given that amount: the one row, of the person it is
  * about, whose line in the document it quotes is that quote. An answer left with no amount at all loses what points at
@@ -1492,7 +1645,7 @@ export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (ro
   // A table's row letter or number ("J, ", "D. ") is the document's layout, not the benefit's name.
   // A figure its quote prints "per child (up to 2 children)" is that, never a sum for the family (release-set H10).
   const per = f.kind === "printed" && f.unit !== "per_day" && f.unit !== "per_period" ? perUnit(row.source.excerpt, f.amount) : null;
-  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, for ${row.qualifier} only` : ""}${how ? `: ${how}` : ""}${per ? `${how ? "," : ":"} ${per}` : ""}.`;
+  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, ${qualifierText(row.qualifier)} only` : ""}${how ? `: ${how}` : ""}${per ? `${how ? "," : ":"} ${per}` : ""}.`;
 }
 
 /** A row whose printed figure is paid per child ("S$5,000 per child (up to 2 children)"). */
