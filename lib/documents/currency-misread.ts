@@ -11,7 +11,8 @@
  *
  * Left alone: a page that prints no such prefix (a bare-dollar schedule's "$520,000" is its own figure); an amount
  * whose remaining digits are not an amount ("$500,000" would be "S$00,000"; "$5,000" would be "S$,000"); a figure with
- * its prefix intact ("S$520,000"); an ISO-code page ("SGD 520,000").
+ * its prefix intact ("S$520,000", or "S $520,000" with a space before the sign where the page prints "S$"); an ISO-code
+ * page ("SGD 520,000").
  */
 import { NOT_CHECKED } from "@/lib/documents/layout-check";
 
@@ -25,23 +26,28 @@ const BARE_DOLLAR_AMOUNT = /(?<![A-Za-z0-9$])\$\s?(\d(?:[\d,]*\d)?(?:\.\d+)?)(?!
 /** A well-formed amount: no leading zero, thousands grouped by threes or not at all, at most two decimals. */
 const WELL_FORMED = /^(?:[1-9]\d{0,2}(?:,\d{3})+|[1-9]\d*)(?:\.\d{1,2})?$/;
 
-/** The digits a misread prefix letter could have left in front of an amount on this page. */
-function misreadDigits(text: string): Set<string> {
-  const digits = new Set<string>();
-  for (const m of text.matchAll(PREFIX_BEFORE_FIGURE))
+/** The prefixes printed on this page, and the digits a misread prefix letter could have left in front of an amount. */
+function pagePrefixes(text: string): { prefixes: Set<string>; digits: Set<string> } {
+  const prefixes = new Set<string>(), digits = new Set<string>();
+  for (const m of text.matchAll(PREFIX_BEFORE_FIGURE)) {
+    prefixes.add(m[1]);
     for (const letter of m[1]) if (PREFIX_LETTER_AS_DIGIT[letter]) digits.add(PREFIX_LETTER_AS_DIGIT[letter]);
-  return digits;
+  }
+  return { prefixes, digits };
 }
 
 /** The page text with every amount whose first digit may be a misread prefix letter marked as not checked, and the
  * amounts so marked, as printed. */
 export function maskPrefixLetterMisreads(text: string): { text: string; masked: string[] } {
   const source = String(text ?? "");
-  const digits = misreadDigits(source);
+  const { prefixes, digits } = pagePrefixes(source);
   if (!digits.size) return { text: source, masked: [] };
   const masked: string[] = [];
-  const out = source.replace(BARE_DOLLAR_AMOUNT, (token: string, figure: string) => {
+  const out = source.replace(BARE_DOLLAR_AMOUNT, (token: string, figure: string, at: number) => {
     if (!digits.has(figure[0]) || !WELL_FORMED.test(figure.slice(1))) return token;
+    // The prefix kept, a space before its sign ("S $520,000", "US $520,000"): not a bare amount (Critic #476 LOW).
+    const before = /(?<![A-Za-z])([A-Z]{1,3})\s$/.exec(source.slice(Math.max(0, at - 5), at));
+    if (before && prefixes.has(before[1])) return token;
     masked.push(token);
     return NOT_CHECKED;
   });

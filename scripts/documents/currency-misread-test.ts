@@ -58,6 +58,11 @@ async function main() {
     const page = `${sd}\nLoss of travel documents\tS$520,000\tUS$520,000`;
     assert.equal(maskPrefixLetterMisreads(page).text, page);
   });
+  test("N3b a prefix kept with a space before its sign stays (S $520,000, US $52,200); running text still masks", () => {
+    const page = `${sd}\nHospital\tS $520,000\nDeath benefit US$100,000\nAccident\tUS $52,200`;
+    assert.equal(maskPrefixLetterMisreads(page).text, page);
+    assert.deepEqual(maskPrefixLetterMisreads(`${sd}\nThe Insurer will pay up to $57,400 in total. Plan A $520,000`).masked, ["$57,400", "$520,000"]);
+  });
   test("N4 a prefix without the letter (HK$, NZ$, A$) and ISO codes (SGD) give no reason", () => {
     for (const lead of ["HK$28,000", "NZ$28,000", "A$28,000", "SGD 28,000", "S 28,000", "€28,000"])
       assert.deepEqual(maskPrefixLetterMisreads(`Overall limit ${lead}\nBaggage\t$520,000`).masked, [], lead);
