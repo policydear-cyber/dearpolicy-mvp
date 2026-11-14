@@ -30,6 +30,7 @@
     "benefit-table:unread-notice-test": "node --import tsx scripts/benefit-table/unread-notice-test.ts",
     "benefit-table:cover-rows-test": "node --import tsx scripts/benefit-table/cover-rows-test.ts",
     "benefit-table:cover-name-count-test": "node --import tsx scripts/benefit-table/cover-name-count-test.ts",
+    "benefit-table:cover-line-rows-test": "node --import tsx scripts/benefit-table/cover-line-rows-test.ts",
     "benefit-table:held-back-rows-test": "node --import tsx scripts/benefit-table/held-back-rows-test.ts",
     "benefit-table:misfiled-letter-test": "node --import tsx scripts/benefit-table/misfiled-letter-test.ts",
     "benefit-table:coverage-recovery-test": "node --import tsx scripts/benefit-table/coverage-recovery-test.ts",

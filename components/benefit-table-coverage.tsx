@@ -16,7 +16,7 @@ type Cover={personId:string;coverKey:string;product:string;cover:string;plan:str
   source:Source;premiumSource?:Source|null;
   /** The currency the premium's own line or page settles; unset, the premium has the cover's currency (check.ts). */
   premiumCurrency?:string|null;};
-type Row=SummaryRow&{coverKey:string;source:Source;product?:string|null};
+type Row=SummaryRow&{coverKey:string;source:Source;product?:string|null;coverLine?:boolean};
 type Person={id:string;name:string;covers:Cover[];rows:Row[];
   /** The person's schedule lines (what Home's tiles count), from GET /api/benefit-table. Optional: an older server sends none. */
   scheduleLines?:{policyId:string;category:string}[]};
@@ -57,6 +57,7 @@ const plainFigure=(n:number)=>n.toLocaleString("en-US",{minimumFractionDigits:Nu
 /** listedWith: no row is this cover's own or this very benefit, but another cover of the same product lists its rows
  * (lib/benefit-table/cover-rows.ts): the card points there, never asks for a wording that is already on file. */
 /** shared: the cover is on a document that also covers others in the household (lib/benefit-table/shared-cover.ts). */
+const NO_BENEFITS_YET="No benefits are listed for it yet. If you have its policy wording or benefit summary, upload it on the Documents page and DearPolicy adds what it pays.";
 function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[];reading:boolean;listedWith?:Cover|null;shared?:string|null}){
   const key=keyBenefits(rows).map(i=>rows[i]),name=benefitNames(rows);
   // A premium whose line and page state no currency claims none, never a bare "$" (Critic R374 L1).
@@ -71,7 +72,9 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
       </div>
     </header>
     {shared?<p className="muted cov-reading" data-testid="table-shared">{shared}</p>:null}
-    {!rows.length?<p className="muted cov-reading">{listedWith?`What it pays is set out with ${coverName(listedWith)}${listedWith.cover!==listedWith.product?` (${listedWith.cover})`:""}, in the same policy wording.`:reading?"Its benefits are still being read.":"No benefits are listed for it yet. If you have its policy wording or benefit summary, upload it on the Documents page and DearPolicy adds what it pays."}</p>:<>
+    {!rows.length?<p className="muted cov-reading">{listedWith?`What it pays is set out with ${coverName(listedWith)}${listedWith.cover!==listedWith.product?` (${listedWith.cover})`:""}, in the same policy wording.`:reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:<>
+      {/* Only its schedule's own cover line is on file: shown as printed, with the same ask for its wording. */}
+      {rows.every(r=>r.coverLine)&&!listedWith?<p className="muted cov-reading" data-testid="table-cover-line">As printed on the schedule. {reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:null}
       <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,name);
         return <li key={i} data-testid="table-row"><span className="b">{b.name}</span><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
       {rows.length>key.length?<details className="cov-all"><summary>All {plural(rows.length,"benefit")}</summary>
