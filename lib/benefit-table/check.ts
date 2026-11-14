@@ -791,7 +791,12 @@ export function capsAsMultiple(sentence: string, open = false): boolean {
   return false;
 }
 export function tiesLimitToLives(line: string, open = false): boolean {
-  if (capsAsMultiple(line, open)) return false;
+  return !capsAsMultiple(line, open) && tiesInClauses(line);
+}
+/** A cheap first look: a sentence with none of these words can tie nothing to the lives together, set no family cap and name
+ * no shared benefit (every word OWNER_TIE, TOGETHER, LIVES, TIED_TO_LIVES and KEEP_SHAPES need starts here). */
+const TIE_HINT = /(?:famil|household|couple|part(?:y|ies)|group|shar|joint|together|combined|total|aggregate|collectiv|pool|every|\ball\b|both|two\s+of\s+you|however|whole|unit|regardless|whatever|travell?er|insured\s+(?:persons|people|lives|members)|not\s+(?:per|for)|same|between|\bone\b|single|certificate|polic|booking|schedule)/i;
+function tiesInClauses(line: string): boolean {
   for (const clause of line.split(/[.;!?](?=\s|$)/)) {
     if (NOT_A_TIE_CLAUSE.test(clause)) continue;
     // Each person's own limit named in a clause about the lives together, in any shape but the closed family-cap ones: one
@@ -911,6 +916,7 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   for (const p of pages) {
     const lines = p.text.split(/\r?\n/);
     let prev: "admin" | "footnote" | null = null;
+    let carriedTo = 0;
     lines.forEach((line, i) => {
       const l = flat(line);
       if (!l) return;
@@ -925,21 +931,28 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
       // A shared or aggregate limit, on a row's own line or any other: every figure may be shared by all the lives.
       if (SHARED_LIMIT.test(line)) add(out.sharedNotes, line);
       // A line off every row's own line that ties a limit to the lives together (a row's own words are read with that row).
-      if (!rowLine) {
-        // The note's whole sentence: this line and the lines that carry it on (starting in lower case), up to its full stop;
-        // the family-cap shape and the tie are judged on the same sentence the row's condition shows (gate round 7, R7-H1).
+      // The note's whole sentence: this line and the lines that carry it on (starting in lower case), up to its full stop;
+      // the family-cap shape and the tie are judged on the same sentence the row's condition shows (gate round 7, R7-H1).
+      // TIE_HINT first, so a page of ordinary lines costs one test each.
+      // A line already read as the rest of the sentence above it is not read again on its own.
+      if (!rowLine && i >= carriedTo && (TIE_HINT.test(line) || /^\s*[a-z]/.test(lines[i + 1] ?? ""))) {
         const parts = [line.trim()];
         let j = i + 1;
         while (!/[.!?]\s*$/.test(parts.at(-1)!) && j < lines.length && j < i + 6 && /^\s*[a-z]/.test(lines[j]) && !own.has(flat(lines[j]))) parts.push(lines[j++].trim());
+        carriedTo = j;
         const sentence = parts.join(" ");
-        // Left open: no full stop, and a line follows that is no row's (it may carry the note on in other words).
-        const next = lines.slice(j).find((x) => flat(x));
-        const open = !/[.!?]\s*$/.test(sentence) && !!next && !own.has(flat(next)) && !tableLine(next);
-        if (tiesLimitToLives(sentence, open)) add(out.tiedNotes, sentence);
-        if (capsAsMultiple(sentence, open)) add(out.capNotes, sentence);
-        // A sentence that ties something to the lives together, printed for one benefit ("Personal liability is shared by
-        // the family."): that row is no one's own (assemble.ts, by the row's label).
-        if (TIED_TO_LIVES.test(sentence) || livesTogether(sentence)) add(out.tieLines, sentence);
+        if (TIE_HINT.test(sentence)) {
+          // Left open: no full stop, and a line follows that is no row's (it may carry the note on in other words).
+          let k = j;
+          while (k < lines.length && !flat(lines[k])) k++;
+          const next = lines[k];
+          const open = !/[.!?]\s*$/.test(sentence) && next != null && !own.has(flat(next)) && !tableLine(next);
+          if (capsAsMultiple(sentence, open)) add(out.capNotes, sentence);
+          else if (tiesInClauses(sentence)) add(out.tiedNotes, sentence);
+          // A sentence that ties something to the lives together, printed for one benefit ("Personal liability is shared by
+          // the family."): that row is no one's own (assemble.ts, by the row's label).
+          if (TIED_TO_LIVES.test(sentence) || livesTogether(sentence)) add(out.tieLines, sentence);
+        }
       }
       // A note printed on a row's own line about every row ("All benefits for children are half the amounts shown").
       if (rowLine) {
