@@ -16,7 +16,7 @@ import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, personOnlyI
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
-import { childColumn, childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife, childLimitNotes, childWordsElsewhere } from "./child-limit";
+import { childColumn, childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife, childLimitNotes, childShareAllowed } from "./child-limit";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
@@ -1947,6 +1947,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // 25% of the Sum Insured"): read only when the cell prints nothing else beside the row's own share, then the child's
     // sentence is left out of the row's own checks (lib/benefit-table/child-limit.ts). Anything else is as before.
     let childLimit: ChildLimit | null = null, childNote: { age: number | null } | null = null, childDoubt = false;
+    let childOthers: { benefit: string; section: string | null }[] = [];
     if (pays === "percent" && value != null && percentOf === "sum_insured" && placed.has(source)) {
       // Every page of the document, leaving out only the row's own cell (its line, from the quote's start to the end of
       // the line its quote ends on) and the people table's relationship cells.
@@ -1955,8 +1956,10 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       const people = [...out.covers.map((x) => x.person), ...out.namedPeople, ...(doc.people ?? []), ...readCovers.map((x) => str(x?.person) ?? "")];
       const notes = childLimitNotes(pages, ownCell, people);
       if (notes.found) childNote = { age: notes.age };
-      // Decision (1): a child's share from the cell only when nothing else in the document speaks of children or ages.
-      childDoubt = childWordsElsewhere(pages, ownCell, people, { benefit, section: str(b.section) });
+      // Decision (1): a child's share from the cell only when everything else in the document that carries a figure or a
+      // limiting word is accounted for (child-limit.ts childShareAllowed, gate R8-H1).
+      childOthers = readRows.map((x) => ({ benefit: str(x?.benefit) ?? "", section: str(x?.section) })).filter((x) => x.benefit);
+      childDoubt = !childShareAllowed(pages, ownCell, people, { benefit, section: str(b.section) }, childOthers);
     }
     if (pays === "percent" && value != null && percentOf === "sum_insured" && num(b.cap) == null && placed.has(source)) {
       const p = placed.get(source)!, text = pageText(source.page);
@@ -1972,7 +1975,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
         const seg = segmentOf(source);
         const rest = [source.excerpt, cell, seg.text, seg.near, ...conditions].map((t) => withoutChildLimit(t, found));
         const ownOnly = (t: string) => [...t.matchAll(/(\d+(?:\.\d+)?)\s*(?:%|per\s?cent)/gi)].every((m) => Math.abs(Number(m[1]) - value!) < 1e-9);
-        if (rest.every((t) => ownOnly(t) && !NEAR_CAP.test(t) && !moneyIn(t).length && !/\bwhichever\b/i.test(t))) childLimit = found;
+        if (rest.every((t) => ownOnly(t) && !NEAR_CAP.test(t) && !moneyIn(t).length && !/\bwhichever\b/i.test(t))) childLimit = { ...found, others: childOthers };
       }
     }
     // One printed table row, its cells parted by tabs, read under a named column, whose percentage is a whole cell of that

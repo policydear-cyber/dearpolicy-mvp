@@ -26,7 +26,7 @@ import type { AnswerStatement, StructuredAnswer } from "@/components/answer-card
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
 import { keepsCapIn, noteMultiple, timesWords } from "@/lib/benefit-table/multiplier";
-import { childCase, childLimitIn, childLimitNotes, childWordsElsewhere, personStatus, provenAdult, printedLife, withoutChildLimit } from "@/lib/benefit-table/child-limit";
+import { childCase, childLimitIn, childLimitNotes, childShareAllowed, personStatus, provenAdult, printedLife, withoutChildLimit } from "@/lib/benefit-table/child-limit";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
@@ -825,7 +825,7 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
    * share (`own`), whether the table found the
    * person is that child, and the days that must hold (today and the printed period of insurance). The checks read the
    * share again from the row's line and the date of birth or relationship again from the person's own line. */
-  child?: { percent: number; belowAge: number | null; own: number; status: "child" | "not_child"; days: number[]; benefit: string; section: string | null };
+  child?: { percent: number; belowAge: number | null; own: number; status: "child" | "not_child"; days: number[]; benefit: string; section: string | null; others: { benefit: string; section: string | null }[] };
   /** The row's document prints a child-limit sentence outside the row's own cell (lib/benefit-table/child-limit.ts
    * childLimitNotes) with this highest age: the table found the person is proven not that child on these days; the checks
    * read the document and the person's own line again. */
@@ -862,7 +862,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const notes = childLimitNotes(rpages, rown, members);
   const childNote = notes.found;
   // A child's share only when nothing else in the document speaks of children or ages (gate R6-H1).
-  if (child && childWordsElsewhere(rpages, rown, members, { benefit: sf.child!.benefit, section: sf.child!.section })) return null;
+  if (child && !childShareAllowed(rpages, rown, members, { benefit: sf.child!.benefit, section: sf.child!.section }, sf.child!.others)) return null;
   if ((child && childNote) || (childNote && (!sf.adult?.days.length || sf.adult.age !== notes.age))) return null;
   if (sf.child && (!child || child.percent !== sf.child.percent || child.belowAge !== sf.child.belowAge
     || sf.percent !== (sf.child.status === "child" ? child.percent : sf.child.own))) return null;

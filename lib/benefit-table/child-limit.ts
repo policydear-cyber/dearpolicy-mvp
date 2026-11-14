@@ -12,7 +12,9 @@ import { printedDay } from "./dates";
  * the date of birth printed in a "Date of birth" column or after a "Date of birth:" label, on every day it could matter
  * (today and the printed period of insurance); with no age, the printed relationship ("Child", "Son", "Daughter";
  * "Policyholder", "Spouse"). Otherwise no amount, and the row's printed words are quoted with the condition. Pure. */
-export type ChildLimit = { percent: number; belowAge: number | null; words: string };
+export type ChildLimit = { percent: number; belowAge: number | null; words: string;
+  /** The document's other read rows, as decision (1) accounted for them (childShareAllowed): the chat's checks read again. */
+  others?: { benefit: string; section: string | null }[] };
 
 const CHILD = String.raw`(?:(?:an?|the|each|any|every)\s+)?(?:(?:insured|covered|dependent|dependant|eligible)\s+)?(?:child(?:ren)?|minors?|juveniles?)`;
 /** "under 18", "below the age of 16", "aged under 18 years", "younger than 18 years of age", "(under 18)", "aged 17 or
@@ -224,6 +226,110 @@ function foreign(text: string): boolean {
   if (/[^\x00-\x7F]/u.test(text.replace(/[^\p{L}]/gu, ""))) return true;
   const seen = new Set((text.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => FOREIGN_WORDS.has(w)));
   return seen.size >= 2;
+}
+
+// ---------- Decision (1) as an allow-list (gate round 8) ----------
+/** A row the reading read from the document: its label and its section as printed. */
+export type ReadRow = { benefit: string; section: string | null };
+/** A figure in words: amounts, fractions and multiples ("three thousand", "one tenth", "half", "halved", "double"). */
+const FIGURE_WORDS = /\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundreds?|thousands?|millions?|half|halves|halved|quarters?|thirds?|fifths?|tenths?|twentieths?|double[ds]?|twice|triple[ds]?|treble[ds]?)\b/i;
+/** Words that limit what is paid. */
+const LIMIT_WORDS = /\b(?:limited|limits?|limitation|maximum|max|up\s+to|only|reduced|reduction|restricted|capped|no\s+more\s+than|not\s+(?:to\s+)?exceed\w*|at\s+most|subject\s+to|halved)\b/i;
+const MONTH = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)`;
+/** The text without what is never a figure: dates, a month and year, durations in days, nights, weeks, months or hours,
+ * page numbers, times, telephone numbers and reference codes ("HPA-55120-K"). */
+function withoutNonFigures(text: string): string {
+  return text
+    .replace(new RegExp(DATE, "gi"), " ")
+    .replace(new RegExp(String.raw`\b${MONTH}\.?\s+\d{4}\b`, "gi"), " ")
+    .replace(/\b(?:\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fourteen|thirty|sixty|ninety)\s*(?:consecutive\s+|calendar\s+|working\s+|business\s+|clear\s+)?(?:days?|nights?|weeks?|months?|hours?|hrs?)\b/gi, " ")
+    .replace(/\bpages?\s+\d+(?:\s*(?:of|-|to)\s*\d+)?\b/gi, " ")
+    .replace(/\b\d{1,2}[:.]\d{2}\s*(?:am|pm)?\b/gi, " ")
+    .replace(/(?:\+\d{1,3}\s?)?(?:\(?\d{2,5}\)?[\s-]){2,}\d{3,}/g, " ")
+    .replace(/\b[A-Z]{2,}[A-Z0-9]*(?:-[A-Z0-9]+)+\b/g, " ");
+}
+/** Whether a piece of text carries a figure (digits, a percentage, a figure in words) or a limiting word. */
+const needsAccount = (t: string) => { const x = withoutNonFigures(t); return /\d/.test(x) || /%/.test(x) || FIGURE_WORDS.test(x) || LIMIT_WORDS.test(x); };
+const flatLabel = (t: string) => t.toLowerCase().replace(/\s+/g, " ").replace(/^(?:section\s+)?\d{1,3}[.)]?\s+/, "").replace(/[\s:.;,-]+$/, "").trim();
+const sectionNo = (s: string | null | undefined) => /^\s*(?:section\s+|sec\.?\s*)?([0-9]{1,3}(?:\.[0-9]{1,2})?(?:\([a-z]\))?|[A-Z]{1,4})[.)]?\s*$/i.exec(s ?? "")?.[1] ?? null;
+const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** Words that name a row (gate R8-H1): a key word of its label (and for a death row the common ways to say a death), or its
+ * section number standing alone in any form ("Section 1", "Item 1", "S1", "1(a)", "Sections 2 and 1"). */
+function rowNamedAny(row: ReadRow): RegExp {
+  const words = [...new Set((row.benefit.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !LABEL_FILLER.has(w)))];
+  const death = words.some((w) => /^(?:death|deaths|life|fatal|fatality)$/.test(w)) ? [String.raw`\bdeaths?\b`, String.raw`\blife\b`, String.raw`\blives\b`, String.raw`\bfatal\w*`, String.raw`\bdie[sd]?\b`, String.raw`\bdying\b`, String.raw`\bkilled\b`, String.raw`\bdeceased\b`, String.raw`\bmortality\b`] : [];
+  const n = sectionNo(row.section);
+  const alts = [...words.map((w) => String.raw`\b${esc(w)}s?\b`), ...death, ...(n ? [String.raw`(?<![\w,.])(?:s|§)?${esc(n)}(?![\w,]|\.\d)`] : [])];
+  return new RegExp(alts.length ? alts.join("|") : "(?!)", "i");
+}
+/** A people-table line: it names an insured person, and each cell is that name (with at most a date of birth), a whole
+ * date, a whole money figure, or a few words with no figure and no limiting word (a relationship, an occupation). */
+function peopleLine(cells: string[], names: string[]): boolean {
+  const lower = cells.map((c) => c.toLowerCase());
+  if (!names.some((n) => lower.some((c) => c.includes(n)))) return false;
+  return cells.every((c, i) => {
+    const t = c.trim();
+    if (!t || WHOLE_DATE.test(t) || WHOLE_MONEY.test(t)) return true;
+    if (names.some((n) => lower[i].includes(n))) return !needsAccount(t.replace(/\b(?:date\s+of\s+birth|d\.?o\.?b\.?|born(?:\s+on)?)\b/gi, " "));
+    return /^[\p{L} ()/'’-]{1,40}$/u.test(t) && t.split(/\s+/).length <= 4 && !LIMIT_WORDS.test(t) && !FIGURE_WORDS.test(t);
+  });
+}
+/** Another read row's own table line: a cell is that row's label, a leading number is that row's section, and nothing on
+ * the line names this row. */
+function otherRowLine(line: string, others: ReadRow[], thisNamed: RegExp): boolean {
+  if (thisNamed.test(line)) return false;
+  const cells = line.split("\t").map((c) => flatLabel(c));
+  const lead = /^\s*(?:section\s+)?([0-9]{1,3}(?:\.[0-9]{1,2})?|[A-Z]{1,4})[.)]?\t/i.exec(line)?.[1] ?? null;
+  return others.some((o) => { const l = flatLabel(o.benefit); return !!l && cells.includes(l) && (lead == null || lead.toLowerCase() === (sectionNo(o.section) ?? "").toLowerCase()); });
+}
+/** A note that names a different read row (its section in any form, or its whole label) and nothing naming this row. */
+function otherRowNote(sentence: string, others: ReadRow[], thisNamed: RegExp): boolean {
+  if (thisNamed.test(sentence)) return false;
+  return others.some((o) => {
+    const n = sectionNo(o.section), l = flatLabel(o.benefit);
+    return (n != null && new RegExp(String.raw`\b(?:sections?|sec\.?|items?|benefits?|covers?|§)\s*${esc(n)}(?![\w,]|\.\d)`, "i").test(sentence))
+      || (l.length >= 4 && sentence.toLowerCase().includes(l));
+  });
+}
+/** A premium or instalment line that limits nothing and names nothing of this row. */
+const premiumLine = (t: string, thisNamed: RegExp) => /\b(?:premiums?|contributions?|instal(?:l)?ments?|direct\s+debit|stamp\s+duty|levy|policy\s+fee)\b/i.test(t)
+  && !/\b(?:limited|limits?|maximum|reduced|restricted|capped|no\s+more\s+than|not\s+(?:to\s+)?exceed\w*)\b/i.test(t) && !thisNamed.test(t);
+/** Decision (1), an allow-list (gate R8-H1): the cell's child share is given only when nothing else in the document could
+ * change it. Every sentence or line outside the row's own cell (`own`) that carries a figure (digits, a percentage, a
+ * figure in words) or a limiting word must be one of: a people-table line; a premium line; another read row's own table
+ * line; a note naming a different read row and nothing of this one. Days, dates, page numbers, times, telephone numbers
+ * and reference codes are not figures. A tab line right after the row's own line with an empty first cell continues its
+ * cell: any figure or limiting word there means no share. The word backstop (childWordsElsewhere: child and age words,
+ * this row's benefit named with a figure, another language) still applies. Anything else: no share. */
+export function childShareAllowed(pages: { page: number; text: string }[], own: { page: number; from: number; to: number } | null, people: string[], row: ReadRow, others: ReadRow[]): boolean {
+  if (childWordsElsewhere(pages, own, people, row)) return false;
+  const names = people.map((n) => n.replace(/\s+/g, " ").trim().toLowerCase()).filter((n) => n.length >= 3);
+  const thisNamed = rowNamedAny(row);
+  const rest = others.filter((o) => !(flatLabel(o.benefit) === flatLabel(row.benefit) && (sectionNo(o.section) ?? "") === (sectionNo(row.section) ?? "")));
+  let run: string[] = [];
+  const runOk = () => {
+    const ok = noteSentences(run.join(" ")).every((t) => !needsAccount(t) || premiumLine(t, thisNamed) || otherRowNote(t, rest, thisNamed));
+    run = [];
+    return ok;
+  };
+  for (const pg of pages) {
+    const text = own && pg.page === own.page ? `${pg.text.slice(0, own.from)}\u0000${pg.text.slice(own.to)}` : pg.text;
+    let afterOwn = false;
+    for (const line of text.split("\n")) {
+      if (line.includes("\u0000")) { if (!runOk()) return false; afterOwn = true; continue; }
+      // The row's own cell continued on a tab line with an empty first cell.
+      if (afterOwn && /^\s*\t/.test(line)) { if (needsAccount(line)) return false; continue; }
+      afterOwn = false;
+      if (!line.trim() || FOOTER.test(line)) continue;
+      if (!line.includes("\t")) { run.push(line.trim()); continue; }
+      if (!runOk()) return false;
+      if (!needsAccount(line)) continue;
+      const cells = line.split("\t").map((c) => c.trim());
+      if (peopleLine(cells.filter(Boolean), names) || otherRowLine(line, rest, thisNamed)) continue;
+      return false;
+    }
+  }
+  return runOk();
 }
 
 // Decision (2): a sentence that limits an insured child's benefit.

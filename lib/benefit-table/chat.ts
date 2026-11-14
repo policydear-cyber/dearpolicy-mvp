@@ -1837,7 +1837,7 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
     row: { docIndex: row.docIndex, page: row.source.page, quote: row.source.excerpt },
     base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap, times: multiple,
     ...(row.childLimit ? { child: { percent: row.childLimit.percent, belowAge: row.childLimit.belowAge, own: row.childLimit.own,
-      status: row.childLimit.status!, days: row.childLimit.days, benefit: row.benefit, section: row.section ?? null } } : {}),
+      status: row.childLimit.status!, days: row.childLimit.days, benefit: row.benefit, section: row.section ?? null, others: row.childLimit.others ?? [] } } : {}),
     ...(row.childNote?.adult ? { adult: { days: row.childNote.days, age: row.childNote.age } } : {}) };
 }
 

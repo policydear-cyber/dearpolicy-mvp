@@ -12,7 +12,7 @@ import { checkReading, foldChildColumns, type SourceDoc } from "@/lib/benefit-ta
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
 import { readModelAnswer, verifyAnswer, type ServerFigure } from "@/lib/simple-chat/verify";
-import { childColumn, childLimitIn, childLimitNotes, childWordsElsewhere, personStatus, printedLife } from "@/lib/benefit-table/child-limit";
+import { childColumn, childLimitIn, childLimitNotes, childShareAllowed, childWordsElsewhere, personStatus, printedLife } from "@/lib/benefit-table/child-limit";
 import { printedDay } from "@/lib/benefit-table/dates";
 
 let passed = 0;
@@ -602,6 +602,79 @@ test("gate R7 LOW: a payee sentence that also limits with a figure counts for pl
   }
   // Without a limit and a figure it still does not.
   assert.equal(r5(["The death benefit is paid to the children of the insured person only if no spouse survives."], { plain: true }).ad(GRACE), 20000);
+});
+// ---------- Gate round 8: decision (1) as an allow-list over everything that carries a figure or a limiting word ----------
+function r8(extra: string[], o: { page3?: string; header?: string; label?: string; section?: string | null; printedSection?: string } = {}) {
+  const sec = o.printedSection ?? "1";
+  const h = schedule(ALL3, [`${sec}\tAccidental death\t${CELL}`, PTD, ...extra], [
+    ben({ section: o.section === undefined ? sec : o.section, benefit: o.label ?? "Accidental death", pays: "percent", value: 100, percentOf: "sum_insured", quote: CELL, conditions: [CLAUSE] }),
+    ben({ section: "2", benefit: "Permanent total disablement", pays: "percent", value: 100, percentOf: "sum_insured", quote: PTD })], { page3: o.page3, header: o.header });
+  const lab = new RegExp((o.label ?? "Accidental death").split(" ")[0], "i");
+  const row = h.table.people.find((x) => x.name === GRACE.name)!.rows.find((y) => lab.test(y.benefit));
+  let chat: string[] = [];
+  try { chat = ask(h, GRACE.name, lab, "If Grace died?").amounts; } catch { chat = []; }
+  return { amount: row && row.figure.kind === "worked_out" ? row.figure.amount : null, chat };
+}
+test("gate R8-H1: any figure or limiting word not accounted for gives the child no share", () => {
+  const FAM = "family members other than the policyholder and spouse";
+  const cases: [string, string[], Parameters<typeof r8>[1]][] = [
+    ...["Insured persons before their 18th birthday: loss of life benefit limited to GBP 3,000.", "Category B lives: payment on loss of life limited to GBP 3,000.",
+      "For the third and each further insured person, the fatality benefit is GBP 3,000.", "If a life listed after the policyholder and spouse dies, we pay no more than GBP 3,000.",
+      "Other family members: maximum GBP 3,000 if killed in an accident.", `${FAM} are covered for a fatal injury up to GBP 3,000.`,
+      "Lives insured at the family rate: loss-of-life benefit GBP 3,000."].map((n): [string, string[], {}] => [n, [n], {}]),
+    ["Item 1", [`Item 1 is limited to GBP 3,000 for each insured person other than the policyholder and spouse.`], {}],
+    ["Benefit 1", [`Benefit 1 is limited to GBP 3,000 for each insured person other than the policyholder and spouse.`], {}],
+    ["Cover 1", [`Cover 1: GBP 3,000 maximum for ${FAM}.`], {}],
+    ["Section A", [`Section A is limited to GBP 3,000 for ${FAM}.`], { printedSection: "A" }],
+    ["Section 1.1", [`Section 1.1 is limited to GBP 3,000 for ${FAM}.`], { printedSection: "1.1" }],
+    ["Section I", [`Section I is limited to GBP 3,000 for ${FAM}.`], { printedSection: "I" }],
+    ["Section 1(a)", [`Section 1(a) is limited to GBP 3,000 for ${FAM}.`], { printedSection: "1(a)" }],
+    ["S1", [`S1 is limited to GBP 3,000 for ${FAM}.`], {}],
+    ["Sections 2 and 1", [`Sections 2 and 1 are limited to GBP 3,000 for ${FAM}.`], {}],
+    ["three thousand pounds", [`${FAM}: death benefit limited to three thousand pounds.`], {}],
+    ["one tenth", [`${FAM}: death benefit limited to one tenth of the Sum Insured.`], {}],
+    ["3,000 pounds", [`${FAM}: death benefit limited to 3,000 pounds.`], {}],
+    ["halved", [`${FAM}: the death benefit is halved.`], {}],
+    ["GBP3000", [`${FAM}: death benefit GBP3000 maximum.`], {}],
+    ["header row note", ["Section\tBenefit\tAmount payable (lives other than the policyholder and spouse: max GBP 3,000 on loss of life)"], {}],
+    ["own cell wraps to a cap line", ["\t\tsubject to a maximum of GBP 3,000 for family members."], {}],
+    ["people header note", [], { header: "Insured person\tRelationship\tDate of birth\tSum Insured (family members: loss of life max GBP 3,000)" }],
+    ["caption on page 3", [], { page3: "[Figure 2: Family members - loss of life benefit GBP 3,000]" }],
+    ["people-line cell, synonym", [], { page3: "Grace Okafor\tDependent life\tloss of life benefit limited to GBP 3,000" }],
+    ["people-line cell, Death", [], { page3: "Grace Okafor\tFamily member\tDeath benefit GBP 3,000 max" }],
+    ["label Loss of life", [`${FAM}: Accidental death benefit limited to GBP 3,000.`], { label: "Loss of life" }],
+    ["label AD, no section", [`${FAM}: death benefit limited to GBP 3,000.`], { label: "AD", section: null }],
+    ["no section, note Section 1", [`Section 1 is limited to GBP 3,000 for ${FAM}.`], { section: null }],
+    ["dying", [`${FAM} dying in an accident: GBP 3,000.`], {}],
+    ...["Kanak-kanak: pampasan maut maksimum GBP 3,000.", "Mga anak: benepisyo sa kamatayan GBP 3,000.", "Figli: capitale morte limitato a GBP 3.000.",
+      "Kinderen: overlijdensuitkering beperkt tot GBP 3.000.", "Tanggungan: pampasan maut had GBP 3,000."].map((n): [string, string[], {}] => [n, [n], {}]),
+    ["an unrelated figure (fall back)", ["Accidental medical expenses up to GBP 2,500."], {}],
+  ];
+  for (const [name, extra, o] of cases) {
+    const k = r8(extra, o);
+    assert.equal(k.amount, null, name);
+    assert.deepEqual(k.chat, [], name);
+  }
+  // Accounted for: the people table, a premium line, another read row's own line, a note naming another row, days and dates.
+  assert.equal(r8([]).amount, 5000);
+  for (const ok of [["Annual premium: GBP 312.00, payable by monthly direct debit of GBP 26.00."], ["Note (a): Section 2 is paid at double, subject to the GBP 1,500", "maximum per accident."],
+    ["How to claim: notify us within 30 days of the accident on 0800 000 0000 (claims line)."], ["Date of issue: 20 February 2026 (renewal schedule; replaces the schedule dated 18 February", "2025)"],
+    ["Policy number: HPA-55120-K\tPeriod of insurance: 1 March 2026 to 28 February 2027"], ["Page 2 of 3"]]) {
+    const k = r8(ok);
+    assert.equal(k.amount, 5000, ok.join(" / "));
+    assert.deepEqual(k.chat, ["£5,000"], ok.join(" / "));
+  }
+  // A note naming another row and this one is not accounted for.
+  assert.equal(r8(["Note: Section 2 and Section 1 are limited to GBP 3,000 for family members."]).amount, null);
+  // The rule on the real layout: rows 2-6, a note naming Section 3, the premium line.
+  const page = "Ngozi Okafor\tPolicyholder\t14/06/1984\tGBP 100,000\nGrace Okafor\tChild\t09/04/2017\tGBP 20,000\nAnnual premium: GBP 312.00, payable by monthly direct debit of GBP 26.00.\n"
+    + `1\tAccidental death\t${CELL}\n2\tPermanent total disablement\t100% of the Sum Insured\n3\tFracture of arm, wrist or leg\t2% of the Sum Insured per fracture, maximum GBP 1,500 per accident (note a)\n`
+    + "Note (a): a compound fracture is paid at double the Section 3 amount, still subject to the GBP 1,500\nmaximum per accident.";
+  const own = { page: 1, from: page.indexOf("1\tAccidental"), to: page.indexOf("\n2\tPermanent") };
+  const rows = [{ benefit: "Accidental death", section: "1" }, { benefit: "Permanent total disablement", section: "2" }, { benefit: "Fracture of arm, wrist or leg", section: "3" }];
+  assert.equal(childShareAllowed([{ page: 1, text: page }], own, ["Ngozi Okafor", "Grace Okafor"], rows[0], rows), true);
+  // Without the fracture row in the reading, its line and its note are not accounted for.
+  assert.equal(childShareAllowed([{ page: 1, text: page }], own, ["Ngozi Okafor", "Grace Okafor"], rows[0], rows.slice(0, 2)), false);
 });
 test("gate L1: a printed date of birth that crosses the age inside the period is said as such, not as 'not printed'", () => {
   const sam = P("Sam Okafor", "Child", "01/12/2008", "GBP 20,000", 20000);
