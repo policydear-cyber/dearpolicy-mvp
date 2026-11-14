@@ -945,23 +945,28 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
   /** A ";" part that is only each person's own limit, a closed shape over its whole text ("Baggage: per person.", "per
    * insured person for baggage", "each person has their own limits for baggage", "baggage limits apply per person", "baggage is per person"); any
    * other part is kept and judged (gate round 22). */
-  const eachOwnPart = (part: string) => {
+  const eachOwnPart = (part: string, own?: { except: string[]; labels: string[] }) => {
     const t = part.trim().replace(/\.$/, "").trim();
     const PP = String.raw`per\s+(?:insured\s+)?person`;
     const L = String.raw`([A-Za-z][A-Za-z ,'-]*?)`;
+    const label = (x: string) => { const ok = isRowLabel(x); if (ok) own?.labels.push(x); return ok; };
     let m: RegExpExecArray | null;
-    if ((m = new RegExp(`^${L}\\s*:\\s*${PP}$`, "i").exec(t))) return isRowLabel(m[1]);
-    if ((m = new RegExp(`^${PP}\\s+for\\s+${L}$`, "i").exec(t))) return isRowLabel(m[1]);
-    // The rest as each person's own: "all other limits are per person", "each person has their own limits for the rest"
-    // (gate round 23).
-    const REST = String.raw`(?:(?:all\s+)?(?:the\s+)?other\s+(?:limits|benefits|sections|cover)|everything\s+else|the\s+rest)`;
-    if (new RegExp(String.raw`^${REST}\s+(?:is|are|apply)\s+${PP}$`, "i").test(t)) return true;
-    if (new RegExp(String.raw`^each\s+(?:insured\s+)?person\s+has\s+(?:their|his\s+or\s+her|his|her)\s+own\s+limits?\s+for\s+${REST}$`, "i").test(t)) return true;
-    if ((m = new RegExp(String.raw`^each\s+(?:insured\s+)?person\s+has\s+(?:their|his\s+or\s+her|his|her)\s+own\s+limits?(?:\s+for\s+${L})?$`, "i").exec(t))) return !m[1] || isRowLabel(m[1]);
-    if ((m = new RegExp(String.raw`^${L}\s+(?:limits?\s+)?apply\s+${PP}$`, "i").exec(t))) return isRowLabel(m[1]);
-    if ((m = new RegExp(String.raw`^${L}\s+(?:is|are)\s+${PP}$`, "i").exec(t))) return isRowLabel(m[1]);
+    if ((m = new RegExp(`^${L}\\s*:\\s*${PP}$`, "i").exec(t))) return label(m[1]);
+    if ((m = new RegExp(`^${PP}\\s+for\\s+${L}$`, "i").exec(t))) return label(m[1]);
+    // The rest as each person's own: "all other limits are per person", "the rest per person", "the others are not
+    // shared", "each person has their own limits for the rest", with an "except X (, which is shared)" or "but not X" tail
+    // that shares X (gate rounds 23, 24).
+    const EXC = String.raw`(?:,?\s*(?:except(?:\s+for)?|but\s+not)\s+([A-Za-z][A-Za-z ,'-]*?)(?:,?\s*which\s+(?:is|are)\s+(?:shared|pooled|joint))?)?`;
+    const rest = (x: RegExpExecArray | null) => { if (!x) return false; if (x[1]) own?.except.push(x[1]); return true; };
+    if (rest(new RegExp(String.raw`^${REST_WORDS}\s+(?:(?:is|are|apply)\s+)?(?:${PP}|not\s+shared)${EXC}$`, "i").exec(t))) return true;
+    if (rest(new RegExp(String.raw`^each\s+(?:insured\s+)?person\s+has\s+(?:their|his\s+or\s+her|his|her)\s+own\s+limits?\s+for\s+${REST_WORDS}${EXC}$`, "i").exec(t))) return true;
+    if ((m = new RegExp(String.raw`^each\s+(?:insured\s+)?person\s+has\s+(?:their|his\s+or\s+her|his|her)\s+own\s+limits?(?:\s+for\s+${L})?$`, "i").exec(t))) return !m[1] || label(m[1]);
+    if ((m = new RegExp(String.raw`^${L}\s+(?:limits?\s+)?apply\s+${PP}$`, "i").exec(t))) return label(m[1]);
+    if ((m = new RegExp(String.raw`^${L}\s+(?:is|are)\s+${PP}$`, "i").exec(t))) return label(m[1]);
     return false;
   };
+  /** The rows "X are shared" names: tier 2's rows, or null for every row. */
+  const namedShared = (x: string): Set<CheckedBenefit> | null => { const t = noteTier(`${x} are shared.`, true); return t.tier === 2 ? t.rows : null; };
   /** A ";" part that says something of its own subject: row labels or whole-table words, then ":" or is / are / apply
    * ("Medical expenses are shared", "everything else: shared"), or each person's own limit. A part with no subject ("up to
    * S$3,000 for the family", "but no more than ...", "together the family can claim ...") qualifies the part before it
@@ -1011,13 +1016,41 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
     if (!named.size && !PREMIUM.test(text) && ((lives && BENEFIT_NOUN.test(text)) || sharesLimitStrongly(text) || (sharesStronglyAmong(text) && (BENEFIT_NOUN.test(text) || /\b(?:sections?|parts?)\b/i.test(text))))) out.all = true;
   };
   for (const t of [...(r.tieLines ?? []), ...(r.tiedNotes ?? []).map((x) => ({ note: x }))]) {
-    const tied = typeof t !== "string", text = cleanNote(typeof t === "string" ? t : t.note);
+    const tied = typeof t !== "string", raw = typeof t === "string" ? t : t.note, text = cleanNote(raw);
+    // "The following (limits) are shared [by <group>]: (a) X (b) Y (c) Z.": the rows listed, each item a row label list;
+    // else every row (gate round 24).
+    const list = /^\s*the\s+following\s+(?:limits\s+|benefits\s+)?(?:is|are)\s+(?:shared|pooled|joint)\b([^:]*):\s*(.+?)\s*\.?\s*$/i.exec(raw);
+    if (list) {
+      const items = list[2].split(/\(\s*(?:[a-z]|i{1,3}|iv|vi{0,3}|ix|x|\d{1,2})\s*\)|[;,]|\band\b/i).map((x) => x.trim().replace(/\.$/, "").trim()).filter(Boolean);
+      const rows = list[1].replace(SHARED_GROUP, " ").trim() || !items.length || !items.every(isRowLabel) ? null : items.map(namedShared);
+      if (!rows || rows.some((x) => !x)) out.all = true;
+      else for (const x of rows) for (const b of x!) out.rows.add(b);
+      continue;
+    }
     // A ";" part that is only each person's own limit ("Medical expenses: shared; baggage: per person.") withholds nothing:
     // the note is judged without it (gate rounds 21, 22).
     const parts = text.split(";");
-    const kept = parts.filter((x) => !eachOwnPart(x));
+    // "Baggage is per person; the rest apply per family.": every row but the ones each person has (gate round 24).
+    const restShared = parts.filter((x) => REST_SHARED.test(x.trim().replace(/\.$/, "").trim()));
+    if (parts.length > 1 && restShared.length) {
+      const own = { except: [] as string[], labels: [] as string[] };
+      const others = parts.filter((x) => !restShared.includes(x));
+      if (others.length && others.every((x) => eachOwnPart(x, own)) && own.labels.length && !own.except.length) {
+        const mine = own.labels.map(namedShared);
+        if (mine.some((x) => !x)) out.all = true;
+        else for (const b of r.benefits) if (!mine.some((x) => x!.has(b))) out.rows.add(b);
+        continue;
+      }
+    }
+    const own = { except: [] as string[], labels: [] as string[] };
+    const kept = parts.filter((x) => !eachOwnPart(x, own));
     // Only when every other part has its own subject: else the each-own part is qualified by what follows it (gate round 23).
     if (parts.length < 2 || kept.length === parts.length || !kept.every(ownSubject)) { judge(text, tied); continue; }
+    // "the rest are per person except baggage (, which is shared)": baggage's rows, or every row for no row label.
+    for (const x of own.except) {
+      const got = isRowLabel(x) ? namedShared(x) : null;
+      if (!got) out.all = true; else for (const b of got) out.rows.add(b);
+    }
     if (kept.join("").trim()) judge(`${kept.join(";").trim().replace(/[;,.\s]*$/, "")}.`, tied);
   }
   tiedCache.set(r, out);
@@ -1026,7 +1059,7 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
 const EXCEPT = /\b(?:except|other\s+than|apart\s+from)\b/i;
 const EXCEPT_SHARED_SHAPE = /^\s*(.*?)\s*,?\s*\bexcept\s+(?:for\s+)?(.+?)\s*,?\s+which\s+(?:is|are)\s+(?:shared|pooled|joint)(?:\s+(?:by|between|among(?:st)?|for|with)\s+(.+?))?\s*\.?\s*$/i;
 /** The lead of an except form that says each person has their own limits (never "for all benefits"). */
-const EACH_OWN_LEAD = /^(?:each\s+(?:insured\s+)?(?:person|traveller|traveler|of\s+you)\s+(?:(?:usually|generally|normally)\s+)?has\s+(?:their|his\s+or\s+her|his|her|your)\s+own\s+(?:limits?|cover)(?:\s+for\s+(?:all|each|every)\s+benefits?)?|(?:the\s+)?limits?\s+(?:shown\s+)?(?:(?:usually|generally|normally)\s+)?apply\s+(?:per|to\s+each|for\s+each)\s+(?:insured\s+)?(?:person|traveller|traveler))$/i;
+const EACH_OWN_LEAD = /^(?:(?:the\s+rest|everything\s+else|(?:all\s+)?(?:the\s+)?other\s+(?:limits|benefits)|the\s+remaining\s+limits|the\s+others)\s+(?:(?:is|are|apply)\s+)?per\s+(?:insured\s+)?(?:person|traveller|traveler)|each\s+(?:insured\s+)?(?:person|traveller|traveler|of\s+you)\s+(?:(?:usually|generally|normally)\s+)?has\s+(?:their|his\s+or\s+her|his|her|your)\s+own\s+(?:limits?|cover)(?:\s+for\s+(?:all|each|every)\s+benefits?)?|(?:the\s+)?limits?\s+(?:shown\s+)?(?:(?:usually|generally|normally)\s+)?apply\s+(?:per|to\s+each|for\s+each)\s+(?:insured\s+)?(?:person|traveller|traveler))$/i;
 /** Words about every row of the table: a shared note with them shares them all (gate round 18). */
 const WHOLE_TABLE = /\b(?:all|every|each\s+other|others?|the\s+rest|remainder|everything|remaining|likewise|too|as\s+well|so\s+(?:is|are)|limits\s+shown|the\s+limits|etc|e\.\s?g|such\s+as|for\s+example|including)\b/i;
 /** Group phrases taken out before WHOLE_TABLE is looked for ("by all insured persons", "every insured person", "all of you"). */
@@ -1065,6 +1098,10 @@ const outsiderWith = (text: string) => {
   const obj = /\b(?:is|are)\s+(?:(?:also|likewise|similarly|equally|still|then)\s+)?(?:shared|pooled|joint)\s+with\s+([^.;]*)/i.exec(text)?.[1];
   return !!obj && OUTSIDER.test(obj) && !GROUPISH.test(obj);
 };
+/** Whole-table words for "the rest" (gate rounds 23, 24). */
+const REST_WORDS = String.raw`(?:(?:all\s+)?(?:the\s+)?other\s+(?:limits|benefits|sections|cover)|(?:all\s+)?(?:the\s+)?others|everything\s+else|the\s+rest|the\s+remainder|the\s+remaining(?:\s+(?:limits|benefits|sections|cover))?)`;
+/** "The rest apply per family / per policy / are for the family": the rest shared (gate round 24). */
+const REST_SHARED = new RegExp(String.raw`^${REST_WORDS}\s+(?:(?:is|are|apply)\s+)?(?:per\s+(?:family|policy|certificate|household)|for\s+the\s+(?:whole\s+)?family)$`, "i");
 /** A note with footnote markers ("*", "†", "¹", "(1)", "[2]", "(see note 3)"), invisible characters and curly quotes
  * made plain, before any word or character of it is read (gate round 22). */
 const cleanNote = (t: string) => t.replace(/[\u200B-\u200D\u2060\uFEFF\u00AD]/g, "").replace(/[\u201C\u201D\u201E"]/g, "").replace(/[\u2018\u2019\u201A]/g, "'")

@@ -1207,6 +1207,83 @@ for (const [line, gone] of [
 for (const line of ["Medical expenses are per person; baggage is per person.", "Baggage: per person."]) {
   test(`gate PPS-23: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
 }
+// Per-person-shared gate round 24 (probe pp34): "the rest / the remaining limits / the others (are) per person / not shared"
+// with an "except X" or "but not X" tail that shares X; "the rest apply per family" shares every row but the per-person
+// ones; "The following are shared: (a) X (b) Y" shares the rows listed. Each sentence follows a valid family-cap note.
+for (const line of ["Baggage: per person; limits: per family.", "Baggage: per person; all limits: per family.", "Baggage is per person; baggage limits apply per family.",
+  "Baggage: per person; family limit: S$3,000.", "Baggage: per person; family maximum: S$3,000.", "Baggage is per person; baggage is also subject to a family limit of S$3,000.",
+  "Baggage is per person; limits are per family.", "Baggage is per person; benefits apply per family.", "Medical expenses are shared; other limits are per person but all limits are capped at S$1,000,000 for the family.",
+  "Medical expenses are shared; other limits per person, but all limits are capped at S$1,000,000 for the family.", "Medical expenses are shared; other limits are per person; all limits are capped at S$1,000,000 for the family.", "Medical expenses are shared; everything else is per person, up to S$1,000,000 for the family.",
+  "Medical expenses are shared; everything else is per person and shared by the family.", "Medical expenses are shared; the rest are per person and pooled.", "Medical expenses are shared; the rest are per person, unless the family plan applies, when they are shared.",
+  "Limits are shared by the family; the rest are per person.", "Medical expenses are shared; all other benefits are per person, for the first S$1,000.", "Medical expenses are shared; the rest are per person; the family limit is twice this.",
+  "Medical expenses are shared; the rest are per person, max S$3,000 per family.", "Medical expenses are shared by the family for (a) treatment and (b) evacuation.", "Limits shared by the family (a).",
+  "Medical expenses are shared by the family, see note 2: other limits are also shared.", "Medical expenses are shared by the family (see note 2 below: all limits are shared).", "Section (c) limits are shared by the family.",
+  "Limits under (a) to (c) are shared by the family.", "\u00a7 2 limits are shared.", "Medical expenses are shared by the family (i.e. both of you).",
+  "Medical expenses (2 persons) are shared.", "Medical expenses are shared by (b) the family and (c) the hotel.", "Medical expenses are shared by the family (c) and the hotel.",
+  "Medical expenses are per person (a) except where shared by the family.", "Limits are sha\u00adred by the family.", "Baggage is per person; the family shares the rest.",
+  "Baggage is per person; you share the remainder.", "Baggage is per person; the remaining limits are shared.", "The family shares the rest.",
+  "Baggage is per person; the family shares the other limits.", "Baggage is per person; the family shares the others."]) {
+  test(`gate PPS-24 tier 1: '${line}' withholds every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), noOne));
+}
+for (const line of ["Medical expenses are shared; the rest per person.", "Other limits are per person; medical expenses are shared.", "Medical expenses are shared; each person has their own limits for everything else.",
+  "Medical expenses are shared; all other sections are per person.", "Medical expenses are shared; other cover is per person.", "Medical expenses are shared; the remaining limits are per person.",
+  "Medical expenses are shared; the others are per person.", "Medical expenses are shared; the rest are not shared.", "Medical expenses are shared; all other limits are per person.",
+  "(a) Medical expenses are shared by the family; (b) baggage is per person.", "The following limits are shared by the family: (a) medical expenses.", "Medical expenses are shared by (a) the family.",
+  "Medical expenses are shared by the family (e).", "Medical expenses are shared by the family (iv).", "Medical expenses are shared by the family (ii) (iii).",
+  "Medical expenses are shared by the family (A).", "Medical expenses are shared by the family (a).", "Medical expenses are shared by the family (i).",
+  "Medical expenses are shared by the family \u207d\u00b9\u207e.", "Medical expenses are shared by the family.", "Medical expenses are shared by the family; baggage is per person.",
+  "Medical expenses are shared with (c) the hotel.", "Medical expenses are shared with (d) other passengers.", "Medical expenses are sha\u00adred by the family."]) {
+  test(`gate PPS-24 tier 2: '${line}' withholds Overseas medical expenses only`, () => scoped(EIGHT, [CAP_NOTE, line], ["Overseas medical expenses"]));
+}
+for (const [line, gone, shown] of [
+  ["Baggage: per person; baggage: S$3,000 for the family.", ["Baggage delay", "Loss of baggage"], ["Overseas medical expenses", "Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability"]],
+  ["Baggage: per person; loss of baggage: up to S$3,000 for the family.", ["Loss of baggage"], ["Overseas medical expenses", "Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Personal liability"]],
+  ["Medical expenses: per person; medical: S$500,000 per family.", ["Overseas medical expenses", "Emergency medical evacuation"], ["Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Medical expenses: per person; medical expenses: S$500,000 for all of you.", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Baggage is per person; baggage is S$3,000 for the family.", ["Baggage delay", "Loss of baggage"], ["Overseas medical expenses", "Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability"]],
+  ["Baggage is per person; baggage is capped at S$3,000 for the family.", ["Baggage delay", "Loss of baggage"], ["Overseas medical expenses", "Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability"]],
+  ["Baggage: per person; medical: S$500,000 per family.", ["Overseas medical expenses", "Emergency medical evacuation"], ["Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Baggage: per person; medical expenses: up to S$500,000 for the whole family.", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Baggage: per person; baggage: family aggregate S$3,000.", ["Baggage delay", "Loss of baggage"], ["Overseas medical expenses", "Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability"]],
+  ["Baggage is per person; the rest apply per family.", ["Overseas medical expenses", "Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability"], ["Baggage delay", "Loss of baggage"]],
+  ["Medical expenses: per person; per family: S$500,000.", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Baggage: per person; baggage: per family.", ["Baggage delay", "Loss of baggage"], ["Overseas medical expenses", "Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["Baggage: per person; baggage: S$3,000 per certificate.", ["Baggage delay", "Loss of baggage"], ["Overseas medical expenses", "Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability"]],
+  ["Medical expenses: per person; medical expenses: S$500,000 per policy.", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Baggage: per person; up to S$3,000 for the family.", ["Baggage delay", "Loss of baggage"], ["Overseas medical expenses", "Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability"]],
+  ["Medical expenses: per person; S$500,000 per family.", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["The rest are per person except medical, which is shared.", ["Overseas medical expenses", "Emergency medical evacuation"], ["Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability", "Accidental death"]],
+  ["Medical expenses are shared; the rest are per person except baggage, which is shared.", ["Overseas medical expenses", "Baggage delay", "Loss of baggage"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["Medical expenses are shared; the rest are per person except baggage.", ["Overseas medical expenses", "Baggage delay", "Loss of baggage"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["Baggage is shared; the rest per person.", ["Baggage delay", "Loss of baggage"], ["Overseas medical expenses", "Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["Medical expenses are shared; each person has their own limits for the rest, except baggage.", ["Overseas medical expenses", "Baggage delay", "Loss of baggage"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["Everything else is per person; the family shares medical and baggage.", ["Overseas medical expenses", "Emergency medical evacuation", "Baggage delay", "Loss of baggage"], ["Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["Medical expenses are shared; the rest are per person, but not baggage.", ["Overseas medical expenses", "Baggage delay", "Loss of baggage"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["(a) Medical expenses are shared by the family (b) baggage is shared by the family.", ["Overseas medical expenses", "Baggage delay", "Loss of baggage"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["Shared by the family: (a) medical expenses; (b) baggage.", ["Overseas medical expenses", "Baggage delay", "Loss of baggage"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["The following are shared by the family: (a) medical expenses (b) loss of baggage (c) personal liability.", ["Overseas medical expenses", "Loss of baggage", "Personal liability"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Accidental death"]],
+  ["The following are shared by the family: (a) medical expenses; (b) loss of baggage; (c) personal liability.", ["Overseas medical expenses", "Loss of baggage", "Personal liability"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Accidental death"]],
+  ["Medical expenses (a) and baggage (b) are shared by the family.", ["Overseas medical expenses", "Baggage delay", "Loss of baggage"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["(i) Medical expenses and (ii) baggage are shared by the family.", ["Overseas medical expenses", "Baggage delay", "Loss of baggage"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["Medical expenses are shared by the family (see note 2 on page 3).", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Medical expenses (a) are per person; baggage (b) is shared.", ["Baggage delay", "Loss of baggage"], ["Overseas medical expenses", "Emergency medical evacuation", "Trip cancellation", "Travel delay", "Personal liability", "Accidental death"]],
+  ["^1 Medical expenses are shared.", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Medical expenses are shared by the family ^1.", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Medical expenses are shared by the family (123).", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Medical expenses are shared by the family \u00a7 4.", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Medical expenses are shared by the family (see Note 2 overleaf).", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]],
+  ["Medical expenses are shared by the family, see note 2.", ["Overseas medical expenses"], ["Emergency medical evacuation", "Trip cancellation", "Travel delay", "Baggage delay", "Loss of baggage", "Personal liability"]]] as [string, string[], string[]][]) {
+  test(`gate PPS-24: '${line}' withholds ${gone.join(", ")} and shows ${shown.join(", ") || "nothing else"}`, () => {
+    const got = sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] });
+    for (const p of [got.a, got.b, got.k]) {
+      for (const g of gone) assert.ok(!p.includes(g), `${g} shown: ${JSON.stringify(p)}`);
+      for (const k of shown) assert.ok(p.includes(k), `${k} withheld: ${JSON.stringify(p)}`);
+    }
+  });
+}
+for (const line of ["The rest are per person.", "(a) per person; (b) shared by the family."]) {
+  test(`gate PPS-24: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),
