@@ -22,6 +22,7 @@ import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
 import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
+import { moneyCapPrinted, ownRowText, printedOnlyAsCount } from "./own-row";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
 /** A money figure with its sign; a sign is never the end of a word ("FORM 2", "ARM 2"). */
@@ -1048,6 +1049,13 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     const p = placed.get(src);
     return printsNumber(p ? cellsApart(pageText(src.page).slice(p.start, p.end)) : src.excerpt, value);
   };
+  // The row's own lines inside its quote (own-row.ts): rows 1 is the whole quote, as before; with two or more rows, the
+  // text of the one whose label is the benefit's, or null when that is not told (wrapped-quote gate P1).
+  const ownRowOf = (src: Source, benefit: string, column: string | null) => {
+    const p = placed.get(src);
+    return p ? ownRowText(pageText(src.page), p.start, p.end, benefit, column) : { rows: 1, text: src.excerpt };
+  };
+  const printedOnOwnRow = (own: { rows: number; text: string | null }, value: number) => own.rows <= 1 || (own.text != null && printsNumber(cellsApart(own.text), value));
   const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, near: "", otherPercent: false }; };
 
   const readCovers = Array.isArray(r.covers) ? r.covers : [];
@@ -1229,6 +1237,17 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     if (fromCoverLine.has(b) && out.benefits.some((x) => x.source.page === source.page && flatLine(x.source.excerpt).includes(flatLine(source.excerpt)))) continue;
     let value = num(b.value);
     if (value != null && !printedIn(source, value)) { out.dropped.push({ what: label, why: `figure ${value} not printed in the quote` }); continue; }
+    // A quote that runs over two rows prints the other row's figure too: a figure printed only on another row's line is
+    // never this row's. The row stays, paid as its words say, with no figure (wrapped-quote gate P1).
+    const ownRow = ownRowOf(source, benefit, str(b.column));
+    if (value != null && !printedOnOwnRow(ownRow, value)) {
+      out.dropped.push({ what: label, why: `figure ${value} is printed on another row's line in the quote, not this row's; kept the row without it` }); pays = "words"; value = null;
+    }
+    // A number printed only before a count noun ("up to a maximum of 2 procedures", "10 sessions") is a count, never an
+    // amount (wrapped-quote gate P2).
+    if (value != null && pays !== "percent" && printedOnlyAsCount(ownRow.text ?? source.excerpt, value)) {
+      out.dropped.push({ what: label, why: `figure ${value} is printed only as a count, not an amount; kept the row without it` }); pays = "words"; value = null;
+    }
     // A row whose line prints a figure for each plan ("Emergency evacuation S$50,000 S$150,000 S$300,000", "Trip
     // cancellation S$5,000 S$10,000") gives a figure only with the plan column it was read under: without one, the figure
     // may be any plan's (Critic R364 H1, the FWD plan-column regression). Fails closed whatever the reader did, including
@@ -1300,7 +1319,10 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       const { text: row, near, otherPercent } = segmentOf(source);
       const claimed = num(b.cap);
       const s = claimed != null && claimed > 0 ? find(str(b.capQuote), source.page) : null;
-      const tied = s && claimed != null && s.page === source.page && printedIn(s, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt));
+      // A cap is money: a money figure, or bare on a page that declares a currency, never before a count noun ("up to a
+      // maximum of 2 procedures" is no S$2 cap: wrapped-quote gate P2); and on the row's own lines.
+      const tied = s && claimed != null && s.page === source.page && printedIn(s, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt))
+        && moneyCapPrinted(s.excerpt, claimed, declaredCurrency(pageText(s.page))) && printedOnOwnRow(ownRow, claimed);
       // Another money figure in the row besides its cap ("up to S$50,000 or S$500 per day, whichever is lower") is a second
       // limit too (Critic R102-1).
       const otherMoney = moneyIn(row).some((m) => m.value !== claimed);
@@ -1314,12 +1336,15 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       } else if (tied) {
         cap = claimed; capSource = s;
       } else if (claimed == null && capInRow(row) != null && !otherPercent && !otherMoneyThan(row, capInRow(row)!) && !NEAR_CAP.test(near)
+        && moneyCapPrinted(plainText(row).replace(/\s+/g, " "), capInRow(row)!, declaredCurrency(pageText(source.page))) && printedOnOwnRow(ownRow, capInRow(row)!)
         && !(/\bwhichever\b/i.test(`${row}\n${near}`) && [...`${row.replace(ITEM_MARKER, "")}\n${near}`.matchAll(/\d[\d,]*(?:\.\d+)?/g)].some((m) => ![capInRow(row), value].includes(Number(m[0].replace(/,/g, "")))))) {
         // No cap read, but the row's own words print exactly one money figure right after a cap word ("100% Sum Insured (up
         // to S$400,000)", "subject to a maximum amount of S$25,000"): that is its cap (overnight run 23 Oct, N016, N083).
         cap = capInRow(row); capSource = source;
       } else {
-        if (claimed != null) out.dropped.push({ what: label, why: `cap ${claimed} not printed in the row; no amount is worked out for it` });
+        if (claimed != null) out.dropped.push({ what: label, why: s && printedIn(s, claimed) && !moneyCapPrinted(s.excerpt, claimed, declaredCurrency(pageText(s.page)))
+          ? `cap ${claimed} is not printed as money (a count, or a bare figure on a page that declares no currency); no amount is worked out for it`
+          : `cap ${claimed} not printed in the row; no amount is worked out for it` });
         // "Limited to 25%" names the share only when the row prints no money beside it ("limited to 25% of the Sum Insured
         // or AUD 15,000" is capped, whatever words join them: Critic #449 round 3).
         // Only on a document printed for one life (one person's covers): on a family or joint schedule the share's life is
@@ -1341,7 +1366,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     }
     const capCurrency = cap != null && capSource ? capFigureCurrency(capSource.excerpt, cap, pageText(capSource.page)) : null;
     // Day counts are figures too: one the quote does not print is not kept.
-    const day = (v: unknown) => { const n = int(v); return n != null && printedIn(source, n) ? n : null; };
+    const day = (v: unknown) => { const n = int(v); return n != null && printedIn(source, n) && printedOnOwnRow(ownRow, n) ? n : null; };
     // "Payable after the 10th day" is first paid on day 11: the same day, worded from the day before (live run 23 Oct, B3).
     // The first paid day the quote states, parsed once as a number, is the row's: "after the 10th day" is day 11, "from day
     // 1" is day 1, whatever the reading said (live run 23 Oct, B3; TE #108 B2, B4). A quote that states two is none; one
