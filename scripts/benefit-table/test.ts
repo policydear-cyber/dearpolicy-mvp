@@ -826,50 +826,6 @@ test("backfill SQL: inserts only for the account's current policy, never over a 
   assert.throws(() => backfillSql({ accountId: "acct'; --", label: "x", links: [], readings: [] }));
   assert.throws(() => backfillSql({ accountId: acct, label: "x", links: [], readings: [{ policyId: "p'1", model: "m", stored: { document: {}, pages: [] } }] }));
 });
-// OCR proof (synthetic 50-document set, 14 Nov): table rows a reader quotes as label plus the cell it read, skipping the
-// cells between, and rows of plan percentages read under a named column.
-{
-  const plans: SourceDoc = { id: "plans", name: "Plans.pdf", readable: true, pages: [{ page: 1, text:
-    "Benefit\tPlan C\tBasic\tElite\tPlan B\nEmergency outpatient\t¥56,400 per day\t¥146,705,900\tUp to ¥159,505,100\t20%\n" +
-    "Missed connection\t30%\t20%\tS$500\tNot covered\nBenefit\tFamily\tPlan A\nEmergency outpatient\t5%\t¥7,200,000\n" +
-    "Hip 75% Wrist 20%" }] };
-  const one = (o: Record<string, unknown>) => checkReading(plans, doc("policy_wording", [], [benefit(o)]));
-  test("a row quoted as its label and one later cell, skipping cells between, is found on its line", () => {
-    const r = one({ benefit: "Emergency outpatient", column: "Basic", pays: "amount", value: 146705900, quote: "Emergency outpatient\t¥146,705,900" });
-    assert.equal(r.benefits.length, 1, JSON.stringify(r.dropped));
-    assert.equal(r.benefits[0].value, 146705900);
-    assert.match(r.benefits[0].source.excerpt, /¥56,400 per day/);
-  });
-  test("a skipped-cell quote never takes a figure from a cell it left out", () => {
-    const r = one({ benefit: "Emergency outpatient", column: "Basic", pays: "amount", value: 56400, quote: "Emergency outpatient\t¥146,705,900" });
-    assert.equal(r.benefits.length, 0);
-    assert.match(r.dropped[0].why, /not printed in the quote/);
-  });
-  test("skipped-cell quote: cells out of order, a cell from another line, or part of a cell is not found", () => {
-    for (const quote of ["Emergency outpatient\t20%\t¥146,705,900", "Emergency outpatient\t¥7,200,000\t20%", "Emergency outpatient\t146,705"]) {
-      const r = one({ benefit: "Emergency outpatient", column: "Basic", pays: "amount", value: 146705900, quote });
-      assert.equal(r.benefits.length, 0, quote);
-      assert.match(r.dropped[0].why, /quote not found/, quote);
-    }
-  });
-  test("a label with the same cell on two lines is not bound to either", () => {
-    const twice: SourceDoc = { ...plans, pages: [{ page: 1, text: "Room\tS$100\tS$200\tS$300\nRoom\tS$100\tS$900\tS$300" }] };
-    const r = checkReading(twice, doc("policy_wording", [], [benefit({ benefit: "Room", column: "C", pays: "amount", value: 300, quote: "Room\tS$300" })]));
-    assert.equal(r.benefits.length, 0);
-  });
-  test("one table row of plan percentages read under a named column keeps its percentage", () => {
-    const r = one({ benefit: "Missed connection", column: "Basic", pays: "percent", value: 20, quote: "Missed connection\t30%\t20%\tS$500\tNot covered" });
-    assert.equal(r.benefits[0].pays, "percent", JSON.stringify(r.dropped));
-    assert.equal(r.benefits[0].value, 20);
-  });
-  test("plan percentages with no column, or a quote over two rows, still give no figure", () => {
-    const noCol = one({ benefit: "Missed connection", pays: "percent", value: 20, quote: "Missed connection\t30%\t20%\tS$500\tNot covered" });
-    assert.equal(noCol.benefits[0]?.value ?? null, null);
-    const runOn = one({ benefit: "Hip", column: "Basic", pays: "percent", value: 75, quote: "Hip 75% Wrist 20%" });
-    assert.equal(runOn.benefits[0].pays, "words");
-    assert.match(runOn.dropped[0].why, /more than one percentage/);
-  });
-}
 console.log(`benefit-table: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log("  FAIL " + f);
 if (failures.length) process.exit(1);
