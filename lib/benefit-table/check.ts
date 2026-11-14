@@ -824,13 +824,22 @@ const ADMIN_SCOPE = /\b(?:amounts?|limits?|most|maximum|max|each|every|everyone|
 const PERSON_LINE_WORDS = new Set(("policyholder policy holder spouse partner husband wife child son daughter insured person persons main joint life assured " +
   "relationship dependant dependent principal member mr mrs ms miss dr and date of birth dob sum name").split(" "));
 /** See CheckedReading.lifeNotes, sharedNotes, footnotes, plainBlockers and premiumFigures. */
-export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedReading, "covers" | "benefits" | "namedPeople"> & { product?: string | null; insurer?: string | null }): DocumentNotes {
+export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedReading, "covers" | "benefits" | "namedPeople"> & { kind?: CheckedReading["kind"]; product?: string | null; insurer?: string | null }): DocumentNotes {
+  // Only a person's own schedule or certificate gives a row to each named insured person (assemble.ts perPersonRows needs
+  // its own proof, plainTable a personal_proof): any other document's notes are never read, so its pages are not walked
+  // (benefit-table:speed-test: a 360-page household of wordings went from about 0.5 s to 4.8 s when every line was).
+  if (reading.kind != null && reading.kind !== "personal_proof") return { tieLines: [], capNotes: [], tiedNotes: [], lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
   const own = new Set<string>();
   for (const b of reading.benefits) for (const l of (b.rowText ?? "").split("\n")) if (flat(l)) own.add(flat(l));
   // A row kept as words, whose line was not read around it (a percentage quote holding two percentages): its own table
   // line, a line of two or more cells, one of its first two the row's label, holding the row's quote.
-  const tableLine = (line: string) => { const cells = line.split("\t").map(flat);
-    return cells.length >= 2 && reading.benefits.some((b) => !b.rowText && flat(b.benefit).length >= 3 && cells.slice(0, 2).includes(flat(b.benefit)) && flat(line).includes(flat(b.source.excerpt))); };
+  // Read once, not for every line of every page (speed-test).
+  const wordsRows = reading.benefits.filter((b) => !b.rowText && flat(b.benefit).length >= 3).map((b) => ({ label: flat(b.benefit), quote: flat(b.source.excerpt) }));
+  const tableLine = (line: string) => { if (!wordsRows.length || !line.includes("\t")) return false;
+    const cells = line.split("\t").map(flat);
+    if (cells.length < 2) return false;
+    const whole = flat(line);
+    return wordsRows.some((b) => cells.slice(0, 2).includes(b.label) && whole.includes(b.quote)); };
   const coverLines = reading.covers.map((c) => flat(c.source.excerpt)).filter((x) => x.length >= 6);
   const people = [...new Set([...reading.namedPeople, ...reading.covers.map((c) => c.person)].map(flat).filter((n) => n.length >= 3 && n.includes(" ")))];
   const sums = reading.covers.map((c) => c.sumInsured).filter((n): n is number => n != null);
@@ -863,7 +872,8 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   const out: DocumentNotes = { tieLines: [], capNotes: [], tiedNotes: [], lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
   const add = (list: string[], line: string) => { if (!list.includes(line.trim()) && list.length < 20) list.push(line.trim()); };
   const money = (line: string) => anyMoneyFigures(line).map((f) => f.value);
-  const named = (l: string) => { const t = ` ${l.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `; return people.filter((n) => t.includes(` ${n.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `)); };
+  const peopleWords = people.map((n) => ` ${n.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `);
+  const named = (l: string) => { if (!people.length) return []; const t = ` ${l.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `; return people.filter((_, i) => t.includes(peopleWords[i])); };
   const words = (t: string) => flat(t).replace(/[^a-z0-9 ]+/g, " ").split(" ").filter(Boolean);
   const strip = (t: string) => {
     let x = ` ${flat(t)} `;
@@ -875,7 +885,12 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   };
   // An admin line: no money figure, no share, no person, no kind of life or age (the policyholder aside), none of the
   // words that would tie it to the amounts (ADMIN_SCOPE).
-  const admin = (line: string) => !money(line).length && !named(flat(line)).length && !LIFE_NOTE.test(line.replace(ROLE_ONLY, " ")) && !ADMIN_SCOPE.test(strip(line));
+  // The money test last: it is the costly one (speed-test), and the others settle most lines.
+  const admin = (line: string) => !ADMIN_SCOPE.test(strip(line)) && !LIFE_NOTE.test(line.replace(ROLE_ONLY, " ")) && !named(flat(line)).length && !money(line).length;
+  /** The premium line test alone (the premium branch of structural), for a document whose blockers list is already full. */
+  const premiumLine = (line: string, l: string) => {
+    if (/\b(?:premiums?|contributions?|instal?l?ments?|direct\s+debit)\b/i.test(line) && !named(l).length && !LIFE_NOTE.test(line.replace(ROLE_ONLY, " "))) out.premiumFigures.push(...money(line));
+  };
   /** One of the closed set of lines a plain family schedule prints outside its benefit rows (assemble.ts plainTable). */
   const structural = (line: string, l: string, prevStructural: "admin" | "footnote" | null, full: string): "admin" | "footnote" | "other" | null => {
     if (/^\s*(?:page\s+)?\d{1,3}(?:\s*(?:of|\/)\s*\d{1,3})?\s*$/i.test(line)) return "admin";
@@ -964,9 +979,14 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
         }
         return;
       }
-      const kind = structural(line, l, prev, mark ? noteText(lines, i) : line);
-      prev = kind === "admin" || kind === "footnote" ? kind : null;
-      if (!kind) add(out.plainBlockers, line);
+      // Once the blockers list is full (add keeps 20), a line's kind can add nothing to it: only a premium line's figures
+      // are still read (speed-test: a long personal document no longer runs every line through the structural tests).
+      if (out.plainBlockers.length >= 20) premiumLine(line, l);
+      else {
+        const kind = structural(line, l, prev, mark ? noteText(lines, i) : line);
+        prev = kind === "admin" || kind === "footnote" ? kind : null;
+        if (!kind) add(out.plainBlockers, line);
+      }
       // A line naming an insured person is a note when it prints an amount, a share or a change to one ("Grace Okafor:
       // hospital cash GBP 25 a day", "Benefits for Grace Okafor are halved"); one that only says who they are ("Spouse:
       // Daniel Okafor") is not. A line naming a kind of life or an age group (the policyholder alone is no kind of life) is
@@ -976,11 +996,12 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
       // of 31 days") is not (TE gate H4, R2-H1, R2-M1). A line that gives some lives another figure without naming them
       // ("Those still in full-time education receive half") is a note too, unless it is the footnote of a row that prints
       // its mark (read with that row).
-      const figures = money(line).filter((v) => !sums.some((x) => Math.abs(x - v) < 0.005));
+      // The line's figures only when it names a person or a kind of life (the costly money test; speed-test).
+      const figures = () => money(line).filter((v) => !sums.some((x) => Math.abs(x - v) < 0.005));
       const heading = l.split(" ").length <= 5 && !/[.:;]\s*$/.test(line.trim());
       const life = LIFE_NOTE.test(line.replace(ROLE_ONLY, " "));
-      const isNote = named(l).length ? figures.length > 0 || STRICT_CHANGE.test(line) || FIGURE_CHANGE.test(line)
-        : life ? figures.length > 0 || STRICT_CHANGE.test(line) || FIGURE_CHANGE.test(line) || heading
+      const isNote = named(l).length ? figures().length > 0 || STRICT_CHANGE.test(line) || FIGURE_CHANGE.test(line)
+        : life ? figures().length > 0 || STRICT_CHANGE.test(line) || FIGURE_CHANGE.test(line) || heading
           : FIGURE_CHANGE.test(line) && !(mark && referenced.has(mark) && ownNote(mark, noteText(lines, i)));
       if (isNote) add(out.lifeNotes, line);
     });
