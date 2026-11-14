@@ -294,7 +294,7 @@ async function main() {
       assert.deepEqual(bd.baiduPagesFromJsonl(vl(md, list), "PaddleOCR-VL-1.5"),
         ["Schedule\n\nHarbour Shield Plan In Force 25,000.00\n\nNote: cover ends at age 65.\n\nExample Assurance Ltd\n\nCo. Reg. 200412345K (Printed: 03-Mar-2026)"]);
       assert.equal(warned.length, 1);
-      assert.match(warned[0], /^\[baidu-ocr\] page 1: 2 block\(s\) not in Baidu's Markdown added from its layout list \(labels: footnote, footer\)$/);
+      assert.match(warned[0], /^\[baidu-ocr\] job page 1: 2 block\(s\) not in Baidu's Markdown added from its layout list \(labels: footnote, footer\)$/);
       assert.ok(!warned[0].includes("200412345"), "the log never carries a block's text");
       // Baidu's block_order, where every block has one, is the reading order; a missing block before every present one
       // goes first. Titles ("figure_title", "table_title") are text and are put back alike.
@@ -315,6 +315,35 @@ async function main() {
       assert.deepEqual(bd.baiduPagesFromJsonl(vl("", [{ block_label: "text", block_content: "Death S$100,000" }]), "PaddleOCR-VL-1.5"), ["Death S$100,000"]);
       assert.equal(warned.length, 3);
     } finally { console.warn = warn; }
+  }
+  // 9b. Every document-model page logs what Baidu's layout list holds, in fixed words and Baidu's labels only.
+  {
+    const said: string[] = []; const info = console.info; console.info = (m: string) => { said.push(String(m)); };
+    try {
+      const page = (list?: unknown) => ({ markdown: { text: "Death S$100,000" }, ...(list === undefined ? {} : { prunedResult: { parsing_res_list: list } }) });
+      bd.baiduPagesFromJsonl(JSON.stringify({ result: { layoutParsingResults: [
+        page([{ block_label: "text", block_content: "Death S$100,000" }, { block_label: "footer", block_content: "Reg 200412345K" }, { block_label: "text", block_content: "Death S$100,000" }, { block_label: "Weird Label!", block_content: "x" }]),
+        page(), page([]),
+      ] } }), "PaddleOCR-VL-1.5");
+      // Without the document's page numbers, a page is named by its place in the Baidu job, and says so.
+      assert.deepEqual(said.filter((m) => m.startsWith("[baidu-ocr]")), [
+        "[baidu-ocr] job page 1 layout: 4 blocks: text 2, footer 1, other 1; added 1",
+        "[baidu-ocr] job page 2 layout: no list; added 0",
+        "[baidu-ocr] job page 3 layout: 0 blocks; added 0",
+      ]);
+      // With them, the document page is logged. A label not on Baidu's known list (a name, say) is logged as "other".
+      said.length = 0;
+      bd.baiduPagesFromJsonl(JSON.stringify({ result: { layoutParsingResults: [
+        page([{ block_label: "john_tan", block_content: "x" }, { block_label: "text", block_content: "Death S$100,000" }]),
+        page([{ block_label: "footer", block_content: "Reg 200412345K" }]),
+      ] } }), "PaddleOCR-VL-1.5", [7, 9]);
+      assert.deepEqual(said.filter((m) => m.startsWith("[baidu-ocr]")), [
+        "[baidu-ocr] page 7 layout: 2 blocks: other 1, text 1; added 0",
+        "[baidu-ocr] page 9 layout: 1 block: footer 1; added 1",
+      ]);
+      assert.ok(said.every((m) => !m.includes("john")), "an unknown label never prints");
+      assert.ok(said.every((m) => !m.includes("200412345") && !m.includes("Death")), "never a block's text");
+    } finally { console.info = info; }
   }
   process.env.BAIDU_OCR_PAGES_PER_JOB = "1";
   seen = []; baidu = baiduJob([vlLine([PAGE_A])], { states: ["done"] });
