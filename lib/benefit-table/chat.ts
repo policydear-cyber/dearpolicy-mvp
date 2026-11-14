@@ -1687,7 +1687,7 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
     base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap, times: multiple,
     ...(row.childLimit ? { child: { percent: row.childLimit.percent, belowAge: row.childLimit.belowAge, own: row.childLimit.own,
       status: row.childLimit.status!, days: row.childLimit.days } } : {}),
-    ...(row.childNote?.status === "not_child" ? { adult: { days: row.childNote.days } } : {}) };
+    ...(row.childNote?.adult ? { adult: { days: row.childNote.days, age: row.childNote.age } } : {}) };
 }
 
 /** One row as a statement the simple chat's checks understand: the figure as printed with the row's own words, or the

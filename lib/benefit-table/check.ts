@@ -16,7 +16,7 @@ import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, personOnlyI
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
-import { childColumn, childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife, childNoteElsewhere } from "./child-limit";
+import { childColumn, childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife, childLimitNotes } from "./child-limit";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
@@ -233,10 +233,11 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   /** The row's child share was read two ways (its cell and a row of its own under a child column that disagree,
    * foldChildColumns): no amount is worked out for it. */
   childLimitConflict?: boolean;
-  /** A percentage of the sum insured whose page prints other words about an insured child (a note under the table, a
-   * footnote to the row's label: childNoteElsewhere, gate R4-H3): its share is worked out only for a person the
-   * schedule's own line proves is not a child (assemble.ts baseFigure). */
-  childNote?: boolean;
+  /** A percentage of the sum insured whose document prints a child-limit sentence outside the row's own cell (a note, a
+   * footnote, another row: child-limit.ts childLimitNotes, gates R4-H3, R5-H1): no child share, and its own share is worked
+   * out only for a person the schedule's own line proves is not that child (assemble.ts baseFigure). `age`: the highest
+   * age those sentences print, or null. */
+  childNote?: { age: number | null };
   /** The footnote marks printed on the row's column heading ("Limit per insured person*"), on its own words or where the
    * page prints it (headingMarks): assemble.ts reads a per-person column with its note (plain-table gate round 5, R5-H2). */
   columnMarks?: string[];
@@ -1727,11 +1728,13 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // A child's share printed in the row's own cell ("100% of the Sum Insured. For an insured child under 18, limited to
     // 25% of the Sum Insured"): read only when the cell prints nothing else beside the row's own share, then the child's
     // sentence is left out of the row's own checks (lib/benefit-table/child-limit.ts). Anything else is as before.
-    let childLimit: ChildLimit | null = null, childNote = false;
+    let childLimit: ChildLimit | null = null, childNote: { age: number | null } | null = null;
     if (pays === "percent" && value != null && percentOf === "sum_insured" && placed.has(source)) {
+      // Every page of the document, leaving out only the row's own cell (its line, from the quote's start to the end of
+      // the line its quote ends on).
       const p = placed.get(source)!, text = pageText(source.page);
-      childNote = childNoteElsewhere(text, text.lastIndexOf("\n", p.start - 1) + 1, lineEndAt(text, p.end),
-        [...out.covers.map((x) => x.person), ...out.namedPeople, ...(doc.people ?? []), ...readCovers.map((x) => str(x?.person) ?? "")]);
+      const notes = childLimitNotes(doc.pages.map((x) => ({ page: x.page, text: x.text })), { page: source.page, from: text.lastIndexOf("\n", p.start - 1) + 1, to: lineEndAt(text, p.end) });
+      if (notes.found) childNote = { age: notes.age };
     }
     if (pays === "percent" && value != null && percentOf === "sum_insured" && num(b.cap) == null && placed.has(source)) {
       const p = placed.get(source)!, text = pageText(source.page);

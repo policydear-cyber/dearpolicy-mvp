@@ -12,7 +12,7 @@ import { checkReading, foldChildColumns, type SourceDoc } from "@/lib/benefit-ta
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
 import { readModelAnswer, verifyAnswer, type ServerFigure } from "@/lib/simple-chat/verify";
-import { childColumn, childLimitIn, personStatus, printedLife } from "@/lib/benefit-table/child-limit";
+import { childColumn, childLimitIn, childLimitNotes, personStatus, printedLife } from "@/lib/benefit-table/child-limit";
 import { printedDay } from "@/lib/benefit-table/dates";
 
 let passed = 0;
@@ -30,13 +30,13 @@ const ACC = "55555555-5555-4555-8555-555555555555";
 const DOC = "eeeeeeee-0000-4000-8000-000000000081";
 const ben = (o: Record<string, unknown>) => ({ section: null, column: null, pays: "amount", value: null, period: null, basis: null, asOf: null, percentOf: null, baseAmount: null, baseQuote: null,
   cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 2, ...o });
-function schedule(people: Person[], tableLines: string[], benefits: Record<string, unknown>[], o: { product?: string; header?: string; period?: string | null; familyDob?: Record<string, string> } = {}) {
+function schedule(people: Person[], tableLines: string[], benefits: Record<string, unknown>[], o: { product?: string; header?: string; period?: string | null; familyDob?: Record<string, string>; page3?: string } = {}) {
   const product = o.product ?? "Family Personal Accident";
   const page1 = `Example Assurance plc\n${product.toUpperCase()} - SCHEDULE${o.period === null ? "" : `\nPeriod of insurance: ${o.period ?? "1 March 2026 to 28 February 2027"}`}\n${o.header ?? "Insured person\tRelationship\tDate of birth\tSum Insured"}\n${people.map((p) => p.line).join("\n")}`;
   const page2 = `TABLE OF BENEFITS\nSection\tBenefit\tAmount payable\n${tableLines.join("\n")}`;
   const d: Household["documents"][number] = { policyId: DOC, name: `${product}.pdf`, insurer: "Example Assurance plc", productName: product, policyNumber: null, documentType: null,
     documentRole: "personal_schedule", effectiveDate: null, expiryDate: null, uploadedAt: "2026-10-01", uploadedFor: null, linkedPeople: people.map((p) => p.name), supersededAt: null,
-    processingStatus: "ready", pages: [page1, page2].map((text, i) => ({ page: i + 1, text })) };
+    processingStatus: "ready", pages: [page1, page2, ...(o.page3 ? [o.page3] : [])].map((text, i) => ({ page: i + 1, text })) };
   const house: Household = { accountId: ACC, members: people.map((p) => ({ name: p.name, relationship: p.relationship })), documents: [d] };
   const family: FamilyMember[] = people.map((p, i) => ({ id: `m${i}`, display_name: p.name, relationship: p.relationship, date_of_birth: o.familyDob?.[p.name] ?? null }));
   const src: SourceDoc = { id: d.policyId, name: d.name, readable: true, pages: d.pages };
@@ -408,6 +408,84 @@ test("gate R4-H4: a date-of-birth label followed by more words is not the person
   }
   assert.equal(printedLife(["Grace Okafor (DOB 09/04/2017)\tGBP 20,000"], 0, "Grace Okafor").birth, "09/04/2017");
   assert.equal(printedLife(["Grace Okafor, born 09/04/2017"], 0, "Grace Okafor").birth, "09/04/2017");
+});
+// ---------- Gate round 5: a child-limit sentence anywhere in the document ----------
+const ALL3 = [NGOZI, DANIEL, GRACE];
+const AD_LINE = `1\tAccidental death\t${CELL}`;
+/** The H1-B table (or a plain one) with more lines under it and an optional page 3: each person's AD and PTD figures. */
+function r5(more: string[], o: { plain?: boolean; page3?: string; people?: Person[] } = {}) {
+  const people = o.people ?? ALL3;
+  const h = schedule(people, [o.plain ? "1\tAccidental death\t100% of the Sum Insured" : AD_LINE, PTD, ...more], [
+    ben({ section: "1", benefit: "Accidental death", pays: "percent", value: 100, percentOf: "sum_insured", quote: o.plain ? "100% of the Sum Insured" : CELL, conditions: o.plain ? [] : [CLAUSE] }),
+    ben({ section: "2", benefit: "Permanent total disablement", pays: "percent", value: 100, percentOf: "sum_insured", quote: PTD })], { page3: o.page3 });
+  const fig = (p: Person, re: RegExp) => { const r = h.table.people.find((x) => x.name === p.name)!.rows.find((y) => re.test(y.benefit))!; return r.figure.kind === "worked_out" ? r.figure.amount : null; };
+  return { h, ad: (p: Person) => fig(p, /Accidental/), ptd: (p: Person) => fig(p, /disable/), chat: (p: Person) => death(h, p).amounts };
+}
+test("gate R5-H1: a child-limit sentence on another page, naming a person, in a row of the same table, or in other words: no child share", () => {
+  const cases: [string, string[], string | undefined][] = [
+    ["page 3 note", [], "GENERAL CONDITIONS\nFor an insured child the death benefit is limited to GBP 3,000."],
+    ["page 3 section note", [], "NOTES TO THE TABLE OF BENEFITS\nSection 1: for insured children under 10 nothing is payable."],
+    ["note naming the child", ["Note: Grace Okafor, as an insured child, is limited to GBP 3,000 for death."], undefined],
+    ["note naming the parent", ["Note: children of Ngozi Okafor are covered for death up to GBP 3,000 only."], undefined],
+    ["same-table row", ["3\tChildren's limit\tFor every insured child, Sections 1 and 2 are limited to GBP 3,000."], undefined],
+    ["same-table row, no number", ["Children's limit\tSections 1 and 2 are limited to GBP 3,000 for each insured child."], undefined],
+    ["another row's child sentence", ["3\tFracture\t5% of the Sum Insured. Not payable for an insured child under 10."], undefined],
+    ...["U18 lives: the death benefit is limited to GBP 3,000.", "Persons who have not reached age 18: death benefit limited to GBP 3,000.",
+      "Young persons (aged 0-17): death benefit limited to GBP 3,000.", "Under-18s: death benefit limited to GBP 3,000."].map((w): [string, string[], undefined] => [w, [w], undefined]),
+  ];
+  for (const [name, more, page3] of cases) {
+    const k = r5(more, { page3 });
+    assert.equal(k.ad(GRACE), null, name);
+    assert.deepEqual(k.chat(GRACE), [], name);
+  }
+  // A plain table under each wording: the child's own share is withheld, the adults keep theirs.
+  for (const w of ["Persons under-18s are covered at 10% of the Sum Insured.", "Insured persons who have not reached age 18: 10% of the Sum Insured.",
+    "Young persons (aged 0-17): 10% of the Sum Insured.", "For insured persons aged less than 18, Section 1 is limited to 10%.", "Students: Section 1 limited to 10% of the Sum Insured.",
+    "U18 lives: 10% of the Sum Insured for death.", "Persons up to age 17 are paid 10%.", "3\tInsured children\tSections 1 and 2: 10% of the Sum Insured for each insured child."]) {
+    const k = r5([w], { plain: true });
+    assert.equal(k.ad(GRACE), null, w);
+    assert.equal(k.ptd(GRACE), null, w);
+    assert.deepEqual(k.chat(GRACE), [], w);
+    assert.equal(k.ad(NGOZI), 100000, w);
+    assert.deepEqual(k.chat(DANIEL), ["£80,000"], w);
+  }
+  // The child-limit sentence shapes, one by one.
+  const notes = (t: string) => childLimitNotes([{ page: 1, text: t }], null);
+  assert.deepEqual(notes("Section 1: for insured children under 10 nothing is payable."), { found: true, age: 10 });
+  assert.deepEqual(notes("Young persons (aged 0-17): 10% of the Sum Insured."), { found: true, age: 18 });
+  assert.deepEqual(notes("Insured children under 21: 50% of the Sum Insured."), { found: true, age: 21 });
+  assert.deepEqual(notes("Note: for an insured child the death benefit is\nlimited to GBP 3,000."), { found: true, age: null });
+  // Another row's own cell with an allow-listed child share is that row's own rule.
+  assert.deepEqual(notes(`2\tPermanent total disablement\t${CELL}`), { found: false, age: null });
+  // Not a child's limit: no child or age phrase as the subject, or no age word beside the number.
+  for (const t of ["Benefit is paid only for stays under 3 nights; maximum 30 days.", "Exclusions: hairline fractures under 2 cm.",
+    "Claims may be made by a son or daughter on behalf of an insured person, up to GBP 500.", "No benefit is payable for injury while minding children for reward."])
+    assert.deepEqual(notes(t), { found: false, age: null }, t);
+});
+test("gate R5-H2: wording that is not a child's limit never withholds a child's figures", () => {
+  for (const w of ["Hospital cash is paid for stays under 30 days.", "Exclusions: hairline fractures under 2 cm.", "Claims may be made by a son or daughter on behalf of an insured person.",
+    "No benefit is payable for injury while minding children for reward.", "Exclusions: childbirth and pregnancy.", "Claims must be notified within 30 days."]) {
+    const k = r5([w], { plain: true });
+    assert.equal(k.ad(GRACE), 20000, w);
+    assert.equal(k.ptd(GRACE), 20000, w);
+    assert.deepEqual(k.chat(GRACE), ["£20,000"], w);
+  }
+});
+test("gate R5-M1, R5-L1: a printed date of birth at or over the note's age proves an adult; the note's own age is used", () => {
+  const note = "Insured children under 21: 50% of the Sum Insured.";
+  const dan = (rel: string, dob: string) => P("Daniel Okafor", rel, dob, "GBP 80,000", 80000);
+  for (const [rel, dob, want] of [["Main life", "02/11/1982", 80000], ["", "02/11/1982", 80000], ["Partner", "02/11/1982", 80000],
+    ["Spouse", "01/06/2006", null], ["Policyholder", "01/06/2006", null], ["Spouse", "", null], ["Daughter", "02/11/1982", null]] as [string, string, number | null][]) {
+    const d = dan(rel, dob);
+    const k = r5([note], { plain: true, people: [NGOZI, d, GRACE] });
+    assert.equal(k.ad(d), want, `${rel} ${dob}`);
+    assert.deepEqual(k.chat(d), want ? [`£${want.toLocaleString("en-GB")}`] : [], `${rel} ${dob}`);
+  }
+  // A note with no age: 18, and an adult relationship with no date of birth still proves it.
+  const spouse = P("Daniel Okafor", "Spouse", "", "GBP 80,000", 80000);
+  const k = r5(["Note: for an insured child the death benefit is limited to GBP 3,000."], { plain: true, people: [NGOZI, spouse, GRACE] });
+  assert.equal(k.ad(spouse), 80000);
+  assert.equal(k.ad(GRACE), null);
 });
 test("gate L1: a printed date of birth that crosses the age inside the period is said as such, not as 'not printed'", () => {
   const sam = P("Sam Okafor", "Child", "01/12/2008", "GBP 20,000", 20000);

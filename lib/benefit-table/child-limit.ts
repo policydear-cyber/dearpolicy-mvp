@@ -131,32 +131,90 @@ export function printedLife(lines: string[], at: number, person = "", others: st
   return { birth, relationship };
 }
 
-/** Words that say something about a child's or a young person's benefit: a child, a son or daughter, a minor or
- * dependant, or an age limit ("under 10", "below the age of 16", "aged 17 or under"). */
-const CHILD_NOTE = /\b(?:child(?:ren)?|minors?|juveniles?|kids?|infants?|juniors?|sons?|daughters?|dependants?|dependents?)\b|\b(?:under|below|younger\s+than)\s+(?:the\s+age\s+of\s+)?\d{1,2}\b|\baged?\s+\d{1,2}\s+(?:years?\s+)?(?:or|and)\s+(?:under|below|younger)\b/i;
-/** Whether a page prints anything else about children than a row's own cell: any line that says child, minor, "under
- * N" and the like (gate R4-H3: "Note: for an insured child the death benefit is limited to GBP 3,000." or a footnote
- * under the table), other than
- * - the row's own line (`from`..`to` in `page`);
- * - the people table's lines (a line naming an insured person);
- * - another row of the same table: a line of as many tab cells (three or more) as the row's own, starting with a section
- *   number as the row's own does ("2\tPermanent total disablement\t...": its words are its own row's).
- * Such a page gives no child share, and a row's own share only for a person proven not a child. */
-export function childNoteElsewhere(page: string, from: number, to: number, people: string[]): boolean {
-  const names = people.map((n) => n.replace(/\s+/g, " ").trim().toLowerCase()).filter((n) => n.length >= 2);
-  const ownLine = page.slice(from, (page.indexOf("\n", from) + 1 || page.length + 1) - 1);
-  const ownCells = ownLine.split("\t").length, LEAD = /^\s*(?:section\s+)?\d{1,3}[.)]?\t/i;
-  const sameTable = (line: string) => ownCells >= 3 && LEAD.test(ownLine) && LEAD.test(line) && line.split("\t").length === ownCells;
-  let at = 0;
-  for (const line of page.split("\n")) {
-    const start = at, end = at + line.length;
-    at = end + 1;
-    if (end >= from && start <= to) continue;
-    const flat = line.replace(/\s+/g, " ").toLowerCase();
-    if (names.some((n) => flat.includes(n)) || sameTable(line)) continue;
-    if (CHILD_NOTE.test(line)) return true;
+// ---------- A child-limit sentence anywhere in the document (gate rounds R4-H3, R5-H1, R5-H2) ----------
+// (a) A phrase whose subject is an insured child or a young insured life, a closed list. An age number counts only beside an
+// age word or right after a child or person word, never beside days, cm, hours, weeks or months.
+const NOT_AGE = String.raw`(?!\s*(?:days?|nights?|cm|mm|km|kg|hours?|hrs?|weeks?|months?|%|per\s?cent|miles?|metres?|meters?|minutes?))`;
+const AGE_PHRASES: { re: RegExp; plus: number }[] = [
+  // "under / below / less than / younger than (the age of) 18 (years)"
+  { re: new RegExp(String.raw`\b(?:aged\s+)?(?:under|below|less\s+than|younger\s+than)\s+(?:the\s+)?age\s+(?:of\s+)?(\d{1,2})\b`, "i"), plus: 0 },
+  { re: new RegExp(String.raw`\b(?:aged\s+)?(?:under|below|less\s+than|younger\s+than)\s+(\d{1,2})\s*(?:years?|yrs?)(?:\s*-?\s*old|\s+of\s+age)?\b`, "i"), plus: 0 },
+  { re: new RegExp(String.raw`\baged\s+(?:under|below|less\s+than|younger\s+than)\s+(\d{1,2})\b${NOT_AGE}`, "i"), plus: 0 },
+  // "children / persons / lives / insured under 18"
+  { re: new RegExp(String.raw`\b(?:child(?:ren)?|persons?|people|lives|insureds?|members?)\s+(?:who\s+are\s+)?(?:under|below|less\s+than|younger\s+than)\s+(\d{1,2})\b${NOT_AGE}`, "i"), plus: 0 },
+  // "not (yet) reached (the) age (of) 18"
+  { re: /\bnot\s+(?:yet\s+)?reached\s+(?:the\s+)?age\s+(?:of\s+)?(\d{1,2})\b/i, plus: 0 },
+  // "aged 0-17", "aged 17 or under / or less / and below"
+  { re: /\baged?\s+0\s*(?:-|–|to)\s*(\d{1,2})\b/i, plus: 1 },
+  { re: new RegExp(String.raw`\baged\s+(\d{1,2})\s*(?:years?\s+)?(?:or|and)\s+(?:under|less|below|younger)\b`, "i"), plus: 1 },
+  // "up to (the) age (of) 17"
+  { re: /\bup\s+to\s+(?:the\s+)?age\s+(?:of\s+)?(\d{1,2})\b/i, plus: 1 },
+  // "U18", "under-18s"
+  { re: /\bU(\d{2})s?\b/, plus: 0 },
+  { re: /\bunder-(\d{1,2})s?\b/i, plus: 0 },
+];
+const CHILD_SUBJECT = /\b(?:(?:insured\s+(?:child(?:ren)?|minors?|juveniles?)|(?:for|to)\s+(?:an?\s+|the\s+|each\s+|every\s+|any\s+)?(?:insured\s+|covered\s+|eligible\s+)?child(?:ren)?|child(?:ren)?\s+(?:aged|under|below|less\s+than|younger\s+than|up\s+to)|child(?:ren)?['’]s?\s+(?:limit|benefit|death|cover|sum|share)|(?:dependent|dependant)\s+child(?:ren)?|minors?|juveniles?|young\s+persons?|students?)\b|children\s+of\s+(?:the\s+)?[\p{L}])/iu;
+// (b) A limiting word, a share or a money figure in the same sentence.
+const LIMITING = /\b(?:limited|limits?|maximum|max|up\s+to|only|reduced|restricted|not\s+payable|nothing\s+(?:is\s+)?payable|no\s+benefit|not\s+covered|excluded|capped)\b|%|\bper\s?cent\b|(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$)\s?\d|\d[\d,.]*\s?(?:\b[A-Z]{3}\b|[£€])/i;
+/** A row's own cell printing its share with a child's share after it ("100% of the Sum Insured. For an insured child under
+ * 18, limited to 25% of the Sum Insured."): that sentence is that row's own rule, not a note for the document. */
+function ownCellChildSentence(cell: string): string | null {
+  const m = /^\s*(\d{1,3}(?:\.\d+)?)\s*(?:%|per\s?cent)\s+of\s+(?:the\s+)?sum\s+(?:insured|assured)\b/i.exec(cell);
+  if (!m) return null;
+  const limit = childLimitIn(cell, Number(m[1]));
+  if (!limit) return null;
+  const rest = withoutChildLimit(cell, limit).replace(/[\s.;]+$/, "");
+  return new RegExp(String.raw`^\s*${m[0].trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i").test(rest) ? limit.words : null;
+}
+/** The child-limit sentences a document prints outside one row's own cell (`own`: that cell's page and its range in the
+ * page's text): a sentence (anywhere: any page, a note, a footnote, a line naming a person, another row of a table) that
+ * has both (a) a phrase whose subject is an insured child or a young life, by a closed list, and (b) a limiting word, a
+ * share or a money figure. Another row's own cell that prints only its share and an allow-listed child's share
+ * (ownCellChildSentence) is that row's own rule and does not count. `age`: the highest age the sentences print (the age a
+ * person must be proven to have reached), or null when none prints one. */
+export function childLimitNotes(pages: { page: number; text: string }[], own: { page: number; from: number; to: number } | null): { found: boolean; age: number | null } {
+  let found = false, age: number | null = null;
+  for (const pg of pages) {
+    let text = pg.text;
+    if (own && pg.page === own.page) text = `${text.slice(0, own.from)}\n\n${text.slice(own.to)}`;
+    // Units: a tab line on its own; the lines between tab lines and blank lines joined as running text.
+    const units: string[] = [];
+    let run: string[] = [];
+    for (const line of text.split("\n")) {
+      if (line.includes("\t") || !line.trim()) {
+        if (run.length) units.push(run.join(" "));
+        run = [];
+        if (line.includes("\t")) {
+          const cells = line.split("\t").map((c) => { const w = ownCellChildSentence(c); return w ? withoutChildLimit(c, { words: w }) : c; });
+          units.push(cells.join(" "));
+        }
+      } else run.push(line.trim());
+    }
+    if (run.length) units.push(run.join(" "));
+    for (const u of units) for (const sentence of u.split(/(?<=[.;!?])\s+(?=[\p{Lu}\d*(†‡])/u)) {
+      const ages = AGE_PHRASES.flatMap(({ re, plus }) => { const m = re.exec(sentence); return m ? [Number(m[1]) + plus] : []; }).filter((n) => n >= 1 && n <= 30);
+      if (!(ages.length || CHILD_SUBJECT.test(sentence)) || !LIMITING.test(sentence)) continue;
+      found = true;
+      for (const n of ages) age = Math.max(age ?? 0, n);
+    }
   }
-  return false;
+  return { found, age };
+}
+/** Whether a person's own line proves they are not the child a document's child-limit sentences are about, on every day
+ * given: a printed date of birth at or over the sentences' age (18 when they print none) proves it on its own, whatever
+ * the relationship says, unless the relationship is a child one (child, son, daughter); with no date of birth, a
+ * relationship on the closed adult list proves it only when the age is 18 or under (gate R5-M1, R5-L1). */
+export function provenAdult(life: PrintedLife | null | undefined, age: number | null, days: number[]): { adult: true } | { adult: false; why: string } {
+  const over = Math.max(age ?? 18, 1);
+  if (!days.length) return { adult: false, why: "has no day to settle it on" };
+  const rel = relationClass(life?.relationship);
+  if (rel === "child") return { adult: false, why: `prints the relationship "${life!.relationship!.trim()}"` };
+  if (life?.birth) {
+    const side = ageSide(life.birth, days, over);
+    return side === "over" ? { adult: true } : { adult: false, why: side === "under" ? `prints a date of birth (${life.birth}) under ${over}` : `prints a date of birth (${life.birth}) that does not settle whether they are ${over} or over on every day of the period of insurance` };
+  }
+  if (rel === "adult" && over <= 18) return { adult: true };
+  return { adult: false, why: rel === "adult" ? `does not print a date of birth to show they are ${over} or over` : "does not print a date of birth" };
 }
 /** The relationships that make a person an insured child, a closed list: never a step, grand or in-law form, "adult child"
  * or "child (over 18)" (gate H1). */

@@ -24,7 +24,7 @@ import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, m
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 import { benefitWords } from "./cover-rows";
-import { childCase, personStatus, personStatusWhy, statusDays, withoutChildLimit, type ChildLimit } from "./child-limit";
+import { childCase, personStatus, personStatusWhy, provenAdult, statusDays, withoutChildLimit, type ChildLimit } from "./child-limit";
 
 export type FamilyMember = { id: string; display_name: string; preferred_name?: string | null;
   /** The date of birth the household entered on the Family page (YYYY-MM-DD), when it did: tells which age group's row of a
@@ -83,7 +83,7 @@ export type TableRow = {
   childLimit?: ChildLimit & { own: number; status: "child" | "not_child" | null; days: number[]; why?: string | null };
   /** The row's page prints other words about an insured child (CheckedBenefit.childNote): worked out only for a person the
    * cover's own line proves is not a child, on every one of `days`. */
-  childNote?: { status: "child" | "not_child" | null; days: number[] };
+  childNote?: { adult: boolean; age: number | null; days: number[] };
   /** The row is the cover's own line as the schedule prints it (check.ts coverLine): its policy wording is not on file. */
   coverLine?: boolean;
 };
@@ -414,8 +414,8 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
     // The page prints other words about an insured child (a note or footnote, gate R4-H3): the row's share only for a person
     // the schedule's own line proves is not a child; no amount for anyone else.
     if (b.childNote && !b.childLimit) {
-      const r = personStatusWhy(cover.life, { belowAge: null }, statusDays(today, cover.documentPeriodFrom, cover.documentPeriodTo));
-      if (r.status !== "not_child") return withShare(b, { kind: "none", why: `${b.value}% of the sum insured, and its page prints other words for an insured child; ${cover.person}'s own line of the schedule ${r.status === "child" ? "shows they are insured as a child" : "why" in r ? r.why : ""}: see the document` });
+      const r = provenAdult(cover.life, b.childNote.age, statusDays(today, cover.documentPeriodFrom, cover.documentPeriodTo));
+      if (!r.adult) return withShare(b, { kind: "none", why: `${b.value}% of the sum insured, and the document also limits what is paid for an insured child${b.childNote.age != null ? ` (under ${b.childNote.age})` : ""}; ${cover.person}'s own line of the schedule ${r.why}: see the document` });
     }
     const child = b.childLimit ? childStatusOf(b, cover, today) : null;
     if (b.childLimit && !child) return { kind: "none", why: `${b.value}% of the sum insured, or ${b.childLimit.percent}% for ${childCase(b.childLimit)}; ${cover.person}'s own line of the schedule ${childWhyOf(b, cover, today) ?? "does not settle which"}: see the document` };
@@ -1621,8 +1621,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         ...(b.childLimit && b.pays === "percent" ? { childLimit: { ...b.childLimit, own: b.value!, status: childStatusOf(b, named ? named.cover : c, singaporeDay(now)),
           days: statusDays(singaporeDay(now), (named ? named.cover : c).documentPeriodFrom, (named ? named.cover : c).documentPeriodTo),
           why: childWhyOf(b, named ? named.cover : c, singaporeDay(now)) } } : {}),
-        ...(b.childNote && !b.childLimit && b.pays === "percent" ? { childNote: { status: personStatus((named ? named.cover : c).life, { belowAge: null },
-          statusDays(singaporeDay(now), (named ? named.cover : c).documentPeriodFrom, (named ? named.cover : c).documentPeriodTo)),
+        ...(b.childNote && !b.childLimit && b.pays === "percent" ? { childNote: { adult: provenAdult((named ? named.cover : c).life, b.childNote.age,
+          statusDays(singaporeDay(now), (named ? named.cover : c).documentPeriodFrom, (named ? named.cover : c).documentPeriodTo)).adult, age: b.childNote.age,
           days: statusDays(singaporeDay(now), (named ? named.cover : c).documentPeriodFrom, (named ? named.cover : c).documentPeriodTo) } } : {}), percentOf: named ? "sum_insured" : b.pays === "percent" ? b.percentOf : null,
         base: named ? named.cover.sumInsured : b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
         baseCorrected: named ? named.cover.confirmation?.status === "corrected" : b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null,
