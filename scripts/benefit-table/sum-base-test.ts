@@ -417,6 +417,49 @@ test("gate R3-L2: a next line opening with a preposition, an article or 'Per' co
   for (const cell of ["Burns\t10% of the Sum Covered, up to SGD 5,000", "Burns\t10% of the Sum Covered, up to US$5,000"]) assert.equal(headlineSumShare(cell, 10), true, cell);
 });
 
+// ---------- Gate round 4 (sum-base-gate.md "Round 4"): every repro ----------
+for (const [lab, l] of [["Life cover", "Lim Bee Hoon (DOB 02/02/1982)"], ["Basic plan", "Name: Lim Bee Hoon"], ["Term cover", "Cover for Ms Lim"], ["Main benefit", "Lim Bee Hoon, age 42"],
+  ["Life cover", "Benefits for Lim Bee Hoon"], ["Protection amount", "Second policy - Lim Bee Hoon"]] as const)
+  test(`gate R4-H1: the person's own sum under ${JSON.stringify(lab)} and a second life's block under ${JSON.stringify(l)}: no TPD figure in the chat`, () => {
+    assert.deepEqual(ask(otherLifeDoc(`${R2H}\n${lab}\tS$450,000\n${TPD_LINE}\n${l}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
+  });
+for (const mid of ["Accidental death benefit:", "Booster", "Top-up cover", "ADB", "Accidental death cover"])
+  test(`gate R4-H1: the basic sum under 'Life cover' and another cover's 'Death' line under ${JSON.stringify(mid)}: no TPD figure in the chat`, () => {
+    assert.deepEqual(ask(otherLifeDoc(`${R2H}\nLife cover\tS$450,000\n${TPD_LINE}\n${mid}\nDeath\tS$100,000`, "Death\tS$100,000", 100000), DANIEL, /permanent/).amounts, []);
+  });
+test("gate R4-H1: a second sum in words, in another currency, on page 2, naming another life, or beside a percentage: no TPD figure in the chat", () => {
+  const cases: [string, string, number, string?][] = [
+    [`${R2H}\nDeath\tS$450,000\n${TPD_LINE}\nDeath (increased from 1 Jan 2027): two hundred thousand Singapore dollars`, "Death\tS$450,000", 450000],
+    [`${R2H}\nDeath\tS$450,000\n${TPD_LINE}\nDeath\tRM 600,000`, "Death\tS$450,000", 450000],
+    [`${R2H}\nDeath\tS$450,000\n${TPD_LINE}`, "Death\tS$450,000", 450000, "ENDORSEMENT\nDeath\tS$500,000"],
+    [`${R2H}\nDeath\tS$450,000\n${TPD_LINE}\nDeath\tS$200,000 (Lim)`, "Death\tS$450,000", 450000],
+    [`${R2H}\nLife cover\tS$450,000\n${TPD_LINE}\nLim Bee Hoon (DOB 02/02/1982)\nDeath\tS$200,000\t100%`, "Life cover\tS$450,000", 450000],
+  ];
+  for (const [p1, line, sum, p2] of cases) assert.deepEqual(ask(otherLifeDoc(p1, line, sum, p2), DANIEL, /permanent/).amounts, [], p1);
+});
+for (const fl of ["Life assured\tDaniel Tan Wei\tNRIC\tS1234567A Lim Bee Hoon", "Life assured\tDaniel Tan Wei\tOccupation\tLim Bee Hoon", "Life assured\tDaniel Tan Wei\tAge\t45 / 42",
+  "Life assured\tDaniel Tan Wei\tDOB\t01/01/1980 & 02/02/1982", "Life assured\tDaniel Tan Wei\tClass\t2 lives", "Life assured\tDaniel Tan Wei\tGender\tM/F", "Life assured\tDaniel Tan Wei\tID no.\tS1234567A, S7654321B",
+  "Life assured\tDaniel Tan Wei\tAge\t45 and 42", "Life assured\tDaniel Tan Wei\tOccupation\tEngineer Lim"])
+  test(`gate R4-H2: a particular printing two values or a name (${JSON.stringify(fl)}): no TPD figure in the chat`, () => {
+    assert.deepEqual(ask(otherLifeDoc(`TERM GUARD - POLICY SCHEDULE\n${fl}\nLife cover\tS$450,000\n${TPD_LINE}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
+  });
+test("gate R4-H2 control: single-value particulars keep the person's one sum", () => {
+  for (const fl of ["Life assured\tDaniel Tan Wei\tAge\t45", "Life assured\tDaniel Tan Wei\tGender\tMale", "Life assured\tDaniel Tan Wei\tDOB\t01/01/1980", "Life assured\tDaniel Tan Wei\tNRIC\tS1234567A",
+    "Life assured\tDaniel Tan Wei\tSmoker status\tNon-smoker", "Life assured\tDaniel Tan Wei\tDate of birth\t1 January 1980"])
+    assert.deepEqual(ask(otherLifeDoc(`TERM GUARD - POLICY SCHEDULE\n${fl}\nDeath\tS$450,000\n${TPD_LINE}`, "Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, ["S$450,000"], fl);
+});
+for (const hd of ["YOUR COVER", "SUMS ASSURED", "POLICY DETAILS", "COVER DETAILS", "BENEFIT SCHEDULE"])
+  test(`gate R4-H3: the basic sum, then the table-word heading ${JSON.stringify(hd)}, then another 'Death' line: no TPD figure in the chat`, () => {
+    assert.deepEqual(ask(otherLifeDoc(`${R2H}\nLife cover\tS$450,000\n${TPD_LINE}\n${hd}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
+  });
+test("gate R4 control: lines that cannot be a sum (premium, per day, a wrapped percentage row's maximum, a lower-case continuation) leave the one sum", () => {
+  const p1 = `${R2H}\nDeath\tS$450,000\n${TPD_LINE}\nHospital cash\tS$100 per day\nAnnual premium\tS$1,250.00\nAccidental burns\t10% of the death sum assured, up to\nS$20,000\nfracture of the hip\tS$5,000`;
+  assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, ["S$450,000"]);
+});
+test("gate R4 control: a labelled line after a percentage row is a sum of its own, not the row's continuation", () => {
+  assert.deepEqual(ask(otherLifeDoc(`${R2H}\nDeath\tS$450,000\n${TPD_LINE}\nDeath\tS$300,000`, "Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, []);
+});
+
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.error(`benefit-table sum base: ${passed} passed, ${failures.length} failed`);

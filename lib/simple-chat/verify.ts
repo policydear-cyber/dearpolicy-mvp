@@ -868,7 +868,26 @@ function fieldCells(cells: string[]): boolean {
     if (!PARTICULAR_LABEL.test(rest[i]) || i + 1 >= rest.length) return false;
     pairs.push(rest[i + 1]); i++;
   }
-  return pairs.every((v) => !/\p{L}{2,}\s+\p{L}{2,}/u.test(v) || /\d/.test(v));
+  return pairs.every(oneParticular);
+}
+/** The closed words a particular may be: a gender, a smoker status, a standard rating. */
+const PARTICULAR_WORDS = new Set(["m", "f", "male", "female", "lelaki", "perempuan", "smoker", "non-smoker", "nonsmoker", "non smoker", "standard"]);
+const PARTICULAR_MONTH = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)`;
+/** Whether a particular's value is exactly ONE value: one number, one date, one ID, one currency code, one class code, or
+ * one word from PARTICULAR_WORDS. "45 / 42", "M/F", "01/01/1980 & 02/02/1982", "S1234567A, S7654321B" or an ID followed
+ * by a name each print two people, so they are refused; so is any other word. */
+function oneParticular(value: string): boolean {
+  const v = value.trim();
+  if (/[&,;+]|\band\b|\bdan\b/i.test(v)) return false;
+  return /^\d{1,3}$/.test(v) // an age
+    || /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(v) // one date
+    || new RegExp(String.raw`^\d{1,2}\s+${PARTICULAR_MONTH}\.?\s+\d{4}$`, "i").test(v)
+    || /^\d{4}-\d{2}-\d{2}$/.test(v)
+    || /^[A-Z]{0,3}-?\d{5,}-?[A-Z0-9]?$/i.test(v) // one ID or policy number
+    || /^\d{6}-\d{2}-\d{4}$/.test(v) // a Malaysian IC number
+    || /^(?:SGD|USD|MYR|HKD|GBP|EUR|AUD|NZD|IDR|PHP|THB|CNY|INR)$/.test(v) // a currency code
+    || /^(?:class\s+)?[A-D]?\d?$/i.test(v) && v.length > 0 && v.length <= 8
+    || PARTICULAR_WORDS.has(v.toLowerCase());
 }
 /** Whether a document is printed for this person alone, so that a line on it need not repeat their name: true, or why not.
  * An ALLOW-list: ALL of these must hold, else main's rule (the line names the person) stands:
@@ -937,28 +956,43 @@ function sumLineInOwnBlock(text: string, lineAt: number): string | null {
   }
   return null;
 }
-/** The structural rule for a document printed for one life (gate round 3): the WHOLE document may print only one figure on
- * lines that could be this row's sum, however they are headed or whoever is named around them. A line could be when it
- * prints money and every word of its label is the row's own or a name of a sum (labelFits, as sumLineIsRows). The row's
- * own lines and its maximum's, and lines printing a percentage, are shares, not sums. Two such lines with the same figure
- * agree ("Sum covered  RM 150,000" and "Death benefit  RM 150,000"); two different figures leave main's rule. */
-function oneSumOnDocument(d: HouseholdDocument, row: string, sf: ServerFigure): string | null {
+/** The structural rule for a document printed for one life (gate rounds 3 and 4): EVERY line of the whole document that
+ * prints money is a possible sum, however it is labelled or headed, unless it is on this closed list of lines that cannot
+ * be a sum:
+ * - the row's own quoted lines and its maximum's;
+ * - a line printing a percentage (a share, not a sum);
+ * - a premium, contribution, fee or charge line (what is paid in, not cover);
+ * - a line paying per day, week, month or year (an allowance, not a sum);
+ * - a continuation of another row's cell: a line starting with a tab, a space or a lower-case letter, or the line right
+ *   after a line printing a percentage (a wrapped percentage row's maximum).
+ * All the figures left must be one figure, this sum's, in its currency. Two lines with the same figure agree ("Sum covered
+ * RM 150,000" and "Death benefit  RM 150,000"); two different figures leave main's rule (the line names the person). */
+const PERCENT_LINE = /\d\s?(?:%|per\s?cent)/i;
+const NOT_A_SUM_LINE = /\b(?:premiums?|contributions?|caruman|fees?|charges?|levy|levies|stamp\s+duty|gst|sst|tax)\b/i;
+const PER_PERIOD = /\b(?:per|a|each|every|sehari|setiap)\s+(?:day|days|week|weeks|month|months|year|years|annum|hari|bulan|tahun)\b|\b(?:daily|weekly|monthly|yearly|annually|annual|p\.?a\.|\/\s?(?:day|week|month|year|yr))\b/i;
+/** A sum written out in words: a number word with a currency word ("two hundred thousand Singapore dollars"). */
+const SUM_IN_WORDS = /\b(?:hundred|thousand|million|billion|ratus|ribu|juta)\b[^\n]*\b(?:dollars?|ringgit|pounds?|euros?|rupiah|pesos?|baht|yuan|rupees?)\b/i;
+function oneSumOnDocument(d: HouseholdDocument, sf: ServerFigure): string | null {
   const flat = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
   const own = [flat(sf.row.quote), flat(sf.cap?.quote ?? "")].filter(Boolean);
   const seen = new Set<string>();
-  for (const pg of d.pages) for (const l of pg.text.split("\n")) {
-    const figs = moneyFiguresIn(l);
-    if (!figs.length || /\d\s?(?:%|per\s?cent)/i.test(l) || own.some((o) => o.includes(flat(l)))) continue;
-    if (!labelFits(l, row)) continue;
-    for (const f of figs) seen.add(`${f.currency}|${Math.round(f.value * 100)}`);
+  for (const pg of d.pages) {
+    const lines = pg.text.split("\n");
+    lines.forEach((l, i) => {
+      const figs = moneyFiguresIn(l);
+      const inWords = SUM_IN_WORDS.test(l);
+      if ((!figs.length && !inWords) || !flat(l)) return;
+      if (own.some((o) => o.includes(flat(l)))) return;
+      if (PERCENT_LINE.test(l) || NOT_A_SUM_LINE.test(l) || PER_PERIOD.test(l)) return;
+      if (/^[\t ]/.test(l) || /^\p{Ll}/u.test(l)) return;
+      // A wrapped percentage row's next line carries its cell alone: no label before its first figure.
+      if (i > 0 && PERCENT_LINE.test(lines[i - 1]) && figs.length && !l.slice(0, l.indexOf(figs[0].raw)).trim()) return;
+      // A sum written out in words cannot be compared, so it is a second sum.
+      if (inWords) seen.add(`words|${flat(l)}`);
+      for (const f of figs) seen.add(`${f.currency}|${Math.round(f.value * 100)}`);
+    });
   }
-  return seen.size === 1 && seen.has(`${sf.currency}|${Math.round(sf.base.value * 100)}`) ? null : "is one of several sums the document prints under the row's or a sum's name";
-}
-/** Whether every word of a money line's label is the row's own (`row`) or a name of a sum (SUM_LINE_WORDS). */
-function labelFits(line: string, row: string): boolean {
-  const label = moneyFiguresIn(line).reduce((t, f) => t.split(f.raw).join(" "), line);
-  const rowWords = new Set(tokens(row));
-  return tokens(label).every((w) => rowWords.has(w) || SUM_LINE_WORDS.has(w));
+  return seen.size === 1 && seen.has(`${sf.currency}|${Math.round(sf.base.value * 100)}`) ? null : "is one of several sums the document prints";
 }
 /** Words a sum's own line may print besides its figure on a document for one life, with the row's own words: the names of
  * the sum and of a cover. */
@@ -1024,7 +1058,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   if (!namesPerson(have)) {
     if (ownDocument !== true) return no(`the sum's line does not name the person, and its document is not printed for them alone (${ownDocument})`);
     const rowWords = `${sf.row.quote}\n${st.text}`;
-    const lineWhy = sumLineIsRows(line, rowWords, person, household) ?? oneSumOnDocument(bdoc, rowWords, sf) ?? sumLineInOwnBlock(bpage.text, at);
+    const lineWhy = sumLineIsRows(line, rowWords, person, household) ?? oneSumOnDocument(bdoc, sf) ?? sumLineInOwnBlock(bpage.text, at);
     if (lineWhy) return no(`the sum's line ${lineWhy}`);
   }
   if (onLine.length !== 1) return no("the sum's line prints no money figure or more than one");
