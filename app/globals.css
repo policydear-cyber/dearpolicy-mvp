@@ -173,7 +173,6 @@ table { font-variant-numeric: tabular-nums; }
 .button.secondary:hover { border-color: var(--brand-ink); }
 .button.compact { padding: 8px 14px; min-height: 40px; white-space: nowrap; }
 .button:disabled { opacity: .5; cursor: not-allowed; }
-.button.primary:disabled { opacity: 1; background: var(--accent-tint); color: var(--muted); }
 .mini-button { border: 1px solid var(--line-strong); background: var(--surface); color: var(--brand-ink); border-radius: var(--r-sm); padding: 6px 10px; min-height: 32px; font-size: var(--fs-xs); font-weight: 600; transition: border-color var(--t-hover) var(--ease), background var(--t-hover) var(--ease); }
 .mini-button:hover { border-color: var(--brand-ink); }
 a.mini-button { display: inline-flex; align-items: center; text-decoration: none; }
