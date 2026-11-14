@@ -956,40 +956,58 @@ function sumLineInOwnBlock(text: string, lineAt: number): string | null {
   }
   return null;
 }
-/** The structural rule for a document printed for one life (gate rounds 3 and 4): EVERY line of the whole document that
- * prints money is a possible sum, however it is labelled or headed, unless it is on this closed list of lines that cannot
- * be a sum:
- * - the row's own quoted lines and its maximum's;
- * - a line printing a percentage (a share, not a sum);
- * - a premium, contribution, fee or charge line (what is paid in, not cover);
- * - a line paying per day, week, month or year (an allowance, not a sum);
- * - a continuation of another row's cell: a line starting with a tab, a space or a lower-case letter, or the line right
- *   after a line printing a percentage (a wrapped percentage row's maximum).
- * All the figures left must be one figure, this sum's, in its currency. Two lines with the same figure agree ("Sum covered
- * RM 150,000" and "Death benefit  RM 150,000"); two different figures leave main's rule (the line names the person). */
-const PERCENT_LINE = /\d\s?(?:%|per\s?cent)/i;
-const NOT_A_SUM_LINE = /\b(?:premiums?|contributions?|caruman|fees?|charges?|levy|levies|stamp\s+duty|gst|sst|tax)\b/i;
-const PER_PERIOD = /\b(?:per|a|each|every|sehari|setiap)\s+(?:day|days|week|weeks|month|months|year|years|annum|hari|bulan|tahun)\b|\b(?:daily|weekly|monthly|yearly|annually|annual|p\.?a\.|\/\s?(?:day|week|month|year|yr))\b/i;
+/** The structural rule for a document printed for one life (gate rounds 3 to 5): EVERY money figure on the whole document
+ * (and any sum written out in words) is a possible sum, wherever it stands and however its line is labelled, indented or
+ * cased, unless a reason on this closed list points at THAT figure:
+ * - it is in the row's own quoted words or its maximum's (located on the stored page);
+ * - its label (the words before it in its cell, or the cell before when it opens its cell) ends with a premium,
+ *   contribution, fee or charge word ("Annual premium  S$1,148.00", "premium: S$1,148.00");
+ * - the words right after it in its cell tie it to a day, a week or a month ("S$100 per day in hospital");
+ * - in its own cell it follows a percentage and then a cap word with no figure between ("10% of the Sum Covered, up to
+ *   RM 5,000");
+ * - it is the first figure on a line whose line above ends with a cap word ("up to a maximum of" / "RM 50,000").
+ * A figure the list does not place counts. All the figures counted must be one figure, this sum's, in its currency. Two
+ * lines with the same figure agree ("Sum covered  RM 150,000" and "Death benefit  RM 150,000"); two different figures, or
+ * a sum in words, leave main's rule (the line names the person). Per year figures count: a sum may be paid yearly. */
+const CHARGE_LABEL = /\b(?:premiums?|contributions?|caruman|fees?|charges?|levy|levies)\s*:?\s*$/i;
+const SHORT_PERIOD_AFTER = /^\s*(?:(?:per|a|each|every|setiap)\s+(?:day|week|month|hari|minggu|bulan)\b|sehari\b|daily\b|weekly\b|monthly\b|\/\s?(?:day|week|month)\b)/i;
+const CAP_WORD_END = /\b(?:up\s+to|maximum(?:\s+of)?|max\.?|not\s+exceeding|limited\s+to|capped\s+at)\s*:?\s*$/i;
+const CAP_IN_PERCENT_CELL = /\d\s?(?:%|per\s?cent)[^\t]*\b(?:up\s+to|maximum|max\.?|not\s+exceeding|limited\s+to|capped\s+at)\b\D*$/i;
 /** A sum written out in words: a number word with a currency word ("two hundred thousand Singapore dollars"). */
 const SUM_IN_WORDS = /\b(?:hundred|thousand|million|billion|ratus|ribu|juta)\b[^\n]*\b(?:dollars?|ringgit|pounds?|euros?|rupiah|pesos?|baht|yuan|rupees?)\b/i;
-function oneSumOnDocument(d: HouseholdDocument, sf: ServerFigure): string | null {
-  const flat = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
-  const own = [flat(sf.row.quote), flat(sf.cap?.quote ?? "")].filter(Boolean);
+function oneSumOnDocument(d: HouseholdDocument, docIndex: number, sf: ServerFigure, household: Household): string | null {
+  // Where the row's own words and its maximum's are printed, by their stored place.
+  const own: { page: number; from: number; to: number }[] = [];
+  for (const q of [{ quote: sf.row.quote, doc: sf.row.docIndex }, ...(sf.cap ? [{ quote: sf.cap.quote, doc: sf.cap.docIndex }] : [])]) {
+    const f = q.quote ? locateQuote(household, q.quote, q.doc) : null;
+    if (f && f.docIndex === docIndex) own.push({ page: f.page, from: f.offset, to: f.end ?? f.offset + q.quote.length });
+  }
   const seen = new Set<string>();
   for (const pg of d.pages) {
     const lines = pg.text.split("\n");
+    let lineAt = 0;
     lines.forEach((l, i) => {
-      const figs = moneyFiguresIn(l);
-      const inWords = SUM_IN_WORDS.test(l);
-      if ((!figs.length && !inWords) || !flat(l)) return;
-      if (own.some((o) => o.includes(flat(l)))) return;
-      if (PERCENT_LINE.test(l) || NOT_A_SUM_LINE.test(l) || PER_PERIOD.test(l)) return;
-      if (/^[\t ]/.test(l) || /^\p{Ll}/u.test(l)) return;
-      // A wrapped percentage row's next line carries its cell alone: no label before its first figure.
-      if (i > 0 && PERCENT_LINE.test(lines[i - 1]) && figs.length && !l.slice(0, l.indexOf(figs[0].raw)).trim()) return;
-      // A sum written out in words cannot be compared, so it is a second sum.
-      if (inWords) seen.add(`words|${flat(l)}`);
-      for (const f of figs) seen.add(`${f.currency}|${Math.round(f.value * 100)}`);
+      const start = lineAt;
+      lineAt += l.length + 1;
+      const inOwn = (at: number) => own.some((o) => o.page === pg.page && start + at >= o.from && start + at < o.to);
+      if (SUM_IN_WORDS.test(l) && !inOwn(l.search(SUM_IN_WORDS))) seen.add(`words|${l.trim().toLowerCase()}`);
+      let from = 0;
+      moneyFiguresIn(l).forEach((f, n) => {
+        const at = l.indexOf(f.raw, from);
+        if (at < 0) { seen.add(`unplaced|${f.raw}`); return; }
+        from = at + f.raw.length;
+        if (inOwn(at)) return;
+        const cellStart = l.lastIndexOf("\t", at - 1) + 1;
+        const before = l.slice(cellStart, at);
+        const label = before.trim() ? before : (l.slice(0, Math.max(0, cellStart - 1)).split("\t").map((c) => c.trim()).filter(Boolean).at(-1) ?? "");
+        const nextTab = l.indexOf("\t", from);
+        const after = l.slice(from, nextTab < 0 ? l.length : nextTab);
+        if (CHARGE_LABEL.test(label)) return;
+        if (SHORT_PERIOD_AFTER.test(after)) return;
+        if (CAP_IN_PERCENT_CELL.test(before)) return;
+        if (n === 0 && i > 0 && CAP_WORD_END.test(lines[i - 1].trimEnd())) return;
+        seen.add(`${f.currency}|${Math.round(f.value * 100)}`);
+      });
     });
   }
   return seen.size === 1 && seen.has(`${sf.currency}|${Math.round(sf.base.value * 100)}`) ? null : "is one of several sums the document prints";
@@ -1058,7 +1076,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   if (!namesPerson(have)) {
     if (ownDocument !== true) return no(`the sum's line does not name the person, and its document is not printed for them alone (${ownDocument})`);
     const rowWords = `${sf.row.quote}\n${st.text}`;
-    const lineWhy = sumLineIsRows(line, rowWords, person, household) ?? oneSumOnDocument(bdoc, sf) ?? sumLineInOwnBlock(bpage.text, at);
+    const lineWhy = sumLineIsRows(line, rowWords, person, household) ?? oneSumOnDocument(bdoc, sf.base.docIndex, sf, household) ?? sumLineInOwnBlock(bpage.text, at);
     if (lineWhy) return no(`the sum's line ${lineWhy}`);
   }
   if (onLine.length !== 1) return no("the sum's line prints no money figure or more than one");

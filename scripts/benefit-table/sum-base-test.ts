@@ -452,12 +452,33 @@ for (const hd of ["YOUR COVER", "SUMS ASSURED", "POLICY DETAILS", "COVER DETAILS
   test(`gate R4-H3: the basic sum, then the table-word heading ${JSON.stringify(hd)}, then another 'Death' line: no TPD figure in the chat`, () => {
     assert.deepEqual(ask(otherLifeDoc(`${R2H}\nLife cover\tS$450,000\n${TPD_LINE}\n${hd}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
   });
-test("gate R4 control: lines that cannot be a sum (premium, per day, a wrapped percentage row's maximum, a lower-case continuation) leave the one sum", () => {
-  const p1 = `${R2H}\nDeath\tS$450,000\n${TPD_LINE}\nHospital cash\tS$100 per day\nAnnual premium\tS$1,250.00\nAccidental burns\t10% of the death sum assured, up to\nS$20,000\nfracture of the hip\tS$5,000`;
+test("gate R4/R5 control: figures that cannot be a sum (a premium, a day's allowance, a wrapped percentage row's maximum) leave the one sum", () => {
+  const p1 = `${R2H}\nDeath\tS$450,000\n${TPD_LINE}\nHospital cash\tS$100 per day\nAnnual premium\tS$1,250.00\nAccidental burns\t10% of the death sum assured, up to\nS$20,000\nFracture\t5% of the death sum assured, up to S$5,000`;
   assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, ["S$450,000"]);
 });
 test("gate R4 control: a labelled line after a percentage row is a sum of its own, not the row's continuation", () => {
   assert.deepEqual(ask(otherLifeDoc(`${R2H}\nDeath\tS$450,000\n${TPD_LINE}\nDeath\tS$300,000`, "Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, []);
+});
+
+// ---------- Gate round 5 (sum-base-gate.md "Round 5"): every repro ----------
+const R5N = "Lim Bee Hoon (DOB 02/02/1982)";
+for (const own of [" Life cover\tS$450,000", "\tLife cover\tS$450,000", "life cover\tS$450,000", "Life cover\tS$450,000\t(100% of plan)", "Life cover\tS$450,000\tincreases 3% a year",
+  "Life cover\tS$450,000 per annum", "Life cover\tS$450,000\tAnnual premium S$1,148.00", "Sum assured (premium-paying term 20 years)\tS$450,000", "Life cover\tS$450,000\tfees waived"])
+  test(`gate R5-H1: the person's own sum printed as ${JSON.stringify(own)} still counts, so a second life's 'Death' line gives no TPD figure in the chat`, () => {
+    assert.deepEqual(ask(otherLifeDoc(`${R2H}\n${own}\n${TPD_LINE}\n${R5N}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
+  });
+test("gate R5-H1: the person's own sum printed unlabelled on the line after a percentage row still counts", () => {
+  for (const p1 of [`${R2H}\nLife cover\n${TPD_LINE}\nS$450,000\n${R5N}\nDeath\tS$200,000`, `${R2H}\nDeath benefit\t100% of the sum assured\nS$450,000\n${TPD_LINE}\n${R5N}\nDeath\tS$200,000`,
+    `${R2H}\n${TPD_LINE}\nDeath\tS$450,000\n${R5N}\nDeath\tS$200,000`])
+    assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, [], p1);
+});
+test("gate R5-H1: a second life's sum indented or in lower case, taken as the base, gives no TPD figure in the chat", () => {
+  for (const line of [" death benefit\tS$200,000", "death benefit\tS$200,000"])
+    assert.deepEqual(ask(otherLifeDoc(`${R2H}\nDeath\tS$450,000\n${TPD_LINE}\n${R5N}\n${line}`, line, 200000), DANIEL, /permanent/).amounts, [], line);
+});
+test("gate R5-L1: a schedule whose text keeps leading spaces on its table lines still shows the TPD figure", () => {
+  const p1 = `Example Life\nTERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\n Benefit\tSum assured / amount\n Death\tS$450,000\n ${TPD_LINE}\n Hospital income rider\tS$100 per day in hospital`;
+  assert.deepEqual(ask(otherLifeDoc(p1, " Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, ["S$450,000"]);
 });
 
 if (failures.length) {
