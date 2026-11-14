@@ -962,7 +962,8 @@ function sumLineInOwnBlock(text: string, lineAt: number): string | null {
  * - it is in this row's own quoted words or its maximum's, or in the stored maximum of another row the table worked out
  *   (`caps`), each located on its stored page;
  * - its WHOLE label is a premium, contribution, fee or charge item ("Annual premium", "Monthly contribution", "Policy
- *   fee"), the label being the words before it in its cell or, when it opens its cell, the cell before it. A column's
+ *   fee"), the label being the words before it in its own cell or, when it opens its cell, the line's first cell right
+ *   before it; and neither its own cell nor the line's first cell names a sum or a cover (NAMES_SUM_OR_COVER). A column's
  *   header is never its label. "Return of premium" and "Waiver of premium" are covers, so they count;
  * - the words right after it in its cell tie it to a day, a week or a month ("S$100 per day in hospital");
  * - it is the first figure on a line whose line above prints a percentage and ends with a cap word: the wrap of a
@@ -972,6 +973,8 @@ function sumLineInOwnBlock(text: string, lineAt: number): string | null {
  * a sum in words, leave main's rule (the line names the person). Per year figures count: a sum may be paid yearly. */
 const CHARGE_LABEL = /^(?:(?:annual|annualised|annualized|yearly|monthly|quarterly|half-yearly|semi-annual|modal|basic|total|first|initial|regular|single|renewal|policy|certificate|admin(?:istration|istrative)?|service|stamp|takaful|wakalah)\s+)*(?:premiums?|contributions?|caruman|fees?|charges?|levy|levies|duty)(?:\s*\((?:annual|yearly|monthly|quarterly|p\.?a\.?)\))?\s*:?$/i;
 const SHORT_PERIOD_AFTER = /^\s*(?:(?:per|a|each|every|setiap)\s+(?:day|week|month|hari|minggu|bulan)\b|sehari\b|daily\b|weekly\b|monthly\b|\/\s?(?:day|week|month)\b)/i;
+/** Words that name a sum or a cover: a line or cell printing one is never a charge's. */
+const NAMES_SUM_OR_COVER = /\b(?:sums?\s+(?:assured|insured|covered)|covers?|coverage|death|benefits?|plans?)\b/i;
 const PERCENT_IN_LINE = /\d\s?(?:%|per\s?cent)/i;
 const CAP_WORD_END = /\b(?:up\s+to|maximum(?:\s+of)?|max\.?|not\s+exceeding|limited\s+to|capped\s+at)\s*:?\s*$/i;
 /** A sum written out in words: a number word with a currency word ("two hundred thousand Singapore dollars"). */
@@ -991,11 +994,17 @@ function lineFigures(lines: string[], i: number): { f: StatedFigure; at: number;
     from = at + f.raw.length;
     const cellStart = l.lastIndexOf("\t", at - 1) + 1;
     const before = l.slice(cellStart, at);
-    // Its label: the words before it in its cell or, when it opens its cell, the cell before it.
-    const label = before.trim() ? before.trim() : (l.slice(0, Math.max(0, cellStart - 1)).split("\t").map((c) => c.trim()).filter(Boolean).at(-1) ?? "");
+    // Its charge label: the words before it in its own cell or, when it opens its cell, the line's first cell when that is
+    // the cell right before it (the row's own label). It is a charge only when neither its own cell nor the line's first
+    // cell names a sum or a cover ("Sum assured<TAB>Premium<TAB>S$450,000", "Contribution: S$450,000 sum covered").
+    const cellsBefore = l.slice(0, Math.max(0, cellStart - 1)).split("\t").map((c) => c.trim()).filter(Boolean);
+    const label = before.trim() ? before.trim() : cellsBefore.length === 1 ? cellsBefore[0] : "";
     const nextTab = l.indexOf("\t", from);
     const after = l.slice(from, nextTab < 0 ? l.length : nextTab);
-    const notSum = CHARGE_LABEL.test(label) || SHORT_PERIOD_AFTER.test(after)
+    const ownCell = l.slice(cellStart, nextTab < 0 ? l.length : nextTab);
+    const firstCell = l.split("\t").map((c) => c.trim()).find(Boolean) ?? "";
+    const charge = CHARGE_LABEL.test(label) && !NAMES_SUM_OR_COVER.test(ownCell) && !NAMES_SUM_OR_COVER.test(firstCell);
+    const notSum = charge || SHORT_PERIOD_AFTER.test(after)
       || (n === 0 && i > 0 && PERCENT_IN_LINE.test(lines[i - 1]) && CAP_WORD_END.test(lines[i - 1].trimEnd()));
     out.push({ f, at, notSum });
   });

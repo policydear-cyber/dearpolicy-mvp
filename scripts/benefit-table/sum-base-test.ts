@@ -522,6 +522,15 @@ test("gate R7B: premium-column tables give no TPD figure in the chat, whichever 
   assert.deepEqual(ask(otherLifeDoc(`${R2H}\nBenefit\tSum assured\tPremium`, "Death\tS$450,000\tS$1,148.00", 450000, `Death\tS$450,000\tS$1,148.00\n${TPD_LINE}`), DANIEL, /permanent/).amounts, []);
 });
 
+// ---------- Gate round 8B (sum-base-gate.md "Round 8B"): the four HIGH shapes and the two refused ones give none ----------
+// Known gap (gate LOW, not asserted): "Sum assured" / "Annual premium<TAB>S$450,000", where the document's own line labels
+// the person's sum as a premium, still skips it as a charge.
+for (const blk of ["Death\tAnnual premium\tS$450,000", "Sum assured\tPremium\tS$450,000", "Life cover\tPolicy fee\tS$450,000", "Contribution: S$450,000 sum covered",
+  "Sum assured\tAnnual premium\nS$450,000\tS$1,148.00", "Total premium-funded sum assured\tS$450,000"])
+  test(`gate R8B: the person's own sum printed as ${JSON.stringify(blk)} beside a charge word still gives no TPD figure when a second life's 'Death' line is taken`, () => {
+    assert.deepEqual(ask(otherLifeDoc(`${R2H}\n${blk}\n${TPD_LINE}\n${R5N}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
+  });
+
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.error(`benefit-table sum base: ${passed} passed, ${failures.length} failed`);
