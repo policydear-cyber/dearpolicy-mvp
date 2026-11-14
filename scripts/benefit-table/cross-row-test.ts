@@ -310,6 +310,13 @@ test("H6: a section heading's currency overrides the page's for the rows under i
   const home = run(q, [{ benefit: "Physiotherapy", pays: "percent", value: 10, percentOf: "sum_insured", cap: 500, capQuote: "up to 500 per trip", quote: q }], "TABLE OF BENEFITS (S$)");
   assert.equal(amountOf(home.figures.get("Physiotherapy")), 500, "control: under the page's own (S$) it is S$500");
 });
+test("control: a two-column row whose cells wrap, quoted in page order, keeps its cap on the wrapped line", () => {
+  const q = "Angioplasty and other invasive treatment for\t10% of the Sum Covered, up to a maximum of\ncoronary artery\tS$15,000";
+  const { b, figures } = run(q, [{ benefit: "Angioplasty and other invasive treatment for coronary artery", pays: "percent", value: 10, percentOf: "sum_insured",
+    cap: 15000, capQuote: "up to a maximum of\ncoronary artery\tS$15,000", quote: q }]);
+  assert.equal(b("Angioplasty and other invasive treatment for coronary artery")?.cap, 15000);
+  assert.equal(amountOf(figures.get("Angioplasty and other invasive treatment for coronary artery")), 15000);
+});
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
 console.log(`cross-row-test: ${passed} passed`);

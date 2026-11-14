@@ -73,6 +73,12 @@ const CAP_BEFORE_FIGURE = /(?:\bup[ \t]+to|\bmax(?:imum)?(?:[ \t]+amount)?(?:[ \
 /** A figure followed by a description in lower case, of three words or more ("S$100 for every six hours diverted"): it
  * describes the row's benefit, not another row's figure. */
 const DESCRIBED_FIGURE = /^[ \t]*\S*\d[\d,.]*%?(?:[ \t]+[a-z][\p{L}'’-]*){3,}/u;
+/** A table row whose cells wrap: as many cells as the line above, and a cell above that runs into the one below it
+ * ("Angioplasty and other invasive treatment for" over "coronary artery": the wrapped-quote branch's CELL_CONTINUES). */
+const cellsRunOn = (above: string, line: string) => {
+  const a = above.split("\t").map((c) => c.trim()).filter(Boolean), b = line.split("\t").map((c) => c.trim()).filter(Boolean);
+  return a.length >= 2 && a.length === b.length && a.some((c) => RUNS_INTO(c));
+};
 type Line = { from: number; text: string; marked: boolean; label: string; figure: boolean };
 type Group = { label: string; marked: boolean; figure: boolean; ownFigure: boolean; pieces: string[]; first: number; last: number };
 const markerLength = (t: string) => ITEM_START.exec(t)?.[0].length ?? 0;
@@ -88,9 +94,9 @@ const hasWords = (t: string) => /\p{L}{2}/u.test(t);
  * into rows. A line starts another row when:
  * - it starts with an item marker or a bullet;
  * - it prints a label, then a figure (whatever its case: "surgical fees\tS$5,000", "And Ambulance\tS$500"), unless the label
- *   names a tier of the row ("Days 1-30") or carries its limit on ("up to", "subject to a maximum of", "or"), or no figure
- *   has been printed yet and the line is the row's label wrapped (the line above runs into it, it starts in lower case, or
- *   its words finish the benefit's name);
+ *   names a tier of the row ("Days 1-30") or carries its limit on ("up to", "subject to a maximum of", "or"), or the line
+ *   above runs into it (as a whole, or a cell into the cell below it), or no figure has been printed yet and the line is
+ *   the row's label wrapped (it starts in lower case, or its words finish the benefit's name);
  * - it prints only a figure after a row that already has its figure, unless the line above runs into it;
  * - it prints only words, after a row that has its figure, and the next line of the quote prints only a figure (a label
  *   with its figure below: "Surgical fees\n\tS$5,000"); or before any figure, when the row's label above is already whole
@@ -129,8 +135,8 @@ export function ownRowText(pageText: string, start: number, end: number, benefit
       let starts: boolean;
       if (line.marked) starts = true;
       else if (line.figure && hasWords(line.label)) {
-        starts = !(capLine || TIER_LABEL.test(line.label)
-          || (!g.ownFigure && (RUNS_INTO(prev) || lower || (within(words, want) && !within(want, labelWords(g.label))))));
+        starts = !(capLine || TIER_LABEL.test(line.label) || RUNS_INTO(prev) || cellsRunOn(prev, line.text)
+          || (!g.ownFigure && (lower || (within(words, want) && !within(want, labelWords(g.label))))));
       } else if (line.figure) starts = g.ownFigure && !RUNS_INTO(prev) && !DESCRIBED_FIGURE.test(line.text.split("\t")[0]);
       else if (CAP_LABEL.test(line.label) || TIER_LABEL.test(line.label) || lower || RUNS_INTO(prev)) starts = false;
       else if (g.ownFigure) starts = !!next && !next.marked && next.figure && !hasWords(next.label);
