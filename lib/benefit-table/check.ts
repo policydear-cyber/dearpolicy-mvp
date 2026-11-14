@@ -20,7 +20,7 @@ import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
-import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency } from "@/lib/simple-chat/verify";
+import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency, type Found } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
 
@@ -1023,15 +1023,47 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     }
     return hits.length === 1 ? hits[0] : null;
   };
+  // A table row quoted as its label and the cell it was read from, leaving out the cells between them ("Emergency
+  // accidental outpatient\t¥146,705,900" from "Emergency accidental outpatient\t¥56,400 per day\t¥146,705,900\t..."): the
+  // row is the one printed line whose first cell is that label and whose later cells include every quoted cell, whole and
+  // in that order. Only a quote of whole cells on one line, and only when one line in the document fits. A figure is then
+  // read only from the quoted cells, never from a cell the quote left out (cellsQuoted, printedIn).
+  const cellsQuoted = new Map<Source, string>();
+  const skippedCells = (quote: string): (Found & { cells: string }) | null => {
+    if (quote.includes("\n")) return null;
+    const flatten = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+    const want = quote.split("\t").map(flatten);
+    if (want.length < 2 || want.some((c) => !c) || !/[a-z]/.test(want[0])) return null;
+    const hits: (Found & { cells: string })[] = [];
+    for (const p of doc.pages) {
+      let at = 0;
+      for (const line of p.text.split("\n")) {
+        const start = at; at += line.length + 1;
+        const cells = line.split("\t");
+        if (cells.length <= want.length || flatten(cells[0]) !== want[0]) continue;
+        let k = 1;
+        for (let i = 1; i < cells.length && k < want.length; i++) if (flatten(cells[i]) === want[k]) k++;
+        if (k < want.length) continue;
+        const lead = line.length - line.trimStart().length;
+        hits.push({ docIndex: 0, page: p.page, excerpt: line.replace(/[ \t]+/g, " ").trim(), offset: start + lead, end: start + line.trimEnd().length,
+          cells: quote.split("\t").slice(1).join("\t") });
+      }
+    }
+    return hits.length === 1 ? hits[0] : null;
+  };
   const find = (quote: string | null, page: number | null): Source | null => {
     if (!quote) return null;
-    const f = locateQuote(household, quote, 0) ?? wrappedLabel(quote);
+    const plain = locateQuote(household, quote, 0) ?? wrappedLabel(quote);
+    const skipped = plain ? null : skippedCells(quote);
+    const f = plain ?? skipped;
     if (!f) return null;
     const at = (g: { page: number; excerpt: string; offset: number; end?: number }) => {
       const src: Source = { documentId: doc.id, document: doc.name, page: g.page, excerpt: g.excerpt };
       placed.set(src, { start: g.offset, end: g.end ?? lineEndAt(pageText(g.page), g.offset) });
+      if (skipped && g === skipped) cellsQuoted.set(src, skipped.cells);
       return src;
     };
+    if (skipped) return at(skipped);
     // The page the words are on, which is shown; the model's page only breaks a tie (locateQuote takes the first page).
     if (page != null && f.page !== page) {
       const onStated = locateQuote({ ...household, documents: [{ ...household.documents[0], pages: doc.pages.filter((p) => p.page === page) }] }, quote, 0);
@@ -1045,6 +1077,8 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
   // A cell break inside one spaced figure ("Room\tS$ 1\t500") parts nothing: a cell ending in a currency sign and 1 to 3
   // digits, before a cell that opens with exactly 3 digits, is one unclear run, and prints neither piece (Critic and TE #352).
   const printedIn = (src: Source, value: number) => {
+    const quoted = cellsQuoted.get(src);
+    if (quoted != null) return printsNumber(cellsApart(quoted), value);
     const p = placed.get(src);
     return printsNumber(p ? cellsApart(pageText(src.page).slice(p.start, p.end)) : src.excerpt, value);
   };
@@ -1289,7 +1323,15 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // A percentage in the row's own label ("Burns: greater than 2% but less than 5%") is the label's, not another row's.
     const percents = (t: string) => (t.match(/\d+(?:\.\d+)?\s*%/g) ?? []).length;
     // The row itself stays, as words with no figure: its quote cannot tell which percentage is its own.
-    if (pays === "percent" && percents(source.excerpt) > percents(benefit) + 1) {
+    // One printed table row, its cells parted by tabs, read under a named column, whose percentage is a whole cell of that
+    // row ("Missed connection\t30%\t20%", column "Basic", 30): the quote runs into no other row, and the column says which
+    // cell is its own, as it does for a row of plan amounts (plansOnValueLine). Not a quote of two lines, nor a figure
+    // printed only inside a longer cell.
+    const span = placed.get(source), spanText = span ? pageText(source.page).slice(span.start, span.end) : "";
+    const ownCell = (c: string) => { const m = /^(\d+(?:\.\d+)?)\s*%(?:\s+of\s+(?:the\s+)?sum\s+(?:insured|assured))?$/i.exec(c.trim()); return m ? Number(m[1]) : null; };
+    const oneTableRow = !!str(b.column) && value != null && !spanText.includes("\n") && spanText.includes("\t")
+      && spanText.split("\t").slice(1).some((c) => ownCell(c) === value);
+    if (pays === "percent" && !oneTableRow && percents(source.excerpt) > percents(benefit) + 1) {
       out.dropped.push({ what: label, why: "quote holds more than one percentage; kept the row with no figure" });
       out.benefits.push({ section: str(b.section), column: str(b.column), benefit, pays: "words", value: null, period: null, basis, asOf: null, percentOf: null, baseAmount: null,
         baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions, page: source.page, quote, source, currency: null, baseSource: null, capSource: null,
