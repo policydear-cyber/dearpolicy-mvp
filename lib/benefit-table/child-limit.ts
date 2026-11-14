@@ -156,6 +156,8 @@ const AGE_PHRASES: { re: RegExp; plus: number }[] = [
 const CHILD_SUBJECT = /\b(?:(?:insured\s+(?:child(?:ren)?|minors?|juveniles?)|(?:for|to)\s+(?:an?\s+|the\s+|each\s+|every\s+|any\s+)?(?:insured\s+|covered\s+|eligible\s+)?child(?:ren)?|child(?:ren)?\s+(?:aged|under|below|less\s+than|younger\s+than|up\s+to)|child(?:ren)?['’]s?\s+(?:limit|benefit|death|cover|sum|share)|(?:dependent|dependant)\s+child(?:ren)?|minors?|juveniles?|young\s+persons?|students?)\b|children\s+of\s+(?:the\s+)?[\p{L}])/iu;
 // (b) A limiting word, a share or a money figure in the same sentence.
 const LIMITING = /\b(?:limited|limits?|maximum|max|up\s+to|only|reduced|restricted|not\s+payable|nothing\s+(?:is\s+)?payable|no\s+benefit|not\s+covered|excluded|capped)\b|%|\bper\s?cent\b|(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$)\s?\d|\d[\d,.]*\s?(?:\b[A-Z]{3}\b|[£€])/i;
+/** A tab cell that is only a relationship ("Child", "Dependent child", "Son", "Insured minor"), as a people table prints it. */
+const RELATION_CELL = /^(?:(?:insured|dependent|dependant|eligible|covered)\s+)?(?:child|son|daughter|minor|juvenile|student)$/i;
 /** A row's own cell printing its share with a child's share after it ("100% of the Sum Insured. For an insured child under
  * 18, limited to 25% of the Sum Insured."): that sentence is that row's own rule, not a note for the document. */
 function ownCellChildSentence(cell: string): string | null {
@@ -185,7 +187,9 @@ export function childLimitNotes(pages: { page: number; text: string }[], own: { 
         if (run.length) units.push(run.join(" "));
         run = [];
         if (line.includes("\t")) {
-          const cells = line.split("\t").map((c) => { const w = ownCellChildSentence(c); return w ? withoutChildLimit(c, { words: w }) : c; });
+          // A people table's relationship cell ("Dependent child", "Son") is who a person is, never a limit: left out.
+          const cells = line.split("\t").filter((c) => !RELATION_CELL.test(c.trim()))
+            .map((c) => { const w = ownCellChildSentence(c); return w ? withoutChildLimit(c, { words: w }) : c; });
           units.push(cells.join(" "));
         }
       } else run.push(line.trim());

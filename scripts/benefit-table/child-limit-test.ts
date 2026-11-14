@@ -461,6 +461,8 @@ test("gate R5-H1: a child-limit sentence on another page, naming a person, in a 
   for (const t of ["Benefit is paid only for stays under 3 nights; maximum 30 days.", "Exclusions: hairline fractures under 2 cm.",
     "Claims may be made by a son or daughter on behalf of an insured person, up to GBP 500.", "No benefit is payable for injury while minding children for reward."])
     assert.deepEqual(notes(t), { found: false, age: null }, t);
+  // A people table's relationship cell is who a person is, never a limit (claim-journeys P5: "Dependent child").
+  assert.deepEqual(notes("Noah Kelly\tDependent child\t11/10/2015\tAUD 80,000"), { found: false, age: null });
 });
 test("gate R5-H2: wording that is not a child's limit never withholds a child's figures", () => {
   for (const w of ["Hospital cash is paid for stays under 30 days.", "Exclusions: hairline fractures under 2 cm.", "Claims may be made by a son or daughter on behalf of an insured person.",
