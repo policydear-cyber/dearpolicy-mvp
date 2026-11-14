@@ -729,6 +729,34 @@ for (const line of ["Insured persons travelling together may claim travel delay 
   "Travel delay is paid once per insured person.", "Each insured person may claim one benefit for each trip."]) {
   test(`gate PPS-12: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: SEVEN, extra: [line] }), each(SEVEN_NAMES)));
 }
+// Per-person-shared gate round 13: a sentence shares a limit only when it binds a limit or amount to a group of people, or to
+// the certificate as the unit, in the same clause; one, once, combined, in total, same and common joining benefits,
+// sections, items, events, days or trips share nothing (R13-M1), and named persons, persons named and every insured person
+// are a group (R13-H1). Each sentence follows a valid family-cap note.
+const EIGHT: [string, string, number][] = [...SEVEN, ["Accidental death", "S$100,000", 100000]];
+const EIGHT_NAMES = EIGHT.map(([b]) => b);
+for (const line of ["The maximum is the combined total of items in one claim.", "In total we pay up to the sum insured for each insured person.",
+  "Hospital cash is paid once a day.", "We pay a single lump sum.", "Only one benefit is payable under Sections 1 and 2 for the same event.",
+  "We will pay one amount for any one item.", "The maximum per item is S$500, and in total S$3,000.", "Benefits are paid once the claim is approved.",
+  "Only one of benefits 3 or 4 is payable.", "The single article limit is S$500.", "In total, all benefits in Section 2 are limited to the amount shown.",
+  "Hijack benefit is paid once per hijack.", "The benefit is paid once per trip.", "Limits are combined for loss and damage to baggage.",
+  "The accidental death benefit is paid only once.", "Travel delay is payable once per trip.", "Trip cancellation and curtailment have one combined limit.",
+  "Medical expenses and evacuation are combined in one limit.", "Baggage delay is paid once after 6 hours.",
+  "Medical and dental expenses combined are limited to the amount shown.", "Medical and dental expenses combined are covered up to the limit shown.",
+  "A single limit applies per event.", "Only one claim may be made for the same loss.", "Payable once in the insured person's lifetime.",
+  "One benefit per accident.", "The limit shown is the total for the trip.", "The benefit is paid as a lump sum once the diagnosis is confirmed.",
+  "We pay the benefit once you return to Singapore.", "A single excess applies to each claim.", "One excess applies per claim.",
+  "Pair or set items are treated as one item."]) {
+  test(`gate PPS-13 R13-M1: '${line}' keeps every per-person row`, () =>
+    assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
+}
+for (const line of ["One limit covers each insured person and their family.", "Every insured person draws on the same limit.",
+  "The same limit covers all named persons.", "Named persons have a common limit.", "The certificate limit covers every person named.",
+  "Persons named on the certificate share the cover.", "The limit for each insured person is one limit for the whole certificate.",
+  "Claims for each insured person come out of a single limit.", "The limit shown is paid once whoever claims."]) {
+  test(`gate PPS-13 R13-H1: '${line}' withholds every per-person row`, () =>
+    assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), noOne));
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),
