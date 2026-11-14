@@ -874,16 +874,27 @@ export function withoutOwnShareCap(text: string, percent: number | null): string
   return text.replace(new RegExp(String.raw`\blimited\s+to\s+(?<![\d.])${own}(?:\.0+)?\s*(?:%|per\s?cent)\s+of\s+(?:the\s+|your\s+)?sum\s+(?:insured|assured)(?!\s*(?:of|for|applicable|payable|under|in\s+respect|as\s+per|according)\b)(?=\s*(?:$|[.;,)\n]))`, "gi"), " ");
 }
 /** Whether a printed line is a row's own: one of its tab cells is the row's benefit name, whole, after at most a section
- * number ("1\tAccidental death\t...", "1. Accidental death\t..."); a line with no tab cells starts so and goes on with
- * its figure ("1 Accidental death 100% of ..."). Compared without case, spacing or end punctuation. */
-export function ownLabelLine(line: string, benefit: string): boolean {
-  const n = (t: string) => t.toLowerCase().replace(/\s+/g, " ").replace(/^(?:section\s+)?\d{1,3}[.)]?\s+/, "").replace(/[\s:.;,-]+$/, "").trim();
+ * number ("1\tAccidental death\t...", "1. Accidental death\t...") and before at most a footnote mark ("Accidental
+ * death*", "(a)"); a line with no tab cells starts so and goes on with its figure ("1 Accidental death 100% of ...").
+ * Compared without case, spacing or end punctuation. And it is the row's only such line (gate R3-H2): a section or item
+ * number the line starts with is the row's own section, and no other line of the page with a figure carries the same
+ * label. */
+export function ownLabelLine(line: string, benefit: string, section: string | null = null, page = ""): boolean {
+  const n = (t: string) => t.toLowerCase().replace(/\s+/g, " ").replace(/^(?:section\s+)?\d{1,3}[.)]?\s+/, "")
+    .replace(/\s*(?:\*{1,3}|†|‡|\(\s*(?:note\s+)?[a-z0-9]{1,2}\s*\))\s*$/, "").replace(/[\s:.;,-]+$/, "").trim();
   const name = n(benefit);
   if (!name) return false;
-  const cells = line.split("\t");
-  if (cells.length >= 2) return cells.some((c) => n(c) === name);
-  const flatLine = n(line);
-  return flatLine.startsWith(`${name} `) && /^\s*\d/.test(flatLine.slice(name.length));
+  const labelled = (l: string) => {
+    const cells = l.split("\t");
+    if (cells.length >= 2) return cells.some((c) => n(c) === name);
+    const flatLine = n(l);
+    return flatLine.startsWith(`${name} `) && /^\s*\d/.test(flatLine.slice(name.length));
+  };
+  if (!labelled(line)) return false;
+  const lead = /^\s*(?:section\s+)?(\d{1,3})[.)]?(?:\t|\s)/i.exec(line)?.[1];
+  const own = /^\s*(?:section\s+)?(\d{1,3})[.)]?\s*$/i.exec(section ?? "")?.[1];
+  if (lead != null && lead !== own) return false;
+  return page.split("\n").filter((l) => /\d/.test(l) && labelled(l)).length <= 1;
 }
 /** A child's share the reader put in a row of its own (TE-ACC-20261114-R3: the cell "100% of the Sum Insured. For an
  * insured child under 18, limited to 25% of the Sum Insured." read as that row plus a second "Accidental death" row with
@@ -1378,7 +1389,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       // number before it), so a quote such as "100% of the Sum Insured" found first in another row's cell ("Accidental
       // death" for a "Death" row, "Burns (third degree)" for "Burns") is never given that row's child share (gate H4).
       const line = text.slice(text.lastIndexOf("\n", p.start - 1) + 1, lineEndAt(text, p.end));
-      const found = ownLabelLine(line, benefit) ? childLimitIn(cell.replace(/\t/g, " "), value) : null;
+      const found = ownLabelLine(line, benefit, str(b.section), text) ? childLimitIn(cell.replace(/\t/g, " "), value) : null;
       if (found) {
         const seg = segmentOf(source);
         const rest = [source.excerpt, cell, seg.text, seg.near, ...conditions].map((t) => withoutChildLimit(t, found));

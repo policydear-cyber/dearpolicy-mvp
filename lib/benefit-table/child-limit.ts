@@ -81,12 +81,15 @@ const BIRTH_HEAD = /^(?:date\s+of\s+birth|birth\s*date|d\.?\s?o\.?\s?b\.?|born)$
 const RELATION_HEAD = /^(?:relationship(?:\s+to\s+(?:the\s+)?(?:policyholder|proposer|insured|policy\s+owner))?|relation)$/i;
 const DATE = String.raw`\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\.?,?\s+\d{4}`;
 const DATES = new RegExp(DATE, "g");
+/** A money figure as a table row prints it: a currency code or sign beside a non-zero figure (a header's "(GBP 000)" is
+ * not one). */
+const MONEY = /(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$)\s?[\d,.]*[1-9]|[1-9][\d,.]*\s?(?:\b[A-Z]{3}\b|[£€])/;
 /** The date of birth and relationship a page prints on one person's line. `lines`: the page's lines; `at`: the person's
  * line; `person`: their printed name; `others`: the other names the document prints for its insured lives.
- * - By column: the person's line has tab cells, and the nearest line above it with no digits is its table's header (every
- *   line between is a row of tab cells; a blank line, a line without cells or more than 12 lines ends the search, and a
- *   header is never skipped for an earlier one). Read only when the header has as many cells as the person's line and
- *   names "Date of birth" or "Relationship" exactly once (gate H2: another table's header above is never reached).
+ * - By column: the person's line has tab cells; the lines right above it with as many cells, each printing a date or
+ *   money, are its table's rows; the first line above them is the only header candidate, never looked past (gates H2,
+ *   R3-H1: another table's header is never reached, whatever digits a header prints). Read only when that line has as
+ *   many cells as the person's line and names "Date of birth" or "Relationship" exactly once.
  * - By label: "<the person's name>, date of birth: <date>" / "(DOB <date>)" / "born <date>", the label right after the
  *   person's own name, on a line naming no one else the document names and printing no other date (gate H3: "child of
  *   <parent> (Policyholder date of birth ...)" is never the child's). */
@@ -95,17 +98,16 @@ export function printedLife(lines: string[], at: number, person = "", others: st
   const cells = line.split("\t").map((c) => c.trim());
   let birth: string | null = null, relationship: string | null = null;
   if (cells.length >= 2) {
-    for (let i = at - 1; i >= 0 && i >= at - 12; i--) {
-      const text = lines[i];
-      const head = text.split("\t").map((c) => c.trim());
-      if (!text.trim() || head.length < 2) break;
-      if (/\d/.test(text)) continue;
-      if (head.length === cells.length) {
-        const b = head.flatMap((h, k) => (BIRTH_HEAD.test(h) ? [k] : [])), r = head.flatMap((h, k) => (RELATION_HEAD.test(h) ? [k] : []));
-        if (b.length === 1 && new RegExp(String.raw`^(?:${DATE})$`).test(cells[b[0]])) birth = cells[b[0]];
-        if (r.length === 1 && /^[A-Za-z][A-Za-z ()/-]{1,40}$/.test(cells[r[0]])) relationship = cells[r[0]];
-      }
-      break;
+    // Up through the same table's own rows only: as many cells as the person's line, each printing a date or money.
+    // The first other line is the only header candidate, and it is never looked past (gate R3-H1).
+    const dataRow = (t: string) => t.split("\t").length === cells.length && (new RegExp(DATE).test(t) || MONEY.test(t));
+    let i = at - 1;
+    while (i >= 0 && i >= at - 12 && dataRow(lines[i])) i--;
+    const head = i >= 0 && i >= at - 12 ? lines[i].split("\t").map((c) => c.trim()) : [];
+    if (head.length === cells.length) {
+      const b = head.flatMap((h, k) => (BIRTH_HEAD.test(h) ? [k] : [])), r = head.flatMap((h, k) => (RELATION_HEAD.test(h) ? [k] : []));
+      if (b.length === 1 && new RegExp(String.raw`^(?:${DATE})$`).test(cells[b[0]])) birth = cells[b[0]];
+      if (r.length === 1 && /^[A-Za-z][A-Za-z ()/-]{1,40}$/.test(cells[r[0]])) relationship = cells[r[0]];
     }
   }
   const words = (n: string) => n.trim().split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
@@ -113,7 +115,7 @@ export function printedLife(lines: string[], at: number, person = "", others: st
   const lower = line.toLowerCase();
   const named = (n: string) => { const w = n.trim().toLowerCase(); return !!w && lower.includes(w); };
   if (!birth && own.length && !others.some((o) => o.trim().toLowerCase() !== person.trim().toLowerCase() && named(o))) {
-    const m = new RegExp(String.raw`(?<![\p{L}\p{N}])${own.join(String.raw`\s+`)}\s*[,(\-–]?\s*(?:date\s+of\s+birth|d\.?o\.?b\.?|born(?:\s+on)?)\s*[:\-]?\s*(${DATE})`, "iu").exec(line);
+    const m = new RegExp(String.raw`(?<![\p{L}\p{N}])${own.join(String.raw`\s+`)}\s*[,(\-–]?\s*(?:date\s+of\s+birth|d\.?o\.?b\.?|born(?:\s+on)?)\s*[:\-]?\s*(${DATE})(?=\s*(?:[),;]|\t|$))`, "iu").exec(line);
     if (m && (line.match(DATES) ?? []).length === 1) birth = m[1];
   }
   return { birth, relationship };
