@@ -985,6 +985,45 @@ for (const [line, gone] of [
 for (const line of ["Hospital cash is shared.", "Hospital cash and dental expenses are shared.", "Legal expenses are shared."]) {
   test(`gate PPS-19 tier 0: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
 }
+// Per-person-shared gate round 20 (probe pp28): an item of filler alone ("and benefits", "the cover", "limits are pooled"),
+// "pooled with" anything but a person or company, "in <capitalised words>" that are no place, "is also shared" and ": same":
+// every row. Each sentence follows a valid family-cap note.
+for (const line of ["Medical expenses and benefits are shared.", "Medical expenses and benefits are shared by the family.", "Medical and baggage cover and limits are shared.",
+  "Medical and baggage cover and limits are shared by the family.", "Medical expenses and limits are shared.", "Medical expenses and limits are shared by the family.",
+  "Medical expenses and cover are shared by the family.", "Medical expenses and the cover are shared by the family.", "Medical expenses and your cover are shared by the family.",
+  "Medical expenses and our benefits are shared by the family.", "Medical expenses and the benefits are shared by the family.", "Medical expenses and the amounts are shared by the family.",
+  "Medical expenses and the maximum are shared by the family.", "Medical expenses and the sums are shared by the family.", "Medical expenses and the sum insured are shared by the family.",
+  "Medical expenses, benefits and limits are shared by the family.", "Medical expenses or benefits are shared by the family.", "Medical expenses or any benefit is shared.",
+  "Medical expenses or any other benefit is shared by the family.", "Medical expenses and fees, costs and charges are shared by the family.", "Medical cover and cover are shared.",
+  "Medical expenses, the cover and the limit are shared by the family.", "Medical expenses and the limit are shared by the family.", "Medical expenses are shared and cover is shared.",
+  "Medical expenses are shared, and benefits are shared.", "Medical expenses are shared and limits are pooled by the family.", "Medical expenses are shared, the cover is joint.",
+  "Medical expenses are shared. Cover is shared.", "Medical expenses are shared. Benefits are shared.", "Medical expenses are shared. Limits are joint.",
+  "Medical expenses in Section Two are shared by the family.", "Medical expenses in Each Section are shared.", "Medical expenses in Any Section are shared by the family.",
+  "Medical expenses and Baggage in Part B are shared.", "Medical expenses in Total are shared by the family.", "Medical expenses in Full are shared.",
+  "Medical expenses in General are shared by the family.", "Medical expenses in Both Plans are shared.", "Medical expenses and the cost of benefits are shared by the family.",
+  "Medical expenses for children and benefits for adults are shared.", "Medical expenses for kids and cover are shared by the family.", "Medical expenses up to the limit shown and benefits are shared.",
+  "Item no. 1 and benefits are shared.", "O/S medical expenses and cover are shared.", "Limits and cover are shared by the family.",
+  "Benefits are shared.", "Benefits are shared by the family.", "Expenses are shared by the family.",
+  "Cover is joint.", "The cover is shared.", "Your cover is shared by the family.",
+  "Our limits are pooled.", "Costs are shared.", "The maximum is shared.",
+  "Amounts are shared by you and your spouse.", "The sum is joint.", "Fees and charges are shared by the family.",
+  "Treatment is shared.", "Bills are shared by the family.", "Limit is shared.",
+  "The limit is joint for both of you.", "Hospital cash and benefits are shared.", "Hospital cash and the cover are shared.",
+  "Dental and limits are shared.", "Dental and benefits are shared.", "Theft and damage cover and benefits are shared.",
+  "Personal money and limits are shared.", "Hospital cash, dental and cover are shared.", "Missed connection and the maximum are shared.",
+  "Hospital cash is also shared.", "Hospital cash is likewise shared.", "Hospital cash and benefits are shared by the family.",
+  "Dental and benefits are pooled.", "Hospital cash or cover is shared.", "Medical expenses are also shared.",
+  "Medical expenses are likewise shared.", "Medical expenses are similarly shared by the family.", "Medical expenses are equally shared.",
+  "Medical expenses are still shared.", "Medical expenses are shared with baggage.", "Medical expenses are shared with the cover.",
+  "Medical expenses are shared with benefits.", "Medical expenses are shared with dental.", "Medical expenses are shared with hospital cash.",
+  "Medical expenses are shared with your spouse and with baggage.", "Medical expenses are pooled with the other limits.", "Medical expenses are shared. Baggage: same.",
+  "Medical expenses are shared. Ditto personal liability.", "Medical expenses are shared. Ditto.", "Medical expenses: shared. Baggage: ditto."]) {
+  test(`gate PPS-20 tier 1: '${line}' withholds every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), noOne));
+}
+for (const line of ["Medical expenses in Singapore and Overseas are shared by the family.", "Medical expenses in Asia are shared by the family.",
+  "Medical expenses in the United States are shared.", "Medical expenses are shared with the rental company."]) {
+  test(`gate PPS-20 tier 2: '${line}' withholds Overseas medical expenses only`, () => scoped(EIGHT, [CAP_NOTE, line], ["Overseas medical expenses"]));
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),

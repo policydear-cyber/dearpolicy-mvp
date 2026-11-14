@@ -867,7 +867,9 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
    *   medical rows; benefits that are no row ("dental", "hospital cash", "personal money", "missed connection") stay out;
    * - tier 0, none: only benefits that are no row, with no group named ("Loss and damage are shared."), as main. */
   const noteTier = (text: string, group: boolean): { tier: 0 | 1 | 2; rows: Set<CheckedBenefit> } => {
-    const plain = withoutTravelTogether(text).replace(SHARED_GROUP, " ").replace(NEUTRAL_SENTENCE, " ").replace(NEUTRAL_EXTRA, " ");
+    // Each "is / are shared, pooled or joint", comma, colon, semicolon and full stop ends an item (gate round 20).
+    const plain = withoutTravelTogether(text).replace(SHARED_GROUP, " ").replace(NEUTRAL_SENTENCE, " ").replace(NEUTRAL_EXTRA, " ")
+      .replace(ITEM_END, " qqsep ");
     let n = ` ${stems(plain).join(" ")} `;
     const named = new Set<CheckedBenefit>();
     for (const p of phrases) if (n.includes(` ${p} `)) { for (const b of byPhrase.get(p)!) named.add(b); n = n.split(` ${p} `).join(" | "); }
@@ -883,7 +885,11 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
       if (!rows && DISTINCTIVE.has(w)) { nonRow = true; return "|"; }
       return w;
     }).join(" ");
-    const left = n.split(" ").filter((w) => w && w !== "|");
+    // An item of filler alone ("Medical expenses and benefits", "the cover", "limits are pooled"): the whole cover, every row.
+    // Items are split at "and" / "or" once the labels' own phrases are out ("evacuation and repatriation").
+    const items = n.split(/\s(?:qqsep|and|or)(?=\s)/).map((x) => x.split(" ").filter((w) => w && !ITEM_NEUTRAL.has(w)));
+    if (items.some((x) => x.length && x.every((w) => SHARED_FILLER.has(w)))) return { tier: 1, rows: named };
+    const left = n.split(" ").filter((w) => w && w !== "|" && w !== "qqsep");
     // A word left over that is no named row's label word and no filler: about more than the rows named.
     if (left.some((w) => !SHARED_FILLER.has(w) && !(byWord.get(w)?.every((b) => named.has(b)) ?? false))) return { tier: 1, rows: named };
     if (named.size) return { tier: 2, rows: named };
@@ -959,17 +965,23 @@ const CAP_LIKE = /\d|%|\b(?:twice|double|treble|triple|thrice|times|per\s*cent)\
 const SHARED_GROUP = /\b(?:by|between|among(?:st)?|with|for)\s+(?:you\s+and\s+your\s+(?:spouse|partner|children|family|companions?)|(?:(?:the|your|all(?:\s+the)?|both)\s+)?(?:whole\s+)?(?:famil(?:y|ies)(?:\s+members)?|households?|couples?|insured\s+(?:persons|people)|insured|travell?ers|members|named\s+persons|persons\s+named|group|party|of\s+you|you(?:\s+(?:all|both|two))?|everyone|everybody|them(?:\s+all)?|each\s+other|spouses?|partners?|children|companions?))(?:\s+on\s+(?:this|the)\s+(?:certificate|policy))?(?:\s+only)?\b/gi;
 /** Neutral sentences that may be joined to a shared note (gate round 18). */
 const NEUTRAL_SENTENCE = /\b(?:(?:or\s+)?see\s+the\s+(?:policy\s+)?wording|it\s+is\s+the\s+most\s+we\s+(?:will\s+)?pay|they\s+apply\s+per\s+(?:trip|journey|event))\s*\.?/gi;
-/** Neutral extra words, a closed list: "the cost of", "abroad", "in <Place>", "for children", "p.p.", "O/S", "item no. 1",
+/** Neutral extra words, a closed list: "the cost of", "abroad", "in <place>" (a closed list of places; never "in Section
+ * Two", "in Total"; gate round 20), "for children", "p.p.", "O/S", "item no. 1",
  * "up to the limit shown". */
-const NEUTRAL_EXTRA = /\b(?:[Tt]he\s+[Cc]ost\s+of|abroad|in\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?|for\s+(?:children|kids)|p\.\s?p\.?|O\/S|item\s+no\.?\s*\d+|up\s+to\s+the\s+limit\s+shown)(?=\W|$)/g;
+const NEUTRAL_EXTRA = /\b(?:the\s+cost\s+of|abroad|in\s+(?:abroad|overseas|locally|singapore|malaysia|indonesia|thailand|vietnam|the\s+philippines|philippines|japan|china|hong\s+kong|taiwan|(?:south\s+)?korea|india|australia|new\s+zealand|(?:south[\s-]?east\s+|east\s+|south\s+)?asia|europe|africa|(?:north\s+|south\s+|latin\s+)?america|the\s+americas|the\s+usa?|usa?|the\s+united\s+(?:states|kingdom)|united\s+(?:states|kingdom)|the\s+uk|uk|canada|the\s+middle\s+east|middle\s+east|the\s+schengen\s+area|asean)|for\s+(?:children|kids)|p\.\s?p\.?|O\/S|item\s+no\.?\s*\d+|up\s+to\s+the\s+limit\s+shown)(?=\W|$)/gi;
+/** Where an item of a shared note ends (gate round 20). */
+const ITEM_END = /\b(?:is|are)(?=\s+(?:(?:also|likewise|similarly|equally|still|then)\s+)?(?:shared|pooled|joint)\b)|[,;:.]/gi;
+/** Words an item may print that are no noun of its own (stems). */
+const ITEM_NEUTRAL = new Set(["the", "your", "our", "is", "are", "shared", "pooled", "joint"]);
 /** Words a shared note may print besides rows, benefits that are no row and its group (stems). */
 const SHARED_FILLER = new Set(["the", "your", "our", "limit", "cover", "benefit", "expens", "expense", "cost", "bill", "treatment", "charge", "fee", "amount", "sum", "maximum", "is", "are", "shared", "pooled", "joint", "and", "or"]);
 /** Distinctive benefit words: one names every row whose label prints it (gate round 18). Stems. */
 const DISTINCTIVE = new Set(["medical", "evacuation", "repatriation", "cancellation", "curtailment", "delay", "baggage", "liability", "death", "disablement", "dental", "hospital", "passport", "money"]);
 /** Benefits that are no row of the usual table, after stemming ("personal money", "loss of passport", "missed connection"). */
 const NON_ROW_NOUN = /\s(?:personal\s+(?:money|belonging|effect)|(?:loss\s+of\s+)?passport|missed\s+(?:connection|departure)|hospital\s+cash|legal\s+(?:expens\w*|cost\w*)|dental(?:\s+(?:expens\w*|treatment|cost\w*))?|theft|damage|loss(?=\s+(?:and|or)\s+(?:damage|theft)\s)|(?<=(?:damage|theft)\s+(?:and|or)\s+)loss)(?=\s)/g;
-/** Saying something is shared, pooled or joint, never with an outsider ("Rental car excess is shared with the rental company"). */
-const SHARED_PREDICATE = /\b(?:is|are)\s+(?:(?:also|likewise|similarly|equally|still|then)\s+)?(?:shared|pooled|joint)\b(?!\s+with\s+(?!(?:your\s+|the\s+|all\s+|other\s+)?(?:famil|spouse|partner|children|insured|companions|each\s+other)))/i;
+/** Saying something is shared, pooled or joint, never with an outsider: a person or company ("Rental car excess is shared
+ * with the rental company", "with another insurer"); "pooled with the other limits" is a shared note (gate round 20). */
+const SHARED_PREDICATE = /(?:\b(?:is|are)\s+(?:(?:also|likewise|similarly|equally|still|then)\s+)?|:\s*)(?:shared|pooled|joint)\b(?!\s+with\s+(?:the\s+|a\s+|an\s+|another\s+|any\s+|other\s+|their\s+|its\s+)?(?:[\w-]+\s+){0,2}?(?:compan(?:y|ies)|insurers?|underwriters?|employers?|providers?|operators?|firms?|agen(?:cy|cies|ts?)|landlords?|owners?|hirers?|lessors?|carriers?|airlines?|hotels?|third\s+part(?:y|ies)|parties|passengers|patients|us)\b)/i;
 /** Last words of a benefit label too general to name it alone ("Overseas medical expenses" is not named by "expenses"). */
 const GENERIC_LAST_WORD = new Set(["expenses", "expense", "costs", "cost", "benefit", "benefits", "cover", "limit", "limits", "amount", "amounts", "allowance", "payment", "charges", "charge", "fees", "fee"]);
 /** A row label that is a family's or household's own benefit ("Family personal liability", "Household contents"), never
