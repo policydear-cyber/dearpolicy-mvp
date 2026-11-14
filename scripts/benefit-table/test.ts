@@ -914,6 +914,19 @@ test("backfill SQL: inserts only for the account's current policy, never over a 
     ];
     for (const [id, text, column, name, pays, value, quote, want] of cases) assert.equal(at(text, column, name, pays, value, quote), want, id);
   });
+  test("Critic #481 H2: a header with currency marks is the header; an earlier table's header never is", () => {
+    const at = (text: string, column: string, value: number, quote: string) =>
+      checkReading({ id: "h2", name: "Plans.pdf", readable: true, pages: [{ page: 1, text }] }, doc("policy_wording", [], [benefit({ benefit: "Hospital", column, pays: "amount", value, quote })])).benefits[0]?.value ?? null;
+    const TWO = "Benefit\tPlan B\tPlan A\nRoom\tS$300\tS$500\nPart 2\nBenefit\tPlan A (S$)\tPlan B (S$)\nRoom\tS$50\tS$80\nHospital\t100,000\t200,000";
+    assert.equal(at(TWO, "Plan A", 100000, "Hospital\t100,000\t200,000"), 100000, "Plan A (S$) names Plan A, past a row of small amounts");
+    assert.equal(at(TWO, "Plan A", 200000, "Hospital\t100,000\t200,000"), null, "Plan B's figure is not Plan A's");
+    assert.equal(at(TWO, "Plan A", 200000, "Hospital\t200,000"), null, "skipped-cell quote of Plan B's cell");
+    assert.equal(at(TWO, "Plan B", 200000, "Hospital\t200,000"), 200000);
+    // Same width, no break line between: a line of another width still ends the table.
+    const NOBREAK = "Benefit\tPlan B\tPlan A\nRoom\tS$300\tS$500\nBenefit\tPlan A (S$)\tPlan B (S$)\tNote\nHospital\t100,000\t200,000";
+    assert.equal(at(NOBREAK, "Plan A", 200000, "Hospital\t200,000"), null, "never the earlier table's header");
+    assert.equal(at("Benefit\tPlan B\tPlan A\nPart 2\nHospital\t100,000\t200,000", "Plan A", 200000, "Hospital\t200,000"), null, "no header in its own table");
+  });
   test("plan percentages with no column, or a quote over two rows, still give no figure", () => {
     const noCol = one({ benefit: "Missed connection", pays: "percent", value: 20, quote: "Missed connection\t30%\t20%\tS$500\tNot covered" });
     assert.equal(noCol.benefits[0]?.value ?? null, null);

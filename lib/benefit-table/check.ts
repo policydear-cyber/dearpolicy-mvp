@@ -1028,20 +1028,28 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
   // row is the one printed line whose first cell is that label and whose later cells include every quoted cell, whole and
   // in that order. Only a quote of whole cells on one line, and only when one line in the document fits. A figure is then
   // read only from the quoted cells, never from a cell the quote left out (cellsQuoted, printedIn).
-  // The cell a named column takes in a tabbed table row: the nearest line above the row on its page with the same number
-  // of cells that prints no figure (its header) must name the column, whole (spacing and case aside), at exactly one cell
-  // after the label. No such header, a header that does not name it, or one naming it twice: no cell (Critic #481 H1: a
-  // percentage of plan C or of John Tan is never Basic's or Mary Tan's by matching its value alone). Fails closed.
+  // The cell a named column takes in a tabbed table row: walking up from the row through its own table only (the lines
+  // just above it that are tabbed with the same number of cells), the first line that prints no figure is its header, and
+  // it must name the column, whole (spacing, case and currency marks aside: "Plan A (S$)" names "Plan A"), at exactly one
+  // cell after the label. A line that is not tabbed or has another number of cells ends the table: an earlier table's
+  // header is never this row's (Critic #481 H2). No header, one not naming the column, or one naming it twice: no cell
+  // (Critic #481 H1: a percentage of plan C or of John Tan is never Basic's or Mary Tan's by its value alone). Fails closed.
+  const CURRENCY_MARK = /\(\s*(?:in\s+)?(?:[A-Z]{0,3}\$|RM|SGD|USD|MYR|HKD|AUD|GBP|EUR|JPY|CNY|IDR|THB|INR|PHP|NZD|CAD|CHF|[¥£€₹₩₱฿₫%])\s*\)|(?<![A-Za-z])(?:[A-Z]{1,3}\$|RM)(?![A-Za-z])|\b(?:SGD|USD|MYR|HKD|AUD|GBP|EUR|JPY|CNY|IDR|THB|INR|PHP|NZD|CAD|CHF)\b|[$¥£€₹₩₱฿₫]/g;
   const flatCell = (c: string) => c.replace(/\s+/g, " ").trim().toLowerCase();
-  const HEADER_FIGURE = /\d[\d,.]*\s*%|\d{1,3}(?:,\d{3})+|\d{3,}|[$¥£€₹₩₱฿₫]/;
+  const headerName = (c: string) => flatCell(c.replace(CURRENCY_MARK, " "));
+  // A cell printing a figure: a currency mark or code beside digits ("S$50", "RM 200"), a percentage, or a long number.
+  // A header's bare mark ("(S$)") is not one.
+  const HEADER_FIGURE = /(?:[A-Z]{0,3}\$|RM|[¥£€₹₩₱฿₫]|\b(?:SGD|USD|MYR|HKD|AUD|GBP|EUR|JPY|CNY|IDR|THB|INR|PHP|NZD|CAD|CHF))\s?\d|\d[\d,.]*\s*%|\d{1,3}(?:,\d{3})+|\d{3,}/;
   const columnCell = (text: string, lineStart: number, cellCount: number, column: string | null): number | null => {
     if (!column || cellCount < 2) return null;
-    const want = flatCell(column);
+    const want = headerName(column);
+    if (!want) return null;
     const above = text.slice(0, lineStart).split("\n").slice(0, -1).reverse();
     for (const line of above) {
       const cells = line.split("\t");
-      if (cells.length !== cellCount || cells.slice(1).some((c) => HEADER_FIGURE.test(c))) continue;
-      const at = cells.map((c, i) => (i > 0 && flatCell(c) === want ? i : -1)).filter((i) => i > 0);
+      if (cells.length !== cellCount) return null;
+      if (cells.slice(1).some((c) => HEADER_FIGURE.test(c))) continue;
+      const at = cells.map((c, i) => (i > 0 && headerName(c) === want ? i : -1)).filter((i) => i > 0);
       return at.length === 1 ? at[0] : null;
     }
     return null;
