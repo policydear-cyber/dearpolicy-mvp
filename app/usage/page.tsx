@@ -1,5 +1,6 @@
 "use client";
 import { AccountTabs } from "@/components/account-tabs";
+import { Icon } from "@/components/icons";
 import { useEffect,useState } from "react";
 
 /** Plan usage, for a household: how much of this month's plan has been used.
@@ -25,7 +26,7 @@ export default function PlanUsagePage(){
   useEffect(()=>{void fetch("/api/usage",{cache:"no-store"}).then(async r=>{const p=await r.json().catch(()=>({}));if(!r.ok||p.error||!p.usage)throw new Error("load");setUsage(p.usage);}).catch(()=>setError(true));},[]);
   const plan=usage?.plan;
   return <div className="page">
-    <header className="page-header compact"><div><h1>Account settings</h1></div></header>
+    <header className="page-header compact"><div><h1><span className="title-icon"><Icon name="family"/></span>Account settings</h1></div></header>
     <AccountTabs />
     <div className="section-heading"><div><h2>Plan usage this month</h2><p>How much of your plan your household has used this month. Answers from documents DearPolicy has already read are always available.</p></div></div>
     {error&&<div className="alert error" role="alert"><strong>Your plan usage couldn&rsquo;t be loaded.</strong><span> Refresh the page in a moment.</span></div>}

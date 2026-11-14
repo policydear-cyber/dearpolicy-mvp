@@ -1564,3 +1564,12 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
   .home-ask-row input { flex-basis: 100%; }
   .home-ask-row .button { width: 100%; }
 }
+
+/* Visual polish round 2 (Nov 2026): document cards. */
+/* Cards in a row share one height; the policy numbers and actions sit at the bottom, so the grid has no holes. */
+@media (min-width: 761px) { .document-list { align-items: stretch; } }
+.document-card { display: flex; flex-direction: column; }
+.document-card > .document-meta { margin-top: auto; }
+/* Delete is quiet until it is about to act: muted, at the end of the row; red on hover, focus and Confirm. */
+.document-meta .mini-button.danger { margin-left: auto; border-color: var(--line); color: var(--muted); }
+.document-meta .mini-button.danger:hover, .document-meta .mini-button.danger:focus-visible, .document-meta .mini-button.danger.armed { border-color: var(--critical-line); color: var(--critical); }
