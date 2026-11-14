@@ -787,6 +787,19 @@
       "refused": 0,
       "failed": 0,
       "note": "Courier-mediated live confirmation of PR #57 on the synthetic fracture household with the dedicated test connection (model gpt-6-luna): arm A only (frozen candidate through the real chat route), six pre-registered conversations (dental, cancer, cancer paraphrase, sickness, fracture alternatives, person correction) run once each, no reruns, limits or expectation changes after results. 23 calls, none refused or failed; one courier checksum refusal (HTTP 400) occurred before any model call and the identical request was resent once. Spend is booked at the upper bound without the cached-input discount (US$0.029663); the application-price estimate with the cached discount is US$0.012903; neither is provider-billed, so the larger figure is charged. Only this run's US$0.05 was authorised; the US$0.15 trial-codespace-1 reservation is unchanged and not available to automated runs."
+    },
+    {
+      "run_id": "ocr-proof-baidu-run-1",
+      "tested_code_sha": "cefbef8",
+      "at": "2026-11-14T10:00:00.000Z",
+      "preflight": false,
+      "run_cap_usd": 0,
+      "spent_usd": 0,
+      "reserved_unsettled_usd": 0,
+      "calls": 102,
+      "refused": 0,
+      "failed": 0,
+      "note": "Baidu PaddleOCR proof run (OCR only, no model calls, so US$0 against this cap). 50 made-up policy wordings, 3,252 pages, 98 Baidu jobs plus 4 single resubmits of jobs Baidu failed with its own status 500 (204 pages), so 3,456 pages read on the Baidu AI Studio account. Baidu's API reports no price per job; any Baidu charge is on that account, not here. Raw replies are kept outside git in the project's ocr-proof/run-1 folder. DC authorised the run (no cost limit on document reading). Every earlier entry and reservation is unchanged."
     }
   ]
 }
