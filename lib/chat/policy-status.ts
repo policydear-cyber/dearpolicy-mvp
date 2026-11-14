@@ -45,10 +45,11 @@ export function daysBetween(fromIso: string, toIso: string) { return Math.round(
 /** "How many days left?": the days from today to the date a document prints. A printed end date that has passed gives no
  *  countdown and no "ended": every policy on file is taken as in force (DC, 31 Oct), so the answer only says what the
  *  document prints. A grace period comes from an unpaid premium, not an end date, and is still counted. */
+/** A "how many days" question gets a number even on the day itself: "ends today, ... (0 days left)." */
 export function countdownLine(name: string, st: Pick<PrintedStatus, "state" | "date" | "printed">, today: string): string | null {
   if (!st.date || !st.printed) return null;
   const n = daysBetween(today, st.date), days = (k: number) => k + " day" + (k === 1 ? "" : "s");
-  if (st.state === "in_force") return name + (n < 0 ? "’s printed period runs to " + st.printed + "." : n === 0 ? " ends today, " + st.printed + "." : " ends on " + st.printed + " — " + days(n) + " from today.");
+  if (st.state === "in_force") return name + (n < 0 ? "’s printed period runs to " + st.printed + "." : n === 0 ? " ends today, " + st.printed + " (0 days left)." : " ends on " + st.printed + " — " + days(n) + " from today.");
   if (st.state === "grace") return name + "’s grace period ends on " + st.printed + " — " + days(n) + " from today.";
   if (st.state === "grace_passed") return name + "’s grace period ended on " + st.printed + ", " + days(-n) + " ago.";
   return null;
