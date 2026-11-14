@@ -1073,9 +1073,11 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
           // less."; gate round 8, C5).
           const after = nextText(j);
           const open = !!after && !own.has(flat(after.line)) && !tableLine(after.line) && (!/[.!?]\s*$/.test(sentence) || /^\s*[a-z]/.test(after.line));
-          // Each sentence of the line on its own ("Family limit: twice the limit shown. Personal liability is shared by the
-          // family."; gate round 15): only the last may be left open.
-          const subs = sentence.split(/(?<=[.!?])\s+(?=[A-Z])/);
+          // Each sentence of the line on its own (gate round 15), only the last left open; but a sentence that refers back
+          // ("This limit is for all of you."; "Everything else is too."; "So are the rest.") is judged with the one before
+          // it, and a family-cap sentence followed by anything but neutral admin words ("Or S$5,000, whichever is less.";
+          // "This does not apply to medical expenses.") is no known shape: the whole is judged as one (gate round 16).
+          const subs = noteSentences(sentence);
           subs.forEach((one, k) => {
             const keep = capsAsMultiple(one, k === subs.length - 1 && open);
             if (keep) add(out.capNotes, one);
@@ -1133,6 +1135,21 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
 /** The same limits, cover or benefits as everyone; and the words that would still change a figure next to them. */
 const SAME_FIGURE = /\b(?:the\s+)?same\s+(?:\w+\s+)?(?:limits?|cover|benefits?|amounts?|sums?(?:\s+insured)?)\b/i;
 const OTHER_THAN_SAME = /\b(?:half|halved|double[ds]?|reduc\w*|less|lower|higher|only|except|but|not|instead|up\s+to|maximum)\b|%|per\s*cent/i;
+/** A sentence that refers back to the one before it, or carries its point on: judged with it (gate round 16). */
+const REFERS_BACK = /^\s*(?:this|these|that|those|it|they|everything|the\s+(?:rest|remainder|others?|same)|all\s+(?:the\s+)?others?|all\s+other|each\s+other|every\s+other|same|so|likewise|similarly|also|as\s+(?:is|are|do|does)|or|and|but|except|unless|other\s+than|apart\s+from)\b|\b(?:too|as\s+well|also|likewise)\b/i;
+/** Neutral admin sentences that may follow a family-cap sentence on its line without changing it. */
+const NEUTRAL_ADMIN = /^\s*(?:terms\s+and\s+conditions\s+apply|see\s+(?:page|section|the\s+policy\s+wording)\b[^.]*|please\s+read\b[^.]*|page\s+\d+(?:\s+of\s+\d+)?|(?:all\s+)?(?:limits|amounts|figures)\s+(?:are\s+)?(?:shown\s+)?in\s+(?:singapore\s+)?dollars|(?:the\s+)?(?:policy|certificate)\s+(?:wording|schedule)\s+applies)\s*\.?\s*$/i;
+/** The sentences of a note line: split at a full stop before a capital, each sentence that refers back joined to the one
+ * before it; a family-cap sentence with anything but neutral admin sentences beside it leaves the line whole. */
+function noteSentences(text: string): string[] {
+  const out: string[] = [];
+  for (const one of text.split(/(?<=[.!?])\s+(?=[A-Z])/)) {
+    if (out.length && REFERS_BACK.test(one)) out[out.length - 1] = `${out[out.length - 1]} ${one}`;
+    else out.push(one);
+  }
+  if (out.length > 1 && out.some((x) => capsAsMultiple(x)) && out.some((x) => !capsAsMultiple(x) && !NEUTRAL_ADMIN.test(x))) return [text];
+  return out;
+}
 /** Words that say a figure is capped: a percentage row with them pays at most a printed limit. */
 export const CAP_WORDS = /\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\s+is\s+(?:the\s+)?(?:lower|lesser|less|smaller)\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\s+(?:a\s+)?(?:maximum|limit)\b/i;
 const flat = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();

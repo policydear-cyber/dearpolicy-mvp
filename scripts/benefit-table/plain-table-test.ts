@@ -813,10 +813,14 @@ for (const line of ["Benefits are not paid for car pooling.", "However many days
 }
 for (const [extra, gone] of [
   [[CAP_NOTE, "Liability cover is shared by the family."], ["Personal liability"]],
-  [[CAP_NOTE, "Each insured person has their own limit for all benefits except medical expenses, which are shared by the family."], ["Overseas medical expenses"]],
-  [["Family limit: twice the limit shown. Personal liability is shared by the family."], ["Personal liability"]],
   [[CAP_NOTE, "Travel delay and baggage delay are pooled for all travellers."], ["Travel delay", "Baggage delay"]]] as [string[], string[]][]) {
   test(`gate PPS-15 row scope: '${extra.at(-1)}' withholds ${gone.join(", ")} only`, () => scoped(EIGHT, extra, gone));
+}
+// Round 16 turned these two round-15 row scopes back to the safe withhold-all (an except form; a cap sentence with another
+// sentence beside it on its line).
+for (const extra of [[CAP_NOTE, "Each insured person has their own limit for all benefits except medical expenses, which are shared by the family."],
+  ["Family limit: twice the limit shown. Personal liability is shared by the family."]]) {
+  test(`gate PPS-16: '${extra.at(-1)}' withholds every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra }), noOne));
 }
 test("gate PPS-15: 'Medical expenses and evacuation are shared by the family.' withholds both rows only", () =>
   scoped(EVAC8, [CAP_NOTE, "Medical expenses and evacuation are shared by the family."], ["Overseas medical expenses", "Emergency medical evacuation and repatriation"]));
@@ -834,6 +838,37 @@ for (const line of ["Shared accommodation costs are covered up to the limit show
   "Your joint policyholder may also make changes.", "Only one claim is paid, whoever made the booking."]) {
   test(`gate PPS-15 attack: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
 }
+// Per-person-shared gate round 16: a note names only the rows it shares when the whole note is "<row label(s)> are shared
+// by <group>." and nothing else (an allow-list); everything else, every except form, and a family cap with another sentence
+// beside it withhold every row. A sentence referring back is judged with the one before it.
+for (const line of ["Medical expense limits are shared by the family, and so is everything else.",
+  "Medical expense limits are shared by the family, as is the rest of the cover.", "Medical expense limits are shared by the family, as are the others.",
+  "Medical expense limits are shared by the family, and so are the others.", "Medical expense limits are shared by the family (as are all others).",
+  "Medical expense limits are shared by all insured persons, like every other limit.",
+  "Medical expense limits are shared by the family, and the same goes for each other section.",
+  "Medical expense limits are shared by the family; likewise everything else.", "Medical expense limits and everything else are shared by the family.",
+  "Medical expense limits, and all others, are shared by the family.", "Personal liability limits are shared by the family, as are the rest.",
+  "Medical expense limits are shared by the family. Everything else is too.", "Medical expense limits are shared by the family. So are the rest.",
+  "All limits are shared by the family except medical expenses, which apply per person.",
+  "The limits are shared by all insured persons except medical expenses, which apply to each person.",
+  "All limits are shared by the family except personal liability, which applies per person.",
+  "All limits are shared by the family except baggage, which applies per person.",
+  "Except for medical expenses, which apply per person, the limits are shared by the family.",
+  "All limits are shared by the family other than medical expenses, which apply per person.",
+  "Apart from medical expenses, which apply per person, the limits are shared by the family.",
+  `${SHAPE_OPEN}. Or S$5,000, whichever is less.`, `${SHAPE_OPEN}. But not more than S$5,000.`,
+  `${SHAPE_OPEN}. This does not apply to medical expenses.`, `${SHAPE_OPEN}. This applies only to Section 1.`, `${SHAPE_OPEN}.\fOr S$5,000, whichever is less.`]) {
+  test(`gate PPS-16: '${line.replace("\f", "\\f")}' withholds every per-person row`, () =>
+    assert.deepEqual(sixWith({ rows: EIGHT, extra: line.startsWith(SHAPE_OPEN) ? [line] : [CAP_NOTE, line] }), noOne));
+}
+for (const [line, gone] of [
+  ["Medical expenses: the limit shown. This limit is for all of you.", ["Overseas medical expenses"]],
+  ["Liability cover is shared by the family.", ["Personal liability"]], ["Delay benefits are shared by the family.", ["Travel delay", "Baggage delay"]],
+  ["Medical expense limits are shared by all insured persons.", ["Overseas medical expenses"]]] as [string, string[]][]) {
+  test(`gate PPS-16: '${line}' withholds ${gone.join(", ")} only`, () => scoped(EIGHT, [CAP_NOTE, line], gone));
+}
+test("gate PPS-16: a family cap followed on its line by 'Terms and conditions apply.' keeps each person's rows with the note", () =>
+  assert.deepEqual(sixWith({ rows: EIGHT, extra: [`${SHAPE_OPEN}. Terms and conditions apply.`] }), each(EIGHT_NAMES)));
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),

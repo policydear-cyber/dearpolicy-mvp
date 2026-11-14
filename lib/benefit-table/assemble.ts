@@ -842,23 +842,32 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
     const named = new Set<CheckedBenefit>();
     for (const p of phrases) if (n.includes(` ${p} `)) { for (const b of byPhrase.get(p)!) named.add(b); n = n.split(` ${p} `).join(" | "); }
     if (group) for (const x of labels) if (!named.has(x.b) && x.content.some((c) => n.includes(` ${c} `))) named.add(x.b);
+    return Object.assign(named, { rest: n });
+  };
+  /** The rows a note names when the whole note is, and is only, "<row label(s)> [limits | cover | expenses] is / are shared |
+   * pooled | joint [by | between | among <group>]." (an allow-list; gate round 16): anything else in it ("and so is
+   * everything else", "as are the rest", "like every other limit", "except ...") leaves no rows named. */
+  const onlyRowsShared = (text: string) => {
+    const m = NAMED_SHARED_SHAPE.exec(text);
+    if (!m || (m[2] && !GROUP_ONLY.test(m[2]))) return new Set<CheckedBenefit>();
+    const named = new Set<CheckedBenefit>();
+    for (const item of m[1].split(/\s*,\s*(?:and\s+)?|\s+and\s+/)) {
+      const got = rowsNamed(item, false);
+      if (!got.size || got.rest.split(" ").some((w) => w && w !== "|" && !SUBJECT_FILLER.has(w))) return new Set<CheckedBenefit>();
+      for (const b of got) named.add(b);
+    }
     return named;
   };
   for (const t of [...(r.tieLines ?? []), ...(r.tiedNotes ?? []).map((x) => ({ note: x }))]) {
     const tied = typeof t !== "string", text = typeof t === "string" ? t : t.note;
     // A group of people named, or the certificate as the unit ("Under one certificate the limit shown is paid once."; gate round 13).
     const lives = bindsToGroup(text) && !PREMIUM.test(text);
-    // "... all benefits except medical expenses, which are shared ...": only the excepted benefits are shared (gate round 15).
-    const except = /\bexcept\s+(?:for\s+)?(.+?)\s*,?\s+which\b/i.exec(text)?.[1];
-    if (except && !CAP_LIKE.test(text)) {
-      const named = rowsNamed(except, true);
-      if (named.size) { for (const b of named) out.rows.add(b); continue; }
-    }
+    // "except / other than / apart from X, which ...": every row (gate round 16).
+    if (EXCEPT.test(text)) { out.all = true; continue; }
     if (tied) {
-      // A note tying a limit to the lives together withholds every row, unless it says the benefits it names are shared
-      // ("Liability cover is shared by the family." withholds Personal liability only; gate round 15) and nothing more: no
-      // figure or multiple (a family cap's shape), no "all benefits", "the limits", "these sections".
-      const named = CAP_LIKE.test(text) || WHOLE.test(text) || !NAMED_ARE_SHARED.test(text) ? new Set<CheckedBenefit>() : rowsNamed(text, false);
+      // A note tying a limit to the lives together withholds every row, unless the whole note is only "<row label(s)> are
+      // shared by <group>." ("Liability cover is shared by the family." withholds Personal liability only; gate rounds 15, 16).
+      const named = onlyRowsShared(text);
       if (!named.size) out.all = true;
       for (const b of named) out.rows.add(b);
       continue;
@@ -873,10 +882,11 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
   tiedCache.set(r, out);
   return out;
 }
-/** A note's figure, multiple or words about every row: the note is about the whole table, not the rows it names. */
-const CAP_LIKE = /\d|%|\b(?:twice|double|treble|triple|thrice|times|per\s*cent)\b/i;
-const NAMED_ARE_SHARED = /\b(?:is|are)\s+(?:shared|pooled|joint)\b/i;
-const WHOLE = /\b(?:all|every|each|any|the|these|those|other|both)\s+(?:\w+\s+)?(?:benefits|limits|sections|covers|amounts|items)\b|\b(?:limits|benefits)\s+(?:shown|above|below|in\s+this|on\s+this|stated)\b|\b(?:all|every)\s+(?:benefits?|limits?|sections?)\b/i;
+const EXCEPT = /\b(?:except|other\s+than|apart\s+from)\b/i;
+const NAMED_SHARED_SHAPE = /^\s*(.+?)\s+(?:is|are)\s+(?:shared|pooled|joint)(?:\s+(?:by|between|among(?:st)?)\s+(.+?))?\s*\.?\s*$/i;
+const GROUP_ONLY = /^(?:the\s+|all\s+(?:the\s+)?|your\s+|both\s+)?(?:whole\s+)?(?:famil(?:y|ies)|households?|couples?|insured\s+(?:persons|people)|insured|travell?ers|members|named\s+persons|persons\s+named|group|party|of\s+you|you\s+and\s+your\s+(?:spouse|partner|children|family)|you\s+both|you\s+all|everyone|everybody)(?:\s+on\s+(?:this|the)\s+(?:certificate|policy))?$/i;
+/** Words a shared row's subject may print besides its label ("Liability cover", "Medical expense limits", "Delay benefits"). */
+const SUBJECT_FILLER = new Set(["limit", "cover", "benefit", "expens", "cost", "the", "your", "our"]);
 /** Last words of a benefit label too general to name it alone ("Overseas medical expenses" is not named by "expenses"). */
 const GENERIC_LAST_WORD = new Set(["expenses", "expense", "costs", "cost", "benefit", "benefits", "cover", "limit", "limits", "amount", "amounts", "allowance", "payment", "charges", "charge", "fees", "fee"]);
 /** A row label that is a family's or household's own benefit ("Family personal liability", "Household contents"), never
