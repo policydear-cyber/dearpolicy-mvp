@@ -12,7 +12,7 @@ import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
 import { readModelAnswer, verifyAnswer, type ServerFigure } from "@/lib/simple-chat/verify";
-import { childLimitIn, personStatus, printedLife } from "@/lib/benefit-table/child-limit";
+import { childColumn, childLimitIn, personStatus, printedLife } from "@/lib/benefit-table/child-limit";
 import { printedDay } from "@/lib/benefit-table/dates";
 
 let passed = 0;
@@ -249,6 +249,109 @@ test("the chat's checks read the share and the date of birth again: a figure cha
   assert.deepEqual(ask(h, NGOZI.name, /death/, "If Ngozi died?", toChild).amounts, []);
   const age = (f: ServerFigure): ServerFigure => f.child ? { ...f, child: { ...f.child, belowAge: 5 } } : f;
   assert.deepEqual(ask(h, GRACE.name, /death/, "If Grace died?", age).amounts, []);
+});
+
+// ---------- The real reader's shape (TE-ACC-20261114-R3): the child's sentence also read as a row of its own ----------
+/** A family PA schedule laid out as the app's PDF reader prints one (pages as extracted), with made-up people and insurer,
+ * and a reading in the shape the reader (prompt 2026-11-13.1) gave: the death row quoting its whole line with the child's
+ * sentence as a condition, plus a second "Accidental death" row under column `childCol` paying `childPct`%. */
+const BELLO = { a: "Amaka Bello", b: "Tunde Bello", c: "Zara Bello" };
+function realShape(o: { childCol?: string | null; childPct?: number; childQuote?: string; childBenefit?: string; childSection?: string; extra?: Record<string, unknown>[];
+  cell?: string; noParent?: boolean } = {}) {
+  const cell = o.cell ?? CELL;
+  const page1 = ["Northgate Assurance plc", "FAMILY PERSONAL ACCIDENT POLICY - SCHEDULE", "Policy number: NGA-0001-X\tPeriod of insurance: 1 March 2026 to 28 February 2027\tCurrency",
+    "of this policy: Pounds sterling (GBP)", "Date of issue: 20 February 2026", "Insured person\tRelationship\tDate of birth\tSum Insured",
+    `${BELLO.a}\tPolicyholder\t14/06/1984\tGBP 100,000`, `${BELLO.b}\tSpouse\t02/11/1982\tGBP 80,000`, `${BELLO.c}\tChild\t09/04/2017\tGBP 20,000`,
+    "Annual premium: GBP 312.00, payable by monthly direct debit of GBP 26.00."].join("\n");
+  const rows = [`1\tAccidental death\t${cell}`, "2\tPermanent total disablement\t100% of the Sum Insured",
+    "3\tFracture of arm, wrist or leg\t2% of the Sum Insured per fracture, maximum GBP 1,500 per accident (note a)", "4\tFracture of skull, spine or pelvis\t5% of the Sum Insured per accident",
+    "5\tHospital cash\tGBP 50 per day in hospital, payable from the third consecutive day, up to 30 days per accident", "6\tMedical expenses\tUp to GBP 2,500 per accident, after an excess of GBP 100 per claim"];
+  const page2 = ["TABLE OF BENEFITS (all amounts in GBP)", "Section\tBenefit\tAmount payable", ...rows,
+    "Note (a): a compound fracture is paid at double the Section 3 amount, still subject to the GBP 1,500", "maximum per accident.",
+    "Exclusions: injury while taking part in motor racing or professional sport; self-inflicted injury.",
+    "How to claim: notify Northgate Assurance within 30 days of the accident on 0800 000 0000", "(claims line) and send the completed claim form with the original hospital discharge summary."].join("\n");
+  const product = "FAMILY PERSONAL ACCIDENT POLICY";
+  const people = [[BELLO.a, "self", "Policyholder\t14/06/1984\tGBP 100,000", 100000], [BELLO.b, "spouse", "Spouse\t02/11/1982\tGBP 80,000", 80000], [BELLO.c, "child", "Child\t09/04/2017\tGBP 20,000", 20000]] as const;
+  const d: Household["documents"][number] = { policyId: DOC, name: "Northgate-Family-PA-Schedule.pdf", insurer: "Northgate Assurance plc", productName: product, policyNumber: "NGA-0001-X", documentType: null,
+    documentRole: "personal_schedule", effectiveDate: null, expiryDate: null, uploadedAt: "2026-10-01", uploadedFor: null, linkedPeople: people.map((p) => p[0]), supersededAt: null,
+    processingStatus: "ready", pages: [page1, page2].map((text, i) => ({ page: i + 1, text })) };
+  const house: Household = { accountId: ACC, members: people.map((p) => ({ name: p[0], relationship: p[1] })), documents: [d] };
+  const family: FamilyMember[] = people.map((p, i) => ({ id: `m${i}`, display_name: p[0], relationship: p[1], date_of_birth: null }));
+  const r = (x: Record<string, unknown>) => ({ cap: null, page: 2, basis: null, column: null, period: null, capQuote: null, baseQuote: null, baseAmount: null, percentOf: null, conditions: [], ...x });
+  const childSentence = /For an insured child[^.]*\./.exec(cell)?.[0] ?? "";
+  const benefits = [
+    ...(o.noParent ? [] : [r({ pays: "percent", quote: rows[0], value: 100, benefit: "Accidental death", forWhom: "some_insured", section: "1", percentOf: "sum_insured", conditions: childSentence ? [childSentence] : [] })]),
+    ...(o.childCol === null ? [] : [r({ pays: "percent", quote: o.childQuote ?? childSentence, value: o.childPct ?? 25, column: o.childCol ?? "Insured child under 18", benefit: o.childBenefit ?? "Accidental death",
+      forWhom: "some_insured", section: o.childSection ?? "1", percentOf: "sum_insured" })]),
+    r({ pays: "percent", quote: rows[1], value: 100, benefit: "Permanent total disablement", forWhom: "each_named_insured", section: "2", percentOf: "sum_insured" }),
+    r({ cap: 1500, pays: "percent", quote: rows[2], value: 2, benefit: "Fracture of arm, wrist or leg", forWhom: "some_insured", section: "3", capQuote: "maximum GBP 1,500 per accident", percentOf: "sum_insured",
+      conditions: ["note (a)", "Note (a): a compound fracture is paid at double the Section 3 amount, still subject to the GBP 1,500 maximum per accident."] }),
+    r({ pays: "percent", quote: rows[3], value: 5, benefit: "Fracture of skull, spine or pelvis", forWhom: "each_named_insured", section: "4", percentOf: "sum_insured" }),
+    r({ pays: "per_day", quote: rows[4], value: 50, benefit: "Hospital cash", forWhom: "each_named_insured", fromDay: 3, maxDays: 30, section: "5",
+      conditions: ["payable from the third consecutive day", "up to 30 days per accident"] }),
+    r({ pays: "up_to", quote: rows[5], value: 2500, benefit: "Medical expenses", forWhom: "each_named_insured", section: "6", conditions: ["after an excess of GBP 100 per claim"] }),
+    ...(o.extra ?? []).map(r),
+  ];
+  const src: SourceDoc = { id: d.policyId, name: d.name, readable: true, pages: d.pages };
+  const reading = checkReading(src, { document: { kind: "personal_proof", plan: null, insurer: d.insurer, product, periodTo: "28 February 2027", periodFrom: "1 March 2026", namedPeople: people.map((p) => p[0]) },
+    covers: people.map((p) => ({ asOf: "20 February 2026", page: 1, plan: null, cover: "Personal accident", quote: `${p[0]}\t${p[2]}`, person: p[0], endDate: "28 February 2027", product,
+      startDate: "1 March 2026", sumInsured: p[3], policyNumber: "NGA-0001-X" })), benefits });
+  const key = coverKeyOf({ product, cover: "Personal accident", plan: null, riderOf: null });
+  const links = [...new Set(reading.benefits.map((b) => sectionKeyOf(DOC, b)))].map((section) => ({ section, cover: key, why: "the schedule's table of benefits" }));
+  const table = assembleTable([reading], family, links, [], NOW);
+  return { house, rows: chatRows(table, house), reading, table };
+}
+/** Each person's figure for a benefit, as the table shows it ("none" when it shows none, "-" when the row is not theirs). */
+const figs = (h: ReturnType<typeof realShape>, benefit: RegExp) => Object.values(BELLO).map((n) => {
+  const rs = h.table.people.find((p) => p.name === n)?.rows.filter((x) => benefit.test(x.benefit)) ?? [];
+  return rs.length ? rs.map((x) => x.figure.kind === "none" ? "none" : `${x.figure.amount}${x.column ? ` [${x.column}]` : ""}`).join(",") : "-";
+});
+test("the real reader's shape: the child's row is folded into its parent; death 100,000 / 80,000 / 5,000; hospital cash and medical for everyone", () => {
+  const h = realShape();
+  assert.ok(!h.reading.benefits.some((b) => b.column), "no column row left");
+  assert.deepEqual(figs(h, /Accidental death/), ["100000", "80000", "5000"]);
+  assert.deepEqual(figs(h, /Hospital cash/), ["50", "50", "50"]);
+  assert.deepEqual(figs(h, /Medical expenses/), ["2500", "2500", "2500"]);
+  const z = { name: BELLO.c } as Person;
+  assert.deepEqual(death(h as never, z).amounts, ["£5,000"]);
+  assert.deepEqual(death(h as never, { name: BELLO.a } as Person).amounts, ["£100,000"]);
+});
+test("the child column allow-list", () => {
+  for (const [c, want] of [["Insured child under 18", 18], ["Children (below 16)", 16], ["Dependent child", null], ["Minors aged 17 or under", 18], ["For an insured child under 21", 21]] as const)
+    assert.deepEqual(childColumn(c), { belowAge: want }, c);
+  for (const c of ["Plan A", "Plan B", "Adult", "Aged 65 and over", "Insured persons aged 70 or over", "Child plan", "Family", "Child under 18 (Plan A)", "Spouse", "Per insured person", ""])
+    assert.equal(childColumn(c), undefined, c);
+});
+test("not folded, as before: plan or age-band columns, a child row with no parent, a child row whose figure or age differs from the page", () => {
+  // Plan tier and age band columns stay columns: the document's plain table is blocked as on main.
+  for (const extra of [{ pays: "up_to", quote: "Up to GBP 2,500 per accident", value: 2500, column: "Plan A", benefit: "Medical expenses", section: "6", forWhom: "some_insured" },
+    { pays: "percent", quote: "100% of the Sum Insured", value: 100, column: "Aged 65 and over", benefit: "Permanent total disablement", section: "2", percentOf: "sum_insured", forWhom: "some_insured" }]) {
+    const h = realShape({ extra: [extra] });
+    assert.ok(h.reading.benefits.some((b) => b.column === extra.column), extra.column);
+    assert.ok(figs(h, /Hospital cash/).every((f) => f === "-" || f === "none"), `${extra.column}: ${figs(h, /Hospital cash/)}`);
+  }
+  // A child column row for a benefit with no parent row: kept, and the plain table stays blocked.
+  const orphan = realShape({ childBenefit: "Loss of limbs", childSection: "7" });
+  assert.ok(orphan.reading.benefits.some((b) => b.column === "Insured child under 18"));
+  assert.ok(figs(orphan, /Hospital cash/).every((f) => f === "-" || f === "none"));
+  // The child row's figure, or its age, differs from the printed sentence: kept, and the parent loses its child share
+  // (no death amount for anyone; never 25% or 30% by guess).
+  // (The page's own 25% is printed: a child row read at a percentage the page does not print is dropped by the figure
+  // check, and the parent's printed sentence decides as above.)
+  for (const o of [{ childPct: 100, childQuote: "100% of the Sum Insured" }, { childCol: "Insured child under 16" }]) {
+    const h = realShape(o);
+    assert.ok(h.reading.benefits.some((b) => b.column), `${JSON.stringify(o)} ${JSON.stringify(h.reading.dropped)}`);
+    const f = figs(h, /Accidental death/);
+    assert.ok(f.every((x) => x.split(",").every((y) => y === "none" || y.includes("["))), `${JSON.stringify(o)}: ${f}`);
+  }
+  assert.deepEqual(figs(realShape({ childPct: 30 }), /Accidental death/), ["100000", "80000", "5000"]);
+  // A child row whose quote is another cell of the page (the next row's "5% of the Sum Insured per accident" read at 5%):
+  // kept, and the parent loses its child share.
+  const elsewhere = realShape({ childPct: 5, childQuote: "5% of the Sum Insured per accident" });
+  assert.ok(elsewhere.reading.benefits.some((b) => b.column));
+  assert.ok(!figs(elsewhere, /Accidental death/).some((f) => /^(?:5000|100000|80000)$/.test(f)));
+  // No child row at all (as R2's reading): unchanged from the first commit.
+  assert.deepEqual(figs(realShape({ childCol: null }), /Accidental death/), ["100000", "80000", "5000"]);
 });
 
 console.log(`${passed} passed, ${failures.length} failed`);

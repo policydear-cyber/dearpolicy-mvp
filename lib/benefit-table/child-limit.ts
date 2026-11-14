@@ -158,3 +158,14 @@ export function statusDays(today: number, from?: string | null, to?: string | nu
 }
 /** "under 18" / "a child" as the card says the limit's case. */
 export const childCase = (limit: Pick<ChildLimit, "belowAge">) => limit.belowAge != null ? `an insured child under ${limit.belowAge}` : "an insured child";
+
+/** A reading row's column that names only the child class of a child's share ("Insured child under 18", "Children (below
+ * 16)", "Dependent child", "Minors aged 17 or under"): its age as ChildLimit.belowAge, or undefined when the column is
+ * anything else (a plan, a tier, an age band, an adult). The real reader puts the child's sentence of a cell in a row of
+ * its own under such a column (TE-ACC-20261114-R3); check.ts foldChildColumns folds it back into its parent row. */
+export function childColumn(column: string | null | undefined): { belowAge: number | null } | undefined {
+  const m = new RegExp(String.raw`^(?:for\s+)?${CHILD}${AGE}\s*$`, "i").exec((column ?? "").replace(/\s+/g, " ").trim());
+  if (!m) return undefined;
+  const under = m[1], orUnder = m[2];
+  return { belowAge: under != null ? Number(under) : orUnder != null ? Number(orUnder) + 1 : null };
+}

@@ -16,7 +16,7 @@ import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, personOnlyI
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { ANY_MONEY_FIGURE, MONEY_SIGN, anyMoneyFigures } from "@/lib/format/currency";
 import { printedDay } from "./dates";
-import { childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife } from "./child-limit";
+import { childColumn, childLimitIn, printedLife, withoutChildLimit, type ChildLimit, type PrintedLife } from "./child-limit";
 import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
@@ -867,6 +867,36 @@ export function withoutOwnShareCap(text: string, percent: number | null): string
   // Insured", "applicable to the Insured Parent": Critic #449 round 4).
   return text.replace(new RegExp(String.raw`\blimited\s+to\s+(?<![\d.])${own}(?:\.0+)?\s*(?:%|per\s?cent)\s+of\s+(?:the\s+|your\s+)?sum\s+(?:insured|assured)(?!\s*(?:of|for|applicable|payable|under|in\s+respect|as\s+per|according)\b)(?=\s*(?:$|[.;,)\n]))`, "gi"), " ");
 }
+/** A child's share the reader put in a row of its own (TE-ACC-20261114-R3: the cell "100% of the Sum Insured. For an
+ * insured child under 18, limited to 25% of the Sum Insured." read as that row plus a second "Accidental death" row with
+ * column "Insured child under 18" and 25%). Folded into its parent, so the parent's child share decides each person's
+ * amount (assemble.ts baseFigure) and no column is left to block the document's plain table (assemble.ts plainTable).
+ * Folded only when all hold: the column names only a child class (child-limit.ts childColumn); exactly one row has the
+ * same benefit name and section, no column, and the same page; that parent's own cell was read with a child share
+ * (childLimit) for the same age; the column row pays that same percentage of the sum insured with no cap; and its quote
+ * is part of the parent's printed child sentence. A column row that disagrees with the parent's printed sentence also
+ * takes the child share off the parent, which then has no amount (the reading is in doubt). Anything else is kept as
+ * read. Applied again after a stored reading's parts are merged (service.ts checkStored). */
+export function foldChildColumns(benefits: CheckedBenefit[], dropped: Dropped[]): CheckedBenefit[] {
+  const key = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const out: CheckedBenefit[] = [];
+  for (const x of benefits) {
+    const col = key(x.column) ? childColumn(x.column) : undefined;
+    const parents = col ? benefits.filter((p) => p !== x && !key(p.column) && key(p.benefit) === key(x.benefit) && key(p.section) === key(x.section) && p.source.page === x.source.page) : [];
+    if (!col || parents.length !== 1 || !parents[0].childLimit) { out.push(x); continue; }
+    const p = parents[0], limit = p.childLimit!;
+    const words = flat(limit.words), quote = flat(x.source.excerpt);
+    const same = col.belowAge === limit.belowAge && x.pays === "percent" && x.value != null && Math.abs(x.value - limit.percent) < 1e-9
+      && x.percentOf === "sum_insured" && x.cap == null && quote.length >= 10 && words.includes(quote);
+    if (same) { dropped.push({ what: `benefit "${x.benefit}" [${x.column}]`, why: "the child's share printed in its parent row's own cell; folded into that row" }); continue; }
+    // The column row says something else than the printed sentence: the parent keeps no child share and no amount.
+    delete p.childLimit;
+    p.capUnread = true;
+    dropped.push({ what: `benefit "${p.benefit}"`, why: `a row read under "${x.column}" disagrees with its printed child share; no amount is worked out for it` });
+    out.push(x);
+  }
+  return out;
+}
 /** The money figures of a row, in any currency (S$, RM, £, € or a code such as MYR or GBP, and a bare "$"), with where
  * each starts in flat(row). A row in ringgit or pounds is read as one in Singapore dollars is: its cap, and a second
  * limit beside it, count the same way (parity test, 25 Oct: "up to RM 200,000 or RM 100,000 after age 65" kept the
@@ -1382,6 +1412,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { notesKind?: Chec
       ...(ownShareNamed ? { ownShareNamed } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}) });
   }
+  out.benefits = foldChildColumns(out.benefits, out.dropped);
   Object.assign(out, lifeNotesOf(doc.pages, { ...out, kind: o.notesKind ?? out.kind, insurer: str(d.insurer) }));
   return out;
 }
