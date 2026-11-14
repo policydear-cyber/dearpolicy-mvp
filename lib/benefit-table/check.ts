@@ -1873,7 +1873,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       const notes = childLimitNotes(pages, ownCell, people);
       if (notes.found) childNote = { age: notes.age };
       // Decision (1): a child's share from the cell only when nothing else in the document speaks of children or ages.
-      childDoubt = childWordsElsewhere(pages, ownCell, people);
+      childDoubt = childWordsElsewhere(pages, ownCell, people, { benefit, section: str(b.section) });
     }
     if (pays === "percent" && value != null && percentOf === "sum_insured" && num(b.cap) == null && placed.has(source)) {
       const p = placed.get(source)!, text = pageText(source.page);

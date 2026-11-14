@@ -345,7 +345,8 @@ test("gate H4: a row whose quote is found in a longer-named row's line never tak
     const row = h.rows.find((r) => r.person === GRACE.name && r.benefit === name)!;
     assert.equal(row.childLimit, undefined, name);
     assert.notDeepEqual(ask(h, GRACE.name, new RegExp(`^${name}$`), `What does ${name} pay for Grace?`).amounts, ["£5,000"], name);
-    assert.deepEqual(ask(h, GRACE.name, new RegExp(`^${other.replace(/[()]/g, "\\$&")}$`), "And the other?").amounts, ["£5,000"], other);
+    // Gate R7-H1: the other line names the same benefit word with a figure, so the longer row's own share is not given either.
+    assert.deepEqual(ask(h, GRACE.name, new RegExp(`^${other.replace(/[()]/g, "\\$&")}$`), "And the other?").amounts, [], other);
   }
 });
 test("gate R3-H2: the same label printed twice on a page never takes the child share; the line's section number must be the row's", () => {
@@ -547,6 +548,60 @@ test("gate R6-H2: wording about premiums, payments, child care or school fees ne
   }
   // The splitter keeps abbreviations inside their sentence.
   assert.deepEqual(childLimitNotes([{ page: 1, text: "For an insured child (e.g. a son) the death benefit is limited to GBP 3,000." }], null), { found: true, age: null });
+});
+// ---------- Gate round 7: whatever its words, a sentence naming the row's benefit with a figure denies the child's share ----------
+test("gate R7-H1: a limit on the child in any words, a people line's limit, or another language: no child share", () => {
+  const notes = ["Offspring of the policyholder: death benefit limited to GBP 3,000.", "Youths: death benefit limited to GBP 3,000.", "Teenagers: death benefit limited to GBP 3,000.",
+    "Teens are covered for death up to GBP 3,000 only.", "Pupils: death benefit limited to GBP 3,000.", "Babies and toddlers: death benefit limited to GBP 3,000.",
+    "Boys and girls insured under this policy: death benefit GBP 3,000 maximum.", "Stepchildren and grandchildren: death benefit limited to GBP 3,000.",
+    "For persons insured as dependants, Section 1 is limited to GBP 3,000.", "Persons aged under eighteen: death benefit limited to GBP 3,000.",
+    "Insured persons who are not yet eighteen: death benefit limited to GBP 3,000.", "Insured persons born after 1 March 2008: death benefit limited to GBP 3,000.",
+    "Lives with a date of birth after 01/03/2008: death benefit limited to GBP 3,000.", "Insured persons in full-time education: death benefit limited to GBP 3,000.",
+    "Juniors: death benefit limited to GBP 3,000.", "Adolescents: death benefit limited to GBP 3,000.", "Anak (kanak-kanak): manfaat kematian terhad kepada GBP 3,000.",
+    "Enfants : capital décès limité à 3 000 GBP.", "Benefit payable to a child is limited to GBP 3,000.", "Benefit payable on the death of an insured child is limited to GBP 3,000.",
+    "Death of the youngest insured life: limited to GBP 3,000.", "Lives not yet of age: death benefit limited to GBP 3,000.", "Non-adult lives: death benefit limited to GBP 3,000.",
+    "Persons who have not attained majority: death benefit limited to GBP 3,000.",
+    // Vocabulary-free: the benefit named with a figure (no child word at all), or its section number.
+    "Special lives: the death benefit is GBP 3,000.", "Section 1 is payable at GBP 3,000 for lives listed in the endorsement.",
+  ];
+  for (const n of notes) {
+    const k = r5([n]);
+    assert.equal(k.ad(GRACE), null, n);
+    assert.deepEqual(k.chat(GRACE), [], n);
+  }
+  for (const [name, more, page3] of [["J1 a repeated header inside the note", ["Note: for an insured", "Section\tBenefit\tAmount payable", "child the death benefit is limited to GBP 3,000."], undefined],
+    ["J2 a note in a cell after the row", ["\tNote: the death benefit for an insured child is limited to GBP 3,000."], undefined],
+    ["J3 an abbreviated child on page 3", [], "Limits\tAmount\nIns. child\tGBP 3,000"], ["J4 'Ch. under 18'", ["Ch. under 18: death benefit limited to GBP 3,000."], undefined],
+    ["P1 a limit inside a people line", [], "Grace Okafor\tChild\tdeath benefit limited to GBP 3,000"],
+    ["P2 a people line 'Child (death GBP 3,000 max)'", [], "Grace Okafor\tChild (death GBP 3,000 max)"]] as [string, string[], string | undefined][]) {
+    const k = r5(more, { page3 });
+    assert.equal(k.ad(GRACE), null, name);
+    assert.deepEqual(k.chat(GRACE), [], name);
+  }
+  // The control: nothing else, the share is given.
+  assert.equal(r5([]).ad(GRACE), 5000);
+  // The rule itself.
+  const p0 = [{ page: 1, text: `Insured person\tRelationship\nGrace Okafor\tChild\n1\tAccidental death\t${CELL}\n2\tPermanent total disablement\t100% of the Sum Insured` }];
+  const own = { page: 1, from: p0[0].text.indexOf("1\tAccidental"), to: p0[0].text.indexOf("\n2\t") };
+  const row = { benefit: "Accidental death", section: "1" };
+  assert.equal(childWordsElsewhere(p0, own, ["Grace Okafor"], row), false);
+  for (const [w, want] of [["\nNote (a): Section 3 is paid at double, still subject to the GBP 1,500 maximum.", false], ["\nSec. 1: GBP 3,000 for listed lives.", true],
+    ["\nDeath benefit: see endorsement.", false], ["\nAccidental injuries are paid at 50%.", true], ["\nAccidental death benefit for lives over 70: 50%.", true], ["\nRégime spécial.", true], ["\nBagi anak dan isteri.", true]] as [string, boolean][]) {
+    const p = [{ page: 1, text: `${p0[0].text}${w}` }];
+    assert.equal(childWordsElsewhere(p, own, ["Grace Okafor"], row), want, w);
+  }
+  // A person's name with letters outside A-Z is not another language.
+  const zoe = [{ page: 1, text: p0[0].text.replace(/Grace Okafor/g, "Zoë Okafor") }];
+  assert.equal(childWordsElsewhere(zoe, { page: 1, from: zoe[0].text.indexOf("1\tAccidental"), to: zoe[0].text.indexOf("\n2\t") }, ["Zoë Okafor"], row), false);
+});
+test("gate R7 LOW: a payee sentence that also limits with a figure counts for plain rows", () => {
+  for (const w of ["Benefit payable to a child is limited to GBP 3,000.", "Payment on behalf of a minor is limited to GBP 3,000."]) {
+    const k = r5([w], { plain: true });
+    assert.equal(k.ad(GRACE), null, w);
+    assert.equal(k.ad(NGOZI), 100000, w);
+  }
+  // Without a limit and a figure it still does not.
+  assert.equal(r5(["The death benefit is paid to the children of the insured person only if no spouse survives."], { plain: true }).ad(GRACE), 20000);
 });
 test("gate L1: a printed date of birth that crosses the age inside the period is said as such, not as 'not printed'", () => {
   const sam = P("Sam Okafor", "Child", "01/12/2008", "GBP 20,000", 20000);

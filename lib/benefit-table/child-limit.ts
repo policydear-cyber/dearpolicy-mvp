@@ -141,7 +141,7 @@ export function printedLife(lines: string[], at: number, person = "", others: st
 
 /** A number that is an age by the words next to it, never days, nights, cm, hours, weeks or months. */
 const NOT_AGE = String.raw`(?!\s*(?:days?|nights?|cm|mm|km|kg|hours?|hrs?|weeks?|months?|%|per\s?cent|miles?|metres?|meters?|minutes?|am|pm))`;
-const CHILD_ANY = /\b(?:child(?:ren)?|sons?|daughters?|minors?|juveniles?|dependants?|dependents?|students?|young\s+(?:persons?|people|lives)|infants?|kids?|U\d{2}s?|under-\d{1,2}s?)\b/i;
+const CHILD_ANY = /\w*child\w*|\b(?:sons?|daughters?|minors?|juveniles?|dependants?|dependents?|students?|young\s+(?:persons?|people|lives)|youngest|infants?|kids?|U\d{2}s?|under-\d{1,2}s?|teens?|teenagers?|teenaged|youths?|pupils?|juniors?|adolescents?|offspring|bab(?:y|ies)|toddlers?|boys?|girls?|adults?|non-adults?|majority|of\s+age|(?:full|part)[\s-]time\s+(?:education|study|students?)|education|(?:eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty(?:[\s-](?:one|two|three|four|five))?)|(?:born|d\.?o\.?b\.?|date\s+of\s+birth)\s+(?:on\s+or\s+)?(?:before|after|from|since|between))\b/i;
 const AGE_ANY = new RegExp(String.raw`\bage[ds]?\b\s*(?:of\s+|between\s+|under\s+|below\s+|over\s+|above\s+|from\s+|up\s+to\s+|less\s+than\s+)?\d{1,3}\b|\b\d{1,3}\s*(?:years?(?:\s*-?\s*old|\s+of\s+age)?|yrs?|year-old)\b|\bbetween\s+\d{1,3}\s+and\s+\d{1,3}\b${NOT_AGE}|\b0\s*[-–]\s*\d{1,2}\b${NOT_AGE}|\b(?:under|below|less\s+than|younger\s+than|over|above|older\s+than)\s+\d{1,2}\b${NOT_AGE}`, "i");
 /** A tab cell that is only a relationship ("Child", "Dependent child", "Son"), as a people table prints it. */
 const RELATION_CELL = /^(?:(?:insured|dependent|dependant|eligible|covered)\s+)?(?:child|son|daughter|minor|juvenile|student)$/i;
@@ -190,8 +190,40 @@ function noteSentences(unit: string): string[] {
  * cell (`own`) and the people table's relationship cells (on a line naming one of `people`). When it does, the cell's
  * child share is never given (gate R6-H1: "Children: ...", a "CHILDREN" heading, a "Child\tGBP 3,000" limits row, a note
  * split by a page break, a blank line or a footer). */
-export function childWordsElsewhere(pages: { page: number; text: string }[], own: { page: number; from: number; to: number } | null, people: string[] = []): boolean {
-  return textUnits(pages, own, people).some((u) => CHILD_ANY.test(u) || AGE_ANY.test(u));
+export function childWordsElsewhere(pages: { page: number; text: string }[], own: { page: number; from: number; to: number } | null, people: string[] = [],
+  row: { benefit: string; section?: string | null } | null = null): boolean {
+  const units = textUnits(pages, own, people);
+  if (units.some((u) => CHILD_ANY.test(u) || AGE_ANY.test(u))) return true;
+  // Gate R7-H1: whatever its words for a child, a sentence elsewhere that names the row's benefit (a key word of its label,
+  // or its own section number) and prints a money figure or a percentage may limit it: no child's share.
+  const named = row ? benefitNamed(row.benefit, row.section ?? null) : null;
+  if (named && units.some((u) => noteSentences(u).some((t) => named.test(t) && FIGURE.test(t)))) return true;
+  // The platform reads English only: a document with other-language words is never read for a child's share.
+  const names = people.map((n) => n.trim()).filter(Boolean);
+  return units.some((u) => foreign(names.reduce((t, n) => t.split(n).join(" "), u)));
+}
+/** A money figure or a percentage. */
+const FIGURE = /%|\bper\s?cent\b|(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$)\s?\d|\d[\d,.]*\s?(?:\b[A-Z]{3}\b|[£€])/i;
+/** Words of a benefit's label that name nothing in particular. */
+const LABEL_FILLER = new Set(["the", "and", "for", "of", "any", "all", "per", "benefit", "benefits", "cover", "covers", "insured", "insurance", "sum", "amount",
+  "amounts", "payable", "paid", "other", "with", "from", "total", "basic", "plan", "section", "table"]);
+/** A sentence that names a row's benefit: a key word of its label ("Accidental death": "accidental", "death"), or its own
+ * section number ("Section 1", "Sec. 1", "§1"). Null when the label has no key word and no section number is printed. */
+function benefitNamed(benefit: string, section: string | null): RegExp | null {
+  const words = [...new Set((benefit.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !LABEL_FILLER.has(w)))];
+  const n = /^\s*(?:section\s+|sec\.?\s*)?(\d{1,3})[.)]?\s*$/i.exec(section ?? "")?.[1];
+  const alts = [...words.map((w) => String.raw`\b${w}s?\b`), ...(n ? [String.raw`(?:\bsections?|\bsec\.?|§)\s*${n}\b`] : [])];
+  return alts.length ? new RegExp(alts.join("|"), "i") : null;
+}
+/** Words of another language: a letter outside A-Z in a word (people's names taken out first), or two or more of the
+ * commonest words of Malay, Indonesian, French, Spanish, Portuguese or German in one unit. */
+const FOREIGN_WORDS = new Set(["dan", "atau", "untuk", "kepada", "yang", "dengan", "bagi", "tidak", "adalah", "manfaat", "kematian", "anak", "terhad", "insurans", "jumlah",
+  "polisi", "sebanyak", "daripada", "ini", "itu", "kanak", "le", "la", "les", "des", "du", "et", "pour", "avec", "une", "est", "sont", "enfants", "capital", "el", "los",
+  "las", "para", "por", "con", "una", "del", "y", "hijos", "niños", "der", "die", "das", "und", "für", "mit", "nicht", "kinder", "seguro", "assurance-vie", "décès"]);
+function foreign(text: string): boolean {
+  if (/[^\x00-\x7F]/u.test(text.replace(/[^\p{L}]/gu, ""))) return true;
+  const seen = new Set((text.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => FOREIGN_WORDS.has(w)));
+  return seen.size >= 2;
 }
 
 // Decision (2): a sentence that limits an insured child's benefit.
@@ -217,7 +249,11 @@ const CHILD_LABEL = /^\s*(?:(?:insured\s+|dependent\s+|dependant\s+)?(?:child(?:
 const LIMITING = /\b(?:limited|limits?|maximum|max|up\s+to|only|reduced|restricted|not\s+payable|nothing\s+(?:is\s+)?payable|no\s+benefit|not\s+covered|excluded|capped)\b|%|\bper\s?cent\b|(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$)\s?\d|\d[\d,.]*\s?(?:\b[A-Z]{3}\b|[£€])/i;
 /** Not a limit on an insured child's own benefit (gate R6-H2): premiums and discounts, who is paid, a payment to a parent or
  * guardian, child care, school fees, a parent staying with or an allowance for a parent. */
-const NOT_CHILD_LIMIT = /\b(?:premiums?|discounts?|paid\s+to|payable\s+to|payment\s+(?:is\s+|will\s+be\s+)?made\s+to|on\s+behalf\s+of|guardian|child\s*care|school\s+fees?|tuition|education|staying\s+with|parent['’]?s?\s+(?:allowance|accommodation)|accommodation)\b/i;
+const NOT_CHILD_LIMIT = /\b(?:premiums?|discounts?|guardian|child\s*care|school\s+fees?|tuition|education|staying\s+with|parent['’]?s?\s+(?:allowance|accommodation)|accommodation)\b/i;
+/** Who is paid: not a limit, unless the sentence also limits with a figure ("Benefit payable to a child is limited to GBP
+ * 3,000"). */
+const PAYEE = /\b(?:paid\s+to|payable\s+to|payment\s+(?:is\s+|will\s+be\s+)?made\s+to|on\s+behalf\s+of)\b/i;
+const LIMITED_FIGURE = (t: string) => /\b(?:limited|maximum|restricted|capped)\b/i.test(t) && FIGURE.test(t);
 /** A row's own cell printing its share with a child's share after it ("100% of the Sum Insured. For an insured child under
  * 18, limited to 25% of the Sum Insured."): that sentence is that row's own rule, not a note for the document. */
 function ownCellChildSentence(cell: string): string | null {
@@ -244,7 +280,8 @@ export function childLimitNotes(pages: { page: number; text: string }[], own: { 
   });
   for (const u of textUnits(rest, null, people)) for (const sentence of noteSentences(u)) {
     const ages = AGE_PHRASES.flatMap(({ re, plus }) => { const m = re.exec(sentence); return m ? [Number(m[1]) + plus] : []; }).filter((n) => n >= 1 && n <= 30);
-    if (!(ages.length || CHILD_SUBJECT.test(sentence) || CHILD_LABEL.test(sentence)) || !LIMITING.test(sentence) || NOT_CHILD_LIMIT.test(sentence)) continue;
+    if (!(ages.length || CHILD_SUBJECT.test(sentence) || CHILD_LABEL.test(sentence)) || !LIMITING.test(sentence) || NOT_CHILD_LIMIT.test(sentence)
+      || (PAYEE.test(sentence) && !LIMITED_FIGURE(sentence))) continue;
     found = true;
     for (const n of ages) age = Math.max(age ?? 0, n);
   }
