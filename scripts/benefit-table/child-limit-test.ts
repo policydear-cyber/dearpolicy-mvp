@@ -799,6 +799,36 @@ test("gate R10: exclusions are an allow-list of causes; codes, times, dates and 
     assert.deepEqual(k.chat, ["£5,000"], ok.join(" / ") || "second people table");
   }
 });
+test("gate R11: a sentence naming an insured person keeps its numbers and dates as figures; removal words deny; sums and causes as round 10", () => {
+  const H4 = "Insured person\tRelationship\tDate of birth\tSum Insured";
+  const second = (x: string) => `${H4}\nGrace Okafor\tChild\t09/04/2017\t${x}`;
+  const denied: [string, string[], Parameters<typeof r9>[1]][] = [
+    ...["disease in dependent persons", "pregnancy-related injury to minors", "illness, other than for the insured child", "hazardous activities at nursery or kindergarten",
+      "injury from drugs or alcohol at any age below eighteen", "hazardous sports by anyone not yet grown up", "illness in youngsters", "flying except as a passenger for the insured child"]
+      .map((w): [string, string[], {}] => [`X ${w}`, [`Exclusions: ${w}.`], {}]),
+    ["G1 removed with effect from a date", ["Grace Okafor was removed from the policy with effect from 01/01/2026."], {}],
+    ["G2 cover ended on a date", ["Cover for Grace Okafor ended on 01/01/2026."], {}],
+    ["G3 a certificate number beside a name", ["Certificate no. FAM-3000 applies to Grace Okafor."], {}],
+    ["G5 a time beside a name", ["Grace Okafor: at 3:00 cover."], {}],
+    ["G6 a date beside a name, no removal word", ["Grace Okafor is insured from 01/01/2026."], {}],
+    ["G7 no longer insured", ["Daniel Okafor and the children are no longer insured."], {}],
+    ...["GBP 3,000", "GBP 20,000.40", "20,000", "GBP 20k", "GBP 20.000"].map((x): [string, string[], Parameters<typeof r9>[1]] => [`S ${x}`, [], { page3: second(x) }]),
+    ["S7 Sum Insured (GBP) 2,000", [], { page3: "Insured person\tRelationship\tDate of birth\tSum Insured (GBP)\nGrace Okafor\tChild\t09/04/2017\t2,000" }],
+    ["S10 one line naming two people", [], { page3: `${H4}\nGrace Okafor / Daniel Okafor\tChild\t09/04/2017\tGBP 20,000` }],
+  ];
+  for (const [name, extra, o] of denied) {
+    const k = r9(extra, o);
+    assert.equal(k.amount, null, name);
+    assert.deepEqual(k.chat, [], name);
+  }
+  for (const [ok, o] of [[["Exclusions: diving, flying (except as a fare-paying passenger) and mountaineering."], {}],
+    [["Exclusions: injury while taking part in motor racing or professional sport; self-inflicted injury."], {}],
+    [[], { page3: second("GBP 20,000.00") }], [[], { page3: `${H4}\nNgozi Okafor\tPolicyholder\t14/06/1984\tGBP 100,000\nGrace Okafor\tChild\t09/04/2017\tGBP 20,000` }]] as [string[], Parameters<typeof r9>[1]][]) {
+    const k = r9(ok, o);
+    assert.equal(k.amount, 5000, ok.join(" / ") || "second people table");
+    assert.deepEqual(k.chat, ["£5,000"], ok.join(" / ") || "second people table");
+  }
+});
 test("gate L1: a printed date of birth that crosses the age inside the period is said as such, not as 'not printed'", () => {
   const sam = P("Sam Okafor", "Child", "01/12/2008", "GBP 20,000", 20000);
   const a = death(family([NGOZI, sam]), sam);

@@ -239,7 +239,7 @@ const FIGURE_WORDS = /\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|t
 /** Words that limit what is paid. */
 const LIMIT_WORDS = /\b(?:limited|limits?|limitation|maximum|max|up\s+to|only|reduced|reduction|restricted|capped|no\s+more\s+than|not\s+(?:to\s+)?exceed\w*|at\s+most|subject\s+to|halved)\b/i;
 /** Words that exclude or negate cover (gate R9-H1). */
-const EXCLUSION_WORDS = /\b(?:excluded|excludes?|exclusions?|does\s+not\s+apply|do\s+not\s+apply|not\s+apply|not\s+covered|not\s+payable|no\s+(?:benefit|cover)|nil|none|void|except|other\s+than|unless|only\s+if|cease[sd]?|not\s+insured|not\s+eligible)\b/i;
+const EXCLUSION_WORDS = /\b(?:excluded|excludes?|exclusions?|does\s+not\s+apply|do\s+not\s+apply|not\s+apply|not\s+covered|not\s+payable|no\s+(?:benefit|cover)|nil|none|void|except|other\s+than|unless|only\s+if|cease[sd]?|not\s+insured|not\s+eligible|removed|deleted|ended|terminat\w*|cancel(?:led|ed|lation|s)?|withdrawn|lapse[ds]?|no\s+longer)\b/i;
 const MONTH = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)`;
 /** A currency sign or code just before a number: what follows is always a figure. */
 const CURRENCY_BEFORE = String.raw`(?<!(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$|\bUS\$)[\s-]?)`;
@@ -267,7 +267,13 @@ const DATE_CONTEXT = /\b(?:dated?|dates|period|from|to|until|till|on|born|birth|
  * word, nothing naming a person or a group of people and nothing naming this row; a page number. In a sentence that names
  * a person or a group of people, or this row, only dates, telephone numbers and page numbers are taken out. A number
  * beside a currency sign or code is never taken out. */
+/** The insured people's names a document's check knows, kept beside the row's own words (thisNamed): a sentence naming
+ * one keeps every number as a figure, like a group of people (gate R11-H1). Set by childShareAllowed for its run. */
+const NAMES_WITH = new WeakMap<RegExp, RegExp>();
 function withoutNonFigures(text: string, thisNamed: RegExp): string {
+  const namedPerson = NAMES_WITH.get(thisNamed);
+  // A sentence naming an insured person: every number in it, dates included, is a figure (gate R11-H1).
+  if (namedPerson && namedPerson.test(text)) return text;
   const money = /(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$)\s?-?\d|\d\s?(?:\b[A-Z]{3}\b|[£€])|\b(?:pounds?|dollars?|euros?|ringgit|rupees?)\b/;
   let t = text
     .replace(new RegExp(DATE, "gi"), (m, off: number, all: string) => {
@@ -427,6 +433,7 @@ export function childShareAllowed(pages: { page: number; text: string }[], own: 
   if (childWordsElsewhere(pages, own, people, row)) return false;
   const names = people.map((n) => n.replace(/\s+/g, " ").trim().toLowerCase()).filter((n) => n.length >= 3);
   const thisNamed = rowNamedAny(row);
+  if (names.length) NAMES_WITH.set(thisNamed, new RegExp(names.map((n) => String.raw`\b${n.split(" ").map(esc).join(String.raw`\s+`)}\b`).join("|"), "i"));
   const rest = others.filter((o) => !(flatLabel(o.benefit) === flatLabel(row.benefit) && (sectionNo(o.section) ?? "") === (sectionNo(row.section) ?? "")));
   const need = (t: string) => needsAccount(t, thisNamed);
   let run: string[] = [];
