@@ -802,6 +802,9 @@ async function main() {
     // A third block of any label on the row (a table or figure beside it) also stops the join; a label with a digit too.
     keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372]), blk("<table></table>", [700, 340, 900, 380], "table")], "Sum Insured\n\nUSD 980,000");
     keep([blk("Plan 2 sum", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372])], "Plan 2 sum\n\nUSD 980,000");
+    // A block with no usable box (it could sit on the row) stops every join on the page (Critic 2 #479 N1, P7).
+    keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372]), { block_label: "text", block_content: "USD 490,000" }], "Sum Insured\n\nUSD 980,000\n\nUSD 490,000");
+    keep([blk("Sum Insured", [89, 348, 222, 375]), blk("USD 980,000", [451, 347, 577, 372]), blk("x", [700, 340, 650, 380], "image")], "Sum Insured\n\nUSD 980,000");
     // Closed value shapes that do join: a percentage and a daily amount.
     assert.equal(bd.sameRowPairsJoined([blk("Co-insurance", [89, 348, 222, 375]), blk("20%", [451, 347, 500, 372])], "Co-insurance\n\n20%").joined, 1);
     assert.equal(bd.sameRowPairsJoined([blk("Hospital cash", [89, 348, 222, 375]), blk("RM200 per day", [451, 347, 600, 372])], "Hospital cash\n\nRM200 per day").joined, 1);

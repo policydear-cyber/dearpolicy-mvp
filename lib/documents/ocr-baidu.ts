@@ -474,6 +474,7 @@ export function layoutSummary(list: unknown): string {
  * two columns (a column's block is many lines) is never joined. Allow-listed only (Critic 2 #479 H1): no other block of
  * the page's layout list sits on that row (a row of plan columns, a sidebar at the same height), the label holds no digit,
  * and the value is one figure in a closed shape (VALUE_CELL): currency, figure, then at most a % or a "per ..." unit.
+ * A page where any block has no usable box gets no join at all.
  * Nothing is added, dropped or reworded. */
 const VALUE_CELL = /^(?:(?:[A-Z]{1,3}\s?\$|\$|€|£|¥|₹|[A-Z]{2,3})\s?)?\d{1,3}(?:,\d{3})*(?:\.\d+)?(?:\s?(?:[A-Z]{3}))?(?:\s?%|\s(?:per|a)\s(?:day|night|week|month|year|annum|visit|trip|claim|accident|policy year|person))?$/;
 export function sameRowPairsJoined(list: unknown, text: string): { text: string; joined: number } {
@@ -483,7 +484,9 @@ export function sameRowPairsJoined(list: unknown, text: string): { text: string;
   // Every block's height on the page, whatever its label, to tell a two-cell row from a wider one.
   const bands = list.map((block) => {
     const v = (block as { block_bbox?: unknown } | null)?.block_bbox;
-    return Array.isArray(v) && v.length === 4 && v.every((n) => typeof n === "number" && Number.isFinite(n)) ? { y1: v[1] as number, y2: v[3] as number } : null;
+    if (!Array.isArray(v) || v.length !== 4 || !v.every((n) => typeof n === "number" && Number.isFinite(n))) return null;
+    const [x1, y1, x2, y2] = v as number[];
+    return x2 > x1 && y2 > y1 ? { y1, y2 } : null;
   });
   const boxes: (Box | null)[] = list.map((block) => {
     const b = (block ?? {}) as { block_label?: unknown; block_content?: unknown; block_bbox?: unknown };
@@ -494,6 +497,8 @@ export function sameRowPairsJoined(list: unknown, text: string): { text: string;
     const [x1, y1, x2, y2] = bb as number[];
     return x2 > x1 && y2 > y1 ? { key: blockKey(clean), x1, y1, x2, y2, len: clean.length, text: clean.trim() } : null;
   });
+  // A block with no usable box could be a third cell on any row: join nothing on that page (fails closed).
+  if (bands.some((b) => !b)) return none;
   const paras = text.split(/\n{2,}/);
   const keys = paras.map(blockKey);
   let joined = 0;
