@@ -4,6 +4,10 @@
 import type { Figure, TableRow } from "./assemble";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 
+/** A qualifier as words to print beside a figure: "for child", "per family", "per insured person" (never "for per insured";
+ * per-person-shared gate round 4). */
+export const qualifierText = (qualifier: string | null) => qualifier ? qualifier.split(", ").map((q) => /^per\b/.test(q) ? q.replace(/^per insured$/, "per insured person") : `for ${q}`).join(", ") : null;
+
 /** "a month" for a period the reading names ("half_year": "a half year"); "for every three-hour delay" for a block a plan
  * table prints in words (lib/benefit-table/chat planTableRows). Here, not in assemble.ts: this file runs in the browser,
  * and assemble.ts imports the database, so a value import from it breaks the build (main 999048d). */
@@ -51,7 +55,7 @@ export function shortFigure(r: SummaryRow): { text: string; note: string | null 
 /** The small line under a benefit: who the figure is for, its days, and every condition ("Only 1 claim", "max 6 claims"),
  * on key rows and in the full list alike (Critic R116-1, TE #99). */
 export function rowDetail(r: SummaryRow): string {
-  return [r.qualifier ? `for ${r.qualifier}` : null, r.fromDay != null ? `from day ${r.fromDay}` : null, r.maxDays != null ? `up to ${r.maxDays} days` : null, ...r.conditions]
+  return [qualifierText(r.qualifier), r.fromDay != null ? `from day ${r.fromDay}` : null, r.maxDays != null ? `up to ${r.maxDays} days` : null, ...r.conditions]
     .filter(Boolean).join(" · ");
 }
 
