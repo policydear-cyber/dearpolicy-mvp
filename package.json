@@ -48,6 +48,8 @@
     "benefit-table:per-child-test": "node --import tsx scripts/benefit-table/per-child-test.ts",
     "benefit-table:claim-amounts-test": "node --import tsx scripts/benefit-table/claim-amounts-test.ts",
     "benefit-table:multiplier-test": "node --import tsx scripts/benefit-table/multiplier-test.ts",
+    "benefit-table:wrapped-quote-test": "node --import tsx scripts/benefit-table/wrapped-quote-test.ts",
+    "benefit-table:quote-pointer-test": "node --import tsx scripts/benefit-table/quote-pointer-test.ts",
     "format:any-currency-test": "node --import tsx scripts/format/any-currency-test.ts",
     "format:plan-number-test": "node --import tsx scripts/format/plan-number-test.ts",
     "format:bare-dollar-test": "node --import tsx scripts/format/bare-dollar-test.ts",

@@ -1153,6 +1153,101 @@ function withoutQuotePointer(sentence: string): string | null {
 /** A text without what points at an amount. */
 export const withoutPointers = (text: string) => sentences(text ?? "").map(withoutPointer).filter((x): x is string => !!x).join(" ").trim();
 
+/** Words that promise the policy's own words are shown with the answer ("the policy's wording is quoted below", "the terms
+ * are set out below", "see the quote below", "..., quoted below"). Only the server shows what a document prints, as a
+ * point's quote: a promise with no quote of that benefit is of nothing (TE R3 H2-A t2: "I can't show it as an amount
+ * benefit, but the policy's wording is quoted below", and nothing followed). An allow-list of words for printed words
+ * (wording, words, terms, text, clause, definition, extract, excerpt, passage, quote); "quoted below" said of anything,
+ * and "the quote below". Kept only when the answer carries a quote of that benefit (dropQuotePointers). */
+const WORDING_NOUN = String.raw`(?:wording|words|terms|text|clauses?|definitions?|extracts?|excerpts?|passages?|quotes?|quotations?)`;
+const WORDING_WORDS = String.raw`(?:(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)|(?:shown|set\s+out|given|printed|included|listed)\s+(?:in\s+full\s+)?below)\b`;
+const SEE_QUOTE = String.raw`\(?\bsee\s+(?:the\s+)?(?:policy['’]s\s+|its\s+|their\s+)?(?:quotes?|quotations?|wording|words|text|clauses?|extracts?|excerpts?|passages?)\s+below\b\)?`;
+export const WORDING_POINTER = new RegExp(String.raw`\b${WORDING_NOUN}\s+(?:(?:is|are)\s+)?${WORDING_WORDS}|\bquoted\s+(?:in\s+full\s+)?below\b|\b(?:the|a)\s+(?:quotes?|quotations?)\s+below\b|${SEE_QUOTE}`, "i");
+/** Where the words are quoted, said beside a point (", quoted below", ", with the clause set out below", " (see the quote
+ * below)"): only that goes. */
+const WORDING_WHERE = new RegExp(String.raw`\s*[,;:]?\s*[-–—]?\s*${SEE_QUOTE}|,\s*(?:with\s+(?:the|its|their)\s+(?:[\p{L}'’-]+\s+){0,2}${WORDING_NOUN}\s+${WORDING_WORDS}|(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?quoted\s+(?:in\s+full\s+)?below\b)(?:\s+(?:from|in)\s+the\s+(?:policy|schedule|document))?,?`, "giu");
+/** A clause that does nothing but promise the words ("but the policy's wording is quoted below", "the terms are set out
+ * below in full"): it goes whole. */
+const ONLY_WORDING_PROMISE = new RegExp(String.raw`^(?:(?:and|but|so|while|although|though)\s+)?(?:[\p{L}'’-]+\s+){0,4}${WORDING_NOUN}\s+(?:is|are)\s+${WORDING_WORDS}(?:\s+(?:from|in|as)\b[^,;.]*)?\s*[.!?]?$`, "iu");
+/** "The terms are quoted below and apply only to ...": the promise goes, what the words are said to do stays, with "is" or
+ * "are" only before no verb of its own (dropsVerb). */
+const WORDING_AND = new RegExp(String.raw`\b(${WORDING_NOUN})\s+(is|are)\s+${WORDING_WORDS}(?:\s+(?:from|in|as)\s+the\s+(?:policy|schedule|document|table))?\s+and\s+`, "giu");
+/** The same words used as a name ("the wording quoted below says ..."): the name stays without the promise. */
+const WORDING_AS_NAME = new RegExp(String.raw`\b(${WORDING_NOUN})\s+${WORDING_WORDS}`, "giu");
+/** A sentence without its promise of quoted words; null when it opens with only the promise. The same steps as for an
+ * amount quoted below (withoutQuotePointer). */
+function withoutWordingPointer(sentence: string): string | null {
+  if (!WORDING_POINTER.test(sentence)) return sentence;
+  const finish = (t: string) => {
+    const s = t.replace(/\s+([.,;:!?])/g, "$1").replace(/[\s,;:–—-]+$/, "").trim();
+    if (!/[\p{L}\d]/u.test(s)) return null;
+    const e = /[.!?]$/.test(s) ? s : `${s}.`;
+    return e.charAt(0).toUpperCase() + e.slice(1);
+  };
+  const where = sentence.replace(WORDING_WHERE, "").trim();
+  if (where !== sentence.trim()) { const f = finish(where); return f && WORDING_POINTER.test(f) ? withoutWordingPointer(f) : f; }
+  const parts = clauses(sentence);
+  if (ONLY_WORDING_PROMISE.test(parts[0].trim())) return null;
+  const kept = parts.filter((c) => !ONLY_WORDING_PROMISE.test(c.trim()))
+    .map((c) => c
+      .replace(WORDING_AND, (m, noun: string, verb: string, at: number, all: string) => (dropsVerb(verb, all.slice(at + m.length)) ? `${noun} ` : `${noun} ${verb.toLowerCase()} `))
+      .replace(WORDING_AS_NAME, (_m, noun: string) => noun))
+    .filter((c) => !WORDING_POINTER.test(c));
+  return kept.length ? finish(kept.join(", ")) : null;
+}
+/** Words of a text that say nothing of which benefit it is about: short words, common words, the promise's own words, and
+ * general words for a policy, a benefit or an amount. */
+const NOT_A_BENEFIT_WORD = new Set(("this that these those with from have will would could should what when where which while there their they them then than "
+  + "into onto about also only just very more most much many some such each every other another separate separately show shown shows quoted quote quotes "
+  + "quotation below here wording words terms text clause clauses definition definitions extract extracts excerpt excerpts passage passages your yours does "
+  + "cannot been being were want need able sure exact exactly full fully same different listed given printed included reproduced cited "
+  + "policy policies plan plans cover covers covered coverage benefit benefits amount amounts figure figures payable paid pays payment payments insurer "
+  + "insured document documents page pages schedule table card cards answer treatment treatments illness illnesses critical insurance under upon after before "
+  + "during because however though although still even either neither whether since until unless").split(" "));
+const wordsOfText = (text: string) => (text.toLowerCase().replace(/['’]s\b/g, "").match(/[a-z]+/g) ?? []).filter((w) => w.length >= 4 && !NOT_A_BENEFIT_WORD.has(w));
+const hasWord = (text: string, w: string) => new RegExp(String.raw`\b${w}\b`, "i").test(text);
+/** Applied to the checked answer: a promise of the policy's words "quoted below" (WORDING_POINTER) is kept only when the
+ * answer carries a quote of what the text is about: the point's own quote, or another point's quote that prints a word
+ * the text uses to name it (any word of the text but a short, common or general one: NOT_A_BENEFIT_WORD, and never a
+ * person's, product's or insurer's name, given as `names`); for a text with no such word, any point's quote. The benefit
+ * may have no row (TE R3 H2-A t2: its row was not read), so the text's own words say which it is. Else the promise goes
+ * as an amount's does (withoutWordingPointer): the clause that only promises it, or the words that say where; a sentence
+ * that is only the promise goes. A server label is never changed. */
+export function dropQuotePointers<T extends { text: string; fullText?: string; source?: { citationIds?: string[] } | null }>(
+  answer: { summary: string; bottomLine?: string | null; statements?: T[]; citations?: { chunkId: string; excerpt?: string | null }[] | null },
+  labels: readonly string[], names: readonly string[] = []): string[] {
+  const statements = answer.statements ?? [];
+  const cited = new Map((answer.citations ?? []).map((c) => [c.chunkId, c.excerpt ?? ""]));
+  const quotesOf = (s: T) => (s.source?.citationIds ?? []).map((id) => cited.get(id) ?? "").filter((x) => x.trim());
+  const quotes = statements.flatMap(quotesOf);
+  const named = new Set(names.flatMap((n) => n.toLowerCase().match(/[a-z]+/g) ?? []));
+  const carried = (text: string, own: string[]) => {
+    if (own.length) return true;
+    const words = wordsOfText(text).filter((w) => !named.has(w));
+    return words.length ? quotes.some((q) => words.some((w) => hasWord(q, w))) : quotes.length > 0;
+  };
+  const left: string[] = [];
+  const cut = (text: string) => {
+    const parts = sentences(text);
+    const kept = parts.map((x) => (WORDING_POINTER.test(x) ? withoutWordingPointer(x) : x));
+    left.push(...parts.filter((x, i) => kept[i] !== x));
+    return kept.filter((x): x is string => !!x).join(" ").trim();
+  };
+  const bottom = answer.bottomLine ?? answer.summary;
+  if (bottom && WORDING_POINTER.test(bottom) && !carried(bottom, [])) {
+    const b = cut(bottom) || "Here is what your documents say.";
+    answer.summary = b;
+    if (answer.bottomLine != null) answer.bottomLine = b;
+  }
+  for (const s of [...statements]) {
+    if (labels.includes(s.text) || !WORDING_POINTER.test(s.text) || carried(s.text, quotesOf(s))) continue;
+    const text = cut(s.text);
+    if (!text) statements.splice(statements.indexOf(s), 1);
+    else { s.text = text; s.fullText = text; }
+  }
+  return left;
+}
+
 /** A point the model wrote about an amount it did not give ("If it is a full break of the spine ... the Product Summary shows
  * this amount", quoting that row's own line, live run 23 Oct, B7) is given that amount: the one row, of the person it is
  * about, whose line in the document it quotes is that quote. An answer left with no amount at all loses what points at
