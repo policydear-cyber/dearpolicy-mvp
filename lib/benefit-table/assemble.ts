@@ -20,7 +20,7 @@ import { PREMIUM, SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
 import { anyMoneyFigures } from "@/lib/format/currency";
-import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, marksIn, noteMarkOf, numbersIn, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
+import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, marksIn, namesTheLives, noteMarkOf, numbersIn, withoutOwnShareCap, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 import { benefitWords } from "./cover-rows";
@@ -802,8 +802,46 @@ function anotherRowsNote(r: CheckedReading, b: CheckedBenefit, line: string | un
     : new RegExp(String.raw`\(\s*(?:note\s+)?${mark}\s*\)|\bnote\s+${mark}\b`, "i").test(t);
   return !marks(b.rowText ?? b.source.excerpt) && r.benefits.some((x) => x !== b && marks(x.rowText ?? x.source.excerpt));
 }
+/** A word's stem for matching a label to a note: plural and singular alike ("liabilities", "delays", "expense"). */
+const stemOf = (w: string) => w.length > 4 && w.endsWith("ies") ? `${w.slice(0, -3)}y` : w.length > 4 && /(?:sses|xes|ches|shes)$/.test(w) ? w.slice(0, -2) : w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w;
+const stems = (t: string) => norm(t.replace(/\([^)]*\)|\[[^\]]*\]/g, " ")).replace(/\bmedical costs?\b/g, "medical expenses").split(" ").filter(Boolean).map(stemOf);
+const LABEL_STOP = new Set(["and", "or", "of", "the", "for", "to", "in", "on", "with", "a", "an", "by", "per", "your", "you"]);
+/** A benefit or limit a sharing note may name: with the lives named too, a note naming none of the rows still shares one. */
+const BENEFIT_NOUN = /\b(?:limits?|maximum|amounts?|benefits?|sums?|cover|expenses?|costs?|bills?|charges?|fees?|liabilit(?:y|ies)|delays?|evacuations?|repatriations?|treatments?|baggage|luggage|belongings|cancellations?|curtailments?|hospital\w*|medical|accidents?|death|disablement|disabilit(?:y|ies)|excess(?:es)?|deductibles?|payments?|compensation|allowances?|indemnit(?:y|ies))\b/i;
+/** Which per-person rows the document's sharing notes (tieLines) take from each person, worked out once per reading:
+ * - a note names a row by its label (bracketed part aside) or the label's last two or more words, or its last word when
+ *   that is no generic word, plural and singular alike ("Liabilities are shared ..." for "Personal liability");
+ * - failing that, a note that also names the lives together names a row by any of its label's content words that is no
+ *   generic word
+ *   ("Evacuation is shared by all insured persons" for "Emergency medical evacuation and repatriation");
+ * - a note that names the lives together and a benefit or limit, but no row, withholds every row ("Expenses are shared by
+ *   the family."; "Hospital expenses ..."): when unsure, show none (gate round 10). A note naming no lives together
+ *   ("Hotel rooms shared with a travel companion", "rescue costs are shared with other rescued parties") or about the
+ *   premium names no row by a content word and withholds nothing on its own. */
+const tiedCache = new WeakMap<CheckedReading, { all: boolean; rows: Set<CheckedBenefit> }>();
+function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit> } {
+  const hit = tiedCache.get(r);
+  if (hit) return hit;
+  const out = { all: false, rows: new Set<CheckedBenefit>() };
+  const labels = r.benefits.map((b) => {
+    const w = stems(b.benefit), last = w.at(-1) ?? "";
+    const phrases = [...w.slice(0, -1).map((_, i) => w.slice(i).join(" ")), ...(last.length >= 4 && !GENERIC_LAST_WORD.has(last) ? [last] : [])];
+    const content = w.filter((x) => x.length >= 4 && !LABEL_STOP.has(x) && !GENERIC_LAST_WORD.has(x));
+    return { b, phrases, content };
+  });
+  for (const t of r.tieLines ?? []) {
+    const n = ` ${stems(t).join(" ")} `;
+    const lives = namesTheLives(t) && !PREMIUM.test(t);
+    let placed = labels.filter((x) => x.phrases.some((p) => n.includes(` ${p} `)));
+    if (!placed.length && lives) placed = labels.filter((x) => x.content.some((c) => n.includes(` ${c} `)));
+    for (const x of placed) out.rows.add(x.b);
+    if (!placed.length && lives && BENEFIT_NOUN.test(t)) out.all = true;
+  }
+  tiedCache.set(r, out);
+  return out;
+}
 /** Last words of a benefit label too general to name it alone ("Overseas medical expenses" is not named by "expenses"). */
-const GENERIC_LAST_WORD = new Set(["expenses", "expense", "costs", "benefit", "benefits", "cover", "limit", "limits", "amount", "amounts", "allowance", "payment", "charges", "fees"]);
+const GENERIC_LAST_WORD = new Set(["expenses", "expense", "costs", "cost", "benefit", "benefits", "cover", "limit", "limits", "amount", "amounts", "allowance", "payment", "charges", "charge", "fees", "fee"]);
 /** A row label that is a family's or household's own benefit ("Family personal liability", "Household contents"), never
  * one that names who does something ("Compassionate visit by a family member"). */
 const HOUSEHOLD_LABEL = /^\s*(?:famil(?:y|ies)|households?)\b(?!\s+members?\b)/i;
@@ -835,13 +873,11 @@ function perPersonColumnRow(r: CheckedReading, b: CheckedBenefit, next: string):
   // family."), even with no limit word: this row is no one's own.
   // The row is named by its label without a bracketed part ("Personal liability (third party)") or by the label's last two
   // or more words ("Overseas medical expenses" is named by "Medical expenses are shared ..."; gate round 8).
+  // A note sentence that ties a benefit to the lives together withholds the rows it names; one that names the lives and a
+  // benefit or limit but no row the matcher can place withholds every per-person row of the document (gate round 10).
   if ((r.tieLines ?? []).length) {
-    // Also by its last word when that word names a benefit ("Liability is shared ..." against "Personal liability";
-    // "Evacuation ..." against "Emergency medical evacuation"), and "medical costs" as "medical expenses" (gate round 9).
-    const words = norm(b.benefit.replace(/\([^)]*\)|\[[^\]]*\]/g, " ")).split(" ").filter(Boolean);
-    const last = words.at(-1) ?? "";
-    const names = [...words.slice(0, -1).map((_, i) => words.slice(i).join(" ")), ...(last.length >= 5 && !GENERIC_LAST_WORD.has(last) ? [last] : [])];
-    if (names.length && r.tieLines!.some((t) => { const n = ` ${norm(t).replace(/\bmedical costs?\b/g, "medical expenses")} `; return names.some((x) => n.includes(` ${x} `)); })) return false;
+    const tied = tiedRowsOf(r);
+    if (tied.all || tied.rows.has(b)) return false;
   }
   if (PAYMENT_LABEL.test(b.benefit) || (r.premiumFigures ?? []).some((v) => b.value != null && Math.abs(v - b.value) < 0.005)) return false;
   // The line below is the row's own words only when it carries on the row's cell (starts in lower case); a note line

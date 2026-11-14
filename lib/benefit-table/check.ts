@@ -709,6 +709,8 @@ const LIMIT_WORD = /\b(?:limits?|maximum|amounts?|benefits?|sums?\s+insured|sums
 /** The lives taken together: insured persons (plural), all insured, travellers, all or both or the two of you, everyone, a
  * couple, family or household. Never one insured person. */
 const LIVES = /\b(?:(?:the\s+|all\s+(?:the\s+)?)?insured\s+(?:persons|people|lives|members)|all\s+(?:the\s+)?insured|travell?ers|all\s+of\s+you|both\s+of\s+you|the\s+two\s+of\s+you|everyone|everybody|couples?|famil(?:y|ies)|households?)\b/gi;
+/** Whether words name the insured lives taken together (LIVES): the family, all insured persons, travellers, both of you. */
+export const namesTheLives = (text: string) => new RegExp(LIVES.source, "i").test(text);
 /** Words that put the lives together when they sit next to them. */
 const TOGETHER = /\b(?:shared?|share|jointly|together|combined|in\s+total|total|in\s+aggregate|aggregate|collectively|pool(?:ed|s)?)\b/gi;
 /** Phrases that tie a limit to the lives together on their own. */
@@ -973,11 +975,13 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
           // less."; gate round 8, C5).
           const after = nextText(j);
           const open = !!after && !own.has(flat(after.line)) && !tableLine(after.line) && (!/[.!?]\s*$/.test(sentence) || /^\s*[a-z]/.test(after.line));
-          if (capsAsMultiple(sentence, open)) add(out.capNotes, sentence);
+          const keep = capsAsMultiple(sentence, open);
+          if (keep) add(out.capNotes, sentence);
           else if (tiesInClauses(sentence)) add(out.tiedNotes, sentence);
           // A sentence that ties something to the lives together, printed for one benefit ("Personal liability is shared by
           // the family."): that row is no one's own (assemble.ts, by the row's label).
-          if (TIED_TO_LIVES.test(sentence) || livesTogether(sentence)) add(out.tieLines, sentence);
+          // Never a kept family cap, nor a cap per event or conveyance or a dispute with us (each person's own limit stands).
+          if (!keep && !NOT_A_TIE_CLAUSE.test(sentence) && (TIED_TO_LIVES.test(sentence) || livesTogether(sentence))) add(out.tieLines, sentence);
         }
       }
       // A note printed on a row's own line about every row ("All benefits for children are half the amounts shown").
