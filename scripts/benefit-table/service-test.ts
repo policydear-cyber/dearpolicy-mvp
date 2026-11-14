@@ -196,7 +196,10 @@ async function main() {
     assert.deepEqual(await relink(f.db, again.model, A), { proposed: 0 });
     assert.equal(again.calls.length, 0, "a section the household placed is not sent again");
     assert.equal(f.s.links.get(`${A}|${accident}`)!.chosen_by, "household");
-    assert.equal((await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!.rows.length, 0);
+    // Was: no rows at all once the household unlinked the scale. The certificate still prints Wei's cover with its sum, so
+    // that one line shows now, as printed, and no row of the unlinked scale does.
+    const wei2 = (await tableFor(f.db, A)).table.people.find((p) => p.id === "p1")!;
+    assert.deepEqual(wei2.rows.map((r) => [r.benefit, r.coverLine ?? false]), [["Group Personal Accident", true]]);
   });
   await test("a second upload links only its own new sections: no section already linked is moved, unlinked or asked about again", async () => {
     const f = household();
@@ -225,7 +228,9 @@ async function main() {
     assert.equal(none.calls.length, 0);
   });
   const linkOf = (f: ReturnType<typeof household>) => f.s.links.get(`${A}|${accident}`);
-  const rowCount = async (f: ReturnType<typeof household>, id: string) => (await tableFor(f.db, A)).table.people.find((p) => p.id === id)!.rows.length;
+  // Rows a section's link placed. A certificate read with no benefit rows also shows each cover's own printed line as its
+  // row while nothing else lists what that cover pays (cover-line-rows-test); those rows are not a link's and not counted here.
+  const rowCount = async (f: ReturnType<typeof household>, id: string) => (await tableFor(f.db, A)).table.people.find((p) => p.id === id)!.rows.filter((r) => !r.coverLine).length;
   await test("S3b: a section first linked to no cover (its certificate not read yet) is asked again and placed once a cover fits", async () => {
     const f = household();
     await readBoth(f);
