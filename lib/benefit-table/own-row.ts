@@ -48,24 +48,26 @@ function likeness(a: string[], b: string[]): number {
 /** What may follow a bare number that is money: nothing, punctuation, a bracket or a slash, or a word from this list.
  * Anything else ("procedures", "fillings", "check-ups", "x") makes it no money figure. */
 const MONEY_AFTER = /^(?:[ \t]*$|[ \t]*[,.;:)\]\n\t\/]|[ \t]*\([ \t]*(?:[A-Z]{0,3}\$|RM|£|€|SGD|USD|MYR|HKD|AUD|NZD|GBP|EUR)|[ \t]*[-–](?![ \t]*\d)|[ \t]+(?:per|each|every|a(?:n)?[ \t]+(?:day|night|week|month|year)|for|in[ \t]+respect[ \t]+of|in[ \t]+total|in[ \t]+aggregate|or|whichever|up[ \t]+to|subject|max(?:imum)?|only|payable|paid|lump|overall|upon|after|from|if|when|while|under|less|plus|limit|dollars?|ringgit|pounds?|euros?|sgd|usd|myr|hkd|aud|gbp|eur|rm)\b)/i;
-/** A bare number followed by a period ("per year", "each visit", "a day") is money only when its cell also names money:
- * a currency sign or code, or a money word ("10 per year" alone may be a count: cross-row gate round 2). */
+/** A bare number followed by a period ("per year", "each visit", "a day") is money on a page that declares exactly one
+ * currency and names no other, as on main ("Hospital cash\t100 per day" under "(S$)"). Elsewhere it is money only when its
+ * cell also names money: a currency sign or code, or a money word ("10 per year" alone may be a count: cross-row gate
+ * round 2). */
 const PERIODIC_AFTER = /^[ \t]+(?:per|each|every|a|an)\b/i;
 const CELL_MONEY = /(?:[A-Z]{0,3}\$|£|€|¥|₹|₱|₩|฿|₫|\b[A-Z]{3}(?=[ \u00a0]?\d)|\b(?:SGD|USD|MYR|RM|HKD|AUD|NZD|GBP|EUR|PHP|IDR|THB|INR|CNY|JPY|KRW|TWD|VND|CHF|CAD|Rp)\b|\b(?:dollars?|ringgit|pounds?|euros?|amounts?|sums?|cash|allowance|reimburse\w*|payable|paid|pays?|fees?|charges?|costs?|expenses?|compensation)\b)/i;
 const BARE_NUMBER = /(?<![\d.,\/\p{L}$£€])(?<!\d[ \t]?[-–][ \t]?)\d[\d,]*(?:\.\d+)?(?![\d%])/gu;
 /** The cell (between tabs or line ends) a position is in. */
 const cellAt = (t: string, i: number) => { const a = Math.max(t.lastIndexOf("\t", i - 1), t.lastIndexOf("\n", i - 1)) + 1; const e = t.slice(i).search(/[\t\n]/); return t.slice(a, e < 0 ? t.length : i + e); };
 /** Bare numbers in the text that read as money (followed by an allowed word), with where each starts. */
-function bareMoney(t: string): { value: number; index: number }[] {
+function bareMoney(t: string, periodicIsMoney = false): { value: number; index: number }[] {
   return [...t.matchAll(BARE_NUMBER)].filter((m) => {
     const after = t.slice(m.index! + m[0].length);
-    return MONEY_AFTER.test(after) && (!PERIODIC_AFTER.test(after) || CELL_MONEY.test(cellAt(t, m.index!)));
+    return MONEY_AFTER.test(after) && (periodicIsMoney || !PERIODIC_AFTER.test(after) || CELL_MONEY.test(cellAt(t, m.index!)));
   }).map((m) => ({ value: Number(m[0].replace(/,/g, "")), index: m.index! }));
 }
 /** A figure in a line or cell: a money figure (any currency), a percentage, or a bare number that reads as money. */
 const MONEY_RE = new RegExp(ANY_MONEY_FIGURE, "u");
 function firstFigureAt(t: string): number {
-  const at = [t.search(/\d\s*%/), t.search(MONEY_RE), ...bareMoney(t).slice(0, 1).map((b) => b.index)].filter((i) => i >= 0);
+  const at = [t.search(/\d\s*%/), t.search(MONEY_RE), ...bareMoney(t, true).slice(0, 1).map((b) => b.index)].filter((i) => i >= 0);
   return at.length ? Math.min(...at) : -1;
 }
 /** A label that only names a tier of the row above: "Days 1-30", "Day 31 onwards", "Year 1", "Visits 1 to 10",
@@ -206,11 +208,11 @@ export function ownRowText(pageText: string, start: number, end: number, benefit
 
 /** The value is printed in the text, and never as money: no money figure prints it, and every bare printing of it is
  * followed by something off the MONEY_AFTER allow-list ("up to a maximum of 2 procedures", "12 fillings", "2 x"). */
-export function printedOnlyAsCount(text: string, value: number): boolean {
+export function printedOnlyAsCount(text: string, value: number, singleCurrencyPage = false): boolean {
   const t = text.normalize("NFKC");
   if (anyMoneyFigures(t).some((f) => Math.abs(f.value - value) < 0.005)) return false;
   const hits = [...t.matchAll(BARE_NUMBER)].filter((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
-  return hits.length > 0 && !bareMoney(t).some((b) => Math.abs(b.value - value) < 0.005);
+  return hits.length > 0 && !bareMoney(t, singleCurrencyPage).some((b) => Math.abs(b.value - value) < 0.005);
 }
 
 /** A cap figure in the cap's own words (and the page words right after them) that is money: a figure with a currency code
@@ -221,5 +223,5 @@ export function moneyCapPrinted(text: string, value: number, declared: string | 
   const money = anyMoneyFigures(t).filter((f) => Math.abs(f.value - value) < 0.005);
   if (money.some((f) => statedCurrencyCode(t.slice(f.index, f.index + f.length)))) return true;
   if (money.length) return !mixed;
-  return !!declared && !mixed && bareMoney(t).some((b) => Math.abs(b.value - value) < 0.005);
+  return !!declared && !mixed && bareMoney(t, true).some((b) => Math.abs(b.value - value) < 0.005);
 }

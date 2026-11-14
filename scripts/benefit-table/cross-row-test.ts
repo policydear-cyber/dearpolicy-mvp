@@ -353,14 +353,24 @@ test("P2: a cap quote that stops at its number is read with the page words after
     assert.notEqual(amountOf(figures.get("Angioplasty")), 2);
   }
 });
-test("allow-list: (two) visits, on any one day, and no more than, a bare per year are no money", () => {
-  for (const words of ["up to 2 (two) visits", "up to 3 on any one day", "up to 6 and no more than one per month", "up to 10 per year"]) {
+test("allow-list: (two) visits, on any one day, and no more than are no money; a bare per-year count needs a money word only off a single-currency page", () => {
+  for (const words of ["up to 2 (two) visits", "up to 3 on any one day", "up to 6 and no more than one per month"]) {
     const value = Number(/\d+/.exec(words)![0]);
     const { figures } = run(`Physiotherapy\t${words}`, [{ benefit: "Physiotherapy", pays: "up_to", value, quote: `Physiotherapy\t${words}` }], "TABLE OF BENEFITS (S$)");
     assert.equal(amountOf(figures.get("Physiotherapy")), null, words);
   }
+  const mixed = run("Physiotherapy\tup to 10 per year\nOverseas evacuation\tUS$50,000", [{ benefit: "Physiotherapy", pays: "up_to", value: 10, quote: "Physiotherapy\tup to 10 per year" }], "TABLE OF BENEFITS (S$)");
+  assert.equal(amountOf(mixed.figures.get("Physiotherapy")), null, "a mixed-currency page: no amount");
   const { figures } = run("Physiotherapy\tup to 500 per year, payable", [{ benefit: "Physiotherapy", pays: "up_to", value: 500, quote: "Physiotherapy\tup to 500 per year, payable" }], "TABLE OF BENEFITS (S$)");
   assert.equal(amountOf(figures.get("Physiotherapy")), 500, "control: a money word in the cell");
+});
+test("Hospital cash\\t100 per day under a single declared currency (S$) keeps S$100, as on main", () => {
+  const { r, figures } = run("Hospital cash\t100 per day", [{ benefit: "Hospital cash", pays: "per_day", value: 100, quote: "Hospital cash\t100 per day" }], "TABLE OF BENEFITS (S$)");
+  assert.equal(amountOf(figures.get("Hospital cash")), 100);
+  assert.equal(r.benefits.find((b) => b.benefit === "Hospital cash")?.currency, "SGD");
+  const cap = "Physiotherapy\t80% of the Sum Insured, up to 1,000 per year";
+  const c = run(cap, [{ benefit: "Physiotherapy", pays: "percent", value: 80, percentOf: "sum_insured", cap: 1000, capQuote: "up to 1,000 per year", quote: cap }], "TABLE OF BENEFITS (S$)");
+  assert.equal(c.b("Physiotherapy")?.cap, 1000, "a bare per-year cap under (S$) is a cap, as on main");
 });
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }

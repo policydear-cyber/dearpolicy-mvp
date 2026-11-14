@@ -1759,7 +1759,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     }
     // A number printed only before a count noun ("up to a maximum of 2 procedures", "10 sessions") is a count, never an
     // amount (wrapped-quote gate P2).
-    if (value != null && pays !== "percent" && printedOnlyAsCount(ownRow.text ?? source.excerpt, value)) {
+    if (value != null && pays !== "percent" && printedOnlyAsCount(ownRow.text ?? source.excerpt, value, (({ declared, mixed }) => !!declared && !mixed)(pageCurrencyOf(pageText(source.page))))) {
       out.dropped.push({ what: label, why: `figure ${value} is printed only as a count, not an amount; kept the row without it` }); pays = "words"; value = null;
     }
     // A row whose line prints a figure for each plan ("Emergency evacuation S$50,000 S$150,000 S$300,000", "Trip
