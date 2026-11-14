@@ -869,6 +869,45 @@ for (const [line, gone] of [
 }
 test("gate PPS-16: a family cap followed on its line by 'Terms and conditions apply.' keeps each person's rows with the note", () =>
   assert.deepEqual(sixWith({ rows: EIGHT, extra: [`${SHAPE_OPEN}. Terms and conditions apply.`] }), each(EIGHT_NAMES)));
+// Per-person-shared gate round 17: a subject word names every row whose label prints it; each person's own limits "except X,
+// which is shared" withholds X only; any note saying something is shared, pooled or joint names only the rows of an
+// allow-listed "<rows> are shared by <group>." and otherwise withholds every row. Each sentence follows a valid family-cap note.
+const BAG = ["Baggage delay", "Loss of baggage"];
+for (const [line, gone] of [
+  ["Baggage limits are shared by the family.", BAG], ["Baggage cover is shared by all insured persons.", BAG], ["Baggage cover is shared by the family.", BAG],
+  ["Baggage is shared.", BAG],
+  ["Each person has their own limits except medical expenses, which are shared.", ["Overseas medical expenses"]],
+  ["Limits apply per person except medical expenses, which are shared by the family.", ["Overseas medical expenses"]],
+  ["Each person has their own limit, except medical expenses, which are shared by the family.", ["Overseas medical expenses"]],
+  ["Travel delay is shared.", ["Travel delay"]], ["Liability cover is shared by the family.", ["Personal liability"]],
+  ["Personal liability is shared by the family. Or call us.", ["Personal liability"]]] as [string, string[]][]) {
+  test(`gate PPS-17: '${line}' withholds ${gone.join(", ")} only`, () => scoped(EIGHT, [CAP_NOTE, line], gone));
+}
+// A note naming a kind of life ("your spouse") may withhold more (the life-note rule); both baggage rows at least.
+test("gate PPS-17: 'Baggage benefits are pooled between you and your spouse.' withholds both baggage rows", () =>
+  withheld("Baggage benefits are pooled between you and your spouse.", BAG));
+test("gate PPS-17: 'Emergency medical evacuation and repatriation are shared by the family.' withholds that row only", () =>
+  scoped(EVAC8, [CAP_NOTE, "Emergency medical evacuation and repatriation are shared by the family."], ["Emergency medical evacuation and repatriation"]));
+test("gate PPS-17 C2: a cap note, then the next line 'Except personal liability, which is shared by the family.', withholds personal liability only", () =>
+  scoped(EIGHT, [CAP_NOTE, "Except personal liability, which is shared by the family."], ["Personal liability"]));
+for (const line of ["Medical expenses are shared by the family, and so is everything else.", "Medical expenses are shared, as are all other limits.",
+  "Medical expenses are shared. So is everything else.", "Liability is shared by the family; so are the other sections.",
+  "Medical expenses are pooled, as are the other limits.", "Medical and other expenses are shared.", "Medical expenses and the rest are shared.",
+  "Medical expenses are joint, as is the rest.", "Medical and dental expenses are shared.", "Medical expenses are shared; so are the others.",
+  "Personal liability is shared, and every other limit is shared as well.", "Medical expenses are shared by the family only.",
+  "All limits are shared except medical expenses, which are shared too.", "All limits are shared by the family except baggage, which is shared."]) {
+  test(`gate PPS-17: '${line}' withholds every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), noOne));
+}
+for (const line of ["Shared accommodation costs are covered up to the limit shown.", "Hospital cash for a shared ward is paid per night.",
+  "Your data may be shared with other insurers.", "Rental car excess is shared with the rental company.", "We refund a share of the unused premium.",
+  "Jointly owned property is not covered.", "Benefits are not paid for car pooling.", "The premium is shared between the insured persons.",
+  "Information shared with us is kept confidential."]) {
+  test(`gate PPS-17: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
+}
+for (const tail of ["Also see page 4.", "Exclusions apply.", "Claims must be made within 30 days.", "Call 6123 4567 for help."]) {
+  test(`gate PPS-17: a family cap followed on its line by '${tail}' keeps each person's rows`, () =>
+    assert.deepEqual(sixWith({ rows: EIGHT, extra: [`${SHAPE_OPEN}. ${tail}`] }), each(EIGHT_NAMES)));
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),

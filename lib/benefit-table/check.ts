@@ -748,8 +748,9 @@ const MOST_FOR_LIVES = /\b(?:most|maximum|total|limits?|sum)\b[^.;]*?\bfor\s+(?:
  * people, or to the certificate, policy or plan as the unit, in the same clause, or when it says so in a strong sharing
  * word.
  * - Strong words share on their own, group or not: share(s/d), sharing, jointly, pooled, "not multiplied by the number of",
- *   "however many", "(only) once, whoever ...". Their one excuse is joining benefits, sections or items rather than people
- *   ("the limit is shared between cancellation and curtailment"; "Both sections ...").
+ *   "however many", "(only) once, whoever ...". Their one excuse is joining sections, or benefits after "between" / "for
+ *   both" / "across", rather than people ("the limit is shared between cancellation and curtailment"; "Both sections ...";
+ *   "Section 1 and Section 2 limits are shared"); never a bare "Medical and dental expenses are shared" (gate round 17).
  * - Weak words share only with the group side present: one / single / only one, once, combined, in total, the same, a common
  *   or the certificate limit. Joining benefits, sections, items, events, days or trips they share nothing ("The single
  *   article limit is S$500"; "paid once per trip"; "Medical and dental expenses combined").
@@ -781,9 +782,9 @@ const ONE_OR_ONCE = /\b(?:(?:only\s+)?(?:one|a\s+single|single)\s+(?:[\w-]+\s+){
 const SHARE_SIGNAL = /\b(?:(?:to|for)\s+(?:them|you)\s+(?:all|together|both)|for\s+(?:all\s+of\s+(?:them|you)|everyone|everybody|both\s+of\s+you|you\s+all|(?:you\s+and\s+)?your\s+(?:travel(?:ling)?\s+)?companions)|as\s+a\s+(?:family|couple|household|group|whole|unit)|combined|in\s+total|(?:common|certificate|policy)\s+(?:\w+\s+)?(?:limits?|maximum|sums?(?:\s+insured)?|amounts?|cover)|same\s+(?:\w+\s+)?(?:limits?|maximum|sums?(?:\s+insured)?|amounts?|cover)\s+(?:covers?|applies\s+to\s+(?:all|every|both|everyone))|(?:draws?|drawn|claims?|paid)\s+(?:on|from|against|out\s+of)\s+the\s+same|share\s+the\s+same)\b/i;
 const sharingWord = (text: string) => ONE_OR_ONCE.test(text) || SHARE_SIGNAL.test(text);
 /** The strong sharing words. */
-const STRONG = /\b(?:shared(?!\s+(?:rooms?|wards?|accommodation))|shares?|sharing(?!\s+(?:a\s+)?(?:rooms?|wards?|accommodation))|jointly|joint\s+limits?|(?:limits?|cover|sums?(?:\s+insured)?|amounts?|maximum|benefits?)\s+(?:is|are)\s+joint|(?:is|are|be|been)\s+pooled|pooled\s+(?:limits?|cover|benefits?|sums?|amounts?)|pool\s+of\s+(?:cover|benefits?|limits?|money|funds?)|not\s+multiplied\s+by\s+the\s+number|however\s+many\s+(?:of\s+you|insured|persons|people|travell?ers|claims?|claimants|members|children|famil)|(?:only\s+)?once,?\s+(?:whoever|however|no\s+matter))\b/i;
+const STRONG = /\b(?:shared(?!\s+(?:rooms?|wards?|accommodation))|shares?|sharing(?!\s+(?:a\s+)?(?:rooms?|wards?|accommodation))|jointly|joint\s+limits?|(?:is|are)\s+joint|(?:is|are|be|been)\s+pooled|pooled\s+(?:limits?|cover|benefits?|sums?|amounts?)|pool\s+of\s+(?:cover|benefits?|limits?|money|funds?)|not\s+multiplied\s+by\s+the\s+number|however\s+many\s+(?:of\s+you|insured|persons|people|travell?ers|claims?|claimants|members|children|famil)|(?:only\s+)?once,?\s+(?:whoever|however|no\s+matter))\b/i;
 /** Words joining benefits, sections or items, with no person named: the strong word's one excuse. */
-const BENEFIT_JOIN = /\b(?:both\s+(?:sections?|benefits?|parts?|covers?|items?)|sections?\s+\d+(?:\s*,\s*\d+)*\s+(?:and|or|&)\s+(?:sections?\s+)?\d+|(?:section|part)\s+\w+\s+(?:and|or|&)\s+(?:section|part)\s+\w+|parts?\s+[a-z]\s+(?:and|or|&)\s+[a-z]\b|between\s+[\w-]+(?:\s+[\w-]+){0,2}\s+(?:and|or)\s+[\w-]+|for\s+both\s+[\w-]+(?:\s+[\w-]+)?\s+and\s+[\w-]+|[\w-]+\s+(?:and|or)\s+[\w-]+(?:\s+[\w-]+)?\s+(?:are\s+)?(?:combined|shared|pooled|share)|(?:combined|shared|pooled)\s+(?:for|between|across)\s+[\w-]+(?:\s+[\w-]+)?\s+(?:and|or)\s+[\w-]+)\b/i;
+const BENEFIT_JOIN = /\b(?:both\s+(?:sections?|benefits?|parts?|covers?|items?)|sections?\s+\d+(?:\s*,\s*\d+)*\s+(?:and|or|&)\s+(?:sections?\s+)?\d+|(?:section|part)\s+\w+\s+(?:and|or|&)\s+(?:section|part)\s+\w+|parts?\s+[a-z]\s+(?:and|or|&)\s+[a-z]\b|between\s+[\w-]+(?:\s+[\w-]+){0,2}\s+(?:and|or)\s+[\w-]+|for\s+both\s+[\w-]+(?:\s+[\w-]+)?\s+and\s+[\w-]+|(?:combined|shared|pooled)\s+(?:for|between|across)\s+[\w-]+(?:\s+[\w-]+)?\s+(?:and|or)\s+[\w-]+)\b/i;
 const PEOPLE_WORD = /\b(?:you|your|spouse|partners?|child(?:ren)?|adults?|members?|dependants?|parents?|companions?|persons?|people|travell?ers?|they|them|their|we|us|famil(?:y|ies)|households?|couples?|everyone|everybody|insured)\b/i;
 const sharesStrongly = (c: string, group: boolean) => STRONG.test(c) && (group || !BENEFIT_JOIN.test(c) || PEOPLE_WORD.test(c));
 /** The group side of a clause (c: travel-together phrases out; cu: the clause with "per insured person per policy" read as
@@ -1138,13 +1139,13 @@ const OTHER_THAN_SAME = /\b(?:half|halved|double[ds]?|reduc\w*|less|lower|higher
 /** A sentence that refers back to the one before it, or carries its point on: judged with it (gate round 16). */
 const REFERS_BACK = /^\s*(?:this|these|that|those|it|they|everything|the\s+(?:rest|remainder|others?|same)|all\s+(?:the\s+)?others?|all\s+other|each\s+other|every\s+other|same|so|likewise|similarly|also|as\s+(?:is|are|do|does)|or|and|but|except|unless|other\s+than|apart\s+from)\b|\b(?:too|as\s+well|also|likewise)\b/i;
 /** Neutral admin sentences that may follow a family-cap sentence on its line without changing it. */
-const NEUTRAL_ADMIN = /^\s*(?:terms\s+and\s+conditions\s+apply|see\s+(?:page|section|the\s+policy\s+wording)\b[^.]*|please\s+read\b[^.]*|page\s+\d+(?:\s+of\s+\d+)?|(?:all\s+)?(?:limits|amounts|figures)\s+(?:are\s+)?(?:shown\s+)?in\s+(?:singapore\s+)?dollars|(?:the\s+)?(?:policy|certificate)\s+(?:wording|schedule)\s+applies)\s*\.?\s*$/i;
+const NEUTRAL_ADMIN = /^\s*(?:terms\s+and\s+conditions\s+apply|exclusions\s+apply|claims\s+must\s+be\s+(?:made|submitted|notified)\s+within\s+\d+\s+days|(?:or\s+)?call\s+us|(?:or\s+)?call\s+(?:us\s+)?(?:on\s+)?\+?\d[\d\s-]{5,}\d(?:\s+for\s+help)?|(?:also\s+)?see\s+(?:page|section|the\s+policy\s+wording)\b[^.]*|please\s+read\b[^.]*|page\s+\d+(?:\s+of\s+\d+)?|(?:all\s+)?(?:limits|amounts|figures)\s+(?:are\s+)?(?:shown\s+)?in\s+(?:singapore\s+)?dollars|(?:the\s+)?(?:policy|certificate)\s+(?:wording|schedule)\s+applies)\s*\.?\s*$/i;
 /** The sentences of a note line: split at a full stop before a capital, each sentence that refers back joined to the one
  * before it; a family-cap sentence with anything but neutral admin sentences beside it leaves the line whole. */
 function noteSentences(text: string): string[] {
   const out: string[] = [];
   for (const one of text.split(/(?<=[.!?])\s+(?=[A-Z])/)) {
-    if (out.length && REFERS_BACK.test(one)) out[out.length - 1] = `${out[out.length - 1]} ${one}`;
+    if (out.length && REFERS_BACK.test(one) && !NEUTRAL_ADMIN.test(one)) out[out.length - 1] = `${out[out.length - 1]} ${one}`;
     else out.push(one);
   }
   if (out.length > 1 && out.some((x) => capsAsMultiple(x)) && out.some((x) => !capsAsMultiple(x) && !NEUTRAL_ADMIN.test(x))) return [text];
