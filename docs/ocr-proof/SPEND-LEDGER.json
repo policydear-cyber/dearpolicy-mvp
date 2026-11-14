@@ -60,9 +60,24 @@
    "tested_code_sha": "6eccaec",
    "calls": 41,
    "note": "pipeline.ts on 12 listed pages (pages-batch1.txt): reader 1 + 3 page-image checkers (Sonnet 5.5, Haiku 4.5, Opus 5.5). Stopped on the cap after 10 pages (ocr50_09 p16 and ocr50_10 p52 not run). Spend from API token counts."
+  },
+  {
+   "run_id": "pipeline-diag-notread",
+   "at": "2026-11-14",
+   "spent_usd": 0.1886,
+   "source": "proof thread, pipeline.ts on ocr50_03 p2 and ocr50_01 p51 (step2/diag-notread)"
+  },
+  {
+   "run_id": "pipeline-batch2-20261114T0803Z",
+   "at": "2026-11-14T08:03:00Z",
+   "spent_usd": 1.9091,
+   "run_cap_usd": 2.2,
+   "tested_code_sha": "22361bf",
+   "calls": 32,
+   "note": "pipeline.ts on 16 pages (pages-batch2.txt), reader 1 + one page-image checker (Sonnet 5.5). All 16 pages read; not stopped. Spend from API token counts."
   }
  ],
- "total_spent_usd": 2.277,
+ "total_spent_usd": 4.3747,
  "authorisations": [
   {
    "usd": 1.0,
