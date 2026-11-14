@@ -61,13 +61,18 @@ export function maskPrefixLetterMisreads(text: string): { text: string; masked: 
  * thousand times too small. Some documents do group thousands with dots ("EUR 1.372.820,50"), so the style is the
  * document's own, decided from its figures, never from the currency's name.
  *
- * In a comma-grouped document, on a transcribed page, a figure grouped by dots is not confirmed: replaced by the page
- * check's "[amount not checked]" mark, never repaired. That is a figure right after a currency mark with one or more dot
- * groups of three ("S$935.542", "GBP 48.000"), or anywhere with two or more ("1.372.820": never a decimal). A single dot
+ * On a transcribed page, a figure grouped by dots is not confirmed: replaced by the page check's "[amount not checked]"
+ * mark, never repaired. That is a figure with a currency right beside it, before or after, and one or more dot groups of
+ * three ("S$935.542", "GBP 48.000", "935.542 SGD"), in any document that is not dot-grouped (a short schedule whose style
+ * cannot be told too: a single dot and three digits beside a currency is never two-decimal money, TE #478 F1), except
+ * one group beside a three-decimal currency ("KWD 1.500"); or, in a comma-grouped document, a figure with two or more
+ * groups and no currency on a line about money ("Overall limit 1.372.820"). A single dot
  * group with no currency mark ("0.125", "a factor of 1.375") is a decimal and stays, as does a percentage.
  */
 /** A currency mark right before a figure: a symbol with its country letters, or a code from a closed list. */
 const MONEY_MARK = String.raw`(?:(?<![A-Za-z])(?:[A-Z]{1,3})?\$|[£€¥₹₱฿₩]|(?<![A-Za-z])(?:RM|Rp\.?|Rs\.?|[A-Z]{3})(?![A-Za-z]))`;
+/** Currencies with three decimals: "KWD 1.500" is one and a half dinars, never a slip. */
+const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR", "JOD", "TND", "LYD", "IQD", "KD", "BD"]);
 const ISO = new Set(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : ["SGD", "USD", "MYR", "GBP", "EUR", "IDR", "HKD", "INR", "PHP", "THB", "AUD", "CNY", "JPY", "CHF", "NZD"]);
 /** Thousands grouped by commas ("935,542", "1,372,820.50"). */
 const COMMA_GROUPED = /(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?(?![\d]|[.,]\d)/g;
@@ -91,24 +96,34 @@ export function thousandsStyle(text: string): "comma" | "dot" | "unknown" {
   return "unknown";
 }
 
-/** In a comma-grouped document, the page text with every dot-grouped figure marked as not checked, and the figures so
- * marked, as printed. */
+/** The page text with every dot-grouped figure that is a slip in this document's style (see above) marked as not
+ * checked, and the figures so marked, as printed. */
 export function maskDotGroupedFigures(text: string, style: ReturnType<typeof thousandsStyle>): { text: string; masked: string[] } {
   const source = String(text ?? "");
-  if (style !== "comma") return { text: source, masked: [] };
+  // A dot-grouped document prints its own figures this way.
+  if (style === "dot") return { text: source, masked: [] };
   const masked: string[] = [];
   const out = source.replace(DOT_FIGURE, (token: string, mark: string | undefined, figure: string, at: number) => {
     const code = mark?.trim().replace(/\.$/, "");
-    const isMark = !!mark && (!/^[A-Z]{3}$/.test(code ?? "") || ISO.has(code!));
+    const before = !!mark && (!/^[A-Z]{3}$/.test(code ?? "") || ISO.has(code!));
+    // A code or sign right after the figure ("935.542 SGD", "935.542 €") is its currency too (TE #478 F1).
+    const suffix = mark ? null : /^[ \u00a0]?(?:([A-Z]{3})(?![A-Za-z])|[€£¥₹₱฿₩])/.exec(source.slice(at + token.length));
+    const after = !!suffix && (!suffix[1] || ISO.has(suffix[1]));
     const groups = figure.split(".").length - 1;
-    if (!isMark) {
-      if (groups < 2) return token;
+    const currency = before ? code : after ? suffix![1] ?? suffix![0].trim() : null;
+    if (currency) {
+      // A three-decimal currency prints "KWD 1.500" as a decimal (one group only).
+      if (groups === 1 && THREE_DECIMAL_CURRENCIES.has(currency.toUpperCase())) return token;
+    } else {
+      // With no currency beside it, only a comma-grouped document says a dotted figure is a slip, and only on a line
+      // about money.
+      if (style !== "comma" || groups < 2) return token;
       const from = source.lastIndexOf("\n", at - 1) + 1, to = source.indexOf("\n", at);
       const line = source.slice(from, to < 0 ? undefined : to).replace(token, " ");
       if (!MONEY_LINE.test(line)) return token;
     }
-    masked.push(token.trim());
-    return isMark ? NOT_CHECKED : token.replace(figure, NOT_CHECKED);
+    masked.push(after ? `${token.trim()}${suffix![0]}` : token.trim());
+    return before ? NOT_CHECKED : token.replace(figure, NOT_CHECKED);
   });
   return { text: out, masked };
 }

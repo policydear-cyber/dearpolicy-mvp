@@ -10,8 +10,9 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$/i.test(k))
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 
 let passed = 0; const failures: string[] = [];
+const pending: Promise<void>[] = [];
 function test(name: string, fn: () => unknown) {
-  try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); }
+  pending.push((async () => { try { await fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } })());
 }
 
 async function main() {
@@ -55,8 +56,21 @@ async function main() {
   test("N3 a dot-grouped document is left alone", () => {
     assert.deepEqual(maskDotGroupedFigures(`${dotDoc}\nbis zu EUR 1.372.820 insgesamt`, thousandsStyle(dotDoc)).masked, []);
   });
-  test("N4 a document whose style is unknown is left alone", () => {
-    assert.deepEqual(maskDotGroupedFigures("up to S$935.542 in total", thousandsStyle("up to S$935.542 in total")).masked, []);
+  test("N4 a short schedule whose style is unknown: a dotted figure beside a currency is still marked (TE #478 F1)", () => {
+    const page = "Sum Assured S$935.542\nPremium S$310.00\nHospital SGD 935.542\nSurgery RM935.542\nAccident 935.542 SGD";
+    assert.equal(thousandsStyle(page), "unknown");
+    const r = maskDotGroupedFigures(page, "unknown");
+    assert.deepEqual(r.masked, ["S$935.542", "SGD 935.542", "RM935.542", "935.542 SGD"]);
+    assert.equal(r.text, `Sum Assured ${M}\nPremium S$310.00\nHospital ${M}\nSurgery ${M}\nAccident ${M} SGD`);
+    // With no currency beside it, an unknown style says nothing: a dotted figure stays.
+    assert.deepEqual(maskDotGroupedFigures("Overall limit 1.372.820", "unknown").masked, []);
+  });
+  test("N4b a three-decimal currency keeps one dot group (KWD 1.500, 1.500 BHD); two groups are still marked", () => {
+    assert.deepEqual(maskDotGroupedFigures("Fee KWD 1.500\nFee 1.500 BHD\nFee OMR 2.250", "comma").masked, []);
+    assert.deepEqual(maskDotGroupedFigures("Fee KWD 1.500\nFee 1.500 BHD", "unknown").masked, []);
+  });
+  test("N4c a suffix code in a comma document is marked (935.542 SGD); a word after a figure is no code (1.250 AND)", () => {
+    assert.deepEqual(maskDotGroupedFigures("Accident 935.542 SGD\nRate 1.250 AND more", "comma").masked, ["935.542 SGD"]);
   });
   test("N5 a word in capitals is not a currency code (AGE 1.375, NO. 1.250)", () => {
     assert.deepEqual(maskDotGroupedFigures("AGE 1.375 rate\nREF 1.250", "comma").masked, []);
@@ -89,6 +103,20 @@ async function main() {
     assert.equal(moneyPrinted("Premium S$120 per year", 120), true);
   });
 
+  // The benefit-table figure reader reads none of these as a two-decimal amount (TE #478 F1).
+  test("B1 numbersIn: a dot and three digits beside a currency prints nothing; ordinary figures and rates read", async () => {
+    const { numbersIn, printsNumber } = await import("@/lib/benefit-table/check");
+    for (const t of ["Sum Assured S$935.542", "SGD 935.542", "RM935.542", "935.542 SGD"]) {
+      assert.deepEqual(numbersIn(t), [], t); assert.equal(printsNumber(t, 935.54), false, t);
+    }
+    assert.deepEqual(numbersIn("S$935.54"), [935.54]);
+    assert.deepEqual(numbersIn("KWD 1.500"), [1.5]);
+    assert.deepEqual(numbersIn("Rp 250.000"), [250000]);
+    assert.deepEqual(numbersIn("S$1.372.820"), [1372820]);
+    assert.deepEqual(numbersIn("rate 1.375"), [1.375]);
+    assert.deepEqual(numbersIn("factor 0.125"), [0.125]);
+  });
+
   // In the reading: transcribed pages only, the style taken from the whole document, with a note.
   test("I1 settleOcrFigures marks a transcribed page of a comma-grouped document", () => {
     const native = { pageNumber: 1, text: commaDoc, imageCount: 0, extractionMethod: "native" as const };
@@ -105,6 +133,7 @@ async function main() {
     assert.equal(out.pages[0], ocr); assert.deepEqual(out.notes, []);
   });
 
+  await Promise.all(pending);
   if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
   console.log(`dot-grouped-figure: ${passed} passed, 0 failed`);
 }

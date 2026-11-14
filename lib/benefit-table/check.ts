@@ -361,6 +361,15 @@ export function numbersIn(text: string): number[] {
     if (m.index! === gluedEnd + 1) { gluedEnd = m.index! + m[1].length; continue; }
     if (/^[.,]\d/.test(text.slice(m.index! + m[1].length)) && /\.\d{3,}$/.test(m[1])) { gluedEnd = m.index! + m[1].length; continue; }
     const after = text.slice(m.index! + m[1].length);
+    // A single dot and three digits with a currency right beside it ("S$935.542", "RM935.542", "935.542 SGD") is never
+    // two-decimal money: a scan may have printed a thousands comma as a dot. It prints nothing, never 935.54 (TE #478 F1).
+    // A three-decimal currency ("KWD 1.500") and a dot market ("Rp 250.000") are read above (dotGrouped).
+    if (/^\d+\.\d{3}$/.test(m[1])) {
+      const near = (re: RegExp, s: string) => re.exec(s);
+      const b = near(SIGN_BEFORE, text.slice(Math.max(0, m.index! - 8), m.index!)), a = near(SIGN_AFTER, after.slice(0, 6));
+      const code = (b ? b[1] ?? b[0].trim() : a ? a[1] ?? a[0].trim() : "").replace(/^KD$/, "KWD").replace(/^BD$/, "BHD");
+      if (code && !/^(?:BHD|KWD|OMR|JOD|TND|LYD|IQD)$/.test(code)) continue;
+    }
     // A figure ending in a comma and one or two digits ("150,00", "3,50", "1,250,50") is not grouped with commas: it prints
     // nothing, never 15000 or 350.
     if (/,\d{1,2}$/.test(m[1]) && !/\./.test(m[1])) continue;
