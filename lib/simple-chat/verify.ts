@@ -1858,7 +1858,7 @@ export function readModelAnswer(json: unknown): ModelAnswer | null {
  * file's own name when a person chose it ("Product Summary"), or else by what kind of document it is. A name a machine
  * gave the file ("0a1b2c3d-....pdf", "scan_20260101090000.pdf") is never shown as a source. Two documents that would
  * still read the same are told apart by their upload date, and then by their order (TE #102). */
-function docLabel(household: Household, d: HouseholdDocument): string {
+export function docLabel(household: Household, d: HouseholdDocument): string {
   const base = (x: HouseholdDocument) => {
     const product = x.productName?.trim();
     const own = personalFileName(x.name);
