@@ -162,6 +162,9 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
   }, [moreOpen]);
   // A public page names itself through its own metadata (title and description for search results), so no <title> here.
   if (publicView) return <PublicShell onLearn={pathname.startsWith("/learn")}>{children}</PublicShell>;
+  // Signed out on sign-in, sign-up or a password page: the same top bar as the landing page, not an empty sidebar.
+  // Frame only, like publicView above: middleware.ts still decides who may open the page.
+  if (!signedIn && signedOutPage && pathname !== "/privacy") return <PublicShell onLearn={false}><title>{pageTitle}</title><div className="auth-frame">{children}</div></PublicShell>;
   return (
     <div className={`app-shell${noNav ? " no-nav" : ""}`}>
       <title>{pageTitle}</title>
