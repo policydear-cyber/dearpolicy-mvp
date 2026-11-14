@@ -149,6 +149,9 @@ jobs:
       - name: Page image check confirms rows whose cells wrap onto several text lines (any market; negative controls)
         run: npm run documents:wrapped-row-check-test
 
+      - name: Scanned pages mark an amount whose first digit may be a misread currency letter ($520,000 for S$20,000; negative controls)
+        run: npm run documents:currency-misread-test
+
       - name: V1.1 source-verified answers, quota failure, usage attribution
         run: npm run v11:answer-test
 
