@@ -20,9 +20,13 @@ async function test(name: string, fn: () => Promise<void> | void) {
 }
 
 // ---- A made-up travel policy: a schedule page and a plan table with two columns. ----
+// The plan table's header ("Benefit\tClassic\tBusiness") ends page 1 and its rows start page 2, a table split across a
+// page break. Reader 1's wrong-column misreads below (Classic's S$500 read under Business) are ones the checks cannot
+// see, so the guards are what correct them. With the header on the rows' own page, the check now drops that misread
+// before any guard runs (PR #481; see "a wrong column the header shows is dropped before the guards run").
 const PAGES = [
-  { page: 1, text: "POLICY SCHEDULE\nInsured: Lim Ah Kow\nPlan: Business\nCover\tSum Insured\tPremium\nTravel Basic Plan\tS$100,000\tS$120.50 (monthly)" },
-  { page: 2, text: "Section 2 Travel inconvenience\nBenefit\tClassic\tBusiness\nTrip postponement\tS$500\tS$1,000\nDaily hospital cash\tS$100 per day\tS$200 per day\nBaggage delay\tS$200\tS$300" },
+  { page: 1, text: "POLICY SCHEDULE\nInsured: Lim Ah Kow\nPlan: Business\nCover\tSum Insured\tPremium\nTravel Basic Plan\tS$100,000\tS$120.50 (monthly)\nSection 2 Travel inconvenience\nBenefit\tClassic\tBusiness" },
+  { page: 2, text: "Trip postponement\tS$500\tS$1,000\nDaily hospital cash\tS$100 per day\tS$200 per day\nBaggage delay\tS$200\tS$300" },
 ];
 const DOC: SourceDoc = { id: "doc-1", name: "Example Travel Policy", readable: true, people: ["Lim Ah Kow"], pages: PAGES };
 const row = (column: string, benefit: string, pays: string, value: number, quote: string) => ({ section: "Section 2 Travel inconvenience", column, benefit, pays, value, period: null, basis: null,
@@ -119,6 +123,14 @@ async function main() {
     assert.equal(v.status, "corrected"); assert.equal(v.value, 1000);
     const shown = applyGuards(r, g).benefits.find((b) => b.benefit === "Trip postponement" && b.column === "Business")!;
     assert.equal(shown.value, 1000);
+  });
+
+  await test("a wrong column the header shows is dropped before the guards run (PR #481)", () => {
+    const sameTable: SourceDoc = { ...DOC, pages: [PAGES[0], { page: 2, text: "Section 2 Travel inconvenience\nBenefit\tClassic\tBusiness\n" + PAGES[1].text }] };
+    const r = checkReading(sameTable, reading(500));
+    assert.equal(r.benefits.find((b) => b.benefit === "Trip postponement" && b.column === "Business"), undefined);
+    assert.ok(r.dropped.some((d) => /Trip postponement/.test(d.what) && /Business column's own cell/.test(d.why)), JSON.stringify(r.dropped));
+    assert.equal(checkReading(sameTable, reading()).benefits.find((b) => b.benefit === "Trip postponement" && b.column === "Business")?.value, 1000);
   });
 
   await test("a figure the five never agree on: 3 re-reads, then the household is asked, and it is used nowhere until then", async () => {
