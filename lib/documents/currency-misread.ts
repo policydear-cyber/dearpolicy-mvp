@@ -15,6 +15,7 @@
  * page ("SGD 520,000").
  */
 import { NOT_CHECKED } from "@/lib/documents/layout-check";
+import { DOT_MARKET, THREE_DECIMALS } from "@/lib/format/printed-number";
 
 /** A prefix letter, and the digit a reader has been seen to print for it. Extend only from observed readings. */
 export const PREFIX_LETTER_AS_DIGIT: Readonly<Record<string, string>> = { S: "5" };
@@ -50,6 +51,82 @@ export function maskPrefixLetterMisreads(text: string): { text: string; masked: 
     if (before && prefixes.has(before[1])) return token;
     masked.push(token);
     return NOT_CHECKED;
+  });
+  return { text: out, masked };
+}
+
+/**
+ * A scan reader can print a thousands comma as a dot: "S$935,542" read as "S$935.542", "S$1,372,820" as "S$1.372.820"
+ * (50-document Baidu PaddleOCR run, 14 Nov 2026: 12 such figures in 8 of 11 made-up documents, every one right after a
+ * currency mark, in documents whose figures are otherwise all comma-grouped). Read as printed, the amount is a
+ * thousand times too small. Some documents do group thousands with dots ("EUR 1.372.820,50"), so the style is the
+ * document's own, decided from its figures, never from the currency's name.
+ *
+ * On a transcribed page, a figure grouped by dots is not confirmed: replaced by the page check's "[amount not checked]"
+ * mark, never repaired. That is a figure with a currency right beside it, before or after, and one or more dot groups of
+ * three ("S$935.542", "GBP 48.000", "935.542 SGD"), in any document that is not dot-grouped (a short schedule whose style
+ * cannot be told too: a single dot and three digits beside S$, SGD or RM is never two-decimal money, TE #478 F1). Beside
+ * the currency of a market that groups with dots (DOT_MARKET: "Rp 250.000", "€1.500"), only in a comma-grouped document
+ * (Critic #478 H1); one group beside a three-decimal currency ("KWD 1.500") never. Or, in a comma-grouped document, a
+ * figure with two or more groups and no currency on a line about money ("Overall limit 1.372.820"). A single dot
+ * group with no currency mark ("0.125", "a factor of 1.375") is a decimal and stays, as does a percentage.
+ */
+/** A currency mark right before a figure: a symbol with its country letters, or a code from a closed list. */
+const MONEY_MARK = String.raw`(?:(?<![A-Za-z])(?:[A-Z]{1,3})?\$|[£€¥₹₱฿₩]|(?<![A-Za-z])(?:RM|Rp\.?|Rs\.?|[A-Z]{3})(?![A-Za-z]))`;
+const ISO = new Set(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : ["SGD", "USD", "MYR", "GBP", "EUR", "IDR", "HKD", "INR", "PHP", "THB", "AUD", "CNY", "JPY", "CHF", "NZD"]);
+/** Thousands grouped by commas ("935,542", "1,372,820.50"). */
+const COMMA_GROUPED = /(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?(?![\d]|[.,]\d)/g;
+/** Thousands grouped by dots ("1.372.820", "1.372,50"), or a comma decimal ("372,50"): the dot style's own forms. */
+const DOT_STYLE = /(?<![\d.,])(?:\d{1,3}(?:\.\d{3}){2,}(?:,\d{1,2})?|\d{1,3}(?:\.\d{3})+,\d{1,2}|\d+,\d{2})(?![\d]|[.,]\d)/g;
+/** A dot-grouped figure: after a currency mark, one dot group or more; with no mark, two or more. */
+const DOT_FIGURE = new RegExp(String.raw`(${MONEY_MARK}\s?)?(?<![\d.,])([1-9]\d{0,2}(?:\.\d{3})+)(?![\d]|[.,]\d|\s*(?:%|per\s*(?:cent|mille)|‰))`, "g");
+/** A line about money: a cover, limit or charge word, or another money figure (a currency mark or a comma-grouped
+ * figure). A dot-grouped figure with no currency mark is marked only on such a line, so a dotted reference ("Policy No.
+ * 123.456.789", "Version 1.200.300") stays as printed (Critic #478 L2). An allow-list: a line naming none of these is
+ * left alone. */
+const MONEY_LINE = new RegExp(String.raw`\b(?:limits?|sums?\s+(?:insured|assured)|benefits?|premiums?|cover(?:ed|age)?|amounts?|excess|deductibles?|totals?|maximum|up\s+to|pay(?:s|able|ment)?|reimburse\w*|expenses?|liability|compensation|charges?|fees?|costs?|per\s+(?:day|year|claim|event|person|trip))\b|${MONEY_MARK}\s?\d|\d,\d{3}`, "i");
+
+/** How the document groups thousands, from its own figures: "comma" when comma groups clearly outnumber the dot style's
+ * own forms (at least 3 comma-grouped figures and three times as many as dot-style ones), "dot" the other way round,
+ * "unknown" otherwise (nothing is marked). */
+export function thousandsStyle(text: string): "comma" | "dot" | "unknown" {
+  const comma = String(text ?? "").match(COMMA_GROUPED)?.length ?? 0, dot = String(text ?? "").match(DOT_STYLE)?.length ?? 0;
+  if (comma >= 3 && comma >= 3 * dot) return "comma";
+  if (dot >= 3 && dot >= 3 * comma) return "dot";
+  return "unknown";
+}
+
+/** The page text with every dot-grouped figure that is a slip in this document's style (see above) marked as not
+ * checked, and the figures so marked, as printed. */
+export function maskDotGroupedFigures(text: string, style: ReturnType<typeof thousandsStyle>): { text: string; masked: string[] } {
+  const source = String(text ?? "");
+  // A dot-grouped document prints its own figures this way.
+  if (style === "dot") return { text: source, masked: [] };
+  const masked: string[] = [];
+  const out = source.replace(DOT_FIGURE, (token: string, mark: string | undefined, figure: string, at: number) => {
+    const code = mark?.trim().replace(/\.$/, "");
+    const before = !!mark && (!/^[A-Z]{3}$/.test(code ?? "") || ISO.has(code!));
+    // A code or sign right after the figure ("935.542 SGD", "935.542 €") is its currency too (TE #478 F1).
+    const suffix = mark ? null : /^[ \u00a0]?(?:([A-Z]{3})(?![A-Za-z])|[€£¥₹₱฿₩])/.exec(source.slice(at + token.length));
+    const after = !!suffix && (!suffix[1] || ISO.has(suffix[1]));
+    const groups = figure.split(".").length - 1;
+    const currency = before ? code : after ? suffix![1] ?? suffix![0].trim() : null;
+    if (currency) {
+      // A three-decimal currency prints "KWD 1.500" as a decimal (one group only).
+      if (groups === 1 && THREE_DECIMALS.test(currency.toUpperCase())) return token;
+      // Beside the currency of a market that groups with dots ("Rp 250.000", "€1.500", "2.500 EUR"), a dotted figure is
+      // the document's own printing unless the document groups its figures with commas (Critic #478 H1).
+      if (DOT_MARKET.test(currency) && style !== "comma") return token;
+    } else {
+      // With no currency beside it, only a comma-grouped document says a dotted figure is a slip, and only on a line
+      // about money.
+      if (style !== "comma" || groups < 2) return token;
+      const from = source.lastIndexOf("\n", at - 1) + 1, to = source.indexOf("\n", at);
+      const line = source.slice(from, to < 0 ? undefined : to).replace(token, " ");
+      if (!MONEY_LINE.test(line)) return token;
+    }
+    masked.push(after ? `${token.trim()}${suffix![0]}` : token.trim());
+    return before ? NOT_CHECKED : token.replace(figure, NOT_CHECKED);
   });
   return { text: out, masked };
 }
