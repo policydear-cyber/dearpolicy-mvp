@@ -1,6 +1,6 @@
 {
  "about": "Paid model usage for the OCR proof (DC's 50-document plan, step 2: AI reads the Baidu OCR text, checkers confirm). Synthetic documents only. Authorised: about US$1.00 for chat-side test spend (coordinator, 14 Nov 2026). One entry per run_id; never edit or remove an entry.",
- "authorised_usd": 1.0,
+ "authorised_usd": 5.0,
  "runs": [
   {
    "run_id": "ocr50-step2-doc00-p1-6",
@@ -14,7 +14,10 @@
    "at": "2026-11-14T07:29:00Z",
    "spent_usd": 0.0001,
    "model": "claude-haiku-4-5",
-   "tokens": {"input": 9, "output": 4},
+   "tokens": {
+    "input": 9,
+    "output": 4
+   },
    "note": "One tiny call to prove the new DEARPOLICY_ANTHROPIC_KEY works. Rounded up."
   },
   {
@@ -25,9 +28,49 @@
    "guard_cap_usd": 0.25,
    "tested_code_sha": "08e5f86",
    "model": "claude-sonnet-5-5 (reader 1, 2 calls)",
-   "tokens": {"input": 5727, "output": 20486},
+   "tokens": {
+    "input": 5727,
+    "output": 20486
+   },
    "note": "figure-check.ts on Baidu parsed-pages.json of ocr50_00 pages 17-20. Guards made no calls: the worst case of their first batch was above the US$0.25 guard cap, so they stopped before spending."
+  },
+  {
+   "run_id": "img-check-00-p19-20",
+   "at": "2026-11-14",
+   "spent_usd": 0.0433,
+   "source": "proof thread, image-check.ts, ocr50_00 p19-20"
+  },
+  {
+   "run_id": "img-check-02-p11",
+   "at": "2026-11-14",
+   "spent_usd": 0.0264,
+   "source": "proof thread, image-check.ts, ocr50_02 p11"
+  },
+  {
+   "run_id": "pipeline-00-p20",
+   "at": "2026-11-14",
+   "spent_usd": 0.115,
+   "source": "proof thread, pipeline.ts, ocr50_00 p20"
+  },
+  {
+   "run_id": "pipeline-batch1-20261114T0748Z",
+   "at": "2026-11-14T07:48:00Z",
+   "spent_usd": 1.4752,
+   "run_cap_usd": 1.6,
+   "tested_code_sha": "6eccaec",
+   "calls": 41,
+   "note": "pipeline.ts on 12 listed pages (pages-batch1.txt): reader 1 + 3 page-image checkers (Sonnet 5.5, Haiku 4.5, Opus 5.5). Stopped on the cap after 10 pages (ocr50_09 p16 and ocr50_10 p52 not run). Spend from API token counts."
   }
  ],
- "total_spent_usd": 0.6171
+ "total_spent_usd": 2.277,
+ "authorisations": [
+  {
+   "usd": 1.0,
+   "source": "coordinator, about US$1 chat-side test spend (before 14 Nov 07:44Z)"
+  },
+  {
+   "usd": 5.0,
+   "source": "DC 'go ahead', 14 Nov 2026 07:44:58Z: US$5 in total for step-2 testing, earlier spend included"
+  }
+ ]
 }
