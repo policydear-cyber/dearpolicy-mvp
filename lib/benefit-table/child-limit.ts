@@ -228,28 +228,38 @@ function foreign(text: string): boolean {
   return seen.size >= 2;
 }
 
-// ---------- Decision (1) as an allow-list (gate round 8) ----------
+// ---------- Decision (1) as an allow-list (gate rounds 8, 9) ----------
 /** A row the reading read from the document: its label and its section as printed. */
 export type ReadRow = { benefit: string; section: string | null };
-/** A figure in words: amounts, fractions and multiples ("three thousand", "one tenth", "half", "halved", "double"). */
-const FIGURE_WORDS = /\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundreds?|thousands?|millions?|half|halves|halved|quarters?|thirds?|fifths?|tenths?|twentieths?|double[ds]?|twice|triple[ds]?|treble[ds]?)\b/i;
+/** A figure in words: amounts, fractions, ordinals and multiples ("three thousand", "one tenth", "one-eighth", "half",
+ * "halved", "double", "per mille"). */
+const FIGURE_WORDS = /\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundreds?|thousands?|millions?|half|halves|halved|quarters?|thirds?|fourths?|fifths?|sixths?|sevenths?|eighths?|ninths?|tenths?|twentieths?|hundredths?|thousandths?|per\s+mille|double[ds]?|twice|triple[ds]?|treble[ds]?)\b/i;
 /** Words that limit what is paid. */
 const LIMIT_WORDS = /\b(?:limited|limits?|limitation|maximum|max|up\s+to|only|reduced|reduction|restricted|capped|no\s+more\s+than|not\s+(?:to\s+)?exceed\w*|at\s+most|subject\s+to|halved)\b/i;
+/** Words that exclude or negate cover (gate R9-H1). */
+const EXCLUSION_WORDS = /\b(?:excluded|excludes?|exclusions?|does\s+not\s+apply|do\s+not\s+apply|not\s+apply|not\s+covered|not\s+payable|no\s+(?:benefit|cover)|nil|none|void|except|other\s+than|unless|only\s+if|cease[sd]?|not\s+insured|not\s+eligible)\b/i;
 const MONTH = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)`;
-/** The text without what is never a figure: dates, a month and year, durations in days, nights, weeks, months or hours,
- * page numbers, times, telephone numbers and reference codes ("HPA-55120-K"). */
+/** A currency sign or code just before a number: what follows is always a figure. */
+const CURRENCY_BEFORE = String.raw`(?<!(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$|\bUS\$)[\s-]?)`;
+/** The text without what is never a figure, each only in its own narrow context (gate R9-H1): dates and a month with its
+ * year; a telephone number beside "tel", "phone", "call" or "line"; a time with am/pm or as hh:mm; a reference code after
+ * a policy, reference or certificate label; a day count ("30 days") only in a sentence with no money and no limiting
+ * word; a page number. A number beside a currency sign or code is never taken out. */
 function withoutNonFigures(text: string): string {
-  return text
+  const money = /(?:\b[A-Z]{3}|[£$€¥₹]|\bRM|\bS\$)\s?-?\d|\d\s?(?:\b[A-Z]{3}\b|[£€])|\b(?:pounds?|dollars?|euros?|ringgit|rupees?)\b/;
+  let t = text
     .replace(new RegExp(DATE, "gi"), " ")
     .replace(new RegExp(String.raw`\b${MONTH}\.?\s+\d{4}\b`, "gi"), " ")
-    .replace(/\b(?:\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fourteen|thirty|sixty|ninety)\s*(?:consecutive\s+|calendar\s+|working\s+|business\s+|clear\s+)?(?:days?|nights?|weeks?|months?|hours?|hrs?)\b/gi, " ")
-    .replace(/\bpages?\s+\d+(?:\s*(?:of|-|to)\s*\d+)?\b/gi, " ")
-    .replace(/\b\d{1,2}[:.]\d{2}\s*(?:am|pm)?\b/gi, " ")
-    .replace(/(?:\+\d{1,3}\s?)?(?:\(?\d{2,5}\)?[\s-]){2,}\d{3,}/g, " ")
-    .replace(/\b[A-Z]{2,}[A-Z0-9]*(?:-[A-Z0-9]+)+\b/g, " ");
+    .replace(new RegExp(String.raw`(\b(?:tel(?:ephone)?|phone|call|helpline|hotline|line)\b\.?:?\s*(?:on\s+|us\s+on\s+)?)${CURRENCY_BEFORE}(?:\+|0)\d[\d\s()-]{6,}\d`, "gi"), "$1 ")
+    .replace(new RegExp(String.raw`${CURRENCY_BEFORE}(?<![\d,.])(?:\+|0)\d[\d\s-]{6,}\d(?=\s*\(\s*(?:[a-z]+\s+)?(?:line|helpline|hotline|telephone|phone)\s*\))`, "gi"), " ")
+    .replace(/\b\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.|o['’]clock)(?![a-z])/gi, " ")
+    .replace(new RegExp(String.raw`${CURRENCY_BEFORE}\b\d{1,2}:\d{2}\b`, "g"), " ")
+    .replace(/(\b(?:policy|reference|ref|certificate|cert|member|claim|account|plan|scheme)\b\.?\s*(?:no\.?|number|#|ref\.?)?\s*:?\s*)[A-Z]{1,6}(?:-?[A-Z0-9]+)*-?\d[A-Z0-9-]*\b/gi, "$1 ")
+    .replace(/\bpages?\s+\d+(?:\s*(?:of|-|to)\s*\d+)?\b/gi, " ");
+  if (!money.test(t) && !LIMIT_WORDS.test(t) && !/\b(?:benefits?|pa(?:id|ys?|yable)|cover(?:ed)?|equal|worth|amounts?|sums?|value)\b/i.test(t))
+    t = t.replace(/\b(?:\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fourteen|thirty|sixty|ninety)\s*(?:consecutive\s+|calendar\s+|working\s+|business\s+|clear\s+)?(?:days?|nights?|weeks?|months?|hours?)\b/gi, " ");
+  return t;
 }
-/** Whether a piece of text carries a figure (digits, a percentage, a figure in words) or a limiting word. */
-const needsAccount = (t: string) => { const x = withoutNonFigures(t); return /\d/.test(x) || /%/.test(x) || FIGURE_WORDS.test(x) || LIMIT_WORDS.test(x); };
 const flatLabel = (t: string) => t.toLowerCase().replace(/\s+/g, " ").replace(/^(?:section\s+)?\d{1,3}[.)]?\s+/, "").replace(/[\s:.;,-]+$/, "").trim();
 const sectionNo = (s: string | null | undefined) => /^\s*(?:section\s+|sec\.?\s*)?([0-9]{1,3}(?:\.[0-9]{1,2})?(?:\([a-z]\))?|[A-Z]{1,4})[.)]?\s*$/i.exec(s ?? "")?.[1] ?? null;
 const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -259,74 +269,136 @@ function rowNamedAny(row: ReadRow): RegExp {
   const words = [...new Set((row.benefit.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !LABEL_FILLER.has(w)))];
   const death = words.some((w) => /^(?:death|deaths|life|fatal|fatality)$/.test(w)) ? [String.raw`\bdeaths?\b`, String.raw`\blife\b`, String.raw`\blives\b`, String.raw`\bfatal\w*`, String.raw`\bdie[sd]?\b`, String.raw`\bdying\b`, String.raw`\bkilled\b`, String.raw`\bdeceased\b`, String.raw`\bmortality\b`] : [];
   const n = sectionNo(row.section);
-  const alts = [...words.map((w) => String.raw`\b${esc(w)}s?\b`), ...death, ...(n ? [String.raw`(?<![\w,.])(?:s|§)?${esc(n)}(?![\w,]|\.\d)`] : [])];
+  // Its section number spelled out ("item one", "the first section").
+  const SPELLED = ["", "one|first", "two|second", "three|third", "four|fourth", "five|fifth", "six|sixth", "seven|seventh", "eight|eighth", "nine|ninth", "ten|tenth"];
+  const spelled = n && /^\d+$/.test(n) && Number(n) < SPELLED.length ? [String.raw`\b(?:sections?|items?|benefits?|covers?|parts?|clauses?)\s+(?:${SPELLED[Number(n)]})\b`, String.raw`\b(?:the\s+)?(?:${SPELLED[Number(n)]})\s+(?:section|item|benefit|cover|part|clause)\b`] : [];
+  const alts = [...words.map((w) => String.raw`\b${esc(w)}s?\b`), ...death, ...spelled, ...(n ? [String.raw`(?<![\w,.])(?:s|§)?${esc(n)}(?![\w,]|\.\d)`] : [])];
   return new RegExp(alts.length ? alts.join("|") : "(?!)", "i");
 }
-/** A people-table line: it names an insured person, and each cell is that name (with at most a date of birth), a whole
- * date, a whole money figure, or a few words with no figure and no limiting word (a relationship, an occupation). */
-function peopleLine(cells: string[], names: string[]): boolean {
+/** Whether a piece of text needs accounting for (gate R9-H1): it carries a figure (digits, a percentage, a figure in
+ * words), a limiting word, an exclusion or negation, or anything that names this row. */
+function needsAccount(t: string, thisNamed: RegExp): boolean {
+  const x = withoutNonFigures(t);
+  return /\d/.test(x) || /%/.test(x) || FIGURE_WORDS.test(x) || LIMIT_WORDS.test(x) || EXCLUSION_WORDS.test(x) || thisNamed.test(x);
+}
+/** The people table's own columns, a closed list (gate R9-H1): a name, a relationship, a date of birth or age, a gender, a
+ * sum insured, a premium or an identity number. Money only under a sum insured or a premium. */
+const PEOPLE_HEAD: { re: RegExp; money: boolean }[] = [
+  { re: /^(?:(?:name\s+of\s+)?(?:the\s+)?(?:insured|covered)\s+(?:person|life|member)s?|insured|name|full\s+name|life\s+insured|lives?\s+insured|member|person|insured\s+name|participant)$/i, money: false },
+  { re: /^(?:relationship(?:\s+to\s+(?:the\s+)?(?:policyholder|proposer|insured|policy\s+owner|principal))?|relation)$/i, money: false },
+  { re: /^(?:date\s+of\s+birth|birth\s*date|d\.?\s?o\.?\s?b\.?|born|age(?:\s+next\s+birthday)?|age\s+at\s+entry)$/i, money: false },
+  { re: /^(?:gender|sex)$/i, money: false },
+  { re: /^(?:sum\s+(?:insured|assured)|amount\s+insured)$/i, money: true },
+  { re: /^(?:(?:annual|monthly|yearly)\s+)?premium|contribution$/i, money: true },
+  { re: /^(?:id|i\.?d\.?\s+(?:no\.?|number)|nric(?:\s+no\.?)?|passport(?:\s+no\.?)?|identity\s+(?:card\s+)?(?:no\.?|number)|member\s+(?:no\.?|number|id)|certificate\s+(?:no\.?|number))$/i, money: false },
+];
+/** A people-table header cell's column, by the closed list (a currency in brackets, "(GBP)", is the column's own). */
+const peopleColumn = (h: string) => { const t = h.trim().replace(/\s*\((?:[A-Z]{3}|[£$€]|RM|S\$)\)\s*$/, ""); return PEOPLE_HEAD.find((c) => c.re.test(t)) ?? null; };
+/** A people-table line: it names an insured person, its header is the nearest tab line above it of as many cells with
+ * every cell a column of the closed list, and each cell fits its column: a name with nothing else that needs accounting,
+ * a whole date, a whole money figure only under a sum insured or a premium, or a few plain words under a relationship or
+ * gender column. Anything else is not accounted for. */
+function peopleLine(cells: string[], names: string[], header: string[] | null, thisNamed: RegExp): boolean {
   const lower = cells.map((c) => c.toLowerCase());
   if (!names.some((n) => lower.some((c) => c.includes(n)))) return false;
+  if (!header || header.length !== cells.length) return false;
+  const cols = header.map(peopleColumn);
+  if (cols.some((c) => !c)) return false;
   return cells.every((c, i) => {
-    const t = c.trim();
-    if (!t || WHOLE_DATE.test(t) || WHOLE_MONEY.test(t)) return true;
-    if (names.some((n) => lower[i].includes(n))) return !needsAccount(t.replace(/\b(?:date\s+of\s+birth|d\.?o\.?b\.?|born(?:\s+on)?)\b/gi, " "));
-    return /^[\p{L} ()/'’-]{1,40}$/u.test(t) && t.split(/\s+/).length <= 4 && !LIMIT_WORDS.test(t) && !FIGURE_WORDS.test(t);
+    const t = c.trim(), col = cols[i]!;
+    if (!t) return true;
+    if (names.some((n) => lower[i].includes(n))) return !needsAccount(t.replace(/\b(?:date\s+of\s+birth|d\.?o\.?b\.?|born(?:\s+on)?)\b/gi, " "), thisNamed);
+    if (WHOLE_DATE.test(t)) return true;
+    if (WHOLE_MONEY.test(t)) return col.money;
+    if (col.money) return false;
+    return /^[\p{L} ()/'’-]{1,40}$/u.test(t) && t.split(/\s+/).length <= 4 && !needsAccount(t, thisNamed);
   });
 }
+/** Collective or pointing words a line or a note may use to reach this row without naming it (gate R9-H1), spelled
+ * numbers that could be its section, and plural sections not each listed by number. */
+const COLLECTIVE = /\b(?:all|every|each|both|other|others|above|below|preceding|following|foregoing|these|those|remaining|aforesaid|the\s+benefits?)\b/i;
+function pluralUnlisted(t: string): boolean {
+  for (const m of t.matchAll(/\b(?:sections|items|benefits|covers|parts|clauses|sec\.?s)\b\s*([^.;:]*)/gi))
+    if (!/^\s*(?:[0-9]{1,3}(?:\.[0-9]{1,2})?|[A-Z]{1,4})(?:\s*(?:,|and|&)\s*(?:[0-9]{1,3}(?:\.[0-9]{1,2})?|[A-Z]{1,4}))+\b/.test(m[1])) return true;
+  return /\b\d{1,3}\s*(?:-|–|to)\s*\d{1,3}\b/.test(t.replace(/\b(?:GBP|USD|EUR|SGD|MYR|AUD|HKD|[£$€])\s?[\d,.]+/g, " "));
+}
 /** Another read row's own table line: a cell is that row's label, a leading number is that row's section, and nothing on
- * the line names this row. */
+ * the line names this row or reaches it collectively. */
 function otherRowLine(line: string, others: ReadRow[], thisNamed: RegExp): boolean {
-  if (thisNamed.test(line)) return false;
+  const plain = withoutNonFigures(line);
+  if (thisNamed.test(plain) || COLLECTIVE.test(plain) || pluralUnlisted(plain)) return false;
   const cells = line.split("\t").map((c) => flatLabel(c));
   const lead = /^\s*(?:section\s+)?([0-9]{1,3}(?:\.[0-9]{1,2})?|[A-Z]{1,4})[.)]?\t/i.exec(line)?.[1] ?? null;
   return others.some((o) => { const l = flatLabel(o.benefit); return !!l && cells.includes(l) && (lead == null || lead.toLowerCase() === (sectionNo(o.section) ?? "").toLowerCase()); });
 }
-/** A note that names a different read row (its section in any form, or its whole label) and nothing naming this row. */
+/** A note that names a different read row (its section in any form, or its whole label) and nothing of this row, with no
+ * collective or pointing words and no plural sections not listed by number. */
 function otherRowNote(sentence: string, others: ReadRow[], thisNamed: RegExp): boolean {
-  if (thisNamed.test(sentence)) return false;
+  const plain = withoutNonFigures(sentence);
+  if (thisNamed.test(plain) || COLLECTIVE.test(plain) || pluralUnlisted(plain) || EXCLUSION_WORDS.test(plain)) return false;
   return others.some((o) => {
     const n = sectionNo(o.section), l = flatLabel(o.benefit);
-    return (n != null && new RegExp(String.raw`\b(?:sections?|sec\.?|items?|benefits?|covers?|§)\s*${esc(n)}(?![\w,]|\.\d)`, "i").test(sentence))
+    return (n != null && new RegExp(String.raw`\b(?:section|sec\.?|item|benefit|cover|§)\s*${esc(n)}(?![\w,]|\.\d)`, "i").test(sentence))
       || (l.length >= 4 && sentence.toLowerCase().includes(l));
   });
 }
-/** A premium or instalment line that limits nothing and names nothing of this row. */
-const premiumLine = (t: string, thisNamed: RegExp) => /\b(?:premiums?|contributions?|instal(?:l)?ments?|direct\s+debit|stamp\s+duty|levy|policy\s+fee)\b/i.test(t)
-  && !/\b(?:limited|limits?|maximum|reduced|restricted|capped|no\s+more\s+than|not\s+(?:to\s+)?exceed\w*)\b/i.test(t) && !thisNamed.test(t);
-/** Decision (1), an allow-list (gate R8-H1): the cell's child share is given only when nothing else in the document could
- * change it. Every sentence or line outside the row's own cell (`own`) that carries a figure (digits, a percentage, a
- * figure in words) or a limiting word must be one of: a people-table line; a premium line; another read row's own table
- * line; a note naming a different read row and nothing of this one. Days, dates, page numbers, times, telephone numbers
- * and reference codes are not figures. A tab line right after the row's own line with an empty first cell continues its
- * cell: any figure or limiting word there means no share. The word backstop (childWordsElsewhere: child and age words,
+/** A premium or instalment line: no limiting, exclusion or cover word, nothing of this row, and every money figure
+ * right after premium, instalment, debit or fee wording (gate R9-H1). */
+function premiumLine(t: string, thisNamed: RegExp): boolean {
+  const plain = withoutNonFigures(t);
+  if (!/\b(?:premiums?|contributions?|instal(?:l)?ments?|direct\s+debit)\b/i.test(plain)) return false;
+  if (LIMIT_WORDS.test(plain) || EXCLUSION_WORDS.test(plain) || /\b(?:cover|covered|covers|benefits?|sum\s+(?:insured|assured))\b/i.test(plain) || thisNamed.test(plain)
+    || FIGURE_WORDS.test(plain) || /%/.test(plain)) return false;
+  const PREMIUM_MONEY = /\b(?:premiums?|contributions?|instal(?:l)?ments?|debit|fee|charge|levy|tax|duty)\b[^.;\d]{0,24}(?:[A-Z]{3}|[£$€¥₹]|RM|S\$)\s?\d[\d,]*(?:\.\d+)?/gi;
+  const left = plain.replace(PREMIUM_MONEY, " ");
+  return !/\d/.test(left);
+}
+/** A general exclusion of causes: "Exclusions: ..." naming no group of people, no figure, nothing of this row and no
+ * limiting word (it is the same for every insured person). */
+function causeExclusion(t: string, thisNamed: RegExp): boolean {
+  const plain = withoutNonFigures(t);
+  return /^\s*(?:general\s+)?exclusions?\s*[:-]/i.test(plain) && !thisNamed.test(plain) && !/\d|%/.test(plain) && !FIGURE_WORDS.test(plain) && !LIMIT_WORDS.test(plain)
+    && !/\b(?:except|other\s+than|unless|only\s+if)\b/i.test(plain)
+    && !/\b(?:persons?|people|lives|life|members?|insureds?|family|families|spouses?|partners?|relatives?|dependants?|dependents?|policyholders?|proposers?|ages?d?|years?|born|further|additional|named)\b/i.test(plain);
+}
+/** Decision (1), an allow-list (gates R8-H1, R9-H1): the cell's child share is given only when nothing else in the document
+ * could change it. Every sentence or line outside the row's own cell (`own`) that carries a figure (digits, a percentage,
+ * a figure in words), a limiting word, an exclusion or negation, or anything naming this row must be one of: a people-table
+ * line under a closed list of columns; a premium line; another read row's own table line; a note naming a different read
+ * row; a general exclusion of causes. A tab line straight after the row's own line with an empty first cell continues its
+ * cell: anything there that needs accounting means no share. The word backstop (childWordsElsewhere: child and age words,
  * this row's benefit named with a figure, another language) still applies. Anything else: no share. */
 export function childShareAllowed(pages: { page: number; text: string }[], own: { page: number; from: number; to: number } | null, people: string[], row: ReadRow, others: ReadRow[]): boolean {
   if (childWordsElsewhere(pages, own, people, row)) return false;
   const names = people.map((n) => n.replace(/\s+/g, " ").trim().toLowerCase()).filter((n) => n.length >= 3);
   const thisNamed = rowNamedAny(row);
   const rest = others.filter((o) => !(flatLabel(o.benefit) === flatLabel(row.benefit) && (sectionNo(o.section) ?? "") === (sectionNo(row.section) ?? "")));
+  const need = (t: string) => needsAccount(t, thisNamed);
   let run: string[] = [];
   const runOk = () => {
-    const ok = noteSentences(run.join(" ")).every((t) => !needsAccount(t) || premiumLine(t, thisNamed) || otherRowNote(t, rest, thisNamed));
+    const bad = noteSentences(run.join(" ")).find((t) => need(t) && !premiumLine(t, thisNamed) && !otherRowNote(t, rest, thisNamed) && !causeExclusion(t, thisNamed));
+    const ok = !bad;
     run = [];
     return ok;
   };
   for (const pg of pages) {
     const text = own && pg.page === own.page ? `${pg.text.slice(0, own.from)}\u0000${pg.text.slice(own.to)}` : pg.text;
-    let afterOwn = false;
+    let afterOwn = false, header: string[] | null = null;
     for (const line of text.split("\n")) {
       if (line.includes("\u0000")) { if (!runOk()) return false; afterOwn = true; continue; }
       // The row's own cell continued on a tab line with an empty first cell.
-      if (afterOwn && /^\s*\t/.test(line)) { if (needsAccount(line)) return false; continue; }
+      if (afterOwn && /^\s*\t/.test(line)) { if (need(line)) return false; continue; }
       afterOwn = false;
       if (!line.trim() || FOOTER.test(line)) continue;
       if (!line.includes("\t")) { run.push(line.trim()); continue; }
       if (!runOk()) return false;
-      if (!needsAccount(line)) continue;
       const cells = line.split("\t").map((c) => c.trim());
-      if (peopleLine(cells.filter(Boolean), names) || otherRowLine(line, rest, thisNamed)) continue;
-      return false;
+      const lower = line.toLowerCase();
+      const namesPerson = names.some((n) => lower.includes(n));
+      // A people-table line, whatever it carries, must fit its header's columns.
+      if (namesPerson ? !peopleLine(cells, names, header, thisNamed) : need(line) && !otherRowLine(line, rest, thisNamed)) return false;
+      // The header a people line is read under: the last tab line naming no one.
+      if (!namesPerson) header = cells;
     }
   }
   return runOk();

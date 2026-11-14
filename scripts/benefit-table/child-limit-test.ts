@@ -317,7 +317,9 @@ test("gate H2: another table's 'Date of birth' header above is never used for a 
   assert.deepEqual(death(h, people[1]).amounts, []);
   // Grace's line is below Daniel's line of another shape: her table's header is not reached, so no amount.
   assert.deepEqual(death(h, people[2]).amounts, []);
-  assert.deepEqual(death(h, people[0]).amounts, ["£100,000"]);
+  // Gate R9-H1: a people column outside the closed list ("Cover start") gives no child share for anyone, and the row falls
+  // back to main (no amount for anyone, as main).
+  assert.deepEqual(death(h, people[0]).amounts, []);
   // Gate R3-H1: the people table's header prints digits; another table's header above is never used.
   for (const head of ["Insured person\tRelationship\tCover start\tDate of birth\tSum Insured (GBP 000)", "Insured person\tRelationship\tCover start 2026\tDate of birth\tSum Insured"]) {
     const k = family(people, CELL, { header: `Proposer\tOccupation\tDate of birth\tNationality\nNgozi Okafor\tTeacher\t14/06/1984\tBritish\n${head}` });
@@ -667,7 +669,7 @@ test("gate R8-H1: any figure or limiting word not accounted for gives the child 
   // A note naming another row and this one is not accounted for.
   assert.equal(r8(["Note: Section 2 and Section 1 are limited to GBP 3,000 for family members."]).amount, null);
   // The rule on the real layout: rows 2-6, a note naming Section 3, the premium line.
-  const page = "Ngozi Okafor\tPolicyholder\t14/06/1984\tGBP 100,000\nGrace Okafor\tChild\t09/04/2017\tGBP 20,000\nAnnual premium: GBP 312.00, payable by monthly direct debit of GBP 26.00.\n"
+  const page = "Insured person\tRelationship\tDate of birth\tSum Insured\nNgozi Okafor\tPolicyholder\t14/06/1984\tGBP 100,000\nGrace Okafor\tChild\t09/04/2017\tGBP 20,000\nAnnual premium: GBP 312.00, payable by monthly direct debit of GBP 26.00.\n"
     + `1\tAccidental death\t${CELL}\n2\tPermanent total disablement\t100% of the Sum Insured\n3\tFracture of arm, wrist or leg\t2% of the Sum Insured per fracture, maximum GBP 1,500 per accident (note a)\n`
     + "Note (a): a compound fracture is paid at double the Section 3 amount, still subject to the GBP 1,500\nmaximum per accident.";
   const own = { page: 1, from: page.indexOf("1\tAccidental"), to: page.indexOf("\n2\tPermanent") };
@@ -675,6 +677,72 @@ test("gate R8-H1: any figure or limiting word not accounted for gives the child 
   assert.equal(childShareAllowed([{ page: 1, text: page }], own, ["Ngozi Okafor", "Grace Okafor"], rows[0], rows), true);
   // Without the fracture row in the reading, its line and its note are not accounted for.
   assert.equal(childShareAllowed([{ page: 1, text: page }], own, ["Ngozi Okafor", "Grace Okafor"], rows[0], rows.slice(0, 2)), false);
+});
+// ---------- Gate round 9: exact accounting classes, exclusions, and figures only stripped in context ----------
+function r9(extra: string[], o: { header?: string; people?: Person[]; ptdLine?: string } = {}) {
+  const people = o.people ?? ALL3;
+  const h = schedule(people, [`1\tAccidental death\t${CELL}`, o.ptdLine ?? PTD, ...extra], [
+    ben({ section: "1", benefit: "Accidental death", pays: "percent", value: 100, percentOf: "sum_insured", quote: CELL, conditions: [CLAUSE] }),
+    ben({ section: "2", benefit: "Permanent total disablement", pays: "percent", value: 100, percentOf: "sum_insured", quote: "100% of the Sum Insured" })], { header: o.header });
+  const row = h.table.people.find((x) => x.name === GRACE.name)!.rows.find((y) => /Accidental/.test(y.benefit));
+  let chat: string[] = [];
+  try { chat = ask(h, GRACE.name, /Accidental/, "If Grace died?").amounts; } catch { chat = []; }
+  return { amount: row && row.figure.kind === "worked_out" ? row.figure.amount : null, chat };
+}
+test("gate R9-H1: what the allow-list accepts is exact; exclusions and figures in any shape deny the child's share", () => {
+  const H5 = (col: string) => `Insured person\tRelationship\tDate of birth\tSum Insured\t${col}`;
+  const fam = (a: string, b: string, c: string) => [
+    P("Ngozi Okafor", "Policyholder", "14/06/1984", "GBP 100,000", 100000, ["Ngozi Okafor", "Policyholder", "14/06/1984", "GBP 100,000", a]),
+    P("Daniel Okafor", "Spouse", "02/11/1982", "GBP 80,000", 80000, ["Daniel Okafor", "Spouse", "02/11/1982", "GBP 80,000", b]),
+    P("Grace Okafor", "Child", "09/04/2017", "GBP 20,000", 20000, ["Grace Okafor", "Child", "09/04/2017", "GBP 20,000", c])];
+  const each = "for each further insured person";
+  const cases: [string, string[], Parameters<typeof r9>[1]][] = [
+    ["P1 a per-person 'Loss of life' column", [], { header: H5("Loss of life"), people: fam("GBP 100,000", "GBP 80,000", "GBP 3,000") }],
+    ["P2 an 'Accidental death' column", [], { header: H5("Accidental death"), people: fam("GBP 100,000", "GBP 80,000", "GBP 3,000") }],
+    ["P3 a 'Section 1 amount' column", [], { header: H5("Section 1 amount"), people: fam("GBP 100,000", "GBP 80,000", "GBP 3,000") }],
+    ["P4 'Not covered'", [], { header: H5("Fatal injury cover"), people: fam("Covered", "Covered", "Not covered") }],
+    ["P5 'Loss of life excluded'", [], { header: H5("Notes"), people: fam("-", "-", "Loss of life excluded") }],
+    ["P6 'No fatality cover'", [], { header: H5("Notes"), people: fam("-", "-", "No fatality cover") }],
+    ["P7 'max GBP 3k'", [], { header: H5("Notes"), people: fam("-", "-", "max GBP 3k") }],
+    ["P8 'GBP 3,000 on loss of life'", [], { header: H5("Notes"), people: fam("-", "-", "GBP 3,000 on loss of life") }],
+    ["R1 premium + up to", ["Premium: GBP 312 a year; each further insured person is covered up to GBP 3,000."], {}],
+    ["R2 premium + only", ["Annual premium GBP 312, which buys GBP 3,000 of cover only for each further insured person."], {}],
+    ["R3 premium + loss of life", ["Premium for each further insured person: GBP 40, for GBP 3,000 on loss of life."], {}],
+    ["R4 premium + subject to", ["Instalment premium GBP 26, subject to GBP 3,000 cover for each further insured person."], {}],
+    ["O1 PTD line names Section 1", [], { ptdLine: "2\tPermanent total disablement\t100% of the Sum Insured; Section 1 and this section limited to GBP 3,000 for each further person" }],
+    ["O2 PTD line 'the benefit above'", [], { ptdLine: "2\tPermanent total disablement\t100% of the Sum Insured; this and the benefit above limited to GBP 3,000 for each further person" }],
+    ["O3 PTD line 'items one and two'", [], { ptdLine: "2\tPermanent total disablement\t100% of the Sum Insured; items one and two limited to GBP 3,000 for each further person" }],
+    ["O4 PTD line 'both sections'", [], { ptdLine: "2\tPermanent total disablement\t100% of the Sum Insured; both sections limited to GBP 3,000 for each further person" }],
+    ["N1 all other sections", [`Note: Section 2 and all other sections are limited to GBP 3,000 ${each}.`], {}],
+    ["N2 every other benefit", [`Permanent total disablement and every other benefit is limited to GBP 3,000 ${each}.`], {}],
+    ["N3 Sections 1 to 6", [`Sections 1 to 6 are limited to GBP 3,000 ${each}.`], {}],
+    ["N4 Sections 0-6", [`Sections 0-6 are limited to GBP 3,000 ${each}.`], {}],
+    ["N5 the preceding section", [`Section 2 and the preceding section are limited to GBP 3,000 ${each}.`], {}],
+    ...["benefit 3k", "benefit £3k", "benefit GBP3000", "benefit 3 000", "benefit GBP 10 000 000", "benefit 3.00 units", "benefit GBP-3000", "benefit equal to 30 days' Hospital cash"]
+      .map((w): [string, string[], {}] => [w, [`Each further insured person: ${w}.`], {}]),
+    ...["is covered for one-fourth of the Sum Insured", "is covered at one-eighth of the Sum Insured", "is covered at 1/8 of the Sum Insured", "born in March 2010 is covered at one-eighth of the Sum Insured"]
+      .map((w): [string, string[], {}] => [w, [`Each further insured person ${w}.`], {}]),
+    ["F11 does not apply", ["Accidental death cover does not apply to family members other than the spouse."], {}],
+    ["F12 excluded", ["Loss of life is excluded for any further insured person."], {}],
+    ["F13 no benefit is payable", ["No benefit is payable on the death of a further insured person."], {}],
+    ["F14 a Nil row", ["\tFurther insured persons\tNil"], {}],
+  ];
+  for (const [name, extra, o] of cases) {
+    const k = r9(extra, o);
+    assert.equal(k.amount, null, name);
+    assert.deepEqual(k.chat, [], name);
+  }
+  assert.equal(r9([]).amount, 5000);
+  // Kept as accounted for: a telephone number beside "line", a time, a policy number, a general exclusion of causes, an
+  // ordinal in another row's own line.
+  for (const ok of [["How to claim: notify us within 30 days of the accident on 0800 000 0000 (claims line)."], ["Call us on 0800 000 0000 between 9am and 5pm."],
+    ["Policy number: HPA-55120-K"], ["Exclusions: injury while taking part in motor racing or professional sport; self-inflicted injury."]]) {
+    const k = r9(ok);
+    assert.equal(k.amount, 5000, ok.join(" / "));
+  }
+  // Not accounted for: an exclusion of a group of people, a number beside a currency in a telephone's shape.
+  assert.equal(r9(["Exclusions: any insured person over 70."]).amount, null);
+  assert.equal(r9(["Call us on GBP 0800 000 000."]).amount, null);
 });
 test("gate L1: a printed date of birth that crosses the age inside the period is said as such, not as 'not printed'", () => {
   const sam = P("Sam Okafor", "Child", "01/12/2008", "GBP 20,000", 20000);
