@@ -90,6 +90,9 @@ function isPublicView(pathname: string): boolean {
 export default function AppShell({ children, signedIn = true }: { children: React.ReactNode; signedIn?: boolean }) {
   const pathname = usePathname();
   const publicView = !signedIn && isPublicView(pathname);
+  // Signed out on sign-in, sign-up or reset password: the landing page's top bar, not an empty sidebar. Frame only,
+  // like publicView: middleware.ts still decides who may open the page.
+  const authFrame = !signedIn && SIGNED_OUT_PATHS.has(pathname) && pathname !== "/privacy";
   // Light is the brand default. The person's choice is kept in this browser
   // and applied before first paint by the small script in layout.tsx.
   const [theme, setTheme] = useState<Theme>("light");
@@ -108,7 +111,7 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
   const [unreachable, setUnreachable] = useState(false);
   const [hosted, setHosted] = useState(true);
   useEffect(() => {
-    if (publicView) return;
+    if (publicView || authFrame) return;
     let cancelled = false;
     const check = async () => {
       try {
@@ -122,7 +125,7 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
     void check();
     const timer = setInterval(() => void check(), 60_000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [publicView]);
+  }, [publicView, authFrame]);
   // The internal reviewer area is a DearPolicy staff tool, not part of any
   // household: it gets its own single-item navigation, never the household's.
   const reviewerArea = pathname.startsWith("/reviewer");
@@ -162,9 +165,7 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
   }, [moreOpen]);
   // A public page names itself through its own metadata (title and description for search results), so no <title> here.
   if (publicView) return <PublicShell onLearn={pathname.startsWith("/learn")}>{children}</PublicShell>;
-  // Signed out on sign-in, sign-up or a password page: the same top bar as the landing page, not an empty sidebar.
-  // Frame only, like publicView above: middleware.ts still decides who may open the page.
-  if (!signedIn && signedOutPage && pathname !== "/privacy") return <PublicShell onLearn={false}><title>{pageTitle}</title><div className="auth-frame">{children}</div></PublicShell>;
+  if (authFrame) return <PublicShell onLearn={false} authPage><title>{pageTitle}</title><div className="auth-frame">{children}</div></PublicShell>;
   return (
     <div className={`app-shell${noNav ? " no-nav" : ""}`}>
       <title>{pageTitle}</title>
