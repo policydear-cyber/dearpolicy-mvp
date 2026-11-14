@@ -7,16 +7,20 @@
  * household sees in the chat is an amount on their Coverage page, checked twice. */
 import type { BenefitTable, Figure, PersonCover, TableRow } from "./assemble";
 import type { Source } from "./check";
-import { figureText, periodWords } from "./assemble";
+import { benefitNamesRead, figureText, periodWords } from "./assemble";
 import { benefitName, benefitNames } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
+import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
+import { noteMultiple, sameNote, type Multiplier, type RowFacts } from "./multiplier";
 import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN, anyMoneyFigures, statedCurrencyCode } from "@/lib/format/currency";
 import { PREMIUM } from "@/lib/coverage/table-figures";
+/** Every benefit name the reading of a row's document named (assemble.ts benefitNamesRead), also rows no person's table
+ * shows: what a row multiple's case may not name (multipleFacts). Kept beside the rows, never on them. */
+const READ_NAMES = new WeakMap<object, string[]>();
 
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null;
   /** The limit's own line, or the same benefit's line for the same figure in another of the person's documents, says the
@@ -32,7 +36,10 @@ export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: n
   premium?: true };
 /** `labels`: the server's own wording of each statement it wrote. The chat's checks keep exactly these words (verifyAnswer's
  * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
-export type RowReport = { dropped: { why: string; text: string; notFit?: boolean; row?: string }[]; labels: string[];
+export type RowReport = { dropped: { why: string; text: string; notFit?: boolean; row?: string;
+  /** The amount is a row's that its document prints for more than one person without saying whose (WithheldRow): the
+   * household hears where it is printed (noteLeftOutAmounts), never that it could not be found. */
+  withheld?: { note: string } }[]; labels: string[];
   /** For each label of a daily row: the first paid day and the most days the table read for it (one entry per row). */
   days?: Record<string, { fromDay: number | null; maxDays: number | null; alone: boolean }[]>;
   /** Each "<benefit> also depends on this: <condition>" point, with the condition's own words and the rows whose cards it
@@ -45,6 +52,37 @@ export type RowReport = { dropped: { why: string; text: string; notFit?: boolean
   /** The percentage rows worked out on a person's own sum insured, as pointers the chat's checks verify and work out again
    * (verifyAnswer's serverFigures). */
   figures?: ServerFigure[] };
+
+/** A row with its own figure that the table shows for no one, because its document prints it for two or more people and
+ * does not say whose (assemble.ts notToldRows), with where it is printed in the library. */
+export type WithheldRow = { benefit: string; value: number | null; excerpt: string; docIndex: number; page: number };
+export function withheldRows(table: BenefitTable, household: Household): WithheldRow[] {
+  const index = new Map(household.documents.map((d, i) => [d.policyId, i]));
+  return (table.notToldRows ?? []).flatMap((r) => { const docIndex = index.get(r.source.documentId);
+    return docIndex == null ? [] : [{ benefit: r.benefit, value: r.value, excerpt: r.source.excerpt, docIndex, page: r.source.page }]; });
+}
+/** What the household hears for an amount left out because its row is printed for several people without saying whose. */
+export const withheldNote = (benefit: string, where: string) =>
+  `The amount for ${benefit} is printed in ${where}, but the document prints it for more than one insured person and does not say whose it is, so it is not shown here as anyone’s. Check that page, or ask the insurer.`;
+const flatWords = (s: string) => s.toLowerCase().replace(/[^a-z0-9%]+/g, " ").trim();
+/** The withheld row a dropped amount statement is about: its quote is that row's printed words, or it names that row's
+ * benefit and prints its figure. One row only; otherwise none. */
+function withheldFor(raw: Record<string, unknown>, withheld: WithheldRow[], household: Household): { note: string } | undefined {
+  if (!withheld.length) return undefined;
+  const quote = typeof raw.quote === "string" ? flatWords(raw.quote) : "";
+  const said = flatWords([raw.text, raw.rowBenefit].filter((x) => typeof x === "string").join(" "));
+  const figures = [raw.amount, raw.text, raw.quote].flatMap((x) => typeof x === "string" ? anyMoneyFigures(x).map((f) => f.value) : []);
+  const hits = withheld.filter((w) => {
+    const ex = flatWords(w.excerpt);
+    if (quote.length >= 8 && (ex.includes(quote) || quote.includes(ex))) return true;
+    const name = flatWords(w.benefit);
+    return name.length >= 3 && ` ${said} `.includes(` ${name} `) && w.value != null && figures.some((v) => Math.abs(v - w.value!) < 0.005);
+  });
+  const where = [...new Set(hits.map((w) => `${w.benefit}\u0000${w.docIndex}\u0000${w.page}`))];
+  if (where.length !== 1) return undefined;
+  const w = hits[0];
+  return { note: withheldNote(w.benefit, `${docLabel(household, household.documents[w.docIndex])}, page ${w.page}`) };
+}
 
 /** Said when the table has no rows yet, so a missing amount is never silent. */
 export const NO_ROWS_YET = "Amounts are not shown yet: your documents have not been read into your Coverage page. They appear there, and here, once they have.";
@@ -66,6 +104,7 @@ export function chatRows(table: BenefitTable, household: Household): ChatRow[] {
     const row: ChatRow = { ...r, id: `R${rows.length + 1}`, docIndex, baseDocIndex: r.baseSource ? index.get(r.baseSource.documentId) ?? null : null };
     // Only a premium line coverRows made is a premium; a row copied from one (a rate, an intensive-care row) is not.
     if (PREMIUM_LINES.has(r)) row.premium = true; else delete row.premium;
+    READ_NAMES.set(row, benefitNamesRead(table, r.source.documentId));
     rows.push(row);
   };
   // A cover's own schedule line (coverLine) is its "Sum insured" row below already (coverRows): never a second card for one
@@ -621,6 +660,7 @@ export function renderTable(rows: ChatRow[]): string {
   return `\n<benefit_table>
 Each person's benefit table, as their Coverage page shows it. One row per line: id | person | cover | benefit | qualifier | figure | conditions | where printed.
 For every statement that gives a row's amount, or points at one ("this amount"), set "eventFit": "on_list" when the row pays only for what a list names (critical illnesses, early critical illnesses, listed injuries) and the event asked about is on that list; "not_on_list" when it pays only for a list and the event is not on it (that card is never shown, so say in a fact that it is not on the list); "any_event" when the row is not limited to a list and pays on the event itself; "not_described" when the row pays only if a further thing happened that the household has not said happened, even one that often follows such an event (an ambulance was used, a hospital or intensive care stay, equipment bought, a death: that card is never shown either, so say in a fact what it needs); "no_event" when the question names no event (asking what a benefit is, or what a person has, is no event). For an event, give every row that pays on it, also one paid for a family member (per child, for a spouse), saying its condition. For a statement about an event ("on_list" or "any_event"), set "waiting" when a waiting period printed for the row's cover could apply to it: {"applies": "yes", "unsure" or "no" (whether it covers this event), "days": its length in days as printed (3 months is 90), "from": the date it runs from as printed for this person (the policy's issue, start or cover date, as DD/MM/YYYY)}; null when the cover prints no waiting period. The app compares those dates with today and never shows a card inside a waiting period that applies or may apply, so say why in a fact. Set "period" for every statement; for an amount whose cover prints its own period of cover (a trip's dates, a policy's start and end): {"from": its first day, "to": its last day, as printed (DD/MM/YYYY, "" when not printed), "eventOn": the date the event happened as the household said it (DD/MM/YYYY; today's date when they say it is happening now; "" when they did not say when)}; all three "" when no period is printed for the cover. Every policy on file is treated as in force: never say a cover has ended, expired, lapsed or not started because of a printed date or period, and never leave an amount out for that reason. Set "row" to the id of the row it gives and "rowBenefit" to that row's benefit name, copied exactly from the table ("" for a statement with no row; the app leaves out a card whose name is not its row's), and leave "amount" and "percentOf" null: the app fills in the row's figure. Give only amounts that are a row here, always with its id, also when you read the figure in another document (a premium on a tax invoice is the premium row); an amount no row shows is not given (say in a "fact" what the documents print instead). The person must be that row's person. A row "for child" or "per family" is only that; say so in the text. A projected figure is not guaranteed; say so.
+On an amount statement, set "multiplierNote" to "" unless one of the row's own conditions pays a multiple of its amount in one case (paid at double, doubled, twice, treble, N times, 150% of the amount) and the household's words about the event asked about now speak of that case (said it happened, or asked whether it pays more); then copy that one condition exactly as the row's conditions print it. The app keeps the row's single amount on the card and adds beside it, in the condition's own printed words, what is paid if that case applies, worked out within the row's maximum; never write that multiplied amount yourself, and never say whose case it is or that it applies. Example: a row's conditions print "Note: loss of sight in both eyes is paid at twice the amount" and the household writes "Tomas lost the sight in both eyes in the accident": set it to that note on Tomas's card. Leave it "" on every other statement.
 ${rows.map((r) => escapeText(line(r))).join("\n")}
 </benefit_table>`;
 }
@@ -785,7 +825,7 @@ const POLICY_ONLY_WORDS = new Set(("what what's whats how much many is are does 
  * card given for one person's row is given for every other member's own row of the same benefit and document: each
  * person the document is linked to and the table holds a row for is named, never only the one the model picked (live
  * 637c547: a group scheme's hospital cash named one of the two insured people). Each card is that person's own row. */
-export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = [], forNobody = false): { json: unknown; report: RowReport } {
+export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = [], forNobody = false, withheld: WithheldRow[] = []): { json: unknown; report: RowReport } {
   const report: RowReport = { dropped: [], labels: [], days: {}, conditionPoints: [], cards: {} };
   // A condition said as a point of its own, for the rows whose cards it belongs to (dropConditionsOnCards).
   const pointFor = (text: string, condition: string, row: ChatRow) => {
@@ -838,12 +878,13 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     if (!raw || typeof raw !== "object" || raw.kind !== "amount") { statements.push(raw); continue; }
     const text = typeof raw.text === "string" ? raw.text : "";
     const named = (typeof raw.row === "string" ? byId.get(raw.row.trim().toUpperCase()) : undefined);
-    if (!named) { report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text }); continue; }
+    if (!named) { const held = withheldFor(raw, withheld, household); report.dropped.push({ why: raw.row ? "no such row in the benefit table" : "an amount with no table row", text, ...(held ? { withheld: held } : {}) }); continue; }
     // The model copies the benefit name of the row it gives: a name that is not that row's means the id slipped to another
     // row (round 9 check, S088: the recuperation benefit given as the Child Education Fund's row). The card is left out: a
     // missing amount, never a wrong one. An answer recorded before the field existed has none, and is not checked.
     if (typeof raw.rowBenefit === "string" && !copiedName(raw.rowBenefit, named, rows) && !quotesRow(raw.quote, named, rows)) {
-      report.dropped.push({ why: `row ${named.id} is ${names(named)}, not "${raw.rowBenefit.slice(0, 80)}"`, text, row: named.id }); continue;
+      const held = withheldFor(raw, withheld, household);
+      report.dropped.push({ why: `row ${named.id} is ${names(named)}, not "${raw.rowBenefit.slice(0, 80)}"`, text, row: named.id, ...(held ? { withheld: held } : {}) }); continue;
     }
     const { row, carried } = checkedRow(named, raw, rows, household, labels, names, given);
     // Every amount statement says whether the event fits its row: a cover that pays only for what its list names, with
@@ -938,6 +979,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       && !o.qualifier && !row.qualifier && sameBenefit(o.benefit, row.benefit) && !o.premium && !row.premium
       && !rows.some((x) => x.personId === o.personId && given.has(x.id) && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))
       && !modelRows.some((x) => x.personId === o.personId && x.docIndex === o.docIndex && sameBenefit(x.benefit, o.benefit))) : [];
+    // The row condition the model names as paying a multiple in the case asked about ("" or missing: none; old answers parse).
+    const noteSaid = typeof raw.multiplierNote === "string" ? raw.multiplierNote.trim() : "";
     for (const r of [row, ...companions, ...firstYear, ...others]) {
       given.add(r.id);
       // A companion carries its own row's conditions, never the model's for the row it named (Critic R126-2).
@@ -953,9 +996,19 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // The row's own printed conditions ride with it, so a total is never worked out past a cap the model left out
       // (Critic R275 M1).
       if (st) st.rowConditions = r.conditions;
+      // A row condition paying a multiple of the amount in one case ("a compound fracture is paid at double the Section 3
+      // amount"), named by the model in "multiplierNote": the card keeps the row's single amount, and the chat's checks add
+      // the multiple as a condition in the note's own printed words with its figure worked out within the printed maximum
+      // (lib/simple-chat/verify.ts serverFigureChecked). The line is true whoever the case is, so the household's words are
+      // not read for it (PR #472 round 7). Only a note that is one of the row's own conditions and pays one plain multiple
+      // (lib/benefit-table/multiplier.ts noteMultiple), on the named row's own person; anything else is the card as before
+      // (Harbourline test, 13 Nov).
+      const facts = st && noteSaid && r.personId === row.personId ? multipleFacts(r, rows) : null;
+      const printed = facts ? r.conditions.find((c) => sameNote(noteSaid, c)) : undefined;
+      const times = facts && printed ? noteMultiple(printed, facts) : null;
       if (st) {
         statements.push(st); report.labels.push(String(st.text));
-        const sf = serverFigureOf(r, st, household);
+        const sf = (times && serverFigureOf(r, st, household, times, facts)) || serverFigureOf(r, st, household);
         if (sf) (report.figures ??= []).push(sf);
         report.cards![r.id] = { text: String(st.text), person: baseName(r.person) };
         if (r.combinedLimit && (raw.eventFit === "on_list" || raw.eventFit === "any_event")) limitsOnEvent.push({ row: r, st });
@@ -988,8 +1041,58 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   return { json: { ...(json as object), statements }, report };
 }
 
-/** Words that point at an amount shown with them ("the Product Summary shows this amount", "the amounts below"). */
-export const AMOUNT_POINTER = /\b(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b(?!\s+(?:insured|assured)\b)|\b(?:the\s+)?(?:amounts?|figures?|cards?)\s+(?:below|shown(?!\s+(?:in|on|by)\b)|here)\b|\b(?:amounts?|figures?)\s+(?:is|are)\s+(?:shown\s+|listed\s+)?below(?=\s*(?:[.,;:!]|$))|\b(?:shown|listed|set\s+out)\s+below\b/i;
+/** Words that promise the printed figure is shown with the answer ("the daily figure is quoted below as the policy prints
+ * it", "the amount quoted here", "the daily rate quoted below"). Only the server shows what a document prints, on a card or
+ * as a point's quote: once no amount is shown the promise is of nothing (live run 13 Nov, a family schedule's hospital
+ * cash: the answer said its figure was "quoted below" and nothing followed). Only an amount, figure, sum or limit, or a
+ * benefit's rate from an allow-list (daily, weekly, monthly, benefit, cash or hospital rate), said to be quoted: "the claims
+ * rule quoted below" is about words, and a premium, exchange, interest or tax rate is no benefit amount; both are kept. */
+const QUOTED_NOUN = String.raw`(?:amounts?|figures?|sums?|limits?|(?:daily|weekly|monthly|benefit|cash|hospital)\s+rates?)`;
+const QUOTED_WORDS = String.raw`(?:quoted|cited|reproduced)\s+(?:in\s+full\s+)?(?:below|here)\b`;
+const QUOTE_POINTER = new RegExp(String.raw`\b${QUOTED_NOUN}\s+(?:(?:is|are)\s+)?${QUOTED_WORDS}`, "i");
+/** The same words used as a name ("the amount quoted below is not paid if ..."), with the determiner and the one word before
+ * the noun ("the daily figure", "the daily rate"): said of the benefit, as "shown below" is (benefitFor). */
+const QUOTED_AS_NAME = new RegExp(String.raw`\b(?:(the|this|that|these|those)\s+)?(?:(daily|weekly|monthly|benefit|cash|hospital)\s+)?(amount|figure|sum|limit|rate)(s?)\s+${QUOTED_WORDS}`, "giu");
+/** "The figure is quoted below and paid from day 3": the promise goes, what the figure is said to do stays. */
+const QUOTED_AND = new RegExp(String.raw`\b(?:(the|this|that|these|those)\s+)?(?:(daily|weekly|monthly|benefit|cash|hospital)\s+)?(amount|figure|sum|limit|rate)(s?)\s+(is|are)\s+${QUOTED_WORDS}(?:\s+(?:from|in|as)\s+the\s+(?:policy|schedule|document|table)(?:\s+prints\s+it)?)?\s+and\s+`, "giu");
+/** Words after which the name is the object of what is said ("up to the limit quoted below", "paid as the figure quoted
+ * below"): said as a kind of figure, never as "this benefit". */
+const AS_OBJECT = /\b(?:up\s+to|as|at|of|to|within|above|beyond|under|over|by|from|than|with|exceeds?|exceeding)\s*$/i;
+/** What a quoted name is said as: the subject is the benefit ("This benefit is not paid if ..."); an object is a kind of
+ * figure ("up to a limit", "paid as a set amount", "at a daily rate"). Null for a rate with no benefit word before it. */
+function benefitFor(det: string | undefined, adj: string | undefined, noun: string, plural: string, before: string): string | null {
+  const n = noun.toLowerCase();
+  if (n === "rate" && !adj) return null;
+  // "Benefit" before the noun names nothing more: "the benefit rate quoted below" is the benefit, never "benefit benefit".
+  const word = adj && !/^benefit$/i.test(adj) ? adj.toLowerCase() : null;
+  if (AS_OBJECT.test(before)) {
+    // A period stays with its limit or rate ("up to a monthly limit", "at a daily rate").
+    const kind = n === "limit" ? (word ? `${word} limit` : "limit") : n === "rate" ? (word ? `${word} rate` : "rate") : word ? `${word} amount` : "set amount";
+    return plural ? `${kind}s` : `${/^[aeiou]/.test(kind) ? "an" : "a"} ${kind}`;
+  }
+  if (word) return `${det ? `${det} ` : ""}${word} benefit${plural}`;
+  return det ? (plural ? "these benefits" : "this benefit") : plural ? "benefits" : "benefit";
+}
+/** Whether "is" or "are" goes before what follows "X is quoted below and ...": only before a verb of its own. Kept by
+ * default ("is paid", "is available from day 3", "are the same for each child"); dropped before an auxiliary or modal
+ * ("does not apply", "can be claimed"), before a singular verb in "-s" after "is" ("applies", "stops"), and before a
+ * plural verb from a closed list after "are" ("need", "exceed", "apply"). When unsure, kept. */
+const AUXILIARY = /^(?:does|do|did|doesn['’]t|don['’]t|didn['’]t|can|cannot|can['’]t|will|won['’]t|would|wouldn['’]t|may|might|must|should|shouldn['’]t|has|have|had|hasn['’]t|haven['’]t)\b/i;
+const PLURAL_VERB = /^(?:apply|stop|cover|need|exceed|include|require|end|start|begin|depend|count|reduce|increase|pay|differ|vary|follow|continue|remain|run|last|rise|fall|change|cease|lapse)\b/i;
+const SINGULAR_VERB = /^[a-z]+(?<!ss|us|is)s\b/;
+function dropsVerb(verb: string, next: string): boolean {
+  const word = next.trimStart();
+  if (AUXILIARY.test(word)) return true;
+  return /^is$/i.test(verb) ? SINGULAR_VERB.test(word) : PLURAL_VERB.test(word);
+}
+/** A clause that does nothing but promise the quote ("so the daily amount is quoted here from the policy, not given as a
+ * card"): it goes whole. */
+const ONLY_QUOTE_PROMISE = new RegExp(String.raw`^(?:(?:and|but|so|while|although|though)\s+)?(?:[\p{L}'’-]+\s+){0,4}${QUOTED_NOUN}\s+(?:is|are)\s+${QUOTED_WORDS}(?:\s+(?:from|in|as)\b[^,;.]*)?(?:,\s*(?:and\s+)?not\s+(?:given|shown)\s+(?:as|on)\s+(?:a\s+)?cards?)?\s*[.!?]?$`, "iu");
+/** Where a figure is quoted, said beside a point ("..., with the limit quoted in full below", "..., quoted below"). */
+const QUOTED_WHERE = new RegExp(String.raw`,\s*(?:with\s+(?:the|its|their)\s+(?:[\p{L}-]+\s+){0,2}${QUOTED_NOUN}\s+|(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?)${QUOTED_WORDS},?`, "giu");
+/** Words that point at an amount shown with them ("the Product Summary shows this amount", "the amounts below"), or at a
+ * quote of it (QUOTE_POINTER). */
+export const AMOUNT_POINTER = new RegExp(String.raw`\b(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b(?!\s+(?:insured|assured)\b)|\b(?:the\s+)?(?:amounts?|figures?|cards?)\s+(?:below|shown(?!\s+(?:in|on|by)\b)|here)\b|\b(?:amounts?|figures?)\s+(?:is|are)\s+(?:shown\s+|listed\s+)?below(?=\s*(?:[.,;:!]|$))|\b(?:shown|listed|set\s+out)\s+below\b|${QUOTE_POINTER.source}`, "i");
 /** "this amount" in a sentence that says something of it ("This amount is not paid if the injury was self-inflicted"): the
  * benefit is meant, and the sentence is kept saying so (TE #105 Y13). */
 const DEICTIC = /\b(this|that|these|those)\s+(amount|figure|sum|limit)(s?)\b(?!\s+(?:insured|assured)\b)/gi;
@@ -1016,12 +1119,38 @@ function withoutPointer(sentence: string): string | null {
   // "..., shown below" only says where: the sentence stays without it (live run 23 Oct after #111, A6).
   const where = sentence.replace(/,\s*(?:as\s+|(?:which|that)\s+(?:is|are)\s+)?(?:shown|listed|set\s+out)\s+below\b,?/gi, "").replace(/\s+([.,;:!?])/g, "$1").trim();
   if (where !== sentence.trim() && where && !AMOUNT_POINTER.test(where)) return where;
+  if (QUOTE_POINTER.test(sentence)) return withoutQuotePointer(sentence);
   if (CONDITION_OF_AMOUNT(sentence)) return ofBenefit(sentence);
   if (!POSITIVE_POINTER.test(sentence)) { const said = asBenefit(sentence); if (!AMOUNT_POINTER.test(said)) return said; }
   const parts = clauses(sentence);
   if (AMOUNT_POINTER.test(parts[0])) return null;
   const kept = parts.filter((x) => !AMOUNT_POINTER.test(x)).join(", ").replace(/[\s,;:]+$/, "");
   return /[.!?]$/.test(kept) ? kept : `${kept}.`;
+}
+/** A sentence without its promise of a quoted figure: "..., with the limit quoted in full below" and a clause that only
+ * promises the quote go; "the amount quoted below" in a clause that says something of it is said of the benefit ("This
+ * benefit is not paid if ..."), as "the amount shown below" is. Null when the sentence opens with only the promise. */
+function withoutQuotePointer(sentence: string): string | null {
+  const where = sentence.replace(QUOTED_WHERE, "").replace(/\s+([.,;:!?])/g, "$1").trim();
+  if (where !== sentence.trim()) return where ? withoutPointer(where) : null;
+  const parts = clauses(sentence);
+  if (ONLY_QUOTE_PROMISE.test(parts[0].trim())) return null;
+  const kept = parts.filter((c) => !ONLY_QUOTE_PROMISE.test(c.trim()))
+    .map((c) => c
+      .replace(QUOTED_AND, (m, det: string | undefined, adj: string | undefined, noun: string, pl: string, verb: string, at: number, all: string) => {
+        const said = benefitFor(det, adj, noun, pl, all.slice(0, at));
+        if (!said) return m;
+        return dropsVerb(verb, all.slice(at + m.length)) ? `${said} ` : `${said} ${said.endsWith("benefits") ? "are" : verb.toLowerCase()} `;
+      })
+      .replace(QUOTED_AS_NAME, (m, det: string | undefined, adj: string | undefined, noun: string, pl: string, at: number, all: string) => benefitFor(det, adj, noun, pl, all.slice(0, at)) ?? m))
+    // A promise left inside a clause that says more ("the figure is quoted below and paid from day 3") cannot be said of
+    // the benefit: that clause goes.
+    .filter((c) => !QUOTE_POINTER.test(c));
+  if (!kept.length) return null;
+  const joined = kept.join(", ").replace(/[\s,;:]+$/, "");
+  const said = /[.!?]$/.test(joined) ? joined : `${joined}.`;
+  const text = said.charAt(0).toUpperCase() + said.slice(1);
+  return AMOUNT_POINTER.test(text) ? withoutPointer(text) : text;
 }
 /** A text without what points at an amount. */
 export const withoutPointers = (text: string) => sentences(text ?? "").map(withoutPointer).filter((x): x is string => !!x).join(" ").trim();
@@ -1075,7 +1204,7 @@ function pointedRows(raws: Record<string, unknown>[], rows: ChatRow[], household
   }
   return out;
 }
-const POSITIVE_POINTER = /\b(?:shows?|gives?|prints?|lists?|sets?\s+out|is|are|pays?|would\s+be|comes?\s+to)\s+(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b|\b(?:the\s+)?(?:amounts?|figures?)\s+(?:below|shown(?!\s+(?:in|on|by)\b))\b|\b(?:shown|listed|set\s+out)\s+below\b/i;
+const POSITIVE_POINTER = new RegExp(String.raw`\b(?:shows?|gives?|prints?|lists?|sets?\s+out|is|are|pays?|would\s+be|comes?\s+to)\s+(?:this|that|these|those)\s+(?:amounts?|figures?|sums?|limits?)\b|\b(?:the\s+)?(?:amounts?|figures?)\s+(?:below|shown(?!\s+(?:in|on|by)\b))\b|\b(?:shown|listed|set\s+out)\s+below\b|${QUOTE_POINTER.source}`, "i");
 const NOT_PAID = /\b(?:not|no|never|none|nothing|cannot|excluded?|exclusions?|ended|expired|lapsed|only|instead|unless|except)\b|n't\b/i;
 
 /** Words that say an amount does not apply or is not paid. */
@@ -1470,8 +1599,30 @@ export function keepLabelledAmounts<T extends { id?: string; amount?: unknown; t
  * is added here (in place of the weaker "left out a point"), and the household always hears that an amount was left out. */
 export function noteLeftOutAmounts<T extends { id: string; kind: string; text: string }>(statements: T[], report: RowReport, make: (id: string, text: string) => T): T[] {
   // An amount the answer itself says does not fit the event is not one the documents fail to print: no note for it.
-  if (!report.dropped.some((d) => !d.notFit) || statements.some((s) => s.id === "left-out-amount")) return statements;
-  return [...statements.filter((s) => !(s.id === "left-out-fact" && s.text === LEFT_OUT_FACT)), make("left-out-amount", LEFT_OUT_AMOUNT)];
+  const left = report.dropped.filter((d) => !d.notFit);
+  if (!left.length) return statements;
+  // An amount whose row is printed for several people without saying whose is printed: the household hears where, once
+  // for each place, never that it could not be found.
+  const notes = [...new Set(left.flatMap((d) => d.withheld ? [d.withheld.note] : []))].filter((n) => !statements.some((s) => s.text === n));
+  const missing = left.some((d) => !d.withheld) && !statements.some((s) => s.id === "left-out-amount");
+  if (!notes.length && !missing) return statements;
+  return [...statements.filter((s) => !(s.id === "left-out-fact" && s.text === LEFT_OUT_FACT)), ...notes.map((n, i) => make(`withheld-amount-${i + 1}`, n)),
+    ...(missing ? [make("left-out-amount", LEFT_OUT_AMOUNT)] : [])];
+}
+
+/** What a row brings to a multiple the model names (lib/benefit-table/multiplier.ts noteMultiple): its own words (benefit
+ * and quote), its section, its printed maximum, and the benefit names of the person's other rows (W4). */
+function multipleFacts(row: ChatRow, rows: readonly ChatRow[]): RowFacts {
+  const cap = row.figure.kind === "worked_out" && row.figure.capped ? row.figure.amount
+    : row.capSource ? (moneyFiguresIn(row.capSource.excerpt).find((m) => row.base == null || Math.abs(m.value - row.base) >= 0.005)?.value ?? null) : null;
+  const others = [...new Set(rows.filter((o) => o.personId === row.personId && !sameBenefit(o.benefit, row.benefit)).map((o) => benefitName(o.benefit)))].join("\n");
+  // Every other benefit read from the same document, whoever's row (gate round 10: a note's case naming one is that
+  // benefit's, "hospital cash for a compound fracture is paid at double").
+  // Read from the document's reading too (READ_NAMES), so a fixed-amount row a family schedule shows for no one counts.
+  const docNames = [...new Set([...rows.filter((o) => o.docIndex === row.docIndex).map((o) => o.benefit), ...(READ_NAMES.get(row) ?? [])]
+    .filter((b) => !sameBenefit(b, row.benefit)).map((b) => benefitName(b)))].join("\n");
+  const perDay = row.figure.kind === "printed" && row.figure.unit === "per_day";
+  return { own: `${row.benefit}\n${row.source.excerpt}`, section: row.section ?? null, cap, others, docNames, perDay };
 }
 
 /** A percentage row worked out on the person's own printed sum insured (not a corrected one), with where that sum is. */
@@ -1481,7 +1632,7 @@ const sumInsuredShare = (row: ChatRow) => row.figure.kind === "worked_out" && ro
  * row's percentage, the person's own sum insured line and the row's printed maximum. The checks find each in the stored pages
  * and work the amount out again; nothing here is shown as it is. Null for any other row, or when the row's maximum cannot
  * be read as one figure. */
-export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, household: Household): ServerFigure | null {
+export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, household: Household, times: Multiplier | null = null, facts: RowFacts | null = null): ServerFigure | null {
   if (!sumInsuredShare(row) || row.figure.kind !== "worked_out" || typeof st.quote !== "string") return null;
   const currency = row.figure.currency!;
   let cap: ServerFigure["cap"] = null;
@@ -1498,11 +1649,29 @@ export function serverFigureOf(row: ChatRow, st: Record<string, unknown>, househ
   for (const c of row.conditions) {
     const figs = moneyFiguresIn(c);
     if (figs.some((f) => !cap || f.currency !== currency || Math.abs(f.value - cap.value) >= 0.005)) return null;
+    // The multiple's own condition saying the same maximum still applies ("subject to the same limit") is that cap.
+    if (!figs.length && times && c === times.condition && times.keepsCap) continue;
     if (!figs.length && (statesMoney(c) || CAP_WORDS.test(c) || /\b(?:no\s+more\s+than|not\s+more\s+than|at\s+most|limit|reduc)/i.test(c))) return null;
+  }
+  // A named note's multiple, said beside the single amount as a condition (the card's figure is still the row's own): the
+  // share of the sum times the multiple, never past the printed maximum; above it only when the condition keeps that
+  // maximum (otherwise whether the maximum is multiplied too is not said: null, and the card is as before). The condition
+  // must be printed in the row's own document, where the checks read the multiple again.
+  let multiple: ServerFigure["times"] = null;
+  if (times) {
+    if (!facts) return null;
+    const worked = Math.round(row.base! * row.percent! * times.times) / 100;
+    if ((cap && worked > cap.value + 0.005 && !times.keepsCap) || (!cap && row.figure.capped)) return null;
+    // A fraction of a share already above the maximum: of the share or of what is paid is not said (gate round 9).
+    if (times.times < 1 && (row.figure.capped || (cap && row.base! * row.percent! / 100 > cap.value + 0.005))) return null;
+    const at = locateQuote(household, times.condition, row.docIndex);
+    if (!at || at.docIndex !== row.docIndex) return null;
+    multiple = { times: times.times, docIndex: at.docIndex, page: at.page, quote: times.condition, own: facts.own, section: facts.section, others: facts.others ?? "",
+      docNames: facts.docNames ?? "", perDay: !!facts.perDay };
   }
   return { text: String(st.text), person: baseName(row.person), quote: st.quote, percent: row.percent!, currency, value: row.figure.amount,
     row: { docIndex: row.docIndex, page: row.source.page, quote: row.source.excerpt },
-    base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap };
+    base: { value: row.base!, docIndex: row.baseDocIndex!, quote: row.baseSource!.excerpt }, cap, times: multiple };
 }
 
 /** One row as a statement the simple chat's checks understand: the figure as printed with the row's own words, or the

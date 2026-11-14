@@ -166,7 +166,7 @@ async function main() {
         } else if (existsSync(pagePath)) pageReply = JSON.parse(readFileSync(pagePath, "utf8")) as Reply;
         if (!pageReply) continue;
         const before = reading.benefits.length + reading.covers.length;
-        reading = mergeReadings(reading, checkReading(w.d, pageReply.json));
+        reading = mergeReadings(reading, checkReading(w.d, pageReply.json, { notesKind: reading.kind }));
         say(`${w.d.name} p${f.page} (${f.figureLines} figure lines, ${f.rowsRead} rows read): +${reading.benefits.length + reading.covers.length - before} rows${paid ? `, US$${usdOf(price, pageReply.input, pageReply.output).toFixed(4)} (total US$${spent.toFixed(4)}), stop ${pageReply.stopReason}` : ""}`);
       }
     }

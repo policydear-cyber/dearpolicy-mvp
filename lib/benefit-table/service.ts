@@ -19,7 +19,7 @@ import { runGuards, type GuardReader } from "./guard-run";
 import { figureGuardsEnabled } from "./guard-flag";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type CoverType, type SectionLink, type SectionRef } from "./reading";
 
-export const PROMPT_VERSION = "2026-10-21.3";
+export const PROMPT_VERSION = "2026-11-13.1";
 export const READ_MAX_OUTPUT = 24_000;
 export const PAGE_MAX_OUTPUT = 8_000;
 /** Output room for one linking call. Live, 12 Nov: a household with 150 sections asked in one call used all of 8,000
@@ -329,7 +329,9 @@ export function checkStored(doc: SourceDoc, stored: Pick<StoredReading, "documen
   const rowsOf = (j: unknown) => { const b = (j as { benefits?: unknown } | null)?.benefits; return Array.isArray(b) ? b.length : 0; };
   const coverLineRows = rowsOf(stored.document) + (stored.pages ?? []).reduce((n, p) => n + rowsOf(p.json), 0) === 0;
   let reading = checkReading(doc, stored.document, { coverLineRows });
-  for (const p of stored.pages ?? []) reading = mergeReadings(reading, checkReading(doc, p.json, { coverLineRows }));
+  // A part's notes are worked out as the whole document's (its kind), never skipped for the part's own kind: mergeReadings
+  // keeps only the notes both readings find (#474 perf gate, P474-H1).
+  for (const p of stored.pages ?? []) reading = mergeReadings(reading, checkReading(doc, p.json, { coverLineRows, notesKind: reading.kind }));
   return reading;
 }
 

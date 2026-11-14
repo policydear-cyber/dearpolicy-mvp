@@ -4,6 +4,9 @@ import Link from "next/link";
 import { PRIVACY_NOTICE_FINAL } from "@/lib/privacy/notice-status";
 import { useSearchParams } from "next/navigation";
 import { customerMessage } from "@/components/customer-text";
+import { safeInviteNext } from "@/lib/auth/invite-return";
+// Only ever navigate within this app after sign-in: `next` comes from the query string and could point anywhere.
+import { sameSitePath } from "@/lib/auth/same-site-path";
 
 const LINK_ERRORS: Record<string, string> = {
   missing_code: "That link is incomplete. Please ask for a new one.",
@@ -38,6 +41,8 @@ const LINK_ERRORS: Record<string, string> = {
  */
 function LoginForm() {
   const params = useSearchParams();
+  // Invited and new here: the sign-up page keeps the invitation, so they come back to join after creating an account.
+  const inviteNext = safeInviteNext(params.get("next"));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -59,7 +64,7 @@ function LoginForm() {
       const response = await fetch("/api/auth/signin", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, ...(inviteNext ? { next: inviteNext } : {}) }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -110,7 +115,7 @@ function LoginForm() {
         <Link href="/reset-password">Forgot your password?</Link>
       </p>
       <p>
-        New here? <Link href="/signup">Create an account</Link>
+        New here? <Link href={inviteNext ? `/signup?next=${encodeURIComponent(inviteNext)}` : "/signup"}>Create an account</Link>
       </p>
       {PRIVACY_NOTICE_FINAL ? (
         <p className="field-hint">
@@ -121,11 +126,6 @@ function LoginForm() {
   );
 }
 
-/** Only ever navigate within this app after sign-in: `next` comes from the
- * query string and could otherwise point anywhere. */
-function sameSitePath(value: unknown): string | null {
-  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : null;
-}
 
 export default function LoginPage() {
   return (

@@ -25,6 +25,7 @@ import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
+import { keepsCapIn, noteMultiple, timesWords } from "@/lib/benefit-table/multiplier";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
@@ -813,7 +814,12 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
   value: number;
   /** The row's own printed words (a capped row's statement quotes its cap instead). */
   row: { docIndex: number; page: number; quote: string };
-  base: { value: number; docIndex: number; quote: string }; cap: { value: number; docIndex: number; page: number; quote: string } | null };
+  base: { value: number; docIndex: number; quote: string }; cap: { value: number; docIndex: number; page: number; quote: string } | null;
+  /** The row's own printed condition the model named as paying a multiple of its amount in one case ("a compound fracture
+   * is paid at double", lib/benefit-table/multiplier.ts noteMultiple): read again here from its stored page, with the row's
+   * own words (`own`), `section` and the benefit names of the person's other rows (`others`). When it checks, the card's
+   * basis adds the multiple as a condition in the note's own words with its figure; the card's amount stays `value`. */
+  times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null; others: string; docNames: string; perDay: boolean } | null };
 /** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
  * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
  * sum under a cover heading or on a page that names one life; the benefit table had already tied each row to the person's
@@ -888,8 +894,37 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const money = (v: number) => formatMoney(cur.sign, v);
   const where = `${docLabel(household, bdoc)}, page ${bf.page}`;
   const basis = `${sf.percent}% of ${person}'s sum insured of ${money(sf.base.value)} (${where})${capped ? ` is ${money(worked)}, more than the most it pays, so up to ${money(cap!.value)} (page ${cap!.found.page})` : cap ? `, within its maximum of ${money(cap.value)}` : ""}`;
-  return { s: { ...st, kind: "amount", percentOf: null, alternativeGroup: st.alternativeGroup }, found, person, note: null, whole: basis,
+  return { s: { ...st, kind: "amount", percentOf: null, alternativeGroup: st.alternativeGroup }, found, person, note: null, whole: basis + timesLine(sf, household, cap, money),
     amount: { value, text: (capped ? "Up to " : "") + money(value), currencyResolved: cur.resolved, illustration: true } };
+}
+/** A named note's multiple as a condition beside the card's single amount, in the note's own printed words ('. Note (a) on
+ * page 2 says: "a compound fracture is paid at double ...". If that applies, this pays £800 (double), within the £1,500
+ * maximum'; above the maximum: 'If that applies, double would be £3,200, but the most it pays is £1,500'). Read
+ * again from the note's stored page in the row's document and checked as the row step does (one plain multiple of this
+ * row's own case, lib/benefit-table/multiplier.ts noteMultiple); the multiplied share is never past the printed maximum,
+ * and above it only when the note keeps that maximum. It is true whoever the case is, so the household's words are not
+ * read (PR #472 round 7). "" when any check fails: the card is then as it is with no note named. */
+function timesLine(sf: ServerFigure, household: Household, cap: { value: number; found: Found } | null, money: (v: number) => string): string {
+  if (!sf.times) return "";
+  const tf = locateQuote(household, sf.times.quote, sf.times.docIndex);
+  if (!tf || tf.docIndex !== sf.row.docIndex || tf.page !== sf.times.page) return "";
+  const d = noteMultiple(sf.times.quote, { own: sf.times.own, section: sf.times.section, cap: cap?.value ?? null, others: sf.times.others,
+    docNames: sf.times.docNames, perDay: sf.times.perDay });
+  if (!d || Math.abs(d.times - sf.times.times) > 1e-9) return "";
+  const worked = Math.round(sf.base.value * sf.percent * d.times) / 100;
+  if (cap && worked > cap.value + 0.005 && !keepsCapIn(sf.times.quote, cap.value)) return "";
+  // A fraction of a share already above the maximum: whether it is taken of the share or of what is paid is not said.
+  if (d.times < 1 && cap && Math.round(sf.base.value * sf.percent) / 100 > cap.value + 0.005) return "";
+  const capped = !!cap && worked > cap.value;
+  // The note by its own printed label when it has one ("Note (a) on page 2 says"), else by the page.
+  const label = /^\s*(note\s*(?:\([a-z0-9]+\)|[a-z0-9]+\b)?)\s*[:.-]\s*/i.exec(sf.times.quote);
+  const words = sf.times.quote.slice(label ? label[0].length : 0).trim().replace(/[.;]+$/, "");
+  const says = label ? `${label[1].replace(/^note/i, "Note")} on page ${tf.page} says` : `The policy (page ${tf.page}) says`;
+  const times = d.words;
+  // The answer first: "this pays £1,500 (double would be £2,000, more than the £1,500 maximum)", "this pays £800
+  // (double)", "this pays half: £200".
+  return `. ${says}: "${words}". If that applies, ${capped ? `this pays ${money(cap!.value)} (${times} would be ${money(worked)}, more than the ${money(cap!.value)} maximum)`
+    : d.times < 1 ? `this pays ${times}: ${money(worked)}` : `this pays ${money(worked)} (${times})`}`;
 }
 /** The cover a row's percentage is of, by name ("20% of the Critical Illness sum assured" -> ["critical", "illness"]); empty
  * when the row says only "of (the) Sum Assured". */
@@ -1823,7 +1858,7 @@ export function readModelAnswer(json: unknown): ModelAnswer | null {
  * file's own name when a person chose it ("Product Summary"), or else by what kind of document it is. A name a machine
  * gave the file ("0a1b2c3d-....pdf", "scan_20260101090000.pdf") is never shown as a source. Two documents that would
  * still read the same are told apart by their upload date, and then by their order (TE #102). */
-function docLabel(household: Household, d: HouseholdDocument): string {
+export function docLabel(household: Household, d: HouseholdDocument): string {
   const base = (x: HouseholdDocument) => {
     const product = x.productName?.trim();
     const own = personalFileName(x.name);

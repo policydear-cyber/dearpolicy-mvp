@@ -271,6 +271,51 @@ async function main() {
 
   // 9. Plain OCR models (PP-OCRv5/v6) are read from rec_texts; large documents are split into several jobs.
   assert.deepEqual(bd.baiduPagesFromJsonl(JSON.stringify({ result: { ocrResults: [{ prunedResult: { rec_texts: ["Death", "S$100,000"] } }, { prunedResult: {} }] } }), "PP-OCRv5"), ["Death\nS$100,000", ""]);
+  // 9a. A text block in Baidu's layout list that its Markdown left out (a schedule's last line) is put back at its own
+  // place in reading order, never at the page's end by default; a block the Markdown already has (any spacing or case),
+  // a picture, a table or a formula is not. Titles of any kind are text.
+  {
+    const vl = (md: string, list: unknown) => JSON.stringify({ result: { layoutParsingResults: [{ markdown: { text: md }, prunedResult: { parsing_res_list: list } }] } });
+    const warned: string[] = []; const warn = console.warn; console.warn = (m: string) => { warned.push(String(m)); };
+    try {
+      const md = "Schedule\n\nHarbour Shield Plan In Force 25,000.00\n\nExample Assurance Ltd";
+      const list = [
+        { block_label: "doc_title", block_content: "Schedule" },
+        { block_label: "text", block_content: "Harbour  shield plan in force 25,000.00" },
+        { block_label: "footnote", block_content: "Note: cover ends at age 65." },
+        { block_label: "image", block_content: "<img src=\"x.png\">" },
+        { block_label: "table", block_content: "<table><tr><td>Extra</td><td>S$9</td></tr></table>" },
+        { block_label: "formula", block_content: "x^2" },
+        { block_label: "header_image", block_content: "Logo text" },
+        { block_label: "footer", block_content: "Example Assurance Ltd" },
+        { block_label: "footer", block_content: "Co. Reg. 200412345K (Printed: 03-Mar-2026)" },
+        { block_label: "footer", block_content: "Co. Reg. 200412345K (Printed: 03-Mar-2026)" },
+      ];
+      assert.deepEqual(bd.baiduPagesFromJsonl(vl(md, list), "PaddleOCR-VL-1.5"),
+        ["Schedule\n\nHarbour Shield Plan In Force 25,000.00\n\nNote: cover ends at age 65.\n\nExample Assurance Ltd\n\nCo. Reg. 200412345K (Printed: 03-Mar-2026)"]);
+      assert.equal(warned.length, 1);
+      assert.match(warned[0], /^\[baidu-ocr\] page 1: 2 block\(s\) not in Baidu's Markdown added from its layout list \(labels: footnote, footer\)$/);
+      assert.ok(!warned[0].includes("200412345"), "the log never carries a block's text");
+      // Baidu's block_order, where every block has one, is the reading order; a missing block before every present one
+      // goes first. Titles ("figure_title", "table_title") are text and are put back alike.
+      assert.deepEqual(bd.baiduPagesFromJsonl(vl("Benefits\n\nDeath S$100,000", [
+        { block_label: "text", block_content: "Death S$100,000", block_order: 3 },
+        { block_label: "table_title", block_content: "Table 1: Benefits in Singapore Dollars", block_order: 2 },
+        { block_label: "header", block_content: "Policy Schedule 2026", block_order: 0 },
+        { block_label: "paragraph_title", block_content: "Benefits", block_order: 1 },
+        { block_label: "figure_title", block_content: "Figure 2: How the 30-day wait works", block_order: 4 },
+      ]), "PaddleOCR-VL-1.5"), ["Policy Schedule 2026\n\nBenefits\n\nTable 1: Benefits in Singapore Dollars\n\nDeath S$100,000\n\nFigure 2: How the 30-day wait works"]);
+      assert.equal(warned.length, 2);
+      // Nothing missing, no layout list, or a list that is not an array: the Markdown text alone, and nothing logged.
+      const plain = ["Schedule\n\nHarbour Shield Plan In Force 25,000.00\n\nExample Assurance Ltd"];
+      assert.deepEqual(bd.baiduPagesFromJsonl(vl(md, list.slice(0, 2)), "PaddleOCR-VL-1.5"), plain);
+      assert.deepEqual(bd.baiduPagesFromJsonl(vl(md, "x"), "PaddleOCR-VL-1.5"), plain);
+      assert.deepEqual(bd.baiduPagesFromJsonl(JSON.stringify({ result: { layoutParsingResults: [{ markdown: { text: md } }] } }), "PaddleOCR-VL-1.5"), plain);
+      // An empty Markdown page with a text block: the block is the page.
+      assert.deepEqual(bd.baiduPagesFromJsonl(vl("", [{ block_label: "text", block_content: "Death S$100,000" }]), "PaddleOCR-VL-1.5"), ["Death S$100,000"]);
+      assert.equal(warned.length, 3);
+    } finally { console.warn = warn; }
+  }
   process.env.BAIDU_OCR_PAGES_PER_JOB = "1";
   seen = []; baidu = baiduJob([vlLine([PAGE_A])], { states: ["done"] });
   out = await run();
