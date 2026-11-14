@@ -380,7 +380,7 @@ test("P-1: a premium, a company footer or exclusion text in another currency nev
     ["policy fee", "Policy fee: USD 25\nAmbulance\t500"],
     ["P3", "Ambulance\t500\nHarbour Insurance Berhad (paid-up capital RM 100 million)"],
     ["P5", "Ambulance\t500\nExclusions: treatment received in the USA, or bills in US$ above the usual charges."],
-    ["note", "Note: overseas bills are converted from (US$) at the claim date\nAmbulance\t500"],
+    ["conversion figure", "Note: overseas bills above US$1,000 are converted at the claim date\nAmbulance\t500"],
   ];
   for (const [name, page] of cases) {
     const r = run(page, [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], "TABLE OF BENEFITS (S$)");
@@ -438,10 +438,37 @@ test("R4: a USD section, heading, column header, note or signed row on a S$ page
 });
 test("R4 control: premium, capital, address, conversion and exclusion mentions still leave a S$ page single-currency", () => {
   for (const line of ["Premium: USD 120 per year", "Harbour Insurance Berhad (paid-up capital RM 100 million)", "Exclusions: claims above US$1,000 incurred in the USA are not covered.",
-    "Note: overseas bills are converted from (US$) at the claim date", "Tel: +65 6123 4567 | www.harbour.example | 1 Harbour Road, Singapore 018989"]) {
+    "Note: overseas bills above US$1,000 are converted at the claim date", "Tel: +65 6123 4567 | www.harbour.example | 1 Harbour Road, Singapore 018989"]) {
     const { figures } = run(`Ambulance\t500\n${line}`, [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], "TABLE OF BENEFITS (S$)");
     assert.equal(amountOf(figures.get("Ambulance")), 500, line);
   }
+});
+
+// ---------- Cross-row gate round 5: only closed shapes of a premium, capital, exclusion or conversion figure are not counted ----------
+const R5 = [
+  "Surgical fees: US$5,000", "Surgeon's fees US$5,000", "Surgical fees  US$5,000", "Hospital charges up to US$10,000", "Room & board charges USD 300 per day",
+  "Daily room charges - USD 300", "Overseas medical (incl. hospital charges) US$50,000", "Hospital charges reimbursed: USD 10,000", "Surgical\tfees: US$5,000",
+  "Contribution waiver benefit: US$1,200",
+  "Daily hospital cash @ US$100 per day", "Daily hospital cash\t@ US$100 per day", "OVERSEAS BENEFITS (USD) - submit claims to claims@harbour.com",
+  "Harbour Insurance, 1 Raffles Place, Singapore 049321  OVERSEAS BENEFITS (USD)", "OVERSEAS BENEFITS (USD)   Tel: 6123 4567",
+  "OVERSEAS BENEFITS (USD) see www.harbour.com/overseas", "OVERSEAS EMERGENCY & TELEMEDICINE BENEFITS (USD) - Tel hotline 24h",
+  "OVERSEAS BENEFITS (USD) - converted to S$ at the prevailing rate", "OVERSEAS BENEFITS (USD) - EXCHANGE RATE AS AT DATE OF LOSS",
+  "Currency conversion: overseas limits below are USD", "Benefit\tLimit (USD)\tConverted S$ equivalent", "CONVERSION PRIVILEGE AND OVERSEAS BENEFITS (USD)",
+  "Exceptions: OVERSEAS BENEFITS (USD)", "Exceptions to Section A apply. OVERSEAS (USD)", "We will not pay more than the limits below (USD)",
+  "This policy does not cover cosmetic surgery. OVERSEAS LIMITS (USD)", "Exclusions apply - OVERSEAS BENEFITS (USD)", "General Exclusions\tLimit (USD)",
+];
+test("R5: 28 shapes naming USD on a S$ page (fees and charges, @, addresses, conversion, exclusion) give a bare figure no amount", () => {
+  assert.equal(R5.length, 28);
+  const alreadyNone = ["Charges for overseas treatment are paid in USD", "Overseas treatment charges: USD", "Benefit\tLimit (USD)\tPremium (S$)", "Benefit\tPremium\tLimit (USD)",
+    "Benefit Limit / Premium (USD)", "Exclusions - see page 4. Overseas benefits below in USD", "Surgical fees\tup to US$5,000", "Limits shown in USD, converted at the exchange rate on the claim date"];
+  for (const line of [...R5, ...alreadyNone]) {
+    const { figures } = run(`Ambulance\tS$500\n${line}\nEmergency medical\t50,000`, [{ benefit: "Emergency medical", pays: "up_to", value: 50000, quote: "Emergency medical\t50,000" }], "TABLE OF BENEFITS (S$)");
+    assert.equal(amountOf(figures.get("Emergency medical")), null, line);
+  }
+});
+test("R5 control: a currency named without a figure in a conversion note counts (mixed, none)", () => {
+  const { figures } = run("Note: overseas bills are converted from (US$) at the claim date\nAmbulance\t500", [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], "TABLE OF BENEFITS (S$)");
+  assert.equal(amountOf(figures.get("Ambulance")), null);
 });
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }

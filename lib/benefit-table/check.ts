@@ -733,31 +733,33 @@ const NAMED_SIGN = /(?<![A-Za-z])(SG?\$|US\$|HK\$|AU?\$|NZ\$|RM)(?=[ \u00a0]?\d|
 const NAMED_WORD = /\b(singapore\s+dollars?|u\.?s\.?\s+dollars?|united\s+states\s+dollars?|hong\s+kong\s+dollars?|australian\s+dollars?|ringgit|pounds?\s+sterling|euros?)\b/gi;
 const SIGN_CODE: Record<string, string> = { "S$": "SGD", "SG$": "SGD", "US$": "USD", "HK$": "HKD", "A$": "AUD", "AU$": "AUD", "NZ$": "NZD", RM: "MYR", "£": "GBP", "€": "EUR" };
 const WORD_CODE = (w: string) => /^sing/i.test(w) ? "SGD" : /^(?:u\.?s|united)/i.test(w) ? "USD" : /^hong/i.test(w) ? "HKD" : /^austr/i.test(w) ? "AUD" : /^ring/i.test(w) ? "MYR" : /^pound/i.test(w) ? "GBP" : "EUR";
-/** A currency mention attached to a figure of a premium, contribution, fee or charge, levy or tax, or a company's capital,
- * in the same cell: "Premium: USD 120", "Policy fee: USD 25", "(paid-up capital RM 100 million)". */
-const NOT_BENEFIT_FIGURE_BEFORE = /\b(?:premiums?|contributions?|instal(?:l)?ments?|fees?|charges?|levy|tax(?:es)?|gst|vat|stamp\s+duty|capital)\b[^\d\t\n]{0,25}$/i;
-/** An address line: contact details or a postal code. */
-const ADDRESS_LINE = /\b(?:tel|telephone|fax|www\.|e-?mail|postal\s+code|p\.?\s?o\.?\s+box)\b|@|\b(?:singapore|malaysia|hong\s+kong)\s+\d{5,6}\b/i;
-/** Exchange or conversion wording, and exclusion text: a currency in it is not the currency benefits are paid in. */
-const CONVERSION = /\bconver(?:ted|sion|t)\b|\bexchange\s+rates?\b|\brates?\s+of\s+exchange\b/i;
-const EXCLUSION_LINE = /^\s*(?:general\s+)?(?:exclusions?|exceptions?)\b|^\s*we\s+(?:will|do|shall)\s+not\s+(?:pay|cover)\b|^\s*(?:this\s+(?:policy|plan)\s+)?does\s+not\s+cover\b/i;
-/** Wording that says what currency amounts or benefits are in or payable in: it always counts. */
-const PAYABLE_IN = /\b(?:amounts?|benefits?|limits?|figures?|sums?|payable|paid|payment)\b[^\n]{0,60}?\bin\s+(?:the\s+)?(?:(?:SGD|USD|MYR|HKD|AUD|NZD|GBP|EUR)\b|(?:S|SG|US|HK|A|AU|NZ)?\$|RM\b|£|€|(?:singapore|u\.?s\.?|united\s+states|hong\s+kong|australian)\s+dollars?|ringgit|pounds?|euros?)/i;
-/** Whether a currency mention at `index` on a line counts as one the page's benefits may be in (mention-level, cross-row
- * gate round 4): every mention counts, except one attached to a premium, fee, charge, tax or capital figure in its cell, one
- * on an address line, or one in conversion or exclusion wording that does not say amounts are payable in it. A row with its
- * own currency figure ("Hospital service charges\tUS$2,000") always counts, whatever its label words. */
+/** A cell that is only a premium-type label before its figure: premium, contribution, instalment, a policy, admin, service,
+ * processing or late fee or charge, levy, tax, GST, VAT or stamp duty ("Premium: USD 120", "Policy fee - USD 25"). Plain
+ * "fees" or "charges" ("Surgical fees", "Hospital charges") are benefits. */
+const PREMIUM_LABEL_CELL = /^[ \t(]*(?:(?:annual|yearly|monthly|quarterly|half[\s-]yearly|modal|total|basic|first|renewal|single|regular)\s+)*(?:premiums?|contributions?|instal(?:l)?ments?|(?:policy|admin(?:istration|istrative)?|service|processing|late)\s+(?:fees?|charges?)|levy|tax(?:es)?|gst|vat|stamp\s+duty)(?:\s+(?:payable|amount|due))?[ \t]*[:\-–]?[ \t]*$/i;
+/** "(paid-up | issued | share) capital (of)" right before the currency. */
+const CAPITAL_BEFORE = /\b(?:(?:paid[\s-]*up|issued|share)\s+)?capital\s+(?:of\s+)?$/i;
+/** A sentence of exclusion or conversion. */
+const EXCLUSION_OR_CONVERSION = /\b(?:exclusions?|excluded|exceptions?|not\s+covered|(?:will|do|shall)\s+not\s+(?:pay|cover)|does\s+not\s+cover|conver(?:ted|sion|t|ts)|exchange\s+rates?|rates?\s+of\s+exchange)\b/i;
+/** A currency printed with a figure right after it ("US$1,000", "USD 120", "RM 100"). */
+const WITH_FIGURE = /^(?:[A-Z]{3}|[A-Z]{0,3}\$|RM|[£€])[  ]?\d/;
+/** Whether a currency mention at `index` on a line counts as one the page's benefits may be in (cross-row gate round 5:
+ * an allow-list of shapes that do NOT count; everything else counts, so an unsure page is mixed and shows none):
+ * (a) a figure in a cell that is only a premium-type label before it; (b) a company's capital figure; (c) a figure in an
+ * exclusion or conversion sentence ("claims above US$1,000 incurred in the USA are not covered"). A currency named without
+ * a figure ("(USD)", "in USD", "are USD", "Limit (USD)") always counts, whatever else the line says. */
 function mentionCounts(line: string, index: number): boolean {
+  if (!WITH_FIGURE.test(line.slice(index))) return true;
   const before = line.slice(0, index), cell = before.slice(before.lastIndexOf("\t") + 1);
-  if (/\t[ \t]*$/.test(before) && /\p{L}{2}/u.test(before)) return true;
-  if (PAYABLE_IN.test(line)) return true;
-  if (NOT_BENEFIT_FIGURE_BEFORE.test(cell) && /^(?:[A-Z]{3}|[A-Z]{0,3}\$|RM|[£€])?[ \u00a0]?\d/.test(line.slice(index))) return false;
-  if (ADDRESS_LINE.test(line) || CONVERSION.test(line) || EXCLUSION_LINE.test(line)) return false;
-  return true;
+  if (PREMIUM_LABEL_CELL.test(cell)) return false;
+  if (CAPITAL_BEFORE.test(before)) return false;
+  const from = Math.max(before.lastIndexOf(". "), before.lastIndexOf("\t")) + 1, stop = line.slice(index).search(/\.(?:\s|$)|\t/);
+  const sentence = line.slice(from, stop < 0 ? line.length : index + stop);
+  return !EXCLUSION_OR_CONVERSION.test(sentence);
 }
 const pageCurrencyCache = new Map<string, { declared: string | null; mixed: boolean }>();
 /** The page's declared currency, and whether the page also names another one in a mention that counts (mentionCounts:
- * never one attached to a premium, fee or capital figure, on an address line, or in conversion or exclusion wording). On such a page a bare figure or a bare cap gets no currency, and so no amount: which currency it is in is never
+ * every mention but a premium-type, capital, or exclusion or conversion figure). On such a page a bare figure or a bare cap gets no currency, and so no amount: which currency it is in is never
  * inferred from a heading (cross-row gate round 2, R2-H3). Only figures printed with their own currency keep it. */
 export function pageCurrencyOf(page: string): { declared: string | null; mixed: boolean } {
   const hit = pageCurrencyCache.get(page);
