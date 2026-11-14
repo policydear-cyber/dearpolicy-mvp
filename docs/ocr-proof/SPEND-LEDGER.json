@@ -1,0 +1,33 @@
+{
+ "about": "Paid model usage for the OCR proof (DC's 50-document plan, step 2: AI reads the Baidu OCR text, checkers confirm). Synthetic documents only. Authorised: about US$1.00 for chat-side test spend (coordinator, 14 Nov 2026). One entry per run_id; never edit or remove an entry.",
+ "authorised_usd": 1.0,
+ "runs": [
+  {
+   "run_id": "ocr50-step2-doc00-p1-6",
+   "at": "2026-11-14",
+   "spent_usd": 0.39,
+   "source": "As reported by the coordinator; run made in thread 'Prove PaddleOCR reads 50 files completely' on branch claude/project-thread-lg8je3 (figure-check.ts, ocr50_00 pages 1-6, text layer). Not re-measured here.",
+   "run_cap_usd": null
+  },
+  {
+   "run_id": "key-check-20261114T0729Z",
+   "at": "2026-11-14T07:29:00Z",
+   "spent_usd": 0.0001,
+   "model": "claude-haiku-4-5",
+   "tokens": {"input": 9, "output": 4},
+   "note": "One tiny call to prove the new DEARPOLICY_ANTHROPIC_KEY works. Rounded up."
+  },
+  {
+   "run_id": "ocr50-step2-doc00-p17-20-20261114T0730Z",
+   "at": "2026-11-14T07:30:26Z",
+   "spent_usd": 0.227,
+   "run_cap_usd": 0.45,
+   "guard_cap_usd": 0.25,
+   "tested_code_sha": "08e5f86",
+   "model": "claude-sonnet-5-5 (reader 1, 2 calls)",
+   "tokens": {"input": 5727, "output": 20486},
+   "note": "figure-check.ts on Baidu parsed-pages.json of ocr50_00 pages 17-20. Guards made no calls: the worst case of their first batch was above the US$0.25 guard cap, so they stopped before spending."
+  }
+ ],
+ "total_spent_usd": 0.6171
+}
