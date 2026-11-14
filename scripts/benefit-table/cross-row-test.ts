@@ -310,7 +310,7 @@ test("R2-H3 (replaces H6): on a page that declares S$ and names another currency
   for (const [page, row] of [
     ["OVERSEAS (USD)\nEvacuation\t500\nLOCAL BENEFITS\nAmbulance\t500", "Ambulance\t500"],
     ["Overseas evacuation (USD)\t50,000\nAmbulance\t500", "Ambulance\t500"],
-    ["Note: overseas bills are converted from (US$) at the claim date\nAmbulance\t500", "Ambulance\t500"],
+    ["Overseas evacuation\tUS$50,000\nAmbulance\t500", "Ambulance\t500"],
   ]) {
     const r = run(page, [{ benefit: "Ambulance", value: 500, quote: row }], "TABLE OF BENEFITS (S$)");
     assert.equal(amountOf(r.figures.get("Ambulance")), null, page);
@@ -371,6 +371,35 @@ test("Hospital cash\\t100 per day under a single declared currency (S$) keeps S$
   const cap = "Physiotherapy\t80% of the Sum Insured, up to 1,000 per year";
   const c = run(cap, [{ benefit: "Physiotherapy", pays: "percent", value: 80, percentOf: "sum_insured", cap: 1000, capQuote: "up to 1,000 per year", quote: cap }], "TABLE OF BENEFITS (S$)");
   assert.equal(c.b("Physiotherapy")?.cap, 1000, "a bare per-year cap under (S$) is a cap, as on main");
+});
+
+// ---------- Cross-row gate round 3: only benefit rows, headings and column headers name a page's other currency ----------
+test("P-1: a premium, a company footer or exclusion text in another currency never wipes a S$ page's bare figures", () => {
+  const cases: [string, string][] = [
+    ["P1", "Premium: USD 120 per year\nAmbulance\t500"],
+    ["policy fee", "Policy fee: USD 25\nAmbulance\t500"],
+    ["P3", "Ambulance\t500\nHarbour Insurance Berhad (paid-up capital RM 100 million)"],
+    ["P5", "Ambulance\t500\nExclusions: treatment received in the USA, or bills in US$ above the usual charges."],
+    ["note", "Note: overseas bills are converted from (US$) at the claim date\nAmbulance\t500"],
+  ];
+  for (const [name, page] of cases) {
+    const r = run(page, [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], "TABLE OF BENEFITS (S$)");
+    assert.equal(amountOf(r.figures.get("Ambulance")), 500, name);
+    assert.equal(r.b("Ambulance")?.currency, "SGD", name);
+  }
+});
+test("P6: a bare cap on a S$ page with a USD premium line stays a S$ cap", () => {
+  const q = "Physiotherapy\t10% of Sum Insured, up to 500 per year";
+  const { b, figures } = run(`Premium: USD 120 per year\n${q}`, [{ benefit: "Physiotherapy", pays: "percent", value: 10, percentOf: "sum_insured", cap: 500, capQuote: "up to 500 per year", quote: q }], "TABLE OF BENEFITS (S$)");
+  assert.equal(b("Physiotherapy")?.cap, 500);
+  assert.equal(amountOf(figures.get("Physiotherapy")), 500);
+});
+test("P-1 control: a benefit heading in (USD), a column header in US$, or a signed US$ benefit row still make the page mixed", () => {
+  for (const page of ["OVERSEAS BENEFITS (USD)\nAmbulance\t500", "Benefit\tLimit (US$)\nAmbulance\t500", "Overseas evacuation\tUSD 50,000\nAmbulance\t500",
+    "Surgical fees\tUS$5,000\nAmbulance\t500"]) {
+    const r = run(page, [{ benefit: "Ambulance", value: 500, quote: "Ambulance\t500" }], "TABLE OF BENEFITS (S$)");
+    assert.equal(amountOf(r.figures.get("Ambulance")), null, page);
+  }
 });
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }

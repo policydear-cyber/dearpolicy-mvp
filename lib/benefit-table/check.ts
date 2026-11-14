@@ -733,17 +733,35 @@ const NAMED_SIGN = /(?<![A-Za-z])(SG?\$|US\$|HK\$|AU?\$|NZ\$|RM)(?=[ \u00a0]?\d|
 const NAMED_WORD = /\b(singapore\s+dollars?|u\.?s\.?\s+dollars?|united\s+states\s+dollars?|hong\s+kong\s+dollars?|australian\s+dollars?|ringgit|pounds?\s+sterling|euros?)\b/gi;
 const SIGN_CODE: Record<string, string> = { "S$": "SGD", "SG$": "SGD", "US$": "USD", "HK$": "HKD", "A$": "AUD", "AU$": "AUD", "NZ$": "NZD", RM: "MYR", "£": "GBP", "€": "EUR" };
 const WORD_CODE = (w: string) => /^sing/i.test(w) ? "SGD" : /^(?:u\.?s|united)/i.test(w) ? "USD" : /^hong/i.test(w) ? "HKD" : /^austr/i.test(w) ? "AUD" : /^ring/i.test(w) ? "MYR" : /^pound/i.test(w) ? "GBP" : "EUR";
+/** Lines whose currency is never the benefits': premiums, contributions, policy fees and charges (never "Surgical fees", a
+ * benefit), a company's name, capital or
+ * registration, an address, notes, and exclusion or general-condition text (cross-row gate round 3, P-1). */
+const NOT_BENEFIT_LINE = /\b(?:premiums?|contributions?|instal(?:l)?ments?|(?:policy|admin(?:istration|istrative)?|service|processing|late|reinstatement|cancellation|surrender|management|insurance)\s+(?:fees?|charges?)|levy|tax(?:es)?|gst|vat|stamp\s+duty|capital|berhad|bhd|sdn|pte|ltd|limited|inc|incorporated|plc|company|co\.|registration|registered|reg\.?\s*no|licen[cs]ed?|address|road|street|avenue|tower|building|floor|level|tel|telephone|fax|email|www|website|exclusions?|exclude[ds]?|general\s+conditions?|conditions?|notes?|remarks?|converted|conversion|exchange|rate\s+of\s+exchange)\b|^\s*[*†‡]/i;
+/** A line on which a currency named counts as the benefits' own (an allow-list, cross-row gate round 3, P-1): a heading or
+ * a column header (words only, short, no sentence: "OVERSEAS (USD)", "Benefit\tLimit (US$)"), or a benefit row (a label,
+ * then a figure). Never a line of NOT_BENEFIT_LINE's words. */
+function namesBenefitCurrency(line: string): boolean {
+  const t = line.trim();
+  if (!t || NOT_BENEFIT_LINE.test(t)) return false;
+  const words = t.replace(NAMED_SIGN, " ").replace(NAMED_WORD, " ");
+  const heading = !/\d/.test(words) && !/[.!?;]\s*$/.test(t) && t.split(/\s+/).length <= 12;
+  const row = /^[^\d]*\p{L}{2}[^\d]*\d/u.test(t);
+  return heading || row;
+}
 const pageCurrencyCache = new Map<string, { declared: string | null; mixed: boolean }>();
-/** The page's declared currency, and whether the page also names another one anywhere (a heading, a label, a note or a signed
- * figure). On such a page a bare figure or a bare cap gets no currency, and so no amount: which currency it is in is never
+/** The page's declared currency, and whether the page also names another one on a benefit row, a heading or a column
+ * header (namesBenefitCurrency; never a premium, fee, company, address, note or exclusion line). On such a page a bare figure or a bare cap gets no currency, and so no amount: which currency it is in is never
  * inferred from a heading (cross-row gate round 2, R2-H3). Only figures printed with their own currency keep it. */
 export function pageCurrencyOf(page: string): { declared: string | null; mixed: boolean } {
   const hit = pageCurrencyCache.get(page);
   if (hit) return hit;
   const declared = declaredCurrency(page);
   const named = new Set<string>();
-  for (const m of page.matchAll(NAMED_SIGN)) named.add(m[2] ?? SIGN_CODE[m[1] ?? m[3]] ?? "");
-  for (const m of page.matchAll(NAMED_WORD)) named.add(WORD_CODE(m[1]));
+  for (const line of page.split("\n")) {
+    if (!namesBenefitCurrency(line)) continue;
+    for (const m of line.matchAll(NAMED_SIGN)) named.add(m[2] ?? SIGN_CODE[m[1] ?? m[3]] ?? "");
+    for (const m of line.matchAll(NAMED_WORD)) named.add(WORD_CODE(m[1]));
+  }
   named.delete("");
   const out = { declared, mixed: !!declared && [...named].some((c) => c !== declared) };
   if (pageCurrencyCache.size > 200) pageCurrencyCache.clear();
