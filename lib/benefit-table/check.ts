@@ -722,53 +722,43 @@ export function limitKind(b: { benefit: string; section?: string | null; quote?:
 /** The currency of the row's own figure ("Up to S$8,000, capped at US$200 per day": S$ for 8,000), never another figure's on
  * the line (TE pr157 F1, F3). A figure printed without one (a bare "$") or not found takes the page's declared currency; a figure
  * printed in more than one way ("S$8,000 (US$8,000 if overseas)", or "$8,000" beside "S$8,000") has none. */
-function figureCurrency(excerpt: string, value: number, page: string, at: number | null = null): string | null {
+function figureCurrency(excerpt: string, value: number, page: string): string | null {
   const text = plainText(excerpt);
   const codes = new Set(anyMoneyFigures(text).filter((f) => Math.abs(f.value - value) < 0.005).map((f) => statedCurrencyCode(text.slice(f.index, f.index + f.length))));
   if (codes.size > 1) return null;
-  return [...codes][0] ?? (at == null ? declaredCurrency(page) : currencyDeclaredAt(page, at));
+  return [...codes][0] ?? bareCurrencyOf(page);
 }
-/** A section heading or column heading that names a currency in brackets ("OVERSEAS (USD)", "Limit (S$)"). */
-const HEADING_CURRENCY = /\(\s*(S\$|SGD|US\$|USD|RM|MYR|HK\$|HKD|A\$|AUD|£|GBP|€|EUR)\s*\)/gi;
-const headingCode = (sign: string) => statedCurrencyCode(sign) ?? (/^rm$/i.test(sign) ? "MYR" : null);
-/** Each page's headings that name a currency in brackets: where each line starts, and the one code it names (null for two). */
-const headingCache = new Map<string, { at: number; code: string | null }[]>();
-function headingsOf(page: string): { at: number; code: string | null }[] {
-  const hit = headingCache.get(page);
+/** Currencies a page names: signs and codes ("S$", "US$", "RM", "£", "USD") and currency names ("Singapore dollars"). */
+const NAMED_SIGN = /(?<![A-Za-z])(SG?\$|US\$|HK\$|AU?\$|NZ\$|RM)(?=[ \u00a0]?\d|[ \u00a0]*\))|(?<![A-Za-z])(SGD|USD|MYR|HKD|AUD|NZD|GBP|EUR|IDR|THB|PHP|CNY|JPY|INR)(?![A-Za-z])|([£€])/g;
+const NAMED_WORD = /\b(singapore\s+dollars?|u\.?s\.?\s+dollars?|united\s+states\s+dollars?|hong\s+kong\s+dollars?|australian\s+dollars?|ringgit|pounds?\s+sterling|euros?)\b/gi;
+const SIGN_CODE: Record<string, string> = { "S$": "SGD", "SG$": "SGD", "US$": "USD", "HK$": "HKD", "A$": "AUD", "AU$": "AUD", "NZ$": "NZD", RM: "MYR", "£": "GBP", "€": "EUR" };
+const WORD_CODE = (w: string) => /^sing/i.test(w) ? "SGD" : /^(?:u\.?s|united)/i.test(w) ? "USD" : /^hong/i.test(w) ? "HKD" : /^austr/i.test(w) ? "AUD" : /^ring/i.test(w) ? "MYR" : /^pound/i.test(w) ? "GBP" : "EUR";
+const pageCurrencyCache = new Map<string, { declared: string | null; mixed: boolean }>();
+/** The page's declared currency, and whether the page also names another one anywhere (a heading, a label, a note or a signed
+ * figure). On such a page a bare figure or a bare cap gets no currency, and so no amount: which currency it is in is never
+ * inferred from a heading (cross-row gate round 2, R2-H3). Only figures printed with their own currency keep it. */
+export function pageCurrencyOf(page: string): { declared: string | null; mixed: boolean } {
+  const hit = pageCurrencyCache.get(page);
   if (hit) return hit;
-  const out: { at: number; code: string | null }[] = [];
-  if (page.includes("(")) for (let at = 0; at <= page.length;) {
-    const e = page.indexOf("\n", at), to = e < 0 ? page.length : e, line = page.slice(at, to);
-    if (line.includes("(")) { const m = [...line.matchAll(HEADING_CURRENCY)]; if (m.length) { const codes = new Set(m.map((x) => headingCode(x[1]))); out.push({ at, code: codes.size === 1 ? [...codes][0] : null }); } }
-    at = to + 1;
-  }
-  if (headingCache.size > 200) headingCache.clear();
-  headingCache.set(page, out);
+  const declared = declaredCurrency(page);
+  const named = new Set<string>();
+  for (const m of page.matchAll(NAMED_SIGN)) named.add(m[2] ?? SIGN_CODE[m[1] ?? m[3]] ?? "");
+  for (const m of page.matchAll(NAMED_WORD)) named.add(WORD_CODE(m[1]));
+  named.delete("");
+  const out = { declared, mixed: !!declared && [...named].some((c) => c !== declared) };
+  if (pageCurrencyCache.size > 200) pageCurrencyCache.clear();
+  pageCurrencyCache.set(page, out);
   return out;
 }
-/** The currency declared for a row printed at `at` on its page: the nearest heading above it that names one in brackets
- * (a section's "OVERSEAS (USD)" over the page's "(S$)": cross-row gate H6); with none above, the page's declaration, unless
- * the page's headings name two or more currencies (which one is the row's is not told: none). */
-export function currencyDeclaredAt(page: string, at: number): string | null {
-  const hs = headingsOf(page), above = hs.filter((h) => h.at < at);
-  if (above.length) return above[above.length - 1].code;
-  return new Set(hs.map((h) => h.code)).size > 1 ? null : declaredCurrency(page);
-}
-/** The currency a heading above the row names in brackets, when one does (not the page's own declaration). */
-function headingCurrencyAbove(page: string, at: number): string | null {
-  const above = headingsOf(page).filter((h) => h.at < at);
-  return above.length ? above[above.length - 1].code : null;
-}
-function capFigureCurrency(excerpt: string, value: number, page: string, at: number | null = null): string | null {
+/** A bare figure's currency on its page: the page's declared one, or none when the page names another too. */
+const bareCurrencyOf = (page: string) => { const c = pageCurrencyOf(page); return c.mixed ? null : c.declared; };
+function capFigureCurrency(excerpt: string, value: number, page: string): string | null {
   const text = plainText(excerpt);
   const figures = anyMoneyFigures(text).filter((f) => Math.abs(f.value - value) < 0.005);
   const codes = new Set(figures.map((f) => statedCurrencyCode(text.slice(f.index, f.index + f.length))).filter((c): c is string => !!c));
   if (codes.size === 1) return [...codes][0];
   if (codes.size > 1) return null;
-  if (figures.some((f) => /\$/.test(text.slice(f.index, f.index + f.length)))) return at == null ? declaredCurrency(page) : currencyDeclaredAt(page, at);
-  // A bare figure under a heading that names a currency is in that currency (cross-row gate H6: "OVERSEAS (USD)" on a page in
-  // S$), so a cap in another currency than the sum it limits is never compared with it.
-  return at == null ? null : headingCurrencyAbove(page, at);
+  return figures.some((f) => /\$/.test(text.slice(f.index, f.index + f.length))) ? bareCurrencyOf(page) : null;
 }
 /** What a percentage is of may be the sum insured only when the row says so, read with ALLOW-lists in any wording (Critic
  * audit of 5c1075d7, A1 and B1: a list of other bases leaks, "10% Basic Premium", "5% Initial Investment Amount"). After
@@ -1563,6 +1553,16 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     const p = placed.get(src);
     return p ? ownRowText(pageText(src.page), p.start, p.end, benefit, column) : { rows: 1, text: src.excerpt };
   };
+  // A cap's words in their cell, with the page words printed right after them: a cap quote that stops at its number ("up to a maximum of
+  // 2") is read with what follows it on the page ("procedures per year", also on the next line when that line goes on in
+  // lower case: cross-row gate round 2, P2).
+  const withWordsAfter = (src: Source, words: string) => {
+    const p = placed.get(src);
+    if (!p) return words;
+    const text = pageText(src.page), cellStart = Math.max(text.lastIndexOf("\t", p.start - 1), text.lastIndexOf("\n", p.start - 1)) + 1;
+    const after = text.slice(p.end, p.end + 60).replace(/[ \t]*\n[ \t]*(?=[a-z])/g, " ");
+    return plainText(`${text.slice(cellStart, p.start)}${words.replace(/\s+/g, " ")}${after}`).replace(/[ \t]+/g, " ").trim();
+  };
   const printedOnOwnRow = (own: { rows: number; text: string | null }, value: number) => own.rows <= 1 || (own.text != null && printsNumber(cellsApart(own.text), value));
   const segmentOf = (src: Source) => { const p = placed.get(src); return p ? rowSegment(pageText(src.page), p.start, p.end) : { text: src.excerpt, near: "", otherPercent: false }; };
 
@@ -1751,6 +1751,12 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     if (value != null && !printedOnOwnRow(ownRow, value)) {
       out.dropped.push({ what: label, why: `figure ${value} is printed on another row's line in the quote, not this row's; kept the row without it` }); pays = "words"; value = null;
     }
+    // A figure printed with no currency of its own, on a page that declares one currency and names another, is in neither
+    // for sure: the row stays with no figure (cross-row gate round 2, R2-H3). A figure printed with its currency keeps it.
+    if (value != null && pays !== "percent" && pageCurrencyOf(pageText(source.page)).mixed
+      && !anyMoneyFigures(plainText(ownRow.text ?? source.excerpt)).some((f) => Math.abs(f.value - value!) < 0.005 && !!statedCurrencyCode(plainText(ownRow.text ?? source.excerpt).slice(f.index, f.index + f.length)))) {
+      out.dropped.push({ what: label, why: `figure ${value} is printed with no currency on a page that names more than one; kept the row without it` }); pays = "words"; value = null;
+    }
     // A number printed only before a count noun ("up to a maximum of 2 procedures", "10 sessions") is a count, never an
     // amount (wrapped-quote gate P2).
     if (value != null && pays !== "percent" && printedOnlyAsCount(ownRow.text ?? source.excerpt, value)) {
@@ -1801,7 +1807,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     }
     const currency = pays === "percent"
       ? (baseSource ? statedCurrencyCode(baseSource.excerpt) ?? declaredCurrency(pageText(source.page)) : null)
-      : value == null ? null : figureCurrency(source.excerpt, value, pageText(source.page), placed.get(source)?.start ?? null);
+      : value == null ? null : figureCurrency(source.excerpt, value, pageText(source.page));
     const conditions: string[] = [], droppedConditions: string[] = [];
     for (const cond of Array.isArray(b.conditions) ? b.conditions : []) {
       const words = str(cond);
@@ -1834,7 +1840,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
         && printsNumber(capWords, claimed) && CAP_WORDS.test(capWords);
       const s = claimed == null || claimed <= 0 ? null : ownCap ? source : find(capWords, source.page);
       const tied = s && claimed != null && s.page === source.page && printedIn(s, claimed) && CAP_WORDS.test(s.excerpt) && flat(row).includes(flat(s.excerpt))
-        && moneyCapPrinted(ownCap ? capWords! : s.excerpt, claimed, currencyDeclaredAt(pageText(s.page), placed.get(s)?.start ?? 0)) && printedOnOwnRow(ownRow, claimed);
+        && moneyCapPrinted(ownCap ? capWords! : withWordsAfter(s, s.excerpt), claimed, pageCurrencyOf(pageText(s.page)).declared, pageCurrencyOf(pageText(s.page)).mixed) && printedOnOwnRow(ownRow, claimed);
       // Another money figure in the row besides its cap ("up to S$50,000 or S$500 per day, whichever is lower") is a second
       // limit too (Critic R102-1).
       const otherMoney = moneyIn(row).some((m) => m.value !== claimed);
@@ -1848,13 +1854,13 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       } else if (tied) {
         cap = claimed; capSource = s;
       } else if (claimed == null && capInRow(row) != null && !otherPercent && !otherMoneyThan(row, capInRow(row)!) && !NEAR_CAP.test(near)
-        && moneyCapPrinted(plainText(row).replace(/\s+/g, " "), capInRow(row)!, currencyDeclaredAt(pageText(source.page), placed.get(source)?.start ?? 0)) && printedOnOwnRow(ownRow, capInRow(row)!)
+        && moneyCapPrinted(withWordsAfter(source, plainText(row)), capInRow(row)!, pageCurrencyOf(pageText(source.page)).declared, pageCurrencyOf(pageText(source.page)).mixed) && printedOnOwnRow(ownRow, capInRow(row)!)
         && !(/\bwhichever\b/i.test(`${row}\n${near}`) && [...`${row.replace(ITEM_MARKER, "")}\n${near}`.matchAll(/\d[\d,]*(?:\.\d+)?/g)].some((m) => ![capInRow(row), value].includes(Number(m[0].replace(/,/g, "")))))) {
         // No cap read, but the row's own words print exactly one money figure right after a cap word ("100% Sum Insured (up
         // to S$400,000)", "subject to a maximum amount of S$25,000"): that is its cap (overnight run 23 Oct, N016, N083).
         cap = capInRow(row); capSource = source;
       } else {
-        if (claimed != null) out.dropped.push({ what: label, why: s && printedIn(s, claimed) && !moneyCapPrinted(s.excerpt, claimed, currencyDeclaredAt(pageText(s.page), placed.get(s)?.start ?? 0))
+        if (claimed != null) out.dropped.push({ what: label, why: s && printedIn(s, claimed) && !moneyCapPrinted(withWordsAfter(s, s.excerpt), claimed, pageCurrencyOf(pageText(s.page)).declared, pageCurrencyOf(pageText(s.page)).mixed)
           ? `cap ${claimed} is not printed as money (a count, or a bare figure on a page that declares no currency); no amount is worked out for it`
           : `cap ${claimed} not printed in the row; no amount is worked out for it` });
         // "Limited to 25%" names the share only when the row prints no money beside it ("limited to 25% of the Sum Insured
@@ -1876,7 +1882,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       out.dropped.push({ what: label, why: `${value}% is not printed as a share of the sum insured; no amount is worked out for it` });
       percentOf = null;
     }
-    const capCurrency = cap != null && capSource ? capFigureCurrency(capSource.excerpt, cap, pageText(capSource.page), placed.get(capSource)?.start ?? null) : null;
+    const capCurrency = cap != null && capSource ? capFigureCurrency(capSource.excerpt, cap, pageText(capSource.page)) : null;
     // Day counts are figures too: one the quote does not print is not kept.
     const day = (v: unknown) => { const n = int(v); return n != null && printedIn(source, n) && printedOnOwnRow(ownRow, n) ? n : null; };
     // "Payable after the 10th day" is first paid on day 11: the same day, worded from the day before (live run 23 Oct, B3).

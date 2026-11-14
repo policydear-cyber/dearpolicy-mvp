@@ -11,6 +11,7 @@
  * money (wrapped-quote gate, P2: "up to S$2"; cross-row gate H5). A figure printed with a currency is always money
  * ("S$150\tDays 1-30", cross-row gate M1). Allow-lists throughout. No model, database or network. */
 import { ANY_MONEY_FIGURE, anyMoneyFigures } from "@/lib/format/currency";
+import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 
 /** A list item's own marker: "(a)", "b)", "ii.", "3)", "(iv)", or a bullet. A line that starts with one is its own item. */
 const ITEM_START = /^[ \t]*(?:\(?(?:[a-z]|[ivx]{1,5}|\d{1,3})[.)](?=\s|$)|\((?:[a-z]|[ivx]{1,5}|\d{1,3})\)|[•●○◦▪▫■□‣⁃∙·*–—-](?=\s))/i;
@@ -46,12 +47,20 @@ function likeness(a: string[], b: string[]): number {
 
 /** What may follow a bare number that is money: nothing, punctuation, a bracket or a slash, or a word from this list.
  * Anything else ("procedures", "fillings", "check-ups", "x") makes it no money figure. */
-const MONEY_AFTER = /^(?:[ \t]*$|[ \t]*[,.;:)\]\n\t(\/]|[ \t]*[-–](?![ \t]*\d)|[ \t]+(?:per|each|every|a(?:n)?[ \t]+(?:day|night|week|month|year)|for|in[ \t]+respect[ \t]+of|in[ \t]+total|in[ \t]+aggregate|or|and|whichever|up[ \t]+to|subject|max(?:imum)?|only|payable|paid|lump|overall|on|upon|after|from|if|when|while|under|less|plus|limit|dollars?|ringgit|pounds?|euros?|sgd|usd|myr|hkd|aud|gbp|eur|rm)\b)/i;
+const MONEY_AFTER = /^(?:[ \t]*$|[ \t]*[,.;:)\]\n\t\/]|[ \t]*\([ \t]*(?:[A-Z]{0,3}\$|RM|£|€|SGD|USD|MYR|HKD|AUD|NZD|GBP|EUR)|[ \t]*[-–](?![ \t]*\d)|[ \t]+(?:per|each|every|a(?:n)?[ \t]+(?:day|night|week|month|year)|for|in[ \t]+respect[ \t]+of|in[ \t]+total|in[ \t]+aggregate|or|whichever|up[ \t]+to|subject|max(?:imum)?|only|payable|paid|lump|overall|upon|after|from|if|when|while|under|less|plus|limit|dollars?|ringgit|pounds?|euros?|sgd|usd|myr|hkd|aud|gbp|eur|rm)\b)/i;
+/** A bare number followed by a period ("per year", "each visit", "a day") is money only when its cell also names money:
+ * a currency sign or code, or a money word ("10 per year" alone may be a count: cross-row gate round 2). */
+const PERIODIC_AFTER = /^[ \t]+(?:per|each|every|a|an)\b/i;
+const CELL_MONEY = /(?:[A-Z]{0,3}\$|£|€|¥|₹|₱|₩|฿|₫|\b[A-Z]{3}(?=[ \u00a0]?\d)|\b(?:SGD|USD|MYR|RM|HKD|AUD|NZD|GBP|EUR|PHP|IDR|THB|INR|CNY|JPY|KRW|TWD|VND|CHF|CAD|Rp)\b|\b(?:dollars?|ringgit|pounds?|euros?|amounts?|sums?|cash|allowance|reimburse\w*|payable|paid|pays?|fees?|charges?|costs?|expenses?|compensation)\b)/i;
 const BARE_NUMBER = /(?<![\d.,\/\p{L}$£€])(?<!\d[ \t]?[-–][ \t]?)\d[\d,]*(?:\.\d+)?(?![\d%])/gu;
+/** The cell (between tabs or line ends) a position is in. */
+const cellAt = (t: string, i: number) => { const a = Math.max(t.lastIndexOf("\t", i - 1), t.lastIndexOf("\n", i - 1)) + 1; const e = t.slice(i).search(/[\t\n]/); return t.slice(a, e < 0 ? t.length : i + e); };
 /** Bare numbers in the text that read as money (followed by an allowed word), with where each starts. */
 function bareMoney(t: string): { value: number; index: number }[] {
-  return [...t.matchAll(BARE_NUMBER)].filter((m) => MONEY_AFTER.test(t.slice(m.index! + m[0].length)))
-    .map((m) => ({ value: Number(m[0].replace(/,/g, "")), index: m.index! }));
+  return [...t.matchAll(BARE_NUMBER)].filter((m) => {
+    const after = t.slice(m.index! + m[0].length);
+    return MONEY_AFTER.test(after) && (!PERIODIC_AFTER.test(after) || CELL_MONEY.test(cellAt(t, m.index!)));
+  }).map((m) => ({ value: Number(m[0].replace(/,/g, "")), index: m.index! }));
 }
 /** A figure in a line or cell: a money figure (any currency), a percentage, or a bare number that reads as money. */
 const MONEY_RE = new RegExp(ANY_MONEY_FIGURE, "u");
@@ -136,7 +145,7 @@ export function ownRowText(pageText: string, start: number, end: number, benefit
       if (line.marked) starts = true;
       else if (line.figure && hasWords(line.label)) {
         starts = !(capLine || TIER_LABEL.test(line.label) || RUNS_INTO(prev) || cellsRunOn(prev, line.text)
-          || (!g.ownFigure && (lower || (within(words, want) && !within(want, labelWords(g.label))))));
+          || (!g.ownFigure && (lower || /^(?:and|&|or|with|plus)\b/i.test(line.label) || (within(words, want) && !within(want, labelWords(g.label))))));
       } else if (line.figure) starts = g.ownFigure && !RUNS_INTO(prev) && !DESCRIBED_FIGURE.test(line.text.split("\t")[0]);
       else if (CAP_LABEL.test(line.label) || TIER_LABEL.test(line.label) || lower || RUNS_INTO(prev)) starts = false;
       else if (g.ownFigure) starts = !!next && !next.marked && next.figure && !hasWords(next.label);
@@ -171,8 +180,8 @@ export function ownRowText(pageText: string, start: number, end: number, benefit
   if (best <= 0 || top.length !== 1) return { rows: groups.length, text: null };
   const own = top[0];
   if (own.figure) return { rows: groups.length, text: own.pieces.join("\t") };
-  // A figure alone, extracted above its label: only as the quote's first line, just above the label line, with the page line
-  // above it not a label lacking a figure, and the page line below the label not a figure alone.
+  // A figure alone, extracted above its label: only as the quote's first line, just above the label line, and only in a
+  // block whose figures all sit above their labels.
   const head = groups[0];
   if (groups.indexOf(own) !== 1 || !head.figure || hasWords(head.label) || head.first !== head.last || own.first !== 1) return { rows: groups.length, text: null };
   const pageLine = (pos: number, dir: -1 | 1): Line | null => {
@@ -182,9 +191,16 @@ export function ownRowText(pageText: string, start: number, end: number, benefit
       else { const e = pageText.indexOf("\n", at); if (e < 0) return null; const e2 = pageText.indexOf("\n", e + 1); const t = pageText.slice(e + 1, e2 < 0 ? pageText.length : e2); at = e + 1; if (t.trim()) return lineOf(t, e + 1); }
     }
   };
-  const above = pageLine(lines[head.first].from, -1), below = pageLine(lines[own.last].from, 1);
-  if (above && !above.figure && (hasWords(above.label) || above.marked)) return { rows: groups.length, text: null };
-  if (below && below.figure && !hasWords(below.label) && !below.marked) return { rows: groups.length, text: null };
+  // Which way the block's figures sit, read from the whole run of figure-alone and label lines around the row (items marked
+  // as the row's is): figures above their labels only when the run goes figure, label, figure, label ... and ends on a
+  // label. Below, or mixed, gives none (cross-row gate round 2, R2-H1).
+  const labelLine = lines[own.first];
+  const isF = (l: Line) => l.figure && !hasWords(l.label) && !l.marked;
+  const isL = (l: Line) => !l.figure && (hasWords(l.label) || l.marked) && l.marked === labelLine.marked;
+  const run: ("F" | "L")[] = ["L"];
+  for (let p = pageLine(labelLine.from, -1), n = 0; p && (isF(p) || isL(p)) && n < 200; p = pageLine(p.from, -1), n++) run.unshift(isF(p) ? "F" : "L");
+  for (let p = pageLine(lines[own.last].from, 1), n = 0; p && (isF(p) || isL(p)) && n < 200; p = pageLine(p.from, 1), n++) run.push(isF(p) ? "F" : "L");
+  if (run.length % 2 || run.some((x, i) => x !== (i % 2 ? "L" : "F"))) return { rows: groups.length, text: null };
   return { rows: groups.length, text: [...head.pieces, ...own.pieces].join("\t") };
 }
 
@@ -197,11 +213,13 @@ export function printedOnlyAsCount(text: string, value: number): boolean {
   return hits.length > 0 && !bareMoney(t).some((b) => Math.abs(b.value - value) < 0.005);
 }
 
-/** A cap figure in the cap's own words that is money: a money figure (a code or a sign; a bare "$" too, whose currency it
- * never sets: check.ts capFigureCurrency), or a bare number that reads as money (MONEY_AFTER) where the row's currency is
- * declared ("Limit (S$)": "up to 500 per year"). */
-export function moneyCapPrinted(text: string, value: number, declared: string | null): boolean {
+/** A cap figure in the cap's own words (and the page words right after them) that is money: a figure with a currency code
+ * or sign; a bare "$" figure, whose currency it never sets (check.ts capFigureCurrency), unless the page names more than one
+ * currency; or a bare number that reads as money (MONEY_AFTER) where the page declares one currency and names no other. */
+export function moneyCapPrinted(text: string, value: number, declared: string | null, mixed = false): boolean {
   const t = text.normalize("NFKC");
-  if (anyMoneyFigures(t).some((f) => Math.abs(f.value - value) < 0.005)) return true;
-  return !!declared && bareMoney(t).some((b) => Math.abs(b.value - value) < 0.005);
+  const money = anyMoneyFigures(t).filter((f) => Math.abs(f.value - value) < 0.005);
+  if (money.some((f) => statedCurrencyCode(t.slice(f.index, f.index + f.length)))) return true;
+  if (money.length) return !mixed;
+  return !!declared && !mixed && bareMoney(t).some((b) => Math.abs(b.value - value) < 0.005);
 }

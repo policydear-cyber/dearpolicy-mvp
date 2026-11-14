@@ -299,16 +299,26 @@ test("H5: a bare number followed by a word off the allow-list is no money (filli
   assert.equal(c.b("Fracture")?.cap, null);
   assert.notEqual(amountOf(c.figures.get("Fracture")), 3);
 });
-test("H6: a section heading's currency overrides the page's for the rows under it", () => {
+test("R2-H3 (replaces H6): on a page that declares S$ and names another currency, bare figures and bare caps get none", () => {
   const q = "Physiotherapy\t10% of Sum Insured, up to 500 per trip";
   const { b, figures } = run(`OVERSEAS (USD)\n${q}\nOverseas ambulance\tup to 800 per trip`, [
     { benefit: "Physiotherapy", pays: "percent", value: 10, percentOf: "sum_insured", cap: 500, capQuote: "up to 500 per trip", quote: q },
     { benefit: "Overseas ambulance", pays: "up_to", value: 800, quote: "Overseas ambulance\tup to 800 per trip" }], "TABLE OF BENEFITS (S$)");
-  assert.notEqual(amountOf(figures.get("Physiotherapy")), 500, "never a S$500 cap");
-  assert.equal(b("Physiotherapy")?.capCurrency, "USD", "the cap is read in the section's currency");
-  assert.equal(b("Overseas ambulance")?.currency, "USD");
+  assert.equal(b("Physiotherapy")?.cap, null);
+  assert.equal(amountOf(figures.get("Physiotherapy")), null, "never a S$500 or US$500 cap");
+  assert.equal(amountOf(figures.get("Overseas ambulance")), null);
+  for (const [page, row] of [
+    ["OVERSEAS (USD)\nEvacuation\t500\nLOCAL BENEFITS\nAmbulance\t500", "Ambulance\t500"],
+    ["Overseas evacuation (USD)\t50,000\nAmbulance\t500", "Ambulance\t500"],
+    ["Note: overseas bills are converted from (US$) at the claim date\nAmbulance\t500", "Ambulance\t500"],
+  ]) {
+    const r = run(page, [{ benefit: "Ambulance", value: 500, quote: row }], "TABLE OF BENEFITS (S$)");
+    assert.equal(amountOf(r.figures.get("Ambulance")), null, page);
+  }
+  const signed = run("OVERSEAS (USD)\nEvacuation\tUS$500\nLOCAL BENEFITS\nAmbulance\tS$500", [{ benefit: "Ambulance", value: 500, quote: "Ambulance\tS$500" }], "TABLE OF BENEFITS (S$)");
+  assert.equal(amountOf(signed.figures.get("Ambulance")), 500, "a figure printed with its currency keeps it");
   const home = run(q, [{ benefit: "Physiotherapy", pays: "percent", value: 10, percentOf: "sum_insured", cap: 500, capQuote: "up to 500 per trip", quote: q }], "TABLE OF BENEFITS (S$)");
-  assert.equal(amountOf(home.figures.get("Physiotherapy")), 500, "control: under the page's own (S$) it is S$500");
+  assert.equal(amountOf(home.figures.get("Physiotherapy")), 500, "control: a page in S$ only, the bare cap is S$500");
 });
 test("control: a two-column row whose cells wrap, quoted in page order, keeps its cap on the wrapped line", () => {
   const q = "Angioplasty and other invasive treatment for\t10% of the Sum Covered, up to a maximum of\ncoronary artery\tS$15,000";
@@ -316,6 +326,41 @@ test("control: a two-column row whose cells wrap, quoted in page order, keeps it
     cap: 15000, capQuote: "up to a maximum of\ncoronary artery\tS$15,000", quote: q }]);
   assert.equal(b("Angioplasty and other invasive treatment for coronary artery")?.cap, 15000);
   assert.equal(amountOf(figures.get("Angioplasty and other invasive treatment for coronary artery")), 15000);
+});
+
+// ---------- Cross-row gate round 2 ----------
+test("R2-H1: in a block whose figures all sit above their labels, each item keeps its own figure", () => {
+  const page = "70%\n(a) Left Hand\n60%\n(b) Right Hand";
+  const { b } = run(page, [
+    { benefit: "Left Hand", pays: "percent", value: 70, percentOf: "sum_insured", quote: "70%\n(a) Left Hand" },
+    { benefit: "Right Hand", pays: "percent", value: 60, percentOf: "sum_insured", quote: "60%\n(b) Right Hand" }]);
+  assert.equal(b("Left Hand")?.value, 70);
+  assert.equal(b("Right Hand")?.value, 60);
+});
+test("R2-H1: a block that mixes figures above and below gives none", () => {
+  const { b } = run("70%\n(a) Left Hand\n(b) Right Hand\n60%", [{ benefit: "Left Hand", pays: "percent", value: 70, percentOf: "sum_insured", quote: "70%\n(a) Left Hand" }]);
+  assert.notEqual(b("Left Hand")?.value, 70);
+});
+test("R2-H2: a wrapped label line that starts with And carries the figure of the row above", () => {
+  const { figures } = run("Accidental Death\nAnd Dismemberment\tS$100,000", [{ benefit: "Accidental death", value: 100000, quote: "Accidental Death\nAnd Dismemberment\tS$100,000" }]);
+  assert.equal(amountOf(figures.get("Accidental death")), 100000);
+});
+test("P2: a cap quote that stops at its number is read with the page words after it", () => {
+  for (const sep of [" ", "\n"]) {
+    const q = `Angioplasty\t10% of Sum Insured, up to a maximum of 2${sep}procedures per year`;
+    const { b, figures } = run(q, [{ benefit: "Angioplasty", pays: "percent", value: 10, percentOf: "sum_insured", cap: 2, capQuote: "up to a maximum of 2", quote: q }], "TABLE OF BENEFITS (S$)");
+    assert.equal(b("Angioplasty")?.cap, null, JSON.stringify(sep));
+    assert.notEqual(amountOf(figures.get("Angioplasty")), 2);
+  }
+});
+test("allow-list: (two) visits, on any one day, and no more than, a bare per year are no money", () => {
+  for (const words of ["up to 2 (two) visits", "up to 3 on any one day", "up to 6 and no more than one per month", "up to 10 per year"]) {
+    const value = Number(/\d+/.exec(words)![0]);
+    const { figures } = run(`Physiotherapy\t${words}`, [{ benefit: "Physiotherapy", pays: "up_to", value, quote: `Physiotherapy\t${words}` }], "TABLE OF BENEFITS (S$)");
+    assert.equal(amountOf(figures.get("Physiotherapy")), null, words);
+  }
+  const { figures } = run("Physiotherapy\tup to 500 per year, payable", [{ benefit: "Physiotherapy", pays: "up_to", value: 500, quote: "Physiotherapy\tup to 500 per year, payable" }], "TABLE OF BENEFITS (S$)");
+  assert.equal(amountOf(figures.get("Physiotherapy")), 500, "control: a money word in the cell");
 });
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
