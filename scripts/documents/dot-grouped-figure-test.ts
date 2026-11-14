@@ -103,18 +103,27 @@ async function main() {
     assert.equal(moneyPrinted("Premium S$120 per year", 120), true);
   });
 
-  // The benefit-table figure reader reads none of these as a two-decimal amount (TE #478 F1).
-  test("B1 numbersIn: a dot and three digits beside a currency prints nothing; ordinary figures and rates read", async () => {
-    const { numbersIn, printsNumber } = await import("@/lib/benefit-table/check");
-    for (const t of ["Sum Assured S$935.542", "SGD 935.542", "RM935.542", "935.542 SGD"]) {
-      assert.deepEqual(numbersIn(t), [], t); assert.equal(printsNumber(t, 935.54), false, t);
-    }
-    assert.deepEqual(numbersIn("S$935.54"), [935.54]);
-    assert.deepEqual(numbersIn("KWD 1.500"), [1.5]);
-    assert.deepEqual(numbersIn("Rp 250.000"), [250000]);
-    assert.deepEqual(numbersIn("S$1.372.820"), [1372820]);
-    assert.deepEqual(numbersIn("rate 1.375"), [1.375]);
-    assert.deepEqual(numbersIn("factor 0.125"), [0.125]);
+  // Critic #478 H1: a short dot-market schedule (style unknown) keeps its own figures; in a comma document they are slips.
+  test("D1 Rp, € and EUR figures in a short schedule stay; in a comma-grouped document they are marked", () => {
+    const page = "Hospital cash Rp 250.000\nBaggage €1.500\nDelay 2.500 EUR\nAccident €50.000\nCover Rp 1.500.000";
+    assert.equal(thousandsStyle(page), "unknown");
+    assert.deepEqual(maskDotGroupedFigures(page, "unknown").masked, []);
+    assert.deepEqual(maskDotGroupedFigures("Baggage €1.500\nAccident EUR 651.632", "comma").masked, ["€1.500", "EUR 651.632"]);
+  });
+  // Critic #478 M1: the benefit-table figure reader is unchanged, so a page with a text layer keeps real 3-decimal rates.
+  test("B1 numbersIn reads rates as before (Premium rate S$1.375 per S$1,000, USD 1.250)", async () => {
+    const { numbersIn } = await import("@/lib/benefit-table/check");
+    assert.ok(numbersIn("Premium rate S$1.375 per S$1,000").includes(1.375));
+    assert.ok(numbersIn("USD 1.250").includes(1.25));
+  });
+  // TE #478 F1 on a scanned page: the short schedule's figure never reaches a reader as 935.54.
+  test("F3 a short scanned schedule: S$935.542, SGD 935.542, RM935.542, 935.542 SGD are marked before any reader sees them", async () => {
+    const { numbersIn } = await import("@/lib/benefit-table/check");
+    const ocr = { pageNumber: 1, text: "Sum Assured S$935.542\nPremium S$310.00\nHospital SGD 935.542\nSurgery RM935.542\nAccident 935.542 SGD", imageCount: 1, extractionMethod: "ocr" as const };
+    const out = settleOcrFigures([ocr]).pages[0].text;
+    assert.ok(!numbersIn(out).some((n) => Math.abs(n - 935.54) < 0.005), out);
+    assert.equal(moneyPrinted(out, 935.54), false);
+    assert.ok(numbersIn(out).includes(310));
   });
 
   // In the reading: transcribed pages only, the style taken from the whole document, with a note.

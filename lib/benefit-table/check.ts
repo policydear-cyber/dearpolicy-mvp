@@ -7,7 +7,7 @@
  * bare "$" stays unresolved. A condition is kept only when its words are printed in this document. Everything dropped
  * is listed with the reason, so a reading can be audited. */
 import { normalizePersonName } from "@/lib/insurance";
-import { SCALE_WORD, printedNumber as scaledFigure, scaleOf } from "@/lib/format/printed-number";
+import { DOT_MARKET, SCALE_WORD, printedNumber as scaledFigure, scaleOf } from "@/lib/format/printed-number";
 import { categoryOfBenefit } from "@/lib/coverage/table-figures";
 import { figuresDifferByPlan, planCellRun } from "@/lib/insurance/scale-limit";
 import { planTypeOfPages, type PlanType } from "@/lib/coverage/plan-type";
@@ -265,9 +265,7 @@ const SIGN_BEFORE = /(?<![A-Za-z])(?:([A-Z]{3})|[A-Z]{1,2}\$|R\$|Rp\.?|RM|€|£
 const SIGN_AFTER = /^[ \u00a0\u202f]?(?:€|£|₫|kr\b|zł|Kč|Ft|lei|([A-Z]{3})(?![A-Za-z]))/u;
 // A three-letter code counts only when it is a currency on this closed list: "TPD 1.500" is no money sign.
 const DOT_CODES = /^(?:SGD|USD|EUR|GBP|JPY|CNY|HKD|AUD|NZD|CAD|CHF|MYR|IDR|THB|INR|PHP|KRW|TWD|VND|AED|SAR|QAR|BND|MOP|SEK|NOK|DKK|ZAR|BRL|MXN|RUB|TRY|ILS|LKR|PKR|BDT|ARS|CLP|COP|PEN|PLN|CZK|HUF|RON|BHD|KWD|OMR|JOD|TND|LYD|IQD)$/;
-// Currencies whose market groups thousands with dots, and the three-decimal ones (KD, BHD): the only signs beside which a
-// lone dot group is read whole.
-const DOT_MARKET = /^(?:Rp\.?|IDR|€|EUR|R\$|BRL|₫|VND|DKK|TRY|ARS|CLP|COP|RON|lei|KWD|BHD|OMR|JOD|TND|LYD|IQD)$/;
+// Currencies whose market groups thousands with dots, and the three-decimal ones: DOT_MARKET (lib/format/printed-number).
 const NOT_MONEY_BEFORE = /\b(?:section|sect\.|table|version|ver\.|v|clause|item|article|art\.|para(?:graph)?|page|p\.|no\.|number|year|years|age|aged|ages|rule|schedule|part|chapter|form|code|ref(?:erence)?|multiplier|factor|rate|ratio|times)\W{0,3}$/i;
 const RUN_SPACE = "[ \\u00a0\\u202f]";
 /** A word right after a figure that makes it a count or part of a date, never a thousands group of the figure before. */
@@ -361,15 +359,6 @@ export function numbersIn(text: string): number[] {
     if (m.index! === gluedEnd + 1) { gluedEnd = m.index! + m[1].length; continue; }
     if (/^[.,]\d/.test(text.slice(m.index! + m[1].length)) && /\.\d{3,}$/.test(m[1])) { gluedEnd = m.index! + m[1].length; continue; }
     const after = text.slice(m.index! + m[1].length);
-    // A single dot and three digits with a currency right beside it ("S$935.542", "RM935.542", "935.542 SGD") is never
-    // two-decimal money: a scan may have printed a thousands comma as a dot. It prints nothing, never 935.54 (TE #478 F1).
-    // A three-decimal currency ("KWD 1.500") and a dot market ("Rp 250.000") are read above (dotGrouped).
-    if (/^\d+\.\d{3}$/.test(m[1])) {
-      const near = (re: RegExp, s: string) => re.exec(s);
-      const b = near(SIGN_BEFORE, text.slice(Math.max(0, m.index! - 8), m.index!)), a = near(SIGN_AFTER, after.slice(0, 6));
-      const code = (b ? b[1] ?? b[0].trim() : a ? a[1] ?? a[0].trim() : "").replace(/^KD$/, "KWD").replace(/^BD$/, "BHD");
-      if (code && !/^(?:BHD|KWD|OMR|JOD|TND|LYD|IQD)$/.test(code)) continue;
-    }
     // A figure ending in a comma and one or two digits ("150,00", "3,50", "1,250,50") is not grouped with commas: it prints
     // nothing, never 15000 or 350.
     if (/,\d{1,2}$/.test(m[1]) && !/\./.test(m[1])) continue;

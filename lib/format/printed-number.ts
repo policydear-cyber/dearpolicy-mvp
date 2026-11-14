@@ -9,7 +9,11 @@
  */
 
 /** Currencies with three decimal places: "BHD 1.500" is one and a half dinars, never fifteen hundred. */
-const THREE_DECIMALS = /^(?:BHD|KWD|OMR|JOD|TND|LYD|IQD)$/;
+export const THREE_DECIMALS = /^(?:BHD|KWD|OMR|JOD|TND|LYD|IQD)$/;
+/** Currencies whose market groups thousands with dots, and the three-decimal ones (KD, BHD): the only signs beside which a
+ * lone dot group is read whole (lib/benefit-table/check.ts), and beside which a dotted figure is the document's own
+ * printing unless the document groups its figures with commas (lib/documents/currency-misread.ts). */
+export const DOT_MARKET = /^(?:Rp\.?|IDR|€|EUR|R\$|BRL|₫|VND|DKK|TRY|ARS|CLP|COP|RON|lei|KWD|BHD|OMR|JOD|TND|LYD|IQD)$/;
 
 const LAKH_CURRENCY = /^(?:INR|NPR|PKR|LKR|BDT)$/;
 /** A rupee or taka marker in text: where figures are grouped in lakhs. */

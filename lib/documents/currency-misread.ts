@@ -15,6 +15,7 @@
  * page ("SGD 520,000").
  */
 import { NOT_CHECKED } from "@/lib/documents/layout-check";
+import { DOT_MARKET, THREE_DECIMALS } from "@/lib/format/printed-number";
 
 /** A prefix letter, and the digit a reader has been seen to print for it. Extend only from observed readings. */
 export const PREFIX_LETTER_AS_DIGIT: Readonly<Record<string, string>> = { S: "5" };
@@ -64,15 +65,14 @@ export function maskPrefixLetterMisreads(text: string): { text: string; masked: 
  * On a transcribed page, a figure grouped by dots is not confirmed: replaced by the page check's "[amount not checked]"
  * mark, never repaired. That is a figure with a currency right beside it, before or after, and one or more dot groups of
  * three ("S$935.542", "GBP 48.000", "935.542 SGD"), in any document that is not dot-grouped (a short schedule whose style
- * cannot be told too: a single dot and three digits beside a currency is never two-decimal money, TE #478 F1), except
- * one group beside a three-decimal currency ("KWD 1.500"); or, in a comma-grouped document, a figure with two or more
- * groups and no currency on a line about money ("Overall limit 1.372.820"). A single dot
+ * cannot be told too: a single dot and three digits beside S$, SGD or RM is never two-decimal money, TE #478 F1). Beside
+ * the currency of a market that groups with dots (DOT_MARKET: "Rp 250.000", "€1.500"), only in a comma-grouped document
+ * (Critic #478 H1); one group beside a three-decimal currency ("KWD 1.500") never. Or, in a comma-grouped document, a
+ * figure with two or more groups and no currency on a line about money ("Overall limit 1.372.820"). A single dot
  * group with no currency mark ("0.125", "a factor of 1.375") is a decimal and stays, as does a percentage.
  */
 /** A currency mark right before a figure: a symbol with its country letters, or a code from a closed list. */
 const MONEY_MARK = String.raw`(?:(?<![A-Za-z])(?:[A-Z]{1,3})?\$|[£€¥₹₱฿₩]|(?<![A-Za-z])(?:RM|Rp\.?|Rs\.?|[A-Z]{3})(?![A-Za-z]))`;
-/** Currencies with three decimals: "KWD 1.500" is one and a half dinars, never a slip. */
-const THREE_DECIMAL_CURRENCIES = new Set(["BHD", "KWD", "OMR", "JOD", "TND", "LYD", "IQD", "KD", "BD"]);
 const ISO = new Set(typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("currency") : ["SGD", "USD", "MYR", "GBP", "EUR", "IDR", "HKD", "INR", "PHP", "THB", "AUD", "CNY", "JPY", "CHF", "NZD"]);
 /** Thousands grouped by commas ("935,542", "1,372,820.50"). */
 const COMMA_GROUPED = /(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?(?![\d]|[.,]\d)/g;
@@ -113,7 +113,10 @@ export function maskDotGroupedFigures(text: string, style: ReturnType<typeof tho
     const currency = before ? code : after ? suffix![1] ?? suffix![0].trim() : null;
     if (currency) {
       // A three-decimal currency prints "KWD 1.500" as a decimal (one group only).
-      if (groups === 1 && THREE_DECIMAL_CURRENCIES.has(currency.toUpperCase())) return token;
+      if (groups === 1 && THREE_DECIMALS.test(currency.toUpperCase())) return token;
+      // Beside the currency of a market that groups with dots ("Rp 250.000", "€1.500", "2.500 EUR"), a dotted figure is
+      // the document's own printing unless the document groups its figures with commas (Critic #478 H1).
+      if (DOT_MARKET.test(currency) && style !== "comma") return token;
     } else {
       // With no currency beside it, only a comma-grouped document says a dotted figure is a slip, and only on a line
       // about money.
