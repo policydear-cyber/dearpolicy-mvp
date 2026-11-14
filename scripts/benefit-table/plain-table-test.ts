@@ -1024,6 +1024,41 @@ for (const line of ["Medical expenses in Singapore and Overseas are shared by th
   "Medical expenses in the United States are shared.", "Medical expenses are shared with the rental company."]) {
   test(`gate PPS-20 tier 2: '${line}' withholds Overseas medical expenses only`, () => scoped(EIGHT, [CAP_NOTE, line], ["Overseas medical expenses"]));
 }
+// Per-person-shared gate round 21 (probe pp29): any character but letters, digits, spaces, apostrophes, hyphens inside
+// words and , : ; . ("&", "/", "+", "|", brackets, dashes); outsider words that are the insured group ("other passengers on
+// this certificate", "us and your spouse"); ": shared" only after a label of row, benefit or limit words; a ";" part about
+// each person's own limit withholds nothing. Each sentence follows a valid family-cap note.
+for (const line of ["Limits are shared with other passengers on the policy.", "Limits are shared with us and your family.", "Limits are shared with the operator and the family.",
+  "Limits are shared with any third party insured under this policy.", "Medical expenses are shared with other passengers on this certificate.", "Medical expenses are shared with us and your spouse.",
+  "Medical expenses are shared with the family and the hotel.", "Limits are shared with patients in the same ward.", "Limits are shared with the airline.",
+  "Limits are shared with fellow passengers insured on this plan.", "Limits are shared with all passengers named on this certificate.", "Limits are pooled with other parties on the certificate.",
+  "Limits are shared with the policy owner and dependants.", "Limits are shared with the owner's family.", "Limits are shared with the other insured parties.",
+  "Limits are shared with your travel agent and family.", "Medical expenses are shared with the insured passengers.", "Limits are shared with the other patients on this policy.",
+  "Limits are shared with us.", "Medical expenses are shared with the main insured's employer and spouse.", "Medical expenses & benefits are shared by the family.",
+  "Medical expenses/benefits are shared by the family.", "Medical expenses plus benefits are shared by the family.", "Medical expenses (and benefits) are shared by the family.",
+  "Medical expenses (benefits) are shared by the family.", "Medical expenses & limits are shared.", "Medical expenses/cover are shared.",
+  "Medical expenses + benefits are shared by the family.", "Medical expenses, and/or benefits, are shared by the family.", "Medical & baggage cover & limits are shared by the family.",
+  "Medical expenses – and benefits – are shared by the family.", "Medical expenses and/or limits are shared.", "Medical expenses as well as benefits are shared.",
+  "Medical expenses with benefits are shared by the family.", "Medical expense benefits and limits are shared by the family.", "Medical expense benefits & limits are shared by the family.",
+  "Medical benefit and limit are shared.", "Medical expenses incl. benefits are shared by the family.", "Medical expenses — benefits — are shared.",
+  "Medical expenses | benefits are shared.", "Medical expenses 'and benefits' are shared.", "Medical expenses [and cover] are shared by the family.",
+  "Medical expenses in Singapore and the family's other cover are shared.", "Medical expenses in Singapore and cover are shared by the family.", "Medical expenses in Asia and Europe are shared by the family.",
+  "Medical expenses in Singapore & benefits are shared.", "Medical expenses in the UK/benefits are shared by the family.", "Medical expenses in Japan, and limits, are shared.",
+  "Medical expenses incurred locally are shared by the family.", "Medical expenses in Total are shared by the family.", "Medical expenses in Section Two are shared by the family.",
+  "Medical expenses in Any Section are shared.", "Note: shared limits apply.", "Limits: shared by the family.",
+  "Benefits: shared.", "Medical expenses: shared with benefits."]) {
+  test(`gate PPS-21 tier 1: '${line}' withholds every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), noOne));
+}
+for (const line of ["Medical expenses are shared with your employer.", "Medical expenses in Singapore are shared by the family.", "Medical expenses: shared by the family.",
+  "Medical expenses: shared.", "Medical expenses: shared; baggage: per person.", "Medical expenses: joint.",
+  "Medical expenses are shared with the rest of your family."]) {
+  test(`gate PPS-21 tier 2: '${line}' withholds Overseas medical expenses only`, () => scoped(EIGHT, [CAP_NOTE, line], ["Overseas medical expenses"]));
+}
+for (const line of ["Hospital cash is shared with patients in the same ward.", "Rental car excess is shared with the rental company.", "Room type: shared ward.",
+  "Accommodation: shared.", "Hospital cash: shared room rate applies.", "Data: shared with partners.",
+  "Personal data: shared with our reinsurers.", "Claims: shared processing with our partner.", "Premium: shared between you and your spouse."]) {
+  test(`gate PPS-21: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),

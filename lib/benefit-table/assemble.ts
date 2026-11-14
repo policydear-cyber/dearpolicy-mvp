@@ -868,8 +868,12 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
    * - tier 0, none: only benefits that are no row, with no group named ("Loss and damage are shared."), as main. */
   const noteTier = (text: string, group: boolean): { tier: 0 | 1 | 2; rows: Set<CheckedBenefit> } => {
     // Each "is / are shared, pooled or joint", comma, colon, semicolon and full stop ends an item (gate round 20).
-    const plain = withoutTravelTogether(text).replace(SHARED_GROUP, " ").replace(NEUTRAL_SENTENCE, " ").replace(NEUTRAL_EXTRA, " ")
-      .replace(ITEM_END, " qqsep ");
+    // Brackets left empty once a neutral extra is out ("(item no. 3)") are no word.
+    const raw = withoutTravelTogether(text).replace(SHARED_GROUP, " ").replace(NEUTRAL_SENTENCE, " ").replace(NEUTRAL_EXTRA, " ").replace(/\(\s*\)|\[\s*\]/g, " ");
+    // Only letters, digits, spaces, apostrophes, hyphens inside words and , : ; . may be left: any other character ("&", "/",
+    // "+", "|", brackets, dashes) may join a word of its own, so every row (gate round 21).
+    if (/[^A-Za-z0-9\s'’,:;.-]/.test(raw) || /(?<![A-Za-z0-9])-|-(?![A-Za-z0-9])/.test(raw)) return { tier: 1, rows: new Set() };
+    const plain = raw.replace(ITEM_END, " qqsep ");
     let n = ` ${stems(plain).join(" ")} `;
     const named = new Set<CheckedBenefit>();
     for (const p of phrases) if (n.includes(` ${p} `)) { for (const b of byPhrase.get(p)!) named.add(b); n = n.split(` ${p} `).join(" | "); }
@@ -912,8 +916,16 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
     if (!m || (lead ? !EACH_OWN_LEAD.test(lead) : !(r.capNotes ?? []).length)) return { all: true, rows: new Set() };
     return sharedRows(`${m[2]} are shared${m[3] ? ` by ${m[3]}` : ""}.`);
   };
-  for (const t of [...(r.tieLines ?? []), ...(r.tiedNotes ?? []).map((x) => ({ note: x }))]) {
-    const tied = typeof t !== "string", text = typeof t === "string" ? t : t.note;
+  /** "<label>: shared / pooled / joint [by <group>]." with a label of row, benefit or limit words only ("Medical expenses:
+   * shared."; never "Accommodation: shared.", "Data: shared with partners.", "Claims: shared processing"; gate round 21). */
+  const colonShared = (text: string) => [...text.matchAll(/(?:^|[.;]\s*)([^.;:]+?)\s*:\s*(?:shared|pooled|joint)\b([^.;]*)/gi)].some((m) => {
+    const label = stems(m[1]);
+    return label.length > 0 && label.every((w) => byWord.has(w) || DISTINCTIVE.has(w) || SHARED_FILLER.has(w) || w === "hospital")
+      && label.some((w) => !ITEM_NEUTRAL.has(w))
+      && (!m[2].replace(SHARED_GROUP, " ").trim() || (/^\s*with\b/i.test(m[2]) && !(OUTSIDER.test(m[2]) && !GROUPISH.test(m[2]))));
+  });
+  /** One note, or one ";" part of a note, judged. */
+  const judge = (text: string, tied: boolean) => {
     // A group of people named, or the certificate as the unit ("Under one certificate the limit shown is paid once."; gate round 13).
     const lives = bindsToGroup(text) && !PREMIUM.test(text);
     // "except / other than / apart from X, which ...": every row, unless it is each person's own limit except X, which is
@@ -922,29 +934,38 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
       const got = exceptShared(text);
       if (got.all) out.all = true;
       for (const b of got.rows) out.rows.add(b);
-      continue;
+      return;
     }
     // A note tying a limit to the lives together, or saying in so many words that something is shared, pooled or joint
     // (gate round 17), withholds every row, unless the whole note is only "<row label(s)> are shared by <group>." ("Liability
     // cover is shared by the family." withholds Personal liability only; gate rounds 15-17). Never a premium's.
-    if (tied || (SHARED_PREDICATE.test(text) && !/\b(?:premiums?|contributions?)\b/i.test(text))) {
-      const at = SHARED_PREDICATE.exec(text);
-      if (!at) { out.all = true; continue; }
+    const predicate = (SHARED_PREDICATE.test(text) && !outsiderWith(text)) || colonShared(text);
+    if (tied || (predicate && !/\b(?:premiums?|contributions?)\b/i.test(text))) {
+      if (!predicate) { out.all = true; return; }
       const got = sharedRows(text);
       if (got.all) out.all = true;
       for (const b of got.rows) out.rows.add(b);
-      continue;
+      return;
     }
     // "Medical expenses are shared with baggage.": shared with a benefit, never an outsider ("with the rental company"):
     // every row (gate round 19).
     const withWhat = /\b(?:is|are)\s+(?:shared|pooled)\s+with\s+(.+)$/i.exec(text)?.[1];
-    if (withWhat && !PREMIUM.test(text) && (rowsNamed(withWhat, false).size || stems(withWhat).some((w) => DISTINCTIVE.has(w)))) { out.all = true; continue; }
+    if (withWhat && !PREMIUM.test(text) && (rowsNamed(withWhat, false).size || stems(withWhat).some((w) => DISTINCTIVE.has(w)))) { out.all = true; return; }
     const named = rowsNamed(text, lives);
     for (const b of named) out.rows.add(b);
     // A note naming no row withholds every row when it names a group and a benefit or limit, shares a limit in a strong word,
     // or shares benefits or sections in a strong word among a group of people (gate rounds 10, 14, 15; never "the policy may
     // be jointly held by spouses"); never a premium's.
     if (!named.size && !PREMIUM.test(text) && ((lives && BENEFIT_NOUN.test(text)) || sharesLimitStrongly(text) || (sharesStronglyAmong(text) && (BENEFIT_NOUN.test(text) || /\b(?:sections?|parts?)\b/i.test(text))))) out.all = true;
+  };
+  for (const t of [...(r.tieLines ?? []), ...(r.tiedNotes ?? []).map((x) => ({ note: x }))]) {
+    const tied = typeof t !== "string", text = typeof t === "string" ? t : t.note;
+    // A ";" part about each person's own limit ("Medical expenses: shared; baggage: per person.") withholds nothing: the
+    // note is judged without it (gate round 21).
+    const parts = text.split(";");
+    const kept = parts.filter((x) => !(PER_PERSON_PART.test(x) && !SHARE_WORD.test(x)));
+    if (parts.length < 2 || kept.length === parts.length) { judge(text, tied); continue; }
+    if (kept.join("").trim()) judge(`${kept.join(";").trim().replace(/[;,.\s]*$/, "")}.`, tied);
   }
   tiedCache.set(r, out);
   return out;
@@ -956,13 +977,13 @@ const EACH_OWN_LEAD = /^(?:each\s+(?:insured\s+)?(?:person|traveller|traveler|of
 /** Words about every row of the table: a shared note with them shares them all (gate round 18). */
 const WHOLE_TABLE = /\b(?:all|every|each\s+other|others?|the\s+rest|remainder|everything|remaining|likewise|too|as\s+well|so\s+(?:is|are)|limits\s+shown|the\s+limits|etc|e\.\s?g|such\s+as|for\s+example|including)\b/i;
 /** Group phrases taken out before WHOLE_TABLE is looked for ("by all insured persons", "every insured person", "all of you"). */
-const GROUP_PHRASE = /\b(?:(?:all|every|each)\s+(?:of\s+)?(?:the\s+|your\s+)?(?:insured\s+|named\s+)?(?:persons?|people|travell?ers?|members?|famil(?:y|ies)|insured|you|them)|(?:you|them)\s+(?:all|both))\b/gi;
+const GROUP_PHRASE = /\b(?:the\s+rest\s+of\s+(?:your|the)\s+famil(?:y|ies)|the\s+rest\s+of\s+the\s+insured\s+(?:persons|people)|(?:all|every|each)\s+(?:of\s+)?(?:the\s+|your\s+)?(?:insured\s+|named\s+)?(?:persons?|people|travell?ers?|members?|famil(?:y|ies)|insured|you|them)|(?:you|them)\s+(?:all|both))\b/gi;
 /** People named after a shared word ("shared with your spouse", "by you and your partner"). */
 const PEOPLE_AFTER = /\b(?:shared|pooled|joint)\s+(?:by|between|among(?:st)?|with)\s+(?:you\b|your\s|the\s+(?:family|insured|household)|all\s|both\s|them\b|insured|famil|spouse|partner|child|adult|member|dependant|parent|companion|travell?er)/i;
 const CAP_LIKE = /\d|%|\b(?:twice|double|treble|triple|thrice|times|per\s*cent)\b/i;
 /** The group phrase after a shared word, a closed list ("by the family (members) (only)", "between you", "with your spouse",
  * "for all travellers"). */
-const SHARED_GROUP = /\b(?:by|between|among(?:st)?|with|for)\s+(?:you\s+and\s+your\s+(?:spouse|partner|children|family|companions?)|(?:(?:the|your|all(?:\s+the)?|both)\s+)?(?:whole\s+)?(?:famil(?:y|ies)(?:\s+members)?|households?|couples?|insured\s+(?:persons|people)|insured|travell?ers|members|named\s+persons|persons\s+named|group|party|of\s+you|you(?:\s+(?:all|both|two))?|everyone|everybody|them(?:\s+all)?|each\s+other|spouses?|partners?|children|companions?))(?:\s+on\s+(?:this|the)\s+(?:certificate|policy))?(?:\s+only)?\b/gi;
+const SHARED_GROUP = /\b(?:by|between|among(?:st)?|with|for)\s+(?:the\s+rest\s+of\s+(?:your|the)\s+famil(?:y|ies)|the\s+rest\s+of\s+the\s+insured\s+(?:persons|people)|you\s+and\s+your\s+(?:spouse|partner|children|family|companions?)|(?:(?:the|your|all(?:\s+the)?|both)\s+)?(?:whole\s+)?(?:famil(?:y|ies)(?:\s+members)?|households?|couples?|insured\s+(?:persons|people)|insured|travell?ers|members|named\s+persons|persons\s+named|group|party|of\s+you|you(?:\s+(?:all|both|two))?|everyone|everybody|them(?:\s+all)?|each\s+other|spouses?|partners?|children|companions?))(?:\s+on\s+(?:this|the)\s+(?:certificate|policy))?(?:\s+only)?\b/gi;
 /** Neutral sentences that may be joined to a shared note (gate round 18). */
 const NEUTRAL_SENTENCE = /\b(?:(?:or\s+)?see\s+the\s+(?:policy\s+)?wording|it\s+is\s+the\s+most\s+we\s+(?:will\s+)?pay|they\s+apply\s+per\s+(?:trip|journey|event))\s*\.?/gi;
 /** Neutral extra words, a closed list: "the cost of", "abroad", "in <place>" (a closed list of places; never "in Section
@@ -981,7 +1002,19 @@ const DISTINCTIVE = new Set(["medical", "evacuation", "repatriation", "cancellat
 const NON_ROW_NOUN = /\s(?:personal\s+(?:money|belonging|effect)|(?:loss\s+of\s+)?passport|missed\s+(?:connection|departure)|hospital\s+cash|legal\s+(?:expens\w*|cost\w*)|dental(?:\s+(?:expens\w*|treatment|cost\w*))?|theft|damage|loss(?=\s+(?:and|or)\s+(?:damage|theft)\s)|(?<=(?:damage|theft)\s+(?:and|or)\s+)loss)(?=\s)/g;
 /** Saying something is shared, pooled or joint, never with an outsider: a person or company ("Rental car excess is shared
  * with the rental company", "with another insurer"); "pooled with the other limits" is a shared note (gate round 20). */
-const SHARED_PREDICATE = /(?:\b(?:is|are)\s+(?:(?:also|likewise|similarly|equally|still|then)\s+)?|:\s*)(?:shared|pooled|joint)\b(?!\s+with\s+(?:the\s+|a\s+|an\s+|another\s+|any\s+|other\s+|their\s+|its\s+)?(?:[\w-]+\s+){0,2}?(?:compan(?:y|ies)|insurers?|underwriters?|employers?|providers?|operators?|firms?|agen(?:cy|cies|ts?)|landlords?|owners?|hirers?|lessors?|carriers?|airlines?|hotels?|third\s+part(?:y|ies)|parties|passengers|patients|us)\b)/i;
+const SHARED_PREDICATE = /\b(?:is|are)\s+(?:(?:also|likewise|similarly|equally|still|then)\s+)?(?:shared|pooled|joint)\b/i;
+/** Outsider words after "shared with": a person or company that is no insured (gate rounds 20, 21). */
+const OUTSIDER = /\b(?:compan(?:y|ies)|(?:re)?insurers?|underwriters?|employers?|(?:service\s+)?providers?|operators?|firms?|agen(?:cy|cies|ts?)|landlords?|owners?|hirers?|lessors?|carriers?|airlines?|hotels?|third\s+part(?:y|ies)|parties|passengers|patients|administrators?|(?<=\b(?:our|business)\s+)partners?|us)\b/i;
+/** Words making an outsider word the insured group ("other passengers on this certificate", "us and your spouse"). */
+const GROUPISH = /\b(?:insured|named|on\s+(?:this|the|your)\s+(?:policy|certificate|plan|schedule)|spouses?|famil(?:y|ies)|children|companions?|households?|you)\b/i;
+/** "... is shared with <an outsider>" ("Rental car excess is shared with the rental company"): no sharing among the insured. */
+const outsiderWith = (text: string) => {
+  const obj = /\b(?:is|are)\s+(?:(?:also|likewise|similarly|equally|still|then)\s+)?(?:shared|pooled|joint)\s+with\s+([^.;]*)/i.exec(text)?.[1];
+  return !!obj && OUTSIDER.test(obj) && !GROUPISH.test(obj);
+};
+/** A ";" part about each person's own limit, and the sharing words that make it more (gate round 21). */
+const PER_PERSON_PART = /\b(?:per|each|for\s+each)\s+(?:insured\s+)?(?:person|traveller|traveler|life)\b|\beach\s+(?:person|traveller|traveler)\s+has\b/i;
+const SHARE_WORD = /\b(?:shar\w*|pool\w*|joint\w*|combined|together|aggregate|famil(?:y|ies)|households?|once|total)\b/i;
 /** Last words of a benefit label too general to name it alone ("Overseas medical expenses" is not named by "expenses"). */
 const GENERIC_LAST_WORD = new Set(["expenses", "expense", "costs", "cost", "benefit", "benefits", "cover", "limit", "limits", "amount", "amounts", "allowance", "payment", "charges", "charge", "fees", "fee"]);
 /** A row label that is a family's or household's own benefit ("Family personal liability", "Household contents"), never
