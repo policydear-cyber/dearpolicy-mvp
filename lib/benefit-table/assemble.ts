@@ -77,6 +77,8 @@ export type TableRow = {
   /** The last day of the row's cover, as printed, when that cover was for one short term that is over (a single trip):
    * the row is no longer current cover, but it still answers for an event inside that term. */
   coverEnded?: string | null;
+  /** The row is the cover's own line as the schedule prints it (check.ts coverLine): its policy wording is not on file. */
+  coverLine?: boolean;
 };
 /** What the household said about one person's cover: that its sum insured is right, or the figure it should be. */
 export type Confirmation = { personId: string; coverKey: string; status: "confirmed" | "corrected"; sumInsured: number | null; updatedAt?: string | null };
@@ -332,7 +334,9 @@ function limitUnderHeading(f: Figure, c: PersonCover): boolean {
 /** One entry per (document, heading, column) that prints a benefit row. */
 export function sectionsOf(readings: CheckedReading[]): SectionRef[] {
   const map = new Map<string, SectionRef>();
+  // A cover's own schedule line (coverLine) is no section: it is placed by its line alone, so nothing is asked about it.
   for (const r of readings) for (const b of r.benefits) {
+    if (b.coverLine) continue;
     const key = sectionKeyOf(r.documentId, b);
     const s = map.get(key) ?? { key, document: r.document, kind: r.kind, product: r.product, section: b.section, column: b.column, examples: [] };
     if (s.examples.length < 3) s.examples.push(b.benefit);
@@ -1439,16 +1443,17 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const householdChose = (l: SectionLink | undefined) => (l as { chosenBy?: string } | undefined)?.chosenBy === "household";
   const placedOf = (sectionKey: string, b: CheckedBenefit): { cover: string; why: string; line?: string } | null => {
     const l = linkOf.get(sectionKey);
-    const own = householdChose(l) ? undefined : ownLine.get(b);
+    const own = householdChose(l) && !b.coverLine ? undefined : ownLine.get(b);
     if (own) return { cover: own.cover, why: OWN_LINE_WHY, line: own.line };
+    if (b.coverLine) return null;
     return l?.cover ? { cover: l.cover, why: l.why } : null;
   };
   // A section is said to be unlinked only for the rows its own line did not place.
-  const unplaced = new Set(readings.flatMap((r) => r.benefits.filter((b) => !placedOf(sectionKeyOf(r.documentId, b), b)).map((b) => sectionKeyOf(r.documentId, b))));
+  const unplaced = new Set(readings.flatMap((r) => r.benefits.filter((b) => !b.coverLine && !placedOf(sectionKeyOf(r.documentId, b), b)).map((b) => sectionKeyOf(r.documentId, b))));
   const unlinkedSections: BenefitTable["unlinkedSections"] = [];
   // Where each section starts, so a part that is not on anyone's table can still be opened at its page.
   const firstSource = new Map<string, Source>();
-  for (const r of readings) for (const b of r.benefits) if (!firstSource.has(sectionKeyOf(r.documentId, b))) firstSource.set(sectionKeyOf(r.documentId, b), b.source);
+  for (const r of readings) for (const b of r.benefits) if (!b.coverLine && !firstSource.has(sectionKeyOf(r.documentId, b))) firstSource.set(sectionKeyOf(r.documentId, b), b.source);
   for (const s of sections) {
     const l = linkOf.get(s.key);
     const refused = refusedLinks.find((x) => x.link.section === s.key);
@@ -1501,8 +1506,15 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
         percent: b.pays === "percent" ? b.value : null, percentOf: named ? "sum_insured" : b.pays === "percent" ? b.percentOf : null,
         base: named ? named.cover.sumInsured : b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
         baseCorrected: named ? named.cover.confirmation?.status === "corrected" : b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null,
-        combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), ...(c.holding ? { holding: c.holding } : {}), coverEnded: c.ended ?? null });
+        combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), ...(c.holding ? { holding: c.holding } : {}), coverEnded: c.ended ?? null, ...(b.coverLine ? { coverLine: true } : {}) });
     }
+  }
+  // A cover's own schedule line is its row only while nothing else says what that very cover pays for the person: a wording
+  // read later (or another document's rows) takes its place, never sits beside it. Another cover's rows (a base plan's
+  // wording) never hide a rider's line (Critic and TE #469 F2).
+  for (const p of people) {
+    const listed = new Set(p.rows.filter((r) => !r.coverLine).map((r) => r.coverKey));
+    if (listed.size) p.rows = p.rows.filter((r) => !r.coverLine || !listed.has(r.coverKey));
   }
   for (const s of sections) if (notTold.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_TOLD_WHY, source: firstSource.get(s.key) ?? null });
   for (const s of sections) if (notTheirs.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_THEIR_DOCUMENT_WHY, source: firstSource.get(s.key) ?? null });
