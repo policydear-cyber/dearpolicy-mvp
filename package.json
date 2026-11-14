@@ -23,6 +23,7 @@
     "benefit-table:service-test": "node --import tsx scripts/benefit-table/service-test.ts",
     "benefit-table:restore-link": "node --import tsx scripts/benefit-table/restore-link.ts",
     "benefit-table:figure-guards-test": "node --import tsx scripts/benefit-table/figure-guards-test.ts",
+    "benefit-table:image-check-test": "node --import tsx scripts/benefit-table/image-check-test.ts",
     "benefit-table:long-document-test": "node --import tsx scripts/benefit-table/long-document-test.ts",
     "benefit-table:speed-test": "node --import tsx scripts/benefit-table/speed-test.ts",
     "benefits:load-speed-test": "node --import tsx --test scripts/benefits/load-speed-test.ts",
