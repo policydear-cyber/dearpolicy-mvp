@@ -23,7 +23,7 @@
  *    anywhere else are left out. */
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
-import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
+import { moneyFiguresIn, sentencesOf, type StatedFigure } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
 import { keepsCapIn, noteMultiple, timesWords } from "@/lib/benefit-table/multiplier";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
@@ -956,29 +956,67 @@ function sumLineInOwnBlock(text: string, lineAt: number): string | null {
   }
   return null;
 }
-/** The structural rule for a document printed for one life (gate rounds 3 to 5): EVERY money figure on the whole document
+/** The structural rule for a document printed for one life (gate rounds 3 to 6): EVERY money figure on the whole document
  * (and any sum written out in words) is a possible sum, wherever it stands and however its line is labelled, indented or
  * cased, unless a reason on this closed list points at THAT figure:
- * - it is in the row's own quoted words or its maximum's (located on the stored page);
- * - its label (the words before it in its cell, or the cell before when it opens its cell) ends with a premium,
- *   contribution, fee or charge word ("Annual premium  S$1,148.00", "premium: S$1,148.00");
+ * - it is in this row's own quoted words or its maximum's, or in the stored maximum of another row the table worked out
+ *   (`caps`), each located on its stored page;
+ * - its WHOLE label is a premium, contribution, fee or charge item ("Annual premium", "Monthly contribution", "Policy
+ *   fee"), the label being the words before it in its cell or, when it opens its cell, the cell before it or its column's
+ *   header (a table's "Premium" column). "Return of premium" and "Waiver of premium" are covers, so they count;
  * - the words right after it in its cell tie it to a day, a week or a month ("S$100 per day in hospital");
- * - in its own cell it follows a percentage and then a cap word with no figure between ("10% of the Sum Covered, up to
- *   RM 5,000");
- * - it is the first figure on a line whose line above ends with a cap word ("up to a maximum of" / "RM 50,000").
+ * - it is the first figure on a line whose line above prints a percentage and ends with a cap word: the wrap of a
+ *   percentage cell ("25% of the Sum Covered, up to a maximum of" / "RM 50,000").
  * A figure the list does not place counts. All the figures counted must be one figure, this sum's, in its currency. Two
  * lines with the same figure agree ("Sum covered  RM 150,000" and "Death benefit  RM 150,000"); two different figures, or
  * a sum in words, leave main's rule (the line names the person). Per year figures count: a sum may be paid yearly. */
-const CHARGE_LABEL = /\b(?:premiums?|contributions?|caruman|fees?|charges?|levy|levies)\s*:?\s*$/i;
+const CHARGE_LABEL = /^(?:(?:annual|annualised|annualized|yearly|monthly|quarterly|half-yearly|semi-annual|modal|basic|total|first|initial|regular|single|renewal|policy|certificate|admin(?:istration|istrative)?|service|stamp|takaful|wakalah)\s+)*(?:premiums?|contributions?|caruman|fees?|charges?|levy|levies|duty)(?:\s*\((?:annual|yearly|monthly|quarterly|p\.?a\.?)\))?\s*:?$/i;
 const SHORT_PERIOD_AFTER = /^\s*(?:(?:per|a|each|every|setiap)\s+(?:day|week|month|hari|minggu|bulan)\b|sehari\b|daily\b|weekly\b|monthly\b|\/\s?(?:day|week|month)\b)/i;
+const PERCENT_IN_LINE = /\d\s?(?:%|per\s?cent)/i;
 const CAP_WORD_END = /\b(?:up\s+to|maximum(?:\s+of)?|max\.?|not\s+exceeding|limited\s+to|capped\s+at)\s*:?\s*$/i;
-const CAP_IN_PERCENT_CELL = /\d\s?(?:%|per\s?cent)[^\t]*\b(?:up\s+to|maximum|max\.?|not\s+exceeding|limited\s+to|capped\s+at)\b\D*$/i;
 /** A sum written out in words: a number word with a currency word ("two hundred thousand Singapore dollars"). */
 const SUM_IN_WORDS = /\b(?:hundred|thousand|million|billion|ratus|ribu|juta)\b[^\n]*\b(?:dollars?|ringgit|pounds?|euros?|rupiah|pesos?|baht|yuan|rupees?)\b/i;
-function oneSumOnDocument(d: HouseholdDocument, docIndex: number, sf: ServerFigure, household: Household): string | null {
-  // Where the row's own words and its maximum's are printed, by their stored place.
+/** The header over a table cell: the nearest line above with as many cells and no money figure, across only the table's
+ * own rows (lines with as many cells); null when there is none. */
+function columnHeader(lines: string[], i: number, column: number): string | null {
+  const width = lines[i].split("\t").length;
+  for (let j = i - 1; j >= 0; j--) {
+    const cells = lines[j].split("\t");
+    if (cells.length !== width) return null;
+    if (!moneyFiguresIn(lines[j]).length) return cells[column]?.trim() || null;
+  }
+  return null;
+}
+/** The stored maximums of the other rows the table worked out for this answer. */
+const otherCaps = (all: readonly ServerFigure[], sf: ServerFigure) => all.filter((f) => f !== sf && f.cap).map((f) => ({ quote: f.cap!.quote, docIndex: f.cap!.docIndex }));
+/** Each money figure on line `i`, where it stands, and whether a closed reason marks it as no sum (oneSumOnDocument's
+ * list, all but the located quotes): a whole charge label, a day's, week's or month's rate, or a wrapped percentage
+ * cell's maximum. */
+function lineFigures(lines: string[], i: number): { f: StatedFigure; at: number; notSum: boolean }[] {
+  const l = lines[i];
+  const out: { f: StatedFigure; at: number; notSum: boolean }[] = [];
+  let from = 0;
+  moneyFiguresIn(l).forEach((f, n) => {
+    const at = l.indexOf(f.raw, from);
+    if (at < 0) { out.push({ f, at: -1, notSum: false }); return; }
+    from = at + f.raw.length;
+    const cellStart = l.lastIndexOf("\t", at - 1) + 1;
+    const before = l.slice(cellStart, at);
+    // Its labels: the words before it in its cell or, when it opens its cell, the cell before it and its column's header.
+    const labels = before.trim() ? [before.trim()] : [l.slice(0, Math.max(0, cellStart - 1)).split("\t").map((c) => c.trim()).filter(Boolean).at(-1) ?? "",
+      columnHeader(lines, i, l.slice(0, cellStart).split("\t").length - 1) ?? ""];
+    const nextTab = l.indexOf("\t", from);
+    const after = l.slice(from, nextTab < 0 ? l.length : nextTab);
+    const notSum = labels.some((x) => CHARGE_LABEL.test(x)) || SHORT_PERIOD_AFTER.test(after)
+      || (n === 0 && i > 0 && PERCENT_IN_LINE.test(lines[i - 1]) && CAP_WORD_END.test(lines[i - 1].trimEnd()));
+    out.push({ f, at, notSum });
+  });
+  return out;
+}
+function oneSumOnDocument(d: HouseholdDocument, docIndex: number, sf: ServerFigure, household: Household, caps: readonly { quote: string; docIndex: number }[]): string | null {
+  // Where the row's own words and its maximum's, and other worked-out rows' maximums, are printed, by their stored place.
   const own: { page: number; from: number; to: number }[] = [];
-  for (const q of [{ quote: sf.row.quote, doc: sf.row.docIndex }, ...(sf.cap ? [{ quote: sf.cap.quote, doc: sf.cap.docIndex }] : [])]) {
+  for (const q of [{ quote: sf.row.quote, doc: sf.row.docIndex }, ...(sf.cap ? [{ quote: sf.cap.quote, doc: sf.cap.docIndex }] : []), ...caps.map((c) => ({ quote: c.quote, doc: c.docIndex }))]) {
     const f = q.quote ? locateQuote(household, q.quote, q.doc) : null;
     if (f && f.docIndex === docIndex) own.push({ page: f.page, from: f.offset, to: f.end ?? f.offset + q.quote.length });
   }
@@ -991,23 +1029,11 @@ function oneSumOnDocument(d: HouseholdDocument, docIndex: number, sf: ServerFigu
       lineAt += l.length + 1;
       const inOwn = (at: number) => own.some((o) => o.page === pg.page && start + at >= o.from && start + at < o.to);
       if (SUM_IN_WORDS.test(l) && !inOwn(l.search(SUM_IN_WORDS))) seen.add(`words|${l.trim().toLowerCase()}`);
-      let from = 0;
-      moneyFiguresIn(l).forEach((f, n) => {
-        const at = l.indexOf(f.raw, from);
-        if (at < 0) { seen.add(`unplaced|${f.raw}`); return; }
-        from = at + f.raw.length;
-        if (inOwn(at)) return;
-        const cellStart = l.lastIndexOf("\t", at - 1) + 1;
-        const before = l.slice(cellStart, at);
-        const label = before.trim() ? before : (l.slice(0, Math.max(0, cellStart - 1)).split("\t").map((c) => c.trim()).filter(Boolean).at(-1) ?? "");
-        const nextTab = l.indexOf("\t", from);
-        const after = l.slice(from, nextTab < 0 ? l.length : nextTab);
-        if (CHARGE_LABEL.test(label)) return;
-        if (SHORT_PERIOD_AFTER.test(after)) return;
-        if (CAP_IN_PERCENT_CELL.test(before)) return;
-        if (n === 0 && i > 0 && CAP_WORD_END.test(lines[i - 1].trimEnd())) return;
+      for (const { f, at, notSum } of lineFigures(lines, i)) {
+        if (at < 0) { seen.add(`unplaced|${f.raw}`); continue; }
+        if (inOwn(at) || notSum) continue;
         seen.add(`${f.currency}|${Math.round(f.value * 100)}`);
-      });
+      }
     });
   }
   return seen.size === 1 && seen.has(`${sf.currency}|${Math.round(sf.base.value * 100)}`) ? null : "is one of several sums the document prints";
@@ -1043,7 +1069,7 @@ function sumLineIsRows(line: string, row: string, person: string, household: Hou
  * - a maximum is printed with its currency right after a cap word in its quoted words, in the same currency, and the row
  *   prints no cap when none is given;
  * - the amount is worked out here: the percentage of the base in cents, and the lesser of that and the maximum. */
-function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found, household: Household, person: string): Checked | { refused: string } {
+function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found, household: Household, person: string, caps: readonly { quote: string; docIndex: number }[] = []): Checked | { refused: string } {
   const no = (refused: string) => ({ refused });
   if (!(sf.percent > 0) || !sf.currency || sf.currency === "$") return no("no percentage, or no currency (a bare \"$\" is none)");
   const rf = locateQuote(household, sf.row.quote, sf.row.docIndex);
@@ -1068,7 +1094,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   // not "Wei Tan"'s line, Critic #449 F8).
   const longer = household.members.map((m) => tokens(m.name)).filter((t) => t.length > who.length && who.every((w) => t.includes(w)));
   const namesPerson = (lt: Set<string>) => who.every((w) => lt.has(w)) && !longer.some((t) => t.every((w) => lt.has(w)));
-  const onLine = moneyFiguresIn(line);
+  let onLine = moneyFiguresIn(line);
   // A document printed for this person alone needs no name on the sum's own line (TE-ACC-20261114-R3 failure 4: "100% of
   // the death sum assured" was worked out on the table and refused here because "Death  S$450,000" does not repeat the
   // life assured's name). ALLOW-list, all of it or main's rule (soleLifeDocument, sumLineIsRows).
@@ -1076,8 +1102,10 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   if (!namesPerson(have)) {
     if (ownDocument !== true) return no(`the sum's line does not name the person, and its document is not printed for them alone (${ownDocument})`);
     const rowWords = `${sf.row.quote}\n${st.text}`;
-    const lineWhy = sumLineIsRows(line, rowWords, person, household) ?? oneSumOnDocument(bdoc, sf.base.docIndex, sf, household) ?? sumLineInOwnBlock(bpage.text, at);
+    const lineWhy = sumLineIsRows(line, rowWords, person, household) ?? oneSumOnDocument(bdoc, sf.base.docIndex, sf, household, caps) ?? sumLineInOwnBlock(bpage.text, at);
     if (lineWhy) return no(`the sum's line ${lineWhy}`);
+    // On such a document a figure on the sum's line that the closed list marks as no sum (a "Premium" column's) is left out.
+    onLine = lineFigures(bpage.text.split("\n"), at).filter((x) => !x.notSum).map((x) => x.f);
   }
   if (onLine.length !== 1) return no("the sum's line prints no money figure or more than one");
   if (onLine[0].currency !== sf.currency || !sameValue(onLine[0].value, sf.base.value)) return no("the sum's line prints another figure or currency");
@@ -2407,7 +2435,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       // Two such rows read the same and are worked on different sums (two policies of one cover): which one this is, is doubt.
       const sfs = person && serverWords.has(st.text) ? serverFigures.filter((f) => f.text === st.text && f.person === person && f.quote === st.quote) : [];
       const sf = new Set(sfs.map((f) => `${f.base.value}|${f.base.docIndex}|${f.cap?.value ?? ""}`)).size === 1 ? sfs[0] : undefined;
-      const served = sf ? serverFigureChecked(sf, st, found, household, person!) : null;
+      const served = sf ? serverFigureChecked(sf, st, found, household, person!, otherCaps(serverFigures, sf)) : null;
       if (served && !("refused" in served)) { checked.push(served); continue; }
       // Why the table's worked-out figure was not shown is kept with the turn's report (never shown to the household).
       if (served) report.serverFigureRefused!.push({ why: served.refused, text: st.text });

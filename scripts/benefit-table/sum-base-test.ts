@@ -453,7 +453,7 @@ for (const hd of ["YOUR COVER", "SUMS ASSURED", "POLICY DETAILS", "COVER DETAILS
     assert.deepEqual(ask(otherLifeDoc(`${R2H}\nLife cover\tS$450,000\n${TPD_LINE}\n${hd}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
   });
 test("gate R4/R5 control: figures that cannot be a sum (a premium, a day's allowance, a wrapped percentage row's maximum) leave the one sum", () => {
-  const p1 = `${R2H}\nDeath\tS$450,000\n${TPD_LINE}\nHospital cash\tS$100 per day\nAnnual premium\tS$1,250.00\nAccidental burns\t10% of the death sum assured, up to\nS$20,000\nFracture\t5% of the death sum assured, up to S$5,000`;
+  const p1 = `${R2H}\nDeath\tS$450,000\n${TPD_LINE}\nHospital cash\tS$100 per day\nAnnual premium\tS$1,250.00\nAccidental burns\t10% of the death sum assured, up to\nS$20,000`;
   assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, ["S$450,000"]);
 });
 test("gate R4 control: a labelled line after a percentage row is a sum of its own, not the row's continuation", () => {
@@ -479,6 +479,29 @@ test("gate R5-H1: a second life's sum indented or in lower case, taken as the ba
 test("gate R5-L1: a schedule whose text keeps leading spaces on its table lines still shows the TPD figure", () => {
   const p1 = `Example Life\nTERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\n Benefit\tSum assured / amount\n Death\tS$450,000\n ${TPD_LINE}\n Hospital income rider\tS$100 per day in hospital`;
   assert.deepEqual(ask(otherLifeDoc(p1, " Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, ["S$450,000"]);
+});
+
+// ---------- Gate round 6B (sum-base-gate.md "Round 6B"): every repro ----------
+for (const own of ["Death / return of premium\tS$450,000", "Life cover incl. waiver of premium\tS$450,000", "Sum assured\tS$450,000\tBasic premium\tS$1,148.00",
+  "Family income benefit\tS$450,000 a month", "Death benefit\t100% of the Sum Assured, up to S$450,000", "Death\t100% of plan, maximum S$450,000",
+  "Death benefit, payable up to a maximum of\nS$450,000", "Life cover up to\nS$450,000", "Maximum:\nS$450,000", "Life cover\tS$450,000 per annum", " Life cover\tS$450,000"])
+  test(`gate R6B-H: the person's own sum printed as ${JSON.stringify(own)} is not skipped, so a second life's 'Death' line gives no TPD figure in the chat`, () => {
+    assert.deepEqual(ask(otherLifeDoc(`${R2H}\n${own}\n${TPD_LINE}\n${R5N}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
+  });
+test("gate R6B control: the other life's line paid per month, when the table took the person's own line, leaves the person's sum", () => {
+  assert.deepEqual(ask(otherLifeDoc(`${R2H}\nDeath\tS$450,000\n${TPD_LINE}\n${R5N}\nDeath\tS$200,000 per month`, "Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, ["S$450,000"]);
+});
+test("gate R6B control: the evidence's term schedule shape with its annual premium still shows the TPD figure", () => {
+  const p1 = `Example Life\nTERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\tPolicy currency: Singapore dollars\n(SGD)\nBenefit\tSum assured / amount\nDeath\tS$450,000\n${TPD_LINE}\nHospital income rider\tS$100 per day in hospital, up to 365 days per\n\tpolicy year\nAnnual premium: S$1,148.00`;
+  assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$450,000", 450000), DANIEL, /permanent/).amounts, ["S$450,000"]);
+});
+test("gate R6B-L1: a premium column's figure, labelled by its column header, is no second sum", () => {
+  const p1 = `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\nBenefit\tSum assured\tPremium\nDeath\tS$450,000\tS$1,148.00\n${TPD_LINE}`;
+  assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$450,000\tS$1,148.00", 450000), DANIEL, /permanent/).amounts, ["S$450,000"]);
+});
+test("gate R6B control: a 'Premium' header over the sum's own column does not hide another sum", () => {
+  const p1 = `TERM GUARD - POLICY SCHEDULE\nPolicy number: TG-5521\tLife assured: Daniel Tan Wei\nBenefit\tSum assured\tPremium\nDeath\tS$450,000\tS$1,148.00\n${TPD_LINE}\n${R5N}\nDeath\tS$200,000`;
+  assert.deepEqual(ask(otherLifeDoc(p1, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
 });
 
 if (failures.length) {
