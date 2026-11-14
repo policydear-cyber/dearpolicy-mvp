@@ -5,13 +5,14 @@
  *
  * What this pins down (chat.ts dropQuotePointers):
  * - words that say the policy's wording, terms, text, clause, definition or quote is quoted, shown or set out below, "see
- *   the quote below", and ", quoted below", stay only when the answer carries a point's quote of that benefit: a quote
- *   that prints a word of the name of a benefit the text names, or, when the text names none, any quote;
- * - else they go as an amount's promise does: the clause that only promises goes, a "where" phrase goes, "the terms are
- *   quoted below and apply ..." keeps what the words do, with "is"/"are" kept only before no verb of its own; a sentence
- *   that is only the promise goes; a bottom line left empty says "Here is what your documents say.";
- * - a quote of another benefit (the waiting period's) is not a quote of this one; a server label is never changed;
- * - words about quotes that promise nothing below ("the insurer quoted a premium", "as quoted in your schedule") stay.
+ *   the quote below", ", quoted below" and "I've quoted the wording below" are judged on the sentence that holds them: kept
+ *   when the point carries its own quote, or when a quote in the answer prints the benefit the sentence names (a word of a
+ *   table row's name, never a common word: "early", "stage", "maximum", "year", "hospital", "start", "date" ...);
+ * - else only the promise goes, the rest word for word: an aside in brackets or dashes, a last clause after "and", "but",
+ *   a comma, a semicolon or a dash, a "see ... below ..." tail, a "where" phrase, a leading promise before a clause with a
+ *   subject of its own, and "X is quoted below and/but <verb> ..." keeping X and its verb; a sentence that is only the
+ *   promise goes; when nothing cuts just the promise the sentence stays as it is (gate round 1 on this branch);
+ * - a server label is never changed; words about quotes that promise nothing below stay.
  * No model, database or network.
  *   npm run benefit-table:quote-pointer-test */
 import assert from "node:assert/strict";
@@ -40,56 +41,102 @@ const answerOf = (bottom: string, statements: [string, string | null][]) => {
   return { summary: bottom, bottomLine: bottom, citations,
     statements: statements.map(([text, q], i): St => ({ text, fullText: text, source: q ? { citationIds: [`c${i}`] } : null })) };
 };
+const ROWS = ["Angioplasty and other invasive treatment for coronary artery", "Early-stage critical illness", "Hospital income (ICU)", "Late-stage critical illness"];
 const BOTTOM = "Her CI Protect plan has a separate benefit for angioplasty and other invasive treatment for coronary artery. I can't show it as an amount benefit, but the policy's wording is quoted below.";
 
 async function main() {
   await test("the live answer: only the waiting period is quoted, so the promise of the angioplasty wording goes", () => {
     const a = answerOf(BOTTOM, [["The 90-day waiting period is worded for critical illness benefits.", WAIT]]);
-    const left = dropQuotePointers(a, []);
+    const left = dropQuotePointers(a, [], [], ROWS);
     assert.equal(a.bottomLine, "Her CI Protect plan has a separate benefit for angioplasty and other invasive treatment for coronary artery. I can't show it as an amount benefit.");
     assert.equal(a.summary, a.bottomLine);
     assert.deepEqual(left, ["I can't show it as an amount benefit, but the policy's wording is quoted below."]);
     assert.equal(a.statements.length, 1);
   });
-  await test("with the angioplasty row's own quote in a point, the promise stays", () => {
+  await test("a quote that prints the benefit the promise's sentence names keeps it; a sentence that names none needs its own quote", () => {
+    const named = "Angioplasty has its own benefit; its wording is quoted below.";
     for (const quote of [ANGIO_QUOTE, "Angioplasty and other invasive treatment for"]) {
-      const a = answerOf(BOTTOM, [["The 90-day waiting period is worded for critical illness benefits.", WAIT], ["The angioplasty benefit is a share of the Sum Covered.", quote]]);
-      assert.deepEqual(dropQuotePointers(a, []), []);
-      assert.equal(a.bottomLine, BOTTOM);
+      const a = answerOf(named, [["The 90-day waiting period is worded for critical illness benefits.", WAIT], ["The angioplasty benefit is a share of the Sum Covered.", quote]]);
+      assert.deepEqual(dropQuotePointers(a, [], [], ROWS), []);
+      assert.equal(a.bottomLine, named);
+    }
+    // The live bottom line: its promise sentence names no benefit and the bottom line carries no quote of its own.
+    const a = answerOf(BOTTOM, [["The angioplasty benefit is a share of the Sum Covered.", ANGIO_QUOTE]]);
+    dropQuotePointers(a, [], [], ROWS);
+    assert.equal(a.bottomLine, "Her CI Protect plan has a separate benefit for angioplasty and other invasive treatment for coronary artery. I can't show it as an amount benefit.");
+    // A point that names no benefit keeps its promise with its own quote, and loses it with none.
+    const own = answerOf("Here it is.", [["I can't show an amount for this, but the policy's wording is quoted below.", ANGIO_QUOTE]]);
+    dropQuotePointers(own, [], [], ROWS);
+    assert.equal(own.statements[0].text, "I can't show an amount for this, but the policy's wording is quoted below.");
+    const none = answerOf("Here it is.", [["I can't show an amount for this, but the policy's wording is quoted below.", null], ["Angioplasty pays a share.", ANGIO_QUOTE]]);
+    dropQuotePointers(none, [], [], ROWS);
+    assert.equal(none.statements[0].text, "I can't show an amount for this.");
+  });
+  await test("a common word shared with another benefit's quote never keeps the promise (gate round 1, M3)", () => {
+    const EARLY = "Early-stage critical illness 25% of the Sum Covered, up to a maximum of\nRM 50,000, once per lifetime";
+    const ICU = "Hospital income (ICU) RM 300 per day of admission to an intensive\ncare unit, up to 30 days per year";
+    const cases: [string, string, string][] = [
+      ["Angioplasty is a separate benefit from the early-stage cover. I can't show it as an amount, but the policy's wording is quoted below.", EARLY,
+        "Angioplasty is a separate benefit from the early-stage cover. I can't show it as an amount."],
+      ["Angioplasty pays a share of the Sum Covered, up to a maximum. I can't show it as an amount, but the policy's wording is quoted below.", EARLY,
+        "Angioplasty pays a share of the Sum Covered, up to a maximum. I can't show it as an amount."],
+      ["Angioplasty is paid once per lifetime. The policy's wording is quoted below.", EARLY, "Angioplasty is paid once per lifetime."],
+      ["Angioplasty is paid per year of cover. The wording is quoted below.", ICU, "Angioplasty is paid per year of cover."],
+      ["Angioplasty done during a hospital stay is a separate benefit; its wording is quoted below.", ICU, "Angioplasty done during a hospital stay is a separate benefit."],
+      ["Her cover start date was 1 April 2026, so the waiting period has passed. Angioplasty has its own benefit; its wording is quoted below.", WAIT,
+        "Her cover start date was 1 April 2026, so the waiting period has passed. Angioplasty has its own benefit."],
+      ["Angioplasty is paid within 30 days of the claim; the wording is quoted below.", WAIT, "Angioplasty is paid within 30 days of the claim."],
+    ];
+    for (const [text, quote, want] of cases) {
+      const a = answerOf(text, [["Another benefit.", quote]]);
+      dropQuotePointers(a, [], ["Mira Halden", "HEART CARE PLUS"], ROWS);
+      assert.equal(a.bottomLine, want, text);
+      const p = answerOf("Here it is.", [[text, null], ["Another benefit.", quote]]);
+      dropQuotePointers(p, [], ["Mira Halden", "HEART CARE PLUS"], ROWS);
+      assert.equal(p.statements[0].text, want, `point: ${text}`);
     }
   });
-  await test("a text that names no benefit keeps its promise when any point carries a quote, and loses it when none does", () => {
-    const bottom = "I can't show an amount for this, but the policy's wording is quoted below.";
-    const a = answerOf(bottom, [["The plan pays a share of the Sum Covered.", ANGIO_QUOTE]]);
-    dropQuotePointers(a, []);
-    assert.equal(a.bottomLine, bottom);
-    const b = answerOf(bottom, [["The plan pays a share of the Sum Covered.", null]]);
-    dropQuotePointers(b, []);
-    assert.equal(b.bottomLine, "I can't show an amount for this.");
-  });
-  await test("the same rewriting as an amount's promise: clauses, 'where' phrases, 'and' with its verb, a name", () => {
+  await test("only the promise goes, the rest word for word; when nothing cuts just the promise, the sentence stays (gate round 1, M1 and M2)", () => {
     const cases: [string, string | null][] = [
       ["The policy's wording is quoted below.", null],
       ["See the quote below.", null],
       ["The angioplasty terms are set out below.", null],
+      ["I've quoted the angioplasty wording below.", null],
       ["Angioplasty is covered as a share of the Sum Covered, quoted below.", "Angioplasty is covered as a share of the Sum Covered."],
       ["Angioplasty is covered as a share of the Sum Covered (see the quote below).", "Angioplasty is covered as a share of the Sum Covered."],
       ["Angioplasty is covered as a share of the Sum Covered - see the wording below.", "Angioplasty is covered as a share of the Sum Covered."],
       ["Angioplasty is covered, with the policy's clause set out below.", "Angioplasty is covered."],
       ["Angioplasty is covered, and the exact text is shown below.", "Angioplasty is covered."],
+      ["Angioplasty is covered at 10% of the Sum Covered, up to RM 25,000 - the policy text is quoted below.", "Angioplasty is covered at 10% of the Sum Covered, up to RM 25,000."],
+      ["Angioplasty is covered — the wording is quoted below — at 10% of the Sum Covered.", "Angioplasty is covered at 10% of the Sum Covered."],
+      ["Your plan covers angioplasty and the wording is quoted below.", "Your plan covers angioplasty."],
+      ["Your plan covers angioplasty, and the wording is quoted below.", "Your plan covers angioplasty."],
+      ["I can't give an amount for angioplasty, as the clause is quoted below but has no figure.", "I can't give an amount for angioplasty, as the clause has no figure."],
+      ["The policy words are quoted below: angioplasty is a separate benefit.", "Angioplasty is a separate benefit."],
+      ["The words are quoted below, and they say nothing about day surgery.", "They say nothing about day surgery."],
+      ["Angioplasty is covered, but only as a share of the Sum Covered (the wording is quoted below), not as a fixed amount.", "Angioplasty is covered, but only as a share of the Sum Covered, not as a fixed amount."],
+      ["The angioplasty wording is quoted below and the amount is shown on the card.", "The amount is shown on the card."],
+      ["The terms are quoted below and are the same for Hafiz.", "The terms are the same for Hafiz."],
+      ["Angioplasty is covered; see the wording below for what counts.", "Angioplasty is covered."],
       ["The angioplasty terms are quoted below and apply only to treatment in Malaysia.", "The angioplasty terms apply only to treatment in Malaysia."],
       ["The angioplasty wording is quoted below and does not mention day surgery.", "The angioplasty wording does not mention day surgery."],
       ["The angioplasty wording is quoted below and is the same in both documents.", "The angioplasty wording is the same in both documents."],
       ["The angioplasty definition is quoted here and needs a cardiologist's report.", "The angioplasty definition needs a cardiologist's report."],
       ["The angioplasty wording quoted below says the treatment must be medically necessary.", "The angioplasty wording says the treatment must be medically necessary."],
       ["The angioplasty clauses reproduced below are reduced by any earlier claim.", "The angioplasty clauses are reduced by any earlier claim."],
+      // Nothing cuts just the promise: the sentence stays as it is, never shorter.
+      ["Angioplasty is listed below with its terms.", "Angioplasty is listed below with its terms."],
+      ["Your plan covers angioplasty and the wording is quoted below and the amount is on the card.", "Your plan covers angioplasty and the wording is quoted below and the amount is on the card."],
     ];
     for (const [sentence, want] of cases) {
       const a = answerOf("Here is the angioplasty benefit.", [[sentence, null]]);
-      dropQuotePointers(a, []);
-      if (want == null) assert.equal(a.statements.length, 1 - 1, `${sentence} -> ${a.statements.map((s) => s.text).join(" | ")}`);
-      else assert.equal(a.statements[0]?.text, want, sentence);
-      if (want != null) assert.equal(a.statements[0].fullText, want);
+      dropQuotePointers(a, [], [], ROWS);
+      if (want == null) assert.equal(a.statements.length, 0, `${sentence} -> ${a.statements.map((s) => s.text).join(" | ")}`);
+      else { assert.equal(a.statements[0]?.text, want, sentence); assert.equal(a.statements[0].fullText, want); }
+      // The same as a bottom line: a sentence that is only the promise leaves the fixed words.
+      const b = answerOf(sentence, []);
+      dropQuotePointers(b, [], [], ROWS);
+      assert.equal(b.bottomLine, want ?? "Here is what your documents say.", `bottom: ${sentence}`);
     }
   });
   await test("a point carrying its own quote keeps its promise; a person's or product's name is no benefit word", () => {
@@ -99,12 +146,8 @@ async function main() {
     // "Mira" and "Heart Care Plus" are in the waiting period's quote too: they say nothing of which benefit is meant.
     const bottom = "Mira's Heart Care Plus pays for angioplasty, but the policy's wording is quoted below.";
     const b = answerOf(bottom, [["The waiting period applies to Mira's Heart Care Plus.", "Heart Care Plus for Mira: no critical illness benefit is payable within 90 days"]]);
-    dropQuotePointers(b, [], ["Mira Halden", "HEART CARE PLUS", "Kestrel Mutual"]);
+    dropQuotePointers(b, [], ["Mira Halden", "HEART CARE PLUS", "Kestrel Mutual"], ROWS);
     assert.equal(b.bottomLine, "Mira's Heart Care Plus pays for angioplasty.");
-    // Without the names, "heart" would be taken as the benefit's word, and the promise kept: the names are what tells.
-    const c = answerOf(bottom, [["The waiting period applies to Mira's Heart Care Plus.", "Heart Care Plus for Mira: no critical illness benefit is payable within 90 days"]]);
-    dropQuotePointers(c, []);
-    assert.equal(c.bottomLine, bottom);
   });
   await test("a bottom line that is only the promise says what the documents say", () => {
     const a = answerOf("The angioplasty wording is quoted below.", [["The 90-day waiting period is worded for critical illness benefits.", WAIT]]);

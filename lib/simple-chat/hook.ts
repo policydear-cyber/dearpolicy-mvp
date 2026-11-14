@@ -295,7 +295,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     report.sentencesLeftOut.push(...dropAmountPointers(answer, fromRows.report.labels, fromRows.report.dropped.some((d) => !d.notFit)));
     report.sentencesLeftOut.push(...dropAgreeingDayRules(answer, fromRows.report));
     // A promise of the policy's words "quoted below" with no quote of that benefit in the answer goes (TE R3 H2-A t2).
-    report.sentencesLeftOut.push(...dropQuotePointers(answer, fromRows.report.labels, [...household.members.map((m) => m.name), ...household.documents.flatMap((d) => [d.productName ?? "", d.insurer ?? ""])]));
+    report.sentencesLeftOut.push(...dropQuotePointers(answer, fromRows.report.labels, [...household.members.map((m) => m.name), ...household.documents.flatMap((d) => [d.productName ?? "", d.insurer ?? ""])], rows!.map((r) => r.benefit)));
     answer.statements = noteLeftOutAmounts(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
     answer.statements = noteNarrowedPages(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
   }
