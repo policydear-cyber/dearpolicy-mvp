@@ -1065,7 +1065,7 @@ for (const line of ["Hospital cash is shared with patients in the same ward.", "
 // are read as plain text; ": joint" on cover-type fields and "joint and several" share nothing. Each sentence follows a valid
 // family-cap note.
 for (const line of ["Medical expenses: shared; baggage: per person, other limits shared by the family.", "Medical expenses are shared; each person has their own limit for baggage only, everything else is shared.", "Limits are per person for baggage; the rest is pooled.",
-  "Medical expenses are shared by the family; baggage is per person.", "Medical expenses are shared; per person limits are reduced by claims of the others.", "Medical expenses are shared; each person's limit is the most we pay for them all.",
+  "Medical expenses are shared; per person limits are reduced by claims of the others.", "Medical expenses are shared; each person's limit is the most we pay for them all.",
   "Medical expenses are shared; each person has the certificate limit, which covers everyone.", "Medical expenses are shared; each traveller draws on the same limit.", "Medical expenses are shared; per person, up to S$1,000 for all of you.",
   "Medical expenses are shared; each insured person's claims reduce the limit for the others.", "Medical expenses are shared; per person limits apply only once, whoever claims.", "Medical expenses are shared; each person has one limit for all of you.",
   "Medical expenses are shared; per person limits are not multiplied by the number of insured persons.", "Medical expenses are shared; each person's limit covers the whole party.", "Medical expenses are shared; each person is covered within the main insured person's limit.",
@@ -1134,6 +1134,13 @@ for (const line of ["Medical expenses: shared rooms are covered.", "Medical expe
   "Policy owner: joint owners.", "Type: joint policy.", "Cover basis: joint.",
   "Insurance: joint.", "Plan type: joint.", "Liability: joint and several."]) {
   test(`gate PPS-22: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
+}
+for (const line of ["Medical expenses are shared by the family; baggage is per person.", "Medical expenses are shared by the family; baggage limits are per insured person.",
+  "Medical expenses: shared; loss of baggage and baggage delay are per person."]) {
+  test(`gate PPS-22: '${line}' withholds Overseas medical expenses only`, () => scoped(EIGHT, [CAP_NOTE, line], ["Overseas medical expenses"]));
+}
+for (const line of ["Medical expenses are shared; baggage is per person for all of you.", "Medical expenses are shared; baggage is per person, others shared."]) {
+  test(`gate PPS-22 tier 1: '${line}' withholds every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), noOne));
 }
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });

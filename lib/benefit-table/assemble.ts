@@ -919,7 +919,7 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
   /** Words of a row label list ("Medical expenses", "medical, baggage and liability", "Hospital limits"): row words,
    * distinctive benefit words and filler only, one at least no filler (gate rounds 21, 22). */
   const isRowLabel = (t: string) => {
-    const w = stems(t).filter((x) => x !== "and" && x !== "or");
+    const w = stems(t).filter((x) => x !== "and" && x !== "or" && x !== "of");
     return w.length > 0 && w.every((x) => byWord.has(x) || DISTINCTIVE.has(x) || SHARED_FILLER.has(x) || x === "hospital")
       && w.some((x) => byWord.has(x) || DISTINCTIVE.has(x) || x === "hospital");
   };
@@ -939,7 +939,7 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
     return got;
   };
   /** A ";" part that is only each person's own limit, a closed shape over its whole text ("Baggage: per person.", "per
-   * insured person for baggage", "each person has their own limits for baggage", "baggage limits apply per person"); any
+   * insured person for baggage", "each person has their own limits for baggage", "baggage limits apply per person", "baggage is per person"); any
    * other part is kept and judged (gate round 22). */
   const eachOwnPart = (part: string) => {
     const t = part.trim().replace(/\.$/, "").trim();
@@ -950,6 +950,7 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
     if ((m = new RegExp(`^${PP}\\s+for\\s+${L}$`, "i").exec(t))) return isRowLabel(m[1]);
     if ((m = new RegExp(String.raw`^each\s+(?:insured\s+)?person\s+has\s+(?:their|his\s+or\s+her|his|her)\s+own\s+limits?(?:\s+for\s+${L})?$`, "i").exec(t))) return !m[1] || isRowLabel(m[1]);
     if ((m = new RegExp(String.raw`^${L}\s+(?:limits?\s+)?apply\s+${PP}$`, "i").exec(t))) return isRowLabel(m[1]);
+    if ((m = new RegExp(String.raw`^${L}\s+(?:is|are)\s+${PP}$`, "i").exec(t))) return isRowLabel(m[1]);
     return false;
   };
   /** One note, or one ";" part of a note, judged. */
