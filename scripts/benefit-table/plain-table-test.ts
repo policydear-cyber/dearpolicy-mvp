@@ -1059,6 +1059,82 @@ for (const line of ["Hospital cash is shared with patients in the same ward.", "
   "Personal data: shared with our reinsurers.", "Claims: shared processing with our partner.", "Premium: shared between you and your spouse."]) {
   test(`gate PPS-21: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
 }
+// Per-person-shared gate round 22 (probes pp30, pp31): a ";" part is dropped only when the whole of it is each person's own
+// limit in a closed shape; ": pooled" shares like ": joint" and ": shared"; a row label's ": shared" with more after it, or a
+// whole-table label ("everything else: shared"), withholds every row; footnote markers, invisible characters and curly quotes
+// are read as plain text; ": joint" on cover-type fields and "joint and several" share nothing. Each sentence follows a valid
+// family-cap note.
+for (const line of ["Medical expenses: shared; baggage: per person, other limits shared by the family.", "Medical expenses are shared; each person has their own limit for baggage only, everything else is shared.", "Limits are per person for baggage; the rest is pooled.",
+  "Medical expenses are shared by the family; baggage is per person.", "Medical expenses are shared; per person limits are reduced by claims of the others.", "Medical expenses are shared; each person's limit is the most we pay for them all.",
+  "Medical expenses are shared; each person has the certificate limit, which covers everyone.", "Medical expenses are shared; each traveller draws on the same limit.", "Medical expenses are shared; per person, up to S$1,000 for all of you.",
+  "Medical expenses are shared; each insured person's claims reduce the limit for the others.", "Medical expenses are shared; per person limits apply only once, whoever claims.", "Medical expenses are shared; each person has one limit for all of you.",
+  "Medical expenses are shared; per person limits are not multiplied by the number of insured persons.", "Medical expenses are shared; each person's limit covers the whole party.", "Medical expenses are shared; each person is covered within the main insured person's limit.",
+  "Medical expenses are shared; per person, the limit is for all of you.", "Each person has their own limit; limits are shared.", "Limits apply per person; except medical expenses, which are shared.",
+  "Medical expenses: shared by all of you and the hotel.", "Medical expenses: shared by the family and the airline.", "Medical expenses: shared with the hotel.",
+  "Medical expenses: shared with baggage.", "Medical expenses: shared, as is baggage.", "Medical expenses: shared by the family, and so is everything else.",
+  "Medical expenses: pooled with the others.", "Medical expenses: shared by all.", "Medical expenses: shared by everyone and every limit.",
+  "Benefits: shared by the family.", "Medical expenses: shared processing.", "Limits: joint.",
+  "Medica1 expenses are shared by the family.", "Medlcal expenses are shared by the family.", "Overseas rnedical expenses are shared by the family.",
+  "Persona1 liability is shared by the family.", "Trave1 delay is shared by the family.", "Baggage dalay is shared by the family.",
+  "Medical ex-penses are shared by the family.", "Medical ex- penses are shared by the family.", "Med1cal expenses and baggage are shared.",
+  "Medical expenses are shared by the farnily.", "Medical expenses are shared by the fami1y.", "Overseas rnedical expenses and benefits are shared.",
+  "Baggage de1ay is shared.", "Loss of baqqage is shared by the family.", "Accidenta1 death is shared by the family.",
+  "Medical expenses are shared by tbe family.", "Limits: pooled.", "Limits: pooled by the family.",
+  "All limits: pooled.", "Benefits: pooled.", "Pooled limits apply.",
+  "Limits are pooled.", "Medical expenses: shared, as are all other limits.", "Medical expenses: shared by the family, as are all other limits.",
+  "Medical expenses: shared by the family, and the rest too.", "Medical expenses: shared by the family; so is everything else.", "Medical expenses: shared by the family, and baggage is shared too.",
+  "Medical expenses: shared by the family plus all other benefits.", "Medical expenses: joint, as are all other limits.", "Medical expenses: shared by all of you, like every other limit.",
+  "Baggage is per person; medical expenses are shared and so is everything else.", "Baggage: per person; everything else: shared.", "Each person has their own baggage limit; all other limits are shared.",
+  "Per person for baggage; medical, liability and the rest: shared by the family."]) {
+  test(`gate PPS-22 tier 1: '${line}' withholds every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), noOne));
+}
+for (const [line, gone] of [
+  ["Medical expenses: shared; baggage: per person.", ["Overseas medical expenses"]],
+  ["Baggage: per person; medical expenses: shared by the family.", ["Overseas medical expenses"]],
+  ["Medical expenses: shared; baggage: per person; personal liability: shared.", ["Overseas medical expenses", "Personal liability"]],
+  ["Medical expenses: shared with your spouse.", ["Overseas medical expenses"]],
+  ["Medical expenses: shared by the family and baggage.", ["Overseas medical expenses", "Baggage delay", "Loss of baggage"]],
+  ["Medical expenses and baggage: shared.", ["Overseas medical expenses", "Baggage delay", "Loss of baggage"]],
+  ["Medical expenses: shared by the family members only.", ["Overseas medical expenses"]],
+  ["Overseas medical expenses: shared.", ["Overseas medical expenses"]],
+  ["Medical: shared.", ["Overseas medical expenses", "Emergency medical evacuation"]],
+  ["Hospital: shared.", ["Overseas medical expenses", "Emergency medical evacuation"]],
+  ["Medical expenses: joint.", ["Overseas medical expenses"]],
+  ["Medical expenses limit: joint.", ["Overseas medical expenses"]],
+  ["Medical\u00a0expenses are shared by the family.", ["Overseas medical expenses"]],
+  ["Medical expenses\u200b are shared by the family.", ["Overseas medical expenses"]],
+  ["Medical expenses are shared by the family\u00ad.", ["Overseas medical expenses"]],
+  ["\u201cMedical expenses\u201d are shared by the family.", ["Overseas medical expenses"]],
+  ["Medical expenses\u2019 limits are shared by the family.", ["Overseas medical expenses"]],
+  ["MEDICAL EXPENSES ARE SHARED BY THE FAMILY.", ["Overseas medical expenses"]],
+  ["Medical Expenses Are Shared By The Family.", ["Overseas medical expenses"]],
+  ["Medical expenses are shared by the family \u00b9.", ["Overseas medical expenses"]],
+  ["Medical expenses are shared by the family*.", ["Overseas medical expenses"]],
+  ["Medical expenses are shared by the family (see note 3).", ["Overseas medical expenses"]],
+  ["Medical expenses are shared by the family (item no. 3).", ["Overseas medical expenses"]],
+  ["Medical expenses: pooled.", ["Overseas medical expenses"]],
+  ["Medical expenses: pooled by the family.", ["Overseas medical expenses"]],
+  ["Medical expenses limit: pooled for all insured persons.", ["Overseas medical expenses"]],
+  ["Medical expenses: pooled; baggage: per person.", ["Overseas medical expenses"]],
+  ["Medical expenses are shared by the family.*", ["Overseas medical expenses"]],
+  ["Medical expenses are shared by the family\u2020.", ["Overseas medical expenses"]],
+  ["Medical expenses are shared by the family (1).", ["Overseas medical expenses"]],
+  ["Medical expenses are shared by the family [2].", ["Overseas medical expenses"]],
+  ["Medical expenses* are shared by the family.", ["Overseas medical expenses"]],
+  ["*Medical expenses are shared by the family.", ["Overseas medical expenses"]],
+  ["Medical expenses are shared by the family #.", ["Overseas medical expenses"]]] as [string, string[]][]) {
+  test(`gate PPS-22 tier 2: '${line}' withholds ${gone.join(", ")} only`, () => scoped(EIGHT, [CAP_NOTE, line], gone));
+}
+for (const line of ["Medical expenses: shared rooms are covered.", "Medical expenses: shared ward rate applies.", "Hospital cash: shared ward.",
+  "Policy type: joint.", "Cover: joint.", "Account: joint.",
+  "Ownership: joint.", "Application type: joint.", "Policy basis: joint.",
+  "Cover type: joint.", "Plan: joint.", "Life assured: joint lives.",
+  "Holders: joint.", "Policyholder: joint applicant.", "Personal liability: joint and several.",
+  "Basis of cover: joint.", "Joint: yes.", "Tenancy: joint tenants.",
+  "Policy owner: joint owners.", "Type: joint policy.", "Cover basis: joint.",
+  "Insurance: joint.", "Plan type: joint.", "Liability: joint and several."]) {
+  test(`gate PPS-22: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),
