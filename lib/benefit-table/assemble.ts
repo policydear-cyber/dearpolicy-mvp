@@ -831,8 +831,13 @@ function perPersonColumnRow(r: CheckedReading, b: CheckedBenefit, next: string):
   if ((r.tiedNotes ?? []).length) return false;
   // A note sentence that names this row's benefit and ties it to the lives together ("Personal liability is shared by the
   // family."), even with no limit word: this row is no one's own.
-  const label = norm(b.benefit);
-  if (label.length >= 4 && (r.tieLines ?? []).some((t) => ` ${norm(t)} `.includes(` ${label} `))) return false;
+  // The row is named by its label without a bracketed part ("Personal liability (third party)") or by the label's last two
+  // or more words ("Overseas medical expenses" is named by "Medical expenses are shared ..."; gate round 8).
+  if ((r.tieLines ?? []).length) {
+    const words = norm(b.benefit.replace(/\([^)]*\)|\[[^\]]*\]/g, " ")).split(" ").filter(Boolean);
+    const names = words.length === 1 ? (words[0].length >= 5 ? [words[0]] : []) : words.slice(0, -1).map((_, i) => words.slice(i).join(" "));
+    if (names.length && r.tieLines!.some((t) => { const n = ` ${norm(t)} `; return names.some((x) => n.includes(` ${x} `)); })) return false;
+  }
   if (PAYMENT_LABEL.test(b.benefit) || (r.premiumFigures ?? []).some((v) => b.value != null && Math.abs(v - b.value) < 0.005)) return false;
   // The line below is the row's own words only when it carries on the row's cell (starts in lower case); a note line
   // printed under the table is read by the note-line rule (check.ts tiedNotes; per-person-shared gate round 3).

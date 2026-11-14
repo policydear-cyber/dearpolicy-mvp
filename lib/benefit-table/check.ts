@@ -928,10 +928,14 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
     if (prevStructural === "admin" && /^\s*[a-z(\d]/.test(line) && admin(line)) return "admin";
     return null;
   };
-  for (const p of pages) {
-    const lines = p.text.split(/\r?\n/);
+  // Every page's lines in one run too, so a note sentence is read across a page break (gate round 8, R8-H1).
+  const pageLines = pages.map((p) => p.text.split(/\r?\n/));
+  const all = pageLines.flat();
+  let pageStart = 0, carriedTo = 0;
+  for (const lines of pageLines) {
+    const off = pageStart;
+    pageStart += lines.length;
     let prev: "admin" | "footnote" | null = null;
-    let carriedTo = 0;
     lines.forEach((line, i) => {
       const l = flat(line);
       if (!l) return;
@@ -945,23 +949,25 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
       const rowLine = own.has(l) || tableLine(line);
       // A shared or aggregate limit, on a row's own line or any other: every figure may be shared by all the lives.
       if (SHARED_LIMIT.test(line)) add(out.sharedNotes, line);
-      // A line off every row's own line that ties a limit to the lives together (a row's own words are read with that row).
       // The note's whole sentence: this line and the lines that carry it on (starting in lower case), up to its full stop;
       // the family-cap shape and the tie are judged on the same sentence the row's condition shows (gate round 7, R7-H1).
       // TIE_HINT first, so a page of ordinary lines costs one test each.
       // A line already read as the rest of the sentence above it is not read again on its own.
-      if (!rowLine && i >= carriedTo && (TIE_HINT.test(line) || /^\s*[a-z]/.test(lines[i + 1] ?? ""))) {
+      // Lines are counted across pages (g), so the sentence runs on over a page break and blank lines at a page's foot.
+      const g = off + i;
+      const nextText = (from: number) => { let k = from; while (k < all.length && k < from + 8 && !flat(all[k])) k++; return k < all.length && flat(all[k]) ? { k, line: all[k] } : null; };
+      if (!rowLine && g >= carriedTo && (TIE_HINT.test(line) || /^\s*[a-z]/.test(nextText(g + 1)?.line ?? ""))) {
         const parts = [line.trim()];
-        let j = i + 1;
-        while (!/[.!?]\s*$/.test(parts.at(-1)!) && j < lines.length && j < i + 6 && /^\s*[a-z]/.test(lines[j]) && !own.has(flat(lines[j]))) parts.push(lines[j++].trim());
+        let j = g + 1;
+        for (let n = nextText(j); n && !/[.!?]\s*$/.test(parts.at(-1)!) && n.k < g + 9 && /^\s*[a-z]/.test(n.line) && !own.has(flat(n.line)); n = nextText(j)) { parts.push(n.line.trim()); j = n.k + 1; }
         carriedTo = j;
         const sentence = parts.join(" ");
         if (TIE_HINT.test(sentence)) {
-          // Left open: no full stop, and a line follows that is no row's (it may carry the note on in other words).
-          let k = j;
-          while (k < lines.length && !flat(lines[k])) k++;
-          const next = lines[k];
-          const open = !/[.!?]\s*$/.test(sentence) && next != null && !own.has(flat(next)) && !tableLine(next);
+          // Left open: a line follows that is no row's, and either the sentence has no full stop (another line, or another
+          // page, may carry it on) or that line starts in lower case ("…twice the limit shown." / "or S$5,000, whichever is
+          // less."; gate round 8, C5).
+          const after = nextText(j);
+          const open = !!after && !own.has(flat(after.line)) && !tableLine(after.line) && (!/[.!?]\s*$/.test(sentence) || /^\s*[a-z]/.test(after.line));
           if (capsAsMultiple(sentence, open)) add(out.capNotes, sentence);
           else if (tiesInClauses(sentence)) add(out.tiedNotes, sentence);
           // A sentence that ties something to the lives together, printed for one benefit ("Personal liability is shared by
