@@ -797,6 +797,43 @@ for (const line of ["Every insured person has the same limits.", "Insured person
   test(`gate PPS-14: '${line}' keeps every per-person row`, () =>
     assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
 }
+// Per-person-shared gate round 15: "pool" shares only as pooled limits or a pool of cover; "however many" only before
+// people; "Section 1 and Section 2" joins sections; a sentence that names the benefits it shares withholds those rows only;
+// a strong word among a named group with no row named withholds every row; "limits are joint", "once, no matter who",
+// "for them all", "to them together". Each sentence follows a valid family-cap note.
+const EVAC8: [string, string, number][] = [EIGHT[0], ["Emergency medical evacuation and repatriation", "S$1,000,000", 1000000], ...EIGHT.slice(2)];
+const scoped = (rows: [string, string, number][], extra: string[], gone: string[]) => {
+  const got = sixWith({ rows, extra });
+  assert.deepEqual(got, each(rows.map(([b]) => b).filter((b) => !gone.includes(b))));
+};
+for (const line of ["Benefits are not paid for car pooling.", "However many days you are delayed, the most we pay is the limit shown.",
+  "Cover applies however many trips you take.", "Section 1 and Section 2 limits are shared.", "Part A and Part B limits are shared.",
+  "Sections 1, 2 and 3 limits are shared.", "Medical expenses for insured persons are paid in total once the claim is approved."]) {
+  test(`gate PPS-15: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
+}
+for (const [extra, gone] of [
+  [[CAP_NOTE, "Liability cover is shared by the family."], ["Personal liability"]],
+  [[CAP_NOTE, "Each insured person has their own limit for all benefits except medical expenses, which are shared by the family."], ["Overseas medical expenses"]],
+  [["Family limit: twice the limit shown. Personal liability is shared by the family."], ["Personal liability"]],
+  [[CAP_NOTE, "Travel delay and baggage delay are pooled for all travellers."], ["Travel delay", "Baggage delay"]]] as [string[], string[]][]) {
+  test(`gate PPS-15 row scope: '${extra.at(-1)}' withholds ${gone.join(", ")} only`, () => scoped(EIGHT, extra, gone));
+}
+test("gate PPS-15: 'Medical expenses and evacuation are shared by the family.' withholds both rows only", () =>
+  scoped(EVAC8, [CAP_NOTE, "Medical expenses and evacuation are shared by the family."], ["Overseas medical expenses", "Emergency medical evacuation and repatriation"]));
+for (const line of ["Sections 1 and 2 are shared by all insured persons.", "Both sections are shared by you and your spouse.", "Limits are joint.",
+  "The cover is joint.", "We pay once, no matter who is injured.", "Each limit is the most we pay for them all.", "The limits apply to them together.",
+  "The limits are pooled.", "One limit is paid however many claim."]) {
+  test(`gate PPS-15: '${line}' withholds every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), noOne));
+}
+for (const line of ["Shared accommodation costs are covered up to the limit shown.", "They must each submit a claim form.", "Their own limits apply.",
+  "Joint account holders must both sign the form.", "Pool and spa injuries are excluded.", "We may share your personal data with our partners and reinsurers.",
+  "We refund a share of the unused premium.", "Jointly owned property is not covered.", "Rental car excess is shared with the rental company.",
+  "Whoever claims must send original receipts.", "They are covered for the limits shown.", "Their claims are paid in Singapore dollars.",
+  "Medical expenses and evacuation are combined in one limit.", "Travel delay and baggage delay are combined.", "Each insured person may claim once per trip.",
+  "The policy may be jointly held by spouses.", "The premium is shared between the insured persons.", "Information shared with us is kept confidential.",
+  "Your joint policyholder may also make changes.", "Only one claim is paid, whoever made the booking."]) {
+  test(`gate PPS-15 attack: '${line}' keeps every per-person row`, () => assert.deepEqual(sixWith({ rows: EIGHT, extra: [CAP_NOTE, line] }), each(EIGHT_NAMES)));
+}
 test("gate PPS-4: a per-person column's qualifier reads 'per insured person' in the chat's table, never 'for per insured'", () => {
   const t = perPersonTable({ rows: SIX });
   const household = { accountId: "11111111-1111-1111-1111-111111111111", members: BASE_FAMILY.map((m) => ({ name: m.display_name, relationship: "self" })),

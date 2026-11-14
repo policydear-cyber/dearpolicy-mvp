@@ -20,7 +20,7 @@ import { PREMIUM, SCHEME_NAME, travelName } from "@/lib/coverage/table-figures";
 import { planTypeOf, type PlanType } from "@/lib/coverage/plan-type";
 import { shareOf as readShare } from "@/lib/format/share-of";
 import { anyMoneyFigures } from "@/lib/format/currency";
-import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, marksIn, namesTheLives, noteMarkOf, numbersIn, bindsToGroup, sharesLimitStrongly, withoutOwnShareCap, withoutTravelTogether, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
+import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, marksIn, namesTheLives, noteMarkOf, numbersIn, bindsToGroup, sharesLimitStrongly, sharesStronglyAmong, withoutOwnShareCap, withoutTravelTogether, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 import { benefitWords } from "./cover-rows";
@@ -829,22 +829,54 @@ function tiedRowsOf(r: CheckedReading): { all: boolean; rows: Set<CheckedBenefit
     const content = w.filter((x) => x.length >= 4 && !LABEL_STOP.has(x) && !GENERIC_LAST_WORD.has(x));
     return { b, phrases, content };
   });
-  for (const t of r.tieLines ?? []) {
-    // Never a row named from inside "travelling together", "on the same trip", "submitted together" (gate round 11).
-    // Nor from inside a unit of time or event ("per trip", "each journey", "any one event"): no benefit's name.
-    const n = ` ${stems(withoutTravelTogether(t).replace(/\b(?:per|each|every|any\s+one)\s+(?:trip|journey|event|day|claim|accident|occurrence|period|year)s?\b/gi, " ")).join(" ")} `;
+  // Every label phrase, longest first, with the rows it names: a phrase found is taken out of the note before shorter ones
+  // are looked for, so "baggage delay" names Baggage delay and leaves no "baggage" to name Loss of baggage (gate round 15).
+  const byPhrase = new Map<string, CheckedBenefit[]>();
+  for (const x of labels) for (const p of x.phrases) byPhrase.set(p, [...(byPhrase.get(p) ?? []), x.b]);
+  const phrases = [...byPhrase.keys()].sort((a, b) => b.split(" ").length - a.split(" ").length || b.length - a.length);
+  /** The rows a note's words name: by label phrase, then (with a group named) by a content word left over. */
+  const rowsNamed = (text: string, group: boolean) => {
+    // Never a row named from inside "travelling together", "on the same trip", "submitted together" (gate round 11), nor from
+    // inside a unit of time or event ("per trip", "each journey", "any one event"): no benefit's name.
+    let n = ` ${stems(withoutTravelTogether(text).replace(/\b(?:per|each|every|any\s+one)\s+(?:trip|journey|event|day|claim|accident|occurrence|period|year)s?\b/gi, " ")).join(" ")} `;
+    const named = new Set<CheckedBenefit>();
+    for (const p of phrases) if (n.includes(` ${p} `)) { for (const b of byPhrase.get(p)!) named.add(b); n = n.split(` ${p} `).join(" | "); }
+    if (group) for (const x of labels) if (!named.has(x.b) && x.content.some((c) => n.includes(` ${c} `))) named.add(x.b);
+    return named;
+  };
+  for (const t of [...(r.tieLines ?? []), ...(r.tiedNotes ?? []).map((x) => ({ note: x }))]) {
+    const tied = typeof t !== "string", text = typeof t === "string" ? t : t.note;
     // A group of people named, or the certificate as the unit ("Under one certificate the limit shown is paid once."; gate round 13).
-    const lives = bindsToGroup(t) && !PREMIUM.test(t);
-    let placed = labels.filter((x) => x.phrases.some((p) => n.includes(` ${p} `)));
-    if (!placed.length && lives) placed = labels.filter((x) => x.content.some((c) => n.includes(` ${c} `)));
-    for (const x of placed) out.rows.add(x.b);
-    // A strong sharing word with no group named withholds every row when it names a limit but no row ("The limits shown are
-    // held jointly."; gate round 14); never a premium's.
-    if (!placed.length && ((lives && BENEFIT_NOUN.test(t)) || (sharesLimitStrongly(t) && !PREMIUM.test(t)))) out.all = true;
+    const lives = bindsToGroup(text) && !PREMIUM.test(text);
+    // "... all benefits except medical expenses, which are shared ...": only the excepted benefits are shared (gate round 15).
+    const except = /\bexcept\s+(?:for\s+)?(.+?)\s*,?\s+which\b/i.exec(text)?.[1];
+    if (except && !CAP_LIKE.test(text)) {
+      const named = rowsNamed(except, true);
+      if (named.size) { for (const b of named) out.rows.add(b); continue; }
+    }
+    if (tied) {
+      // A note tying a limit to the lives together withholds every row, unless it says the benefits it names are shared
+      // ("Liability cover is shared by the family." withholds Personal liability only; gate round 15) and nothing more: no
+      // figure or multiple (a family cap's shape), no "all benefits", "the limits", "these sections".
+      const named = CAP_LIKE.test(text) || WHOLE.test(text) || !NAMED_ARE_SHARED.test(text) ? new Set<CheckedBenefit>() : rowsNamed(text, false);
+      if (!named.size) out.all = true;
+      for (const b of named) out.rows.add(b);
+      continue;
+    }
+    const named = rowsNamed(text, lives);
+    for (const b of named) out.rows.add(b);
+    // A note naming no row withholds every row when it names a group and a benefit or limit, shares a limit in a strong word,
+    // or shares benefits or sections in a strong word among a group of people (gate rounds 10, 14, 15; never "the policy may
+    // be jointly held by spouses"); never a premium's.
+    if (!named.size && !PREMIUM.test(text) && ((lives && BENEFIT_NOUN.test(text)) || sharesLimitStrongly(text) || (sharesStronglyAmong(text) && (BENEFIT_NOUN.test(text) || /\b(?:sections?|parts?)\b/i.test(text))))) out.all = true;
   }
   tiedCache.set(r, out);
   return out;
 }
+/** A note's figure, multiple or words about every row: the note is about the whole table, not the rows it names. */
+const CAP_LIKE = /\d|%|\b(?:twice|double|treble|triple|thrice|times|per\s*cent)\b/i;
+const NAMED_ARE_SHARED = /\b(?:is|are)\s+(?:shared|pooled|joint)\b/i;
+const WHOLE = /\b(?:all|every|each|any|the|these|those|other|both)\s+(?:\w+\s+)?(?:benefits|limits|sections|covers|amounts|items)\b|\b(?:limits|benefits)\s+(?:shown|above|below|in\s+this|on\s+this|stated)\b|\b(?:all|every)\s+(?:benefits?|limits?|sections?)\b/i;
 /** Last words of a benefit label too general to name it alone ("Overseas medical expenses" is not named by "expenses"). */
 const GENERIC_LAST_WORD = new Set(["expenses", "expense", "costs", "cost", "benefit", "benefits", "cover", "limit", "limits", "amount", "amounts", "allowance", "payment", "charges", "charge", "fees", "fee"]);
 /** A row label that is a family's or household's own benefit ("Family personal liability", "Household contents"), never
@@ -873,14 +905,15 @@ const HEADING_NOTE_SHAPES = [
  *   other figure, no shared limit or sum insured, and prints nothing beyond a row's own shapes, per insured person, per trip
  *   or period, and the currency (an allow-list, as for a plain row's note). */
 function perPersonColumnRow(r: CheckedReading, b: CheckedBenefit, next: string): boolean {
-  if ((r.tiedNotes ?? []).length) return false;
   // A note sentence that names this row's benefit and ties it to the lives together ("Personal liability is shared by the
   // family."), even with no limit word: this row is no one's own.
   // The row is named by its label without a bracketed part ("Personal liability (third party)") or by the label's last two
   // or more words ("Overseas medical expenses" is named by "Medical expenses are shared ..."; gate round 8).
   // A note sentence that ties a benefit to the lives together withholds the rows it names; one that names the lives and a
   // benefit or limit but no row the matcher can place withholds every per-person row of the document (gate round 10).
-  if ((r.tieLines ?? []).length) {
+  // A note tying a limit to the lives together (check.ts tiedNotes) withholds every row, or only the rows it names when it
+  // names rows and nothing more (gate round 15).
+  if ((r.tieLines ?? []).length || (r.tiedNotes ?? []).length) {
     const tied = tiedRowsOf(r);
     if (tied.all || tied.rows.has(b)) return false;
   }
