@@ -297,7 +297,10 @@ export type CheckedReading = { documentId: string; document: string; kind: Readi
    * each named person (TE gate round 2: an allow-list, not a list of words to refuse). */
   plainBlockers?: string[];
   /** The money figures printed on the document's premium lines: a row with one of them is never a benefit for each person. */
-  premiumFigures?: number[] };
+  premiumFigures?: number[];
+  /** The lines printed over and inside the benefit table (its title, column headings and any sub-heading among its rows;
+   * lifeNotesOf): an unmarked row is each named person's only when every one of them is plain (assemble.ts plainHeads). */
+  tableHeads?: string[] };
 
 // The same lists as evidence.ts's printedFigures (#260): a currency printed right beside a figure, and words before a
 // figure that make it a number other than money.
@@ -1176,7 +1179,7 @@ function tiesInClauses(line: string): boolean {
   }
   return false;
 }
-export type DocumentNotes = { tieLines: string[]; capNotes: string[]; tiedNotes: string[]; lifeNotes: string[]; sharedNotes: string[]; footnotes: { mark: string; text: string }[]; plainBlockers: string[]; premiumFigures: number[] };
+export type DocumentNotes = { tieLines: string[]; capNotes: string[]; tiedNotes: string[]; lifeNotes: string[]; sharedNotes: string[]; footnotes: { mark: string; text: string }[]; plainBlockers: string[]; premiumFigures: number[]; tableHeads: string[] };
 /** Words that change a figure for whoever a line names: a printed share, a cut or a rise (TE gate round 2, R2-M1: never "paid",
  * "only" or "limited", which ordinary lines about who may be insured print). */
 const STRICT_CHANGE = /\b(?:half|halved|halves|doubl\w*|reduc\w*|less|lower|instead|not\s+covered|exclud\w*|subsequent|benefits?|amounts?|limits?|rates?|maximum|pays?)\b|%|\bper\s*cent\b/i;
@@ -1194,7 +1197,7 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   // Only a person's own schedule or certificate gives a row to each named insured person (assemble.ts perPersonRows needs
   // its own proof, plainTable a personal_proof): any other document's notes are never read, so its pages are not walked
   // (benefit-table:speed-test: a 360-page household of wordings went from about 0.5 s to 4.8 s when every line was).
-  if (reading.kind != null && reading.kind !== "personal_proof") return { tieLines: [], capNotes: [], tiedNotes: [], lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
+  if (reading.kind != null && reading.kind !== "personal_proof") return { tieLines: [], capNotes: [], tiedNotes: [], lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [], tableHeads: [] };
   // Invisible characters inside a word ("sha\u00ADred") are no character of it (gate round 23).
   pages = pages.map((p) => /[\u200B-\u200D\u2060\uFEFF\u00AD]/.test(p.text) ? { ...p, text: p.text.replace(INVISIBLE, "") } : p);
   // List items printed on their own lines under "The following (limits) are (not) shared [by <group>]:", each starting with
@@ -1243,7 +1246,7 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   };
   /** A footnote line and the line that continues it (one starting in lower case). */
   const noteText = (lines: string[], i: number) => /^\s*[a-z]/.test(lines[i + 1] ?? "") ? `${lines[i].trim()} ${lines[i + 1].trim()}` : lines[i].trim();
-  const out: DocumentNotes = { tieLines: [], capNotes: [], tiedNotes: [], lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [] };
+  const out: DocumentNotes = { tieLines: [], capNotes: [], tiedNotes: [], lifeNotes: [], sharedNotes: [], footnotes: [], plainBlockers: [], premiumFigures: [], tableHeads: [] };
   const add = (list: string[], line: string) => { if (!list.includes(line.trim()) && list.length < 20) list.push(line.trim()); };
   const money = (line: string) => anyMoneyFigures(line).map((f) => f.value);
   const peopleWords = people.map((n) => ` ${n.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `);
@@ -1252,6 +1255,8 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   const strip = (t: string) => {
     let x = ` ${flat(t)} `;
     for (const n of [reading.product, reading.insurer]) if (n && flat(n).length >= 4) x = x.split(flat(n)).join(" ");
+    // A currency's name is no pronoun: "US dollars" names the currency, never "us" the insurer (ADMIN_SCOPE).
+    x = x.replace(/\b(?:u\.?\s?s\.?|united\s+states)\s+dollars?\b/g, " dollars ");
     // "(all amounts in GBP)": what currency the table is printed in.
     return x.replace(/\(?\s*(?:all\s+)?(?:amounts?|figures?)\s+(?:are\s+)?(?:shown\s+|stated\s+)?in\s+[a-z ]{3,20}\)?/g, " ")
       // A heading over the table: "TABLE OF BENEFITS", "Schedule of benefits", "Benefit schedule".
@@ -1403,6 +1408,26 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
       const sameAsAll = life && SAME_FIGURE.test(line) && !OTHER_THAN_SAME.test(line) && !figures().length;
       if (isNote && !sameAsAll) add(out.lifeNotes, line);
     });
+  }
+  // The lines printed over and inside the table, on each page that prints a benefit row: from the line after the page's
+  // last cover line above its first row (or the page's top) down to its last row, rows and cover lines aside (each-person
+  // gate round 2, EP-H2: a title or column heading such as "BENEFITS FOR THE POLICYHOLDER" or "Amount payable for her").
+  for (const lines of pageLines) {
+    const isRow = (line: string) => { const l = flat(line); return !!l && (own.has(l) || tableLine(line)); };
+    const isCover = (line: string) => { const l = flat(line); return !!l && coverLines.some((c) => l.includes(c) || (l.length >= 6 && c.includes(l))); };
+    const first = lines.findIndex(isRow);
+    if (first < 0) continue;
+    let last = first;
+    lines.forEach((line, i) => { if (isRow(line)) last = i; });
+    let start = 0;
+    for (let i = first - 1; i >= 0; i--) if (isCover(lines[i])) { start = i + 1; break; }
+    for (let i = start; i <= last; i++) {
+      const line = lines[i];
+      if (!flat(line) || isRow(line) || isCover(line) || PAGE_NUMBER.test(line)) continue;
+      // Past the cap, a line no word list allows: the document's table heads are not all read, so they are not all plain.
+      if (out.tableHeads.length >= 40) { out.tableHeads.push("\u0000"); break; }
+      out.tableHeads.push(line.trim());
+    }
   }
   return out;
 }

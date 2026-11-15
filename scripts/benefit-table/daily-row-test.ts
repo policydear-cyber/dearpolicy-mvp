@@ -84,8 +84,13 @@ async function main() {
     assert.equal(cashOf(read(CASH).r)?.fromDay, 3);
     assert.equal(cashOf(read(CASH).r)?.maxDays, 30);
   });
-  await test("one table printed once for three people that never says the figure is each person's: shown for no one, and said so", () => {
-    const t = tableOf(read(CASH).r);
+  // Changed on purpose (TE-ACC-20261115-R4 H1-C): with the reader's forWhom left out, the family schedule's one plain table
+  // (each life its own different sum insured, a share-of-sum row beside it, every other line structural) gives the daily
+  // row to each named person, as the R3 reader's mark did; the reader saying it is for some still gives it to no one.
+  await test("one plain family table, no forWhom from the reader: the daily row is each named person's; marked for some: no one, and said so", () => {
+    const each = tableOf(read(CASH).r);
+    for (const p of each.people) assert.ok(p.rows.some((x) => x.benefit === "Hospital cash" && x.figure.kind === "printed" && x.figure.amount === 50), p.name);
+    const t = tableOf(read(CASH, { forWhom: "some_insured" }).r);
     for (const p of t.people) assert.ok(!p.rows.some((x) => x.benefit === "Hospital cash"), p.name);
     assert.ok(t.unlinkedSections.some((u) => u.section.section === "5" && u.why === NOT_TOLD_WHY));
     // A share of each person's own sum is each person's own figure.
