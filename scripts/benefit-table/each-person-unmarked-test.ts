@@ -312,7 +312,7 @@ for (const [what, o] of [
   test(`EP-H3/EP-M1: no forWhom, ${what}: no one gets the fixed rows`, () => noneFixed(table(schedule({ ...o, rows: mark(ROWS, null) })), what));
 }
 for (const [money, header] of [[SGD, "Section\tBenefit\tAmount payable (S$)"], [SGD, "Section\tBenefit\tAmount payable (SGD)"], [SGD, "Section\tBenefit\tAmount payable (Singapore dollars)"],
-  [USD, "Section\tBenefit\tAmount payable (US$)"], [USD, "Section\tBenefit\tAmount payable (US dollars)"], [USD, "Section\tBenefit\tAmount payable (U.S.$)"], [USD, "Section\tBenefit\tAmount payable (USD)"],
+  [USD, "Section\tBenefit\tAmount payable (USD)"], [USD, "Section\tBenefit\tAmount payable (U.S.$)"],
   [SGD, "Section\tBenefit\tAmount payable for a insured person"]] as const) {
   test(`EP-H3 positives: no forWhom, column heading "${header.split("\t")[2]}": each named person, as when marked`, () => {
     const un = table(schedule({ money, header, rows: mark(ROWS, null) })), mk = table(schedule({ money, header, rows: mark(ROWS, "each_named_insured") }));
@@ -320,6 +320,40 @@ for (const [money, header] of [[SGD, "Section\tBenefit\tAmount payable (S$)"], [
     for (const id of NAMED) assert.equal(fixedOf(un, id).length, 2, id);
   });
 }
+// Round 4 (EP-H4): a column heading's "(US$)", "(U.S.$)" or "(US dollars)" is read as main reads it ("us"), so the table is
+// not plain on either path: main's result (no one), with or without the reader's mark.
+for (const header of ["Section\tBenefit\tAmount payable (US$)", "Section\tBenefit\tAmount payable (US dollars)",
+  "Section\tBenefit\tAmount payable (US$) for the Policyholder", "Section\tBenefit\tAmount payable (US$) - Policyholder"]) {
+  test(`EP-H4: column heading "${header.split("\t")[2]}" on a US$ schedule: main's result (no one), marked or not`, () => {
+    noneFixed(table(schedule({ money: USD, header, rows: mark(ROWS, null) })), "unmarked");
+    noneFixed(table(schedule({ money: USD, header, rows: mark(ROWS, "each_named_insured") })), "marked");
+  });
+}
+// Round 4 (EP-H5): a letter or number outside ASCII, or a currency sign right after person / insured / section.
+for (const [what, o] of [
+  ["title \"Benefits for 陈伟明\"", { title: "Benefits for 陈伟明" }],
+  ["column heading \"Amount payable (陈伟明)\"", { header: "Section\tBenefit\tAmount payable (陈伟明)" }],
+  ["title \"Benefits for the insured person 陈伟明\"", { title: "Benefits for the insured person 陈伟明" }],
+  ["title \"Benefits for insured person 一\"", { title: "Benefits for insured person 一" }],
+  ["title \"Benefits for insured person Ⓐ\"", { title: "Benefits for insured person Ⓐ" }],
+  ["title \"Benefits for insured person Ａ\" (fullwidth)", { title: "Benefits for insured person Ａ" }],
+  ["title \"Benefits for insured person Α\" (Greek)", { title: "Benefits for insured person Α" }],
+  ["title \"Benefits for insured person A$\"", { title: "Benefits for insured person A$" }],
+  ["title \"Benefits for insured A$\"", { title: "Benefits for insured A$" }],
+  ["title \"Benefits for insured person HK$\"", { title: "Benefits for insured person HK$" }],
+  ["title \"Benefits for insured person £\"", { title: "Benefits for insured person £" }],
+  ["title \"Benefits for insured person €\"", { title: "Benefits for insured person €" }],
+  ["title \"Section S$ benefits\"", { title: "Section S$ benefits" }],
+] as [string, Opts][]) {
+  test(`EP-H5: no forWhom, ${what}: no one gets the fixed rows`, () => noneFixed(table(schedule({ ...o, rows: mark(ROWS, null) })), what));
+}
+test("EP-H5 positives: \"(all amounts in SGD)\", \"Amount payable (S$)\", \"TABLE OF BENEFITS (£)\" and \"Benefits (€)\" stay plain: each named person, as when marked", () => {
+  for (const [money, title] of [[SGD, "TABLE OF BENEFITS (all amounts in SGD)"], [SGD, "Section\tBenefit\tAmount payable (S$)"], [GBP, "TABLE OF BENEFITS (£)"], [GBP, "Benefits (€)"]] as const) {
+    const un = table(schedule({ money, title, rows: mark(ROWS, null) })), mk = table(schedule({ money, title, rows: mark(ROWS, "each_named_insured") }));
+    assert.deepEqual(everyone(un), everyone(mk), title);
+    for (const id of NAMED) assert.equal(fixedOf(un, id).length, 2, `${title}: ${id}`);
+  }
+});
 test("EP-H2 positives: R4's title and headings (\"TABLE OF BENEFITS (all amounts in GBP)\", \"Section Benefit Amount payable\") give the same figures with and without forWhom", () => {
   for (const [money, title] of [[GBP, "TABLE OF BENEFITS (all amounts in GBP)"], [SGD, "SCHEDULE OF BENEFITS (all amounts in Singapore dollars)"], [USD, "Table of benefits - all amounts are in US dollars"]] as const) {
     const un = table(schedule({ money, title, rows: mark(ROWS, null) })), mk = table(schedule({ money, title, rows: mark(ROWS, "each_named_insured") }));

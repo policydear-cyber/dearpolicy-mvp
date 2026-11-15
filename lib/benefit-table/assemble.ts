@@ -1281,13 +1281,18 @@ function headWords(line: string): string[] {
 /** Whether every table head line the document prints (check.ts tableHeads), and the row's own column heading, is plain:
  * each line prints at least one word (the cap's sentinel and a line of marks alone fail; EP-M1), every word is in
  * PLAIN_HEAD, and "a" or "an" is followed by another plain word and never follows person, insured or section ("Benefits
- * for insured person A", "Section A benefits"; EP-H3). */
+ * for insured person A", "Section A benefits"; EP-H3); no letter or number outside ASCII, and no currency sign right after
+ * person, insured or section (EP-H5). */
 function plainHeads(r: CheckedReading, b: CheckedBenefit): boolean {
   if (!r.tableHeads) return false;
   const plain = (line: string) => {
     if (line.includes("\u0000")) return false;
+    // A letter or number outside ASCII ("Benefits for 陈伟明", "insured person Ａ / Α / Ⓐ / 一") is one no word list here can
+    // read: not plain (each-person gate round 4, EP-H5). The currency signs £ and € are read as tokens first.
+    if (/[^\x00-\x7f]/u.test(line.replace(/[\u00a3\u20ac]/g, "$"))) return false;
     const ws = headWords(line);
-    return ws.length > 0 && ws.every((w, i) => PLAIN_HEAD.has(w) && (!(w === "a" || w === "an")
+    // A currency sign right after person, insured or section ("insured person A$", "insured person £") may be a life's tag.
+    return ws.length > 0 && ws.every((w, i) => PLAIN_HEAD.has(w) && !(w === "cur" && i > 0 && NOT_BEFORE_ARTICLE.has(ws[i - 1])) && (!(w === "a" || w === "an")
       || (i + 1 < ws.length && PLAIN_HEAD.has(ws[i + 1]) && ws[i + 1] !== "a" && ws[i + 1] !== "an" && !(i > 0 && NOT_BEFORE_ARTICLE.has(ws[i - 1])))));
   };
   return r.tableHeads.every(plain) && (!(b.column ?? "").trim() || plain(b.column!));
