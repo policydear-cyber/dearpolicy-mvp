@@ -26,7 +26,7 @@ relies on its words.
 | Confirmed | `--good-*` | read, matched, verified, saved | "Read", "Matched", "Saved", a covered benefit |
 | Unresolved | `--unresolved-*` + dashed edge | not settled yet, and nothing for the household to fix | "Read in part", an amount whose wording isn't read yet, a benefit that depends on conditions, an indicative estimate, "could not check every part" |
 | Warning | `--warn-*` | the household (or a reviewer) should look, decide or provide | a name to confirm, "confirm this" on a benefit, a benefit that needs a document, a claim waiting on their documents, benefits that failed to read, a usage limit near its end, a held file |
-| Error | `--critical-*` | something failed or will be destroyed | upload failed, a document or page that couldn't be read (with Try again), form errors, a rejected file, delete buttons |
+| Error | `--critical-*` | something failed or will be destroyed | upload failed, a document or page that couldn't be read (with Try again), form errors, a rejected file, delete buttons (a document card's Delete is muted at rest and turns `--critical` on hover, focus and its Confirm step) |
 | Information | `--info-*` (warm neutrals) | neutral news | "still being read", "replaced", invite-only sign-up |
 
 Rules of thumb:

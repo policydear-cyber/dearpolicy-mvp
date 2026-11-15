@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { HouseholdExportPanel } from "./export-panel";
 import { AccountTabs } from "@/components/account-tabs";
+import { Icon } from "@/components/icons";
 import { customerMessage } from "@/components/customer-text";
 
 type Member = { householdId: string; userId: string; role: "owner" | "member"; createdAt: string; email?: string | null; isSelf?: boolean };
@@ -96,7 +97,7 @@ export default function HouseholdPage() {
     <div className="page">
       <header className="page-header compact">
         <div>
-          <h1>Account settings</h1>
+          <h1><span className="title-icon"><Icon name="family"/></span>Account settings</h1>
         </div>
       </header>
       <AccountTabs />

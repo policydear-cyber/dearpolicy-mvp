@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
 import { AccountTabs } from "@/components/account-tabs";
+import { Icon } from "@/components/icons";
 import { HouseholdAccess } from "@/components/household-access";
 import { kindsOfTable, ledgerKindsByPerson, namedCoverKinds, type KindRow, type ScheduleLine, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
 
@@ -112,7 +113,7 @@ export default function FamilyPage() {
 
   return (
     <div className="page">
-      <header className="page-header compact"><div><h1>Account settings</h1></div></header>
+      <header className="page-header compact"><div><h1><span className="title-icon"><Icon name="family"/></span>Account settings</h1></div></header>
       <AccountTabs />
       <div className="section-heading"><div><h2>Your family</h2><p>The people your policies cover. Use each person&rsquo;s full name as their documents print it. DearPolicy uses it to match each document to the people it covers.</p></div></div>
 
