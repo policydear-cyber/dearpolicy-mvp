@@ -62,7 +62,7 @@ const FIXED = ["Hospital cash", "Medical expenses"];
 const mark = (rows: Row[], forWhom: string | null) => rows.map((r) => FIXED.includes(r.benefit) ? { ...r, forWhom } : r);
 const withRow = (rows: Row[], benefit: string, change: Partial<Row>) => rows.map((r) => r.benefit === benefit ? { ...r, ...change } : r);
 
-type Opts = { id?: string; money?: Money; rows?: Row[]; header?: string; notes?: string[]; lives?: Life[]; policyOf?: (l: Life) => string; numbered?: "label" | "bare"; printedPolicies?: string[] };
+type Opts = { id?: string; money?: Money; rows?: Row[]; header?: string; title?: string; subHeading?: string; notes?: string[]; lives?: Life[]; policyOf?: (l: Life) => string; numbered?: "label" | "bare"; printedPolicies?: string[] };
 /** A family PA schedule, read by hand from its own page text: page 1 the insured persons, page 2 one table of benefits. */
 function schedule(o: Opts = {}) {
   const m = o.money ?? SGD, rows = o.rows ?? ROWS, lives = o.lives ?? LIVES, id = o.id ?? DOC_A;
@@ -73,7 +73,10 @@ function schedule(o: Opts = {}) {
     `Currency of this policy: ${m.words}`, "Insured person\tRelationship\tDate of birth\tSum Insured", ...lives.map((l) => `${l.name}\t${l.role}\t${l.dob}\t${fmt(m, l.sum)}`),
     `Annual premium: ${fmt(m, 312)}.00, payable by monthly direct debit of ${fmt(m, 26)}.00.`].join("\n");
   const lines = rows.map((r) => `${r.n}\t${r.benefit}\t${r.cell(m)}`);
-  const page2 = ["TABLE OF BENEFITS", o.header ?? "Section\tBenefit\tAmount payable", ...lines, ...(o.notes ?? []),
+  // A sub-heading printed among the rows, right above the first fixed row.
+  const at = rows.findIndex((r) => r.pays !== "percent");
+  const body = o.subHeading && at >= 0 ? [...lines.slice(0, at), o.subHeading, ...lines.slice(at)] : lines;
+  const page2 = [o.title ?? "TABLE OF BENEFITS", o.header ?? "Section\tBenefit\tAmount payable", ...body, ...(o.notes ?? []),
     "Exclusions: injury while taking part in motor racing or professional sport; self-inflicted injury.",
     "How to claim: notify Merlion Mutual within 30 days of the accident and send the completed claim form with the hospital discharge summary."].join("\n");
   const doc: SourceDoc = { id, name: "Family-PA-Schedule-2026.pdf", readable: true, pages: [{ page: 1, text: page1 }, { page: 2, text: page2 }] };
@@ -274,6 +277,35 @@ for (const [label, cell, value, period] of [["Ambulance", "Up to S$500 per accid
     for (const id of NAMED) assert.ok(un.people.find((p) => p.id === id)!.rows.some((x) => x.benefit === label && x.figure.kind !== "none"), id);
   });
 }
+
+// ---------------------------------------------------------------- each-person gate round 2, EP-H2: a title or column heading naming one life
+const EP_H2: [string, Opts][] = [
+  ["title \"BENEFITS FOR THE POLICYHOLDER\"", { title: "BENEFITS FOR THE POLICYHOLDER" }],
+  ["title \"Policyholder benefits\"", { title: "Policyholder benefits" }],
+  ["title line above the headings \"Benefits for the insured spouse\"", { title: "TABLE OF BENEFITS\nBenefits for the insured spouse" }],
+  ...["Amount payable for the Policyholder", "Policyholder", "Amount payable to the Life Assured", "Amount payable - Life Assured", "Amount payable for the Proposer",
+    "Amount payable for the Employee", "Amount payable for her", "Amount payable for the breadwinner", "Amount payable (Adult)", "Amount payable - Main life"]
+    .map((h): [string, Opts] => [`column heading "${h}"`, { header: `Section\tBenefit\t${h}` }]),
+  ["a sub-heading among the rows (\"Policyholder only\")", { subHeading: "Policyholder only" }],
+  ["a sub-heading among the rows (\"Benefits for the Employee\")", { subHeading: "Benefits for the Employee" }],
+];
+for (const [what, o] of EP_H2) {
+  test(`EP-H2: no forWhom, ${what}: no one gets the fixed rows`, () => {
+    const t = table(schedule({ ...o, rows: mark(ROWS, null) }));
+    noneFixed(t, what);
+  });
+}
+test("EP-H2 positives: R4's title and headings (\"TABLE OF BENEFITS (all amounts in GBP)\", \"Section Benefit Amount payable\") give the same figures with and without forWhom", () => {
+  for (const [money, title] of [[GBP, "TABLE OF BENEFITS (all amounts in GBP)"], [SGD, "SCHEDULE OF BENEFITS (all amounts in Singapore dollars)"], [USD, "Table of benefits - all amounts are in US dollars"]] as const) {
+    const un = table(schedule({ money, title, rows: mark(ROWS, null) })), mk = table(schedule({ money, title, rows: mark(ROWS, "each_named_insured") }));
+    assert.deepEqual(everyone(un), everyone(mk), title);
+    for (const id of NAMED) assert.equal(fixedOf(un, id).length, 2, `${title}: ${id}`);
+  }
+});
+test("EP-H2: the same headings with the reader's mark keep main's behaviour (marked path unchanged)", () => {
+  const t = table(schedule({ header: "Section\tBenefit\tAmount payable for the Policyholder", rows: mark(ROWS, "each_named_insured") }));
+  for (const id of NAMED) assert.equal(fixedOf(t, id).length, 2, id);
+});
 
 // ---------------------------------------------------------------- #464/#466's adversarial matrix with every row unmarked
 /** Each adversarial certificate with every row's forWhom left out, with and (stripped) without its column heading. UNSAFE:

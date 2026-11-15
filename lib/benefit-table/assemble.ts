@@ -1259,6 +1259,19 @@ function perLifeKindLabel(b: CheckedBenefit): boolean {
   const section = words(b.section ?? "").filter((w) => !/^\d+[a-z]?$/.test(w) && w !== "section");
   return label.length > 0 && [...label, ...section].every((w) => PER_LIFE_KIND.has(w));
 }
+/** The words a line printed over or inside a plain table (its title, column headings, a sub-heading) may print, all of
+ * them, for an unmarked row to be each named person's (each-person gate round 2, EP-H2): "table / schedule / summary of
+ * benefits", section, benefit, amount, payable, limit, maximum, "per / each insured person", an "all amounts in <currency>"
+ * note and connector words. Any other word ("BENEFITS FOR THE POLICYHOLDER", "Amount payable for her", "... to the Life
+ * Assured", "Employee") may make the table one life's, so its rows stay no one's without the reader's mark. */
+const PLAIN_HEAD = new Set(("table schedule summary of benefit benefits section sections no amount amounts payable limit limits maximum max " +
+  "per each insured person persons all are shown stated in for the a an and " +
+  "currency gbp sgd usd myr eur hkd aud rm s us u dollar dollars singapore pound pounds sterling ringgit euro euros").split(" "));
+/** Whether every table head line the document prints (check.ts tableHeads), and the row's own column heading, is plain. */
+function plainHeads(r: CheckedReading, b: CheckedBenefit): boolean {
+  if (!r.tableHeads) return false;
+  return [...r.tableHeads, b.column ?? ""].every((line) => norm(line).split(" ").filter(Boolean).every((w) => PLAIN_HEAD.has(w)));
+}
 function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<string>>, ownProof: (documentId: string, coverKey: string) => boolean) {
   const figure = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
   const firstLine = (t: string) => norm(t.split("\n")[0]);
@@ -1296,8 +1309,9 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
     const plain = !PER_PERSON_HEADING.test(b.column ?? "") && plainTable(r, b, coverKey);
     if (!plain && (!marked || !PER_PERSON_HEADING.test(b.column ?? ""))) return false;
     // With no mark, the document itself must show its one table is read for each insured person (tableIsEachPersons), and
-    // the row's label and section print only per-life benefit kinds (perLifeKindLabel).
-    if (!marked && (!tableIsEachPersons() || !perLifeKindLabel(b))) return false;
+    // the row's label and section print only per-life benefit kinds (perLifeKindLabel), and every title and heading over or
+    // inside the table prints only plain table words (plainHeads).
+    if (!marked && (!tableIsEachPersons() || !perLifeKindLabel(b) || !plainHeads(r, b))) return false;
     // A note anywhere on the document, off every row's own line, that names a kind of life or an age ("Note: for insured
     // children the limits are 50% of those shown") may change any row for some of the lives (check.ts lifeNotes).
     if ((r.lifeNotes ?? []).length) return false;
@@ -1323,7 +1337,7 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
       && !KIND_OF_LIFE.test(`${x.benefit} ${x.rowText ?? x.source.excerpt} ${x.conditions.join(" ")}`);
     // In a plain table, an unmarked neighbour that is itself a plain row by the document's own print (plainTable: no life,
     // age, share, tier, shared limit or other figure in its words; tableIsEachPersons) changes nothing for some of the lives either.
-    const plainNeighbour = (x: CheckedBenefit) => plain && x.forWhom == null && perLifeKindLabel(x) && tableIsEachPersons() && plainTable(r, x, coverKey);
+    const plainNeighbour = (x: CheckedBenefit) => plain && x.forWhom == null && perLifeKindLabel(x) && plainHeads(r, x) && tableIsEachPersons() && plainTable(r, x, coverKey);
     if ([...below, ...above].some((x) => x.forWhom !== "each_named_insured" && !shareOfOwnSum(x) && !plainNeighbour(x))) return false;
     const next = below.length || (plain && anotherRowsNote(r, b, b.nextLine)) ? "" : b.nextLine ?? "";
     if (!plain && !perPersonColumnRow(r, b, next)) return false;
