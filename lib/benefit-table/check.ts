@@ -25,7 +25,7 @@ import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency, type Found } from "@/li
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { moneyCapPrinted, ownRowText, printedOnlyAsCount } from "./own-row";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
-import { sectionIdOf } from "./section-id";
+import { rowSectionCode, rowSectionNumber } from "./section-id";
 
 /** A money figure with its sign; a sign is never the end of a word ("FORM 2", "ARM 2"). */
 const MONEY = String.raw`(?:(?<![A-Za-z])(?:S\$|US\$|A\$|HK\$|RM)|£|€|(?<![A-Za-z$])\$|\b(?:SGD|USD|MYR|GBP|EUR|AUD|HKD))\s?\d[\d,]*(?:\.\d+)?`;
@@ -1229,8 +1229,10 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
     const rows = markRows.get(mark) ?? [];
     if (!rows.length) return false;
     const t = flat(text), w = ` ${t.replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `;
-    // Each row's own section number, bare or with its label ("3", "Section 3", "3 Fracture of arm, wrist or leg").
-    const ownNumbers = new Set(rows.map((b) => sectionIdOf(b.section)?.number ?? null));
+    // Each row's own section number (section-id.ts rowSectionCode: its own line's leading number, else a bare section or
+    // one carrying only the row's own label, "3 Fracture of arm, wrist or leg"); otherwise as before (a bare number only).
+    const ownNumbers = new Set(rows.map((b) => rowSectionCode(b.section, b.benefit, b.rowText ?? b.source.excerpt) != null ? rowSectionNumber(b.section, b.benefit, b.rowText ?? b.source.excerpt)
+      : (() => { const m = /^\s*(?:(?:section|part|item|benefit)\s+)?(\d{1,3})[.)]?\s*$/i.exec(b.section ?? ""); return m ? Number(m[1]) : null; })()));
     for (const m of t.matchAll(/\b(?:section|row|item|benefit|part)\s+(\d{1,3})\b/g)) if (!ownNumbers.has(Number(m[1]))) return false;
     if (/\b(?:sections|rows|items|parts)\b/.test(t)) return false;
     if (reading.benefits.some((b) => !rows.includes(b) && flat(b.benefit).length >= 5 && w.includes(` ${flat(b.benefit).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `))) return false;
@@ -1475,9 +1477,10 @@ export function ownLabelLine(line: string, benefit: string, section: string | nu
   };
   if (!labelled(line)) return false;
   const lead = /^\s*(?:section\s+)?(\d{1,3})[.)]?(?:\t|\s)/i.exec(line)?.[1];
-  // The row's own section number, bare or with its label ("1", "Section 1", "1 Accidental death").
-  const id = sectionIdOf(section);
-  const own = id?.number != null ? id.code : undefined;
+  // The row's own section number: a bare section or one carrying only the row's own label ("1", "Section 1", "1 Accidental
+  // death"; section-id.ts rowSectionCode, with no line: the line here is the one being tested); otherwise as before.
+  const code = rowSectionCode(section, benefit);
+  const own = code != null ? (/^\d{1,3}$/.test(code) ? code : undefined) : /^\s*(?:section\s+)?(\d{1,3})[.)]?\s*$/i.exec(section ?? "")?.[1];
   if (lead != null && lead !== own) return false;
   return page.split("\n").filter((l) => /\d/.test(l) && labelled(l)).length <= 1;
 }

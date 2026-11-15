@@ -1,5 +1,5 @@
 import { printedDay } from "./dates";
-import { sectionIdOf } from "./section-id";
+import { rowSectionCode } from "./section-id";
 
 /** A child's share printed inside a percentage row's own amount cell ("100% of the Sum Insured. For an insured child under
  * 18, limited to 25% of the Sum Insured."). Acceptance run TE-ACC-20261113 R2, H1-B: a child's accidental death on a family
@@ -216,7 +216,8 @@ const LABEL_FILLER = new Set(["the", "and", "for", "of", "any", "all", "per", "b
  * section number ("Section 1", "Sec. 1", "§1"). Null when the label has no key word and no section number is printed. */
 function benefitNamed(benefit: string, section: string | null): RegExp | null {
   const words = [...new Set((benefit.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !LABEL_FILLER.has(w)))];
-  const id = sectionIdOf(section), n = id?.number != null ? id.code : undefined;
+  const code = rowSectionCode(section, benefit);
+  const n = code != null ? (/^\d{1,3}$/.test(code) ? code : undefined) : /^\s*(?:section\s+|sec\.?\s*)?(\d{1,3})[.)]?\s*$/i.exec(section ?? "")?.[1];
   const alts = [...words.map((w) => String.raw`\b${w}s?\b`), ...(n ? [String.raw`(?:\bsections?|\bsec\.?|§)\s*${n}\b`] : [])];
   return alts.length ? new RegExp(alts.join("|"), "i") : null;
 }
@@ -297,16 +298,17 @@ function withoutNonFigures(text: string, thisNamed: RegExp): string {
   return t;
 }
 const flatLabel = (t: string) => t.toLowerCase().replace(/\s+/g, " ").replace(/^(?:section\s+)?\d{1,3}[.)]?\s+/, "").replace(/[\s:.;,-]+$/, "").trim();
-/** A row's section number or code: its leading one, bare or with its label ("3", "3 Fracture of arm, wrist or leg";
- * section-id.ts), else a heading that is only a code ("A", "PA") as before. */
-const sectionNo = (s: string | null | undefined) => sectionIdOf(s)?.code ?? /^\s*(?:section\s+|sec\.?\s*)?([0-9]{1,3}(?:\.[0-9]{1,2})?(?:\([a-z]\))?|[A-Z]{1,4})[.)]?\s*$/i.exec(s ?? "")?.[1] ?? null;
+/** A row's section number or code: a bare section or one carrying only the row's own label ("3", "3 Fracture of arm, wrist
+ * or leg" on that row; section-id.ts rowSectionCode), else as before (a heading that is only a code: "3", "A", "PA"). */
+const sectionNo = (row: ReadRow) => rowSectionCode(row.section, row.benefit) ?? sectionCodeOnly(row.section);
+const sectionCodeOnly = (s: string | null | undefined) => /^\s*(?:section\s+|sec\.?\s*)?([0-9]{1,3}(?:\.[0-9]{1,2})?(?:\([a-z]\))?|[A-Z]{1,4})[.)]?\s*$/i.exec(s ?? "")?.[1] ?? null;
 const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Words that name a row (gate R8-H1): a key word of its label (and for a death row the common ways to say a death), or its
  * section number standing alone in any form ("Section 1", "Item 1", "S1", "1(a)", "Sections 2 and 1"). */
 function rowNamedAny(row: ReadRow): RegExp {
   const words = [...new Set((row.benefit.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !LABEL_FILLER.has(w)))];
   const death = words.some((w) => /^(?:death|deaths|life|fatal|fatality)$/.test(w)) ? [String.raw`\bdeaths?\b`, String.raw`\blife\b`, String.raw`\blives\b`, String.raw`\bfatal\w*`, String.raw`\bdie[sd]?\b`, String.raw`\bdying\b`, String.raw`\bkilled\b`, String.raw`\bdeceased\b`, String.raw`\bmortality\b`] : [];
-  const n = sectionNo(row.section);
+  const n = sectionNo(row);
   // Its section number spelled out ("item one", "the first section").
   const SPELLED = ["", "one|first", "two|second", "three|third", "four|fourth", "five|fifth", "six|sixth", "seven|seventh", "eight|eighth", "nine|ninth", "ten|tenth"];
   const spelled = n && /^\d+$/.test(n) && Number(n) < SPELLED.length ? [String.raw`\b(?:sections?|items?|benefits?|covers?|parts?|clauses?)\s+(?:${SPELLED[Number(n)]})\b`, String.raw`\b(?:the\s+)?(?:${SPELLED[Number(n)]})\s+(?:section|item|benefit|cover|part|clause)\b`] : [];
@@ -381,7 +383,7 @@ function otherRowLine(line: string, others: ReadRow[], thisNamed: RegExp): boole
   if (thisNamed.test(plain) || COLLECTIVE.test(plain) || pluralUnlisted(plain)) return false;
   const cells = line.split("\t").map((c) => flatLabel(c));
   const lead = /^\s*(?:section\s+)?([0-9]{1,3}(?:\.[0-9]{1,2})?|[A-Z]{1,4})[.)]?\t/i.exec(line)?.[1] ?? null;
-  return others.some((o) => { const l = flatLabel(o.benefit); return !!l && cells.includes(l) && (lead == null || lead.toLowerCase() === (sectionNo(o.section) ?? "").toLowerCase()); });
+  return others.some((o) => { const l = flatLabel(o.benefit); return !!l && cells.includes(l) && (lead == null || lead.toLowerCase() === (sectionNo(o) ?? "").toLowerCase()); });
 }
 /** A note that names a different read row (its section in any form, or its whole label) and nothing of this row, with no
  * collective or pointing words and no plural sections not listed by number. */
@@ -389,7 +391,7 @@ function otherRowNote(sentence: string, others: ReadRow[], thisNamed: RegExp): b
   const plain = withoutNonFigures(sentence, thisNamed);
   if (thisNamed.test(plain) || COLLECTIVE.test(plain) || pluralUnlisted(plain) || EXCLUSION_WORDS.test(plain)) return false;
   return others.some((o) => {
-    const n = sectionNo(o.section), l = flatLabel(o.benefit);
+    const n = sectionNo(o), l = flatLabel(o.benefit);
     return (n != null && new RegExp(String.raw`\b(?:section|sec\.?|item|benefit|cover|§)\s*${esc(n)}(?![\w,]|\.\d)`, "i").test(sentence))
       || (l.length >= 4 && sentence.toLowerCase().includes(l));
   });
@@ -437,7 +439,7 @@ export function childShareAllowed(pages: { page: number; text: string }[], own: 
   const names = people.map((n) => n.replace(/\s+/g, " ").trim().toLowerCase()).filter((n) => n.length >= 3);
   const thisNamed = rowNamedAny(row);
   if (names.length) NAMES_WITH.set(thisNamed, new RegExp(names.map((n) => String.raw`\b${n.split(" ").map(esc).join(String.raw`\s+`)}\b`).join("|"), "i"));
-  const rest = others.filter((o) => !(flatLabel(o.benefit) === flatLabel(row.benefit) && (sectionNo(o.section) ?? "") === (sectionNo(row.section) ?? "")));
+  const rest = others.filter((o) => !(flatLabel(o.benefit) === flatLabel(row.benefit) && (sectionNo(o) ?? "") === (sectionNo(row) ?? "")));
   const need = (t: string) => needsAccount(t, thisNamed);
   let run: string[] = [];
   const runOk = () => {

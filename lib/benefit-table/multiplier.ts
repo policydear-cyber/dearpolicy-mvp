@@ -1,5 +1,5 @@
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
-import { sectionIdOf } from "./section-id";
+import { rowSectionCode } from "./section-id";
 
 /** A row's own printed condition that pays a multiple of its amount in one case ("a compound fracture is paid at double the
  * Section 3 amount, still subject to the GBP 1,500 maximum"). Harbourline family PA test, 13 Nov: "It was a compound
@@ -104,7 +104,7 @@ const anchorStem = (w: string) => w.toLowerCase().replace(/(?:ing|ed|es|s|e)$/, 
  * keeps the case this row's). */
 function plainShape(note: string, m: { at: RegExpMatchArray; count: number }, row: RowFacts): boolean {
   if (m.count !== 1 || ARITHMETIC.test(note) || OTHER_BASE.test(note)) return false;
-  const ownSection = row.section ? rowSectionKey(row.section) : "";
+  const ownSection = row.section ? rowSectionKey(row) : "";
   const name = (row.own.split("\n")[0] ?? "").trim().toLowerCase();
   const mine = new Set(tokens(name).map(stem));
   const anchors = new Set(tokens(name).filter((w) => !NOT_CASE.has(w)).map(anchorStem));
@@ -147,9 +147,15 @@ export function keepsCapIn(text: string, cap: number | null): boolean {
 /** A section, item or benefit number a note names ("the Section 3 amount", "item 4", "Benefit 2(a)"). */
 const SECTION_REF = /\b(?:section|item|benefit|clause|part|table\s+item|no\.?)\s*(\d+[a-z]?|\b[ivx]{1,4}\b)(?:\s*\(\s*([a-z0-9]+)\s*\))?/gi;
 const sectionKey = (s: string) => s.toLowerCase().replace(/^\s*(?:section|item|benefit|clause|part|no\.?)\s*/i, "").replace(/[^a-z0-9]/g, "");
-/** A row's own section as a key: its leading number or code when it starts with one ("3", "Section 3" and "3 Fracture of
- * arm, wrist or leg" are all "3"; section-id.ts), else the whole heading as before. */
-const rowSectionKey = (s: string) => { const id = sectionIdOf(s); return id ? sectionKey(id.code) : sectionKey(s); };
+/** A row's own section as a key: its own number or code (section-id.ts rowSectionCode: its own line's leading number, else
+ * the section's when the section is bare or carries only the row's own label; "3", "Section 3" and "3 Fracture of arm,
+ * wrist or leg" on that row are all "3"), else the whole heading as before (a cover heading such as "Section 3 Personal
+ * accident" is never the row's own number). `own` is the row's benefit, then its printed line. */
+const rowSectionKey = (row: Pick<RowFacts, "own" | "section">) => {
+  const [benefit, line] = row.own.split("\n");
+  const code = rowSectionCode(row.section, benefit, line);
+  return code != null ? sectionKey(code) : sectionKey(row.section ?? "");
+};
 
 /** Words that never name the case a multiple is paid in: grammar, how a benefit is paid, money and insurance words. The
  * row's own benefit and quote words are taken out as well (caseParts). */
@@ -228,7 +234,7 @@ export function noteMultiple(note: string, row: RowFacts): Multiplier | null {
   const m = multipleIn(note);
   if (!m || m === "unsure" || !m.plain || !plainShape(note, m, row)) return null;
   const refs = [...note.matchAll(SECTION_REF)].map((x) => sectionKey(x[1]));
-  const own = row.section ? rowSectionKey(row.section) : "";
+  const own = row.section ? rowSectionKey(row) : "";
   if (refs.length && (!own || refs.some((r) => r !== own))) return null;
   const parts = caseParts(m.rest, row.own);
   if (parts === "trait" || !parts.length) return null;

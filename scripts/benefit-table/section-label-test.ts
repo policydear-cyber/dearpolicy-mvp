@@ -12,7 +12,7 @@ import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/li
 import { checkReading, ownLabelLine, type SourceDoc } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
 import { noteMultiple } from "@/lib/benefit-table/multiplier";
-import { sectionIdOf } from "@/lib/benefit-table/section-id";
+import { rowSectionCode, sectionIdOf } from "@/lib/benefit-table/section-id";
 import type { Household } from "@/lib/simple-chat/library";
 import { readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 
@@ -46,7 +46,7 @@ const STYLES: Record<string, ((n: number, label: string) => string | null) | und
 /** A synthetic family accident schedule (the shape of the acceptance households, made-up insurer and people), read as the
  * R4 reader read it: the child's share as a condition on the death row, no column row, and each row's section written by
  * `style`. `note` is the footnote printed under row 3; `section` overrides one row's section. */
-function schedule(style: (n: number, label: string) => string | null, o: { note?: string; section?: Record<number, string | null> } = {}) {
+function schedule(style: (n: number, label: string) => string | null, o: { note?: string; section?: Record<number, string | null>; skullNote?: boolean } = {}) {
   const note = o.note ?? NOTE;
   const page1 = ["Northgate Assurance plc", "FAMILY PERSONAL ACCIDENT POLICY - SCHEDULE", "Policy number: NGA-0001-X\tPeriod of insurance: 1 March 2026 to 28 February 2027\tCurrency",
     "of this policy: Pounds sterling (GBP)", "Date of issue: 20 February 2026", "Insured person\tRelationship\tDate of birth\tSum Insured",
@@ -73,7 +73,8 @@ function schedule(style: (n: number, label: string) => string | null, o: { note?
     r({ pays: "percent", quote: rows[1], value: 100, benefit: LABELS[1], section: sec(2), percentOf: "sum_insured" }),
     r({ cap: 1500, pays: "percent", quote: rows[2], value: 2, benefit: LABELS[2], forWhom: "some_insured", section: sec(3), capQuote: "maximum GBP 1,500 per accident", percentOf: "sum_insured",
       conditions: ["note (a)", note] }),
-    r({ pays: "percent", quote: rows[3], value: 5, benefit: LABELS[3], section: sec(4), percentOf: "sum_insured" }),
+    // skullNote: the reader also attaches note (a) to the skull row (section-label gate SL-H1).
+    r({ pays: "percent", quote: rows[3], value: 5, benefit: LABELS[3], section: sec(4), percentOf: "sum_insured", conditions: o.skullNote ? [note] : [] }),
     // forWhom is given on rows 5 and 6 (R3's reading had it; R4's left it out, a separate cause of H1-C not tested here).
     r({ pays: "per_day", quote: rows[4], value: 50, benefit: LABELS[4], forWhom: "each_named_insured", fromDay: 3, maxDays: 30, section: sec(5),
       conditions: ["payable from the third consecutive day, up to 30 days per accident"] }),
@@ -226,6 +227,46 @@ test("a section with no leading number behaves as on main", () => {
   assert.deepEqual(figs(h, /^Accidental death/), MAIN_LABEL_ONLY.death);
   assert.deepEqual(figs(h, /^Hospital cash/), MAIN_LABEL_ONLY.hospital);
   assert.deepEqual(all(h), MAIN_LABEL_ONLY.all);
+});
+
+// ---------- Section-label gate, round 1 ----------
+/** Note (a) with no figure: nothing but its section number ties it to row 3. */
+const BARE_NOTE = "Note (a): a compound fracture is paid at double the Section 3 amount.";
+/** Cover headings and readings that carry the number 3 over row 4 (whose own line starts with 4). */
+const HEADINGS_3 = ["Section 3 Personal accident", "SECTION 3 - FRACTURES", "Part 3 Fractures", "3 Personal accident", "3 Fracture of skull, spine or pelvis"];
+const skull = (h: H, who: string) => ask(h, who, /Fracture of skull/, "It was a compound fracture of the skull.", BARE_NOTE, [`${who.split(" ")[0]} fractured her skull. What can we claim?`]);
+test("SL-H1: a heading's number is never row 4's own: 'double the Section 3 amount' never doubles the skull row", () => {
+  const SKULL = "Fracture of skull, spine or pelvis\n4\tFracture of skull, spine or pelvis\t5% of the Sum Insured per accident";
+  for (const section of [...HEADINGS_3, "4 Fracture of skull, spine or pelvis", "4", "Personal accident"]) {
+    assert.equal(noteMultiple(BARE_NOTE, { own: SKULL, section, cap: null, others: "" }), null, section);
+    // With the skull row's line not read (no leading number), a heading carrying another label is still not its own.
+    if (!/Fracture of skull/.test(section) && section !== "4") assert.equal(noteMultiple(BARE_NOTE, { own: "Fracture of skull, spine or pelvis\n5% of the Sum Insured per accident", section, cap: null, others: "" }), null, section);
+    for (const who of [PEOPLE.c, PEOPLE.b]) {
+      const h = schedule(STYLES.bare!, { note: BARE_NOTE, skullNote: true, section: { 4: section } });
+      const a = skull(h, who);
+      assert.doesNotMatch(a.basis, /double|£2,000|£8,000/, `${section} ${who}: ${a.basis}`);
+    }
+  }
+  // The row's own line decides over the heading: "Section 3 Personal accident" over row 4's line "4\t..." is 4.
+  assert.equal(rowSectionCode("Section 3 Personal accident", "Fracture of skull, spine or pelvis", "4\tFracture of skull, spine or pelvis\t5%"), "4");
+  // With no line, a heading's code is the row's only when the heading's label is the row's own label, or there is none.
+  assert.equal(rowSectionCode("Section 3 Personal accident", "Fracture of skull, spine or pelvis"), null);
+  assert.equal(rowSectionCode("3 Fracture of skull, spine or pelvis", "Fracture of skull, spine or pelvis"), "3");
+  assert.equal(rowSectionCode("Section 3", "Fracture of skull, spine or pelvis"), "3");
+  assert.equal(rowSectionCode("Personal accident", "Fracture of skull, spine or pelvis", "4\tFracture"), null);
+});
+test("SL-H1: the arm row (its own line starts with 3) under the same headings keeps its own double, as with a bare 3", () => {
+  const want = compound(schedule(STYLES.bare!, { skullNote: true })).basis;
+  assert.match(want, /£800 \(double\)/);
+  for (const section of ["Section 3 Personal accident", "SECTION 3 - FRACTURES", "Part 3 Fractures", "3 Fracture of arm, wrist or leg"])
+    assert.equal(compound(schedule(STYLES.bare!, { skullNote: true, section: { 3: section } })).basis, want, section);
+});
+test("SL-L1: figure-like headings are never section codes", () => {
+  for (const s of ["24-hour cover", "18-64 year olds", "2-day", "50 per day", "1 000 benefit", "6 Monthly benefit", "4 Wheel drive cover", "2 adults and 2 children", "2x Weekly benefit",
+    "24 – hour cover", "3 daily benefit", "2 x sum insured", "5 per accident", "12 annual benefit", "3 thousand cover"])
+    assert.equal(sectionIdOf(s), null, s);
+  // And real codes still read.
+  for (const [s, code] of [["3 X-ray benefit", "3"], ["2B Hospital cash", "2B"], ["SECTION 2 - MEDICAL BENEFITS", "2"], ["4 Burns", "4"]] as const) assert.equal(sectionIdOf(s)?.code, code, s);
 });
 
 // ---------- Report ----------
