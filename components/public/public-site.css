@@ -78,3 +78,19 @@
 .auth-frame .page { margin-inline: auto; padding-top: clamp(32px, 8vh, 88px) !important; }
 .auth-frame .page a:not(.button) { color: var(--brand-ink); font-weight: 600; }
 .auth-frame .page a:not(.button):hover { text-decoration: underline; }
+
+/* Card wallet: the hero holds a fanned hand of cover cards above the example answer. */
+.landing-wallet { display: grid; gap: 8px; min-width: 0; }
+.landing-fan { position: relative; height: 230px; }
+.landing-fan .wallet-card { position: absolute; width: min(250px, 54%); top: 30px; }
+.landing-fan .wallet-card:nth-child(1) { left: 0; transform: rotate(-9deg); }
+.landing-fan .wallet-card:nth-child(2) { left: 23%; top: 12px; transform: rotate(-2deg); }
+.landing-fan .wallet-card:nth-child(3) { left: 46%; top: 36px; transform: rotate(6deg); }
+@media (max-width: 640px) {
+  .landing-fan { height: 200px; overflow: hidden; margin: 0 -16px; }
+  .landing-fan .wallet-card { width: 230px; left: 50% !important; margin-left: -115px; top: 20px; }
+  .landing-fan .wallet-card:nth-child(1) { transform: rotate(-12deg) translateX(-34px); }
+  .landing-fan .wallet-card:nth-child(2) { transform: rotate(9deg) translateX(34px); }
+  .landing-fan .wallet-card:nth-child(3) { transform: none; }
+}
+.landing-fan .wallet-card strong { font-size: 16px; }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon, type IconName } from "@/components/icons";
+import { WalletCard } from "@/components/wallet-card";
 import { GUIDES } from "@/lib/learn/content";
 import { SITE_DESCRIPTION } from "@/lib/public-site/site";
 
@@ -58,6 +59,13 @@ export default function WelcomePage() {
           </div>
           <p className="landing-small">It explains your policies. It doesn&rsquo;t sell you one.</p>
         </div>
+        <div className="landing-wallet">
+        {/* A fanned hand of cover cards, drawn: one card per kind of cover is how Home shows a person's cover. */}
+        <div className="landing-fan">
+          <WalletCard card="ci" icon="pulse" title="Critical illness" line="•••• 2231" mark="LP" />
+          <WalletCard card="death" icon="heart" title="Death" line="•••• 7850" mark="GS" />
+          <WalletCard card="hospital" icon="hospital" title="Hospital stay" line="•••• 0412" mark="AS" />
+        </div>
         <figure className="landing-example" aria-label="Example question and answer, using a made-up family and insurer">
           <figcaption>Example with a made-up family and insurer</figcaption>
           <p className="landing-bubble landing-bubble-you">Mei fell at school and broke her wrist. Is she covered?</p>
@@ -70,6 +78,7 @@ export default function WelcomePage() {
             <p>The policy asks for the claim to be reported within 30 days. Your insurer decides what is paid.</p>
           </div>
         </figure>
+        </div>
       </section>
 
       <section className="landing-section" aria-labelledby="landing-how">

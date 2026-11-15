@@ -1,9 +1,9 @@
 /* ==========================================================================
    DearPolicy — design tokens. The written brand spec is docs/brand.md.
    Colour has one written meaning each. Spend it on nothing else.
-     --brand       the one accent: links, active nav, primary buttons (green).
+     --brand       the one accent: links, active nav, primary buttons (near-black ink).
                    The logo is the only warm colour on a page.
-     --accent      action: primary buttons (same green as --brand)
+     --accent      action: primary buttons (same ink as --brand)
      --money       a figure printed in the household's documents
      --good        confirmed: read, matched, verified, saved
      --unresolved  not settled yet: a page not read, an amount to confirm,
@@ -13,36 +13,37 @@
      --critical    failed: an error, a refused action, a destructive step
      --info        neutral news: still reading, replaced, invite only
    Never hard-code a colour outside this block: add a token here instead.
+   Black is the one accent (buttons, links, the active menu item).
    Border for siblings in a list or grid. Shadow only for what floats:
    the composer, the mobile nav, menus. Never both.
    ========================================================================== */
 :root {
   color-scheme: light;
-  --bg: #ffffff;              /* brand off-white, from the logo file */
-  --bg-2: #f1f3ef;            /* sidebar / recessed panels */
-  --surface: #f4f5f2;         /* cards, rows, inputs */
-  --surface-2: #eceee9;       /* quiet in-card blocks */
-  --ink: #16211c;
-  --ink-2: #45514b;
-  --muted: #58625c;           /* 5.6:1 on --bg */
-  --line: #e3e6e1;
+  --bg: #eef0f3;              /* the wallet: cool grey page, white cards on it */
+  --bg-2: #e4e7ec;            /* sidebar / recessed panels */
+  --surface: #ffffff;         /* cards, rows, inputs */
+  --surface-2: #f3f4f6;       /* quiet in-card blocks */
+  --ink: #0d1117;
+  --ink-2: #374151;
+  --muted: #5b6472;           /* 5.6:1 on --bg */
+  --line: #e3e6ea;
   --edge: transparent;     /* card edges: surfaces are told apart by tone, not lines */
-  --line-strong: #cfd4cd;
-  --input-line: #858e88;      /* 3.4:1 on --bg */
+  --line-strong: #cfd4dc;
+  --input-line: #8a919c;      /* 3.4:1 on --bg */
 
-  --brand: #1f5240;
-  --brand-ink: #1f5240;       /* brand as text: the same green as the buttons, one accent only */
-  --brand-tint: #ebeee9;
-  --brand-tint-2: #e0e5de;
+  --brand: #0d1117;
+  --brand-ink: #0d1117;       /* brand as text: the same ink as the buttons, one accent only */
+  --brand-tint: #e4e7ec;
+  --brand-tint-2: #d6dae1;
   --on-brand: #ffffff;        /* text on a --brand fill, 6.9:1 */
   --logo-plate: #f9f5e4;      /* the logo's own ground, kept behind it in dark */
 
-  --accent: #1f5240;
-  --accent-hover: #18443a;
-  --accent-active: #12362e;
+  --accent: #0d1117;
+  --accent-hover: #262c36;
+  --accent-active: #000000;
   --accent-ink: #ffffff;      /* text on an --accent fill, 6.7:1 */
-  --money: #16211c;           /* accent as text, 6.3:1 on --bg */
-  --accent-tint: #ebeee9;
+  --money: #0d1117;           /* accent as text, 6.3:1 on --bg */
+  --accent-tint: #f3f4f6;
 
   --good: #2f7a4f;
   --good-text: #276b44;
@@ -70,13 +71,14 @@
   --scrim: rgba(14, 22, 18, .28);
 
   --shadow-float: 0 4px 12px rgba(22, 33, 28, .10), 0 1px 2px rgba(22, 33, 28, .06);
-  --focus: 0 0 0 3px rgba(31, 82, 64, .35);
+  --focus: 0 0 0 3px rgba(37, 99, 235, .4);
 
   --r-sm: 10px; --r-md: 14px; --r-lg: 20px;
   --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 22px; --fs-2xl: 28px; --fs-3xl: 36px;
   --t-hover: 120ms; --t-state: 240ms; --t-move: 340ms; --ease: cubic-bezier(.2, .7, .2, 1);
   --nav-h: 60px;
   --font: var(--font-face), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
+  --font-mono: var(--font-mono-face), ui-monospace, "SFMono-Regular", Menlo, monospace;
 
   /* Family members: one identity hue each, by their place in the household.
      Never green, red, amber or slate: those colours are status. */
@@ -85,32 +87,45 @@
   --person-3: #0b5560; --person-3-tint: #ddf1f2;   /* teal */
   --person-4: #3a3590; --person-4-tint: #e9e8fb;   /* indigo */
 
+  /* Card wallet (docs/brand.md): each kind of cover is a card with one fixed colour, in both themes.
+     White text on every card fill is at least 7:1. Cards, chips and slots are drawn, not status. */
+  --card-hospital: #14213d; --card-cash: #7b2d26; --card-death: #1f5135; --card-ci: #2f4b7c; --card-disability: #0f5560;
+  --card-accident: #3a3f47; --card-travel: #6b4f1d; --card-property: #4a3b6b; --card-savings: #4d3f2a; --card-other: #374151;
+  --on-card: #ffffff; --on-card-2: rgba(255, 255, 255, .8); --card-ring: rgba(255, 255, 255, .7);
+  --card-sheen: rgba(255, 255, 255, .18); --card-grain: rgba(255, 255, 255, .035); --card-top: rgba(255, 255, 255, .22);
+  --card-shadow: 0 12px 24px -14px rgba(13, 17, 23, .55); --lift: 0 1px 3px rgba(13, 17, 23, .08);
+  --chip-1: #f0d78c; --chip-2: #b8954a; --chip-mark: rgba(0, 0, 0, .25);
+  --slot-line: #a3abb7;
+  --r-card: 18px;
+
 }
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --bg: #121614; --bg-2: #0e1210; --surface: #1b211e; --surface-2: #222924;
-    --ink: #eef2ee; --ink-2: #c4ccc6; --muted: #9aa59e;
-    --line: #2b332e; --line-strong: #38423c; --input-line: #7f8a83;
-    --brand-ink: #8fd0b0; --brand-tint: #232b26; --brand-tint-2: #2c3630;
-    --money: #eef2ee; --accent-tint: #232b26;
+    --bg: #0f1216; --bg-2: #0b0e11; --surface: #191d23; --surface-2: #20252c;
+    --ink: #eef0f3; --ink-2: #c4cad3; --muted: #99a1ad;
+    --line: #2a3038; --line-strong: #38404a; --input-line: #7d8693;
+    --brand-ink: #eef0f3; --brand-tint: #262c35; --brand-tint-2: #303742;
+    --money: #eef0f3; --accent-tint: #20252c;
     --good: #7fc49a; --good-text: #8fd0a8; --good-tint: #1f2f26; --good-line: #33503f;
     --warn: #e8b85a; --warn-text: #ecc46e; --warn-tint: #332b18; --warn-line: #5a4a24;
     --critical: #f08b7d; --critical-tint: #3a211e; --critical-line: #5c332d;
     --unresolved: #93a7bb; --unresolved-text: #b7c7d7; --unresolved-tint: #1f262d; --unresolved-line: #6a7d90;
     --scrim: rgba(0, 0, 0, .5);
     --shadow-float: 0 4px 14px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .3);
-    --focus: 0 0 0 3px rgba(143, 208, 176, .45);
-    --brand: #8fd0b0;
-    --on-brand: #0e1210;
-    --accent: #8fd0b0;
-    --accent-hover: #a6dcc1;
-    --accent-active: #7cc2a0;
-    --accent-ink: #0e1210;
+    --focus: 0 0 0 3px rgba(147, 180, 255, .5);
+    --brand: #eef0f3;
+    --on-brand: #0f1216;
+    --accent: #eef0f3;
+    --accent-hover: #ffffff;
+    --accent-active: #d6dae1;
+    --accent-ink: #0f1216;
     --person-1: #a9c9f0; --person-1-tint: #182638;
     --person-2: #e3a9da; --person-2-tint: #321a2f;
     --person-3: #8fd3da; --person-3-tint: #11292c;
     --person-4: #bcb8f3; --person-4-tint: #221f3d;
 
+    --lift: 0 1px 3px rgba(0, 0, 0, .4);
+    --slot-line: #5c6573;
 }
 :root[data-theme="dark"] .brand-logo, :root[data-theme="dark"] .big-mark { background: var(--logo-plate); padding: 6px 10px; border-radius: var(--r-sm); }
 
@@ -1619,3 +1634,139 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
   .sidebar-footer [data-tip]::after { left: auto; right: 0; top: calc(100% + 8px); bottom: auto; transform: none; }
 }
 @media (min-width: 901px) and (max-width: 1240px) { .sidebar .privacy-pill { display: none; } .nav-item { padding: 8px 10px; } }
+
+/* ==========================================================================
+   Card wallet (DC chose it 15 Nov 2026; mockups in docs/brand.md).
+   The household's cover is a wallet of cards: one card per kind of cover, one fixed colour per kind,
+   a gold chip, the insurer's mark, a masked number. Everything else is quiet grey and white, with
+   near-black buttons. Missing cover is an empty dashed slot, never a coloured card.
+   ========================================================================== */
+h1 { font-weight: 700; letter-spacing: -.025em; }
+h2 { font-weight: 650; letter-spacing: -.015em; }
+
+/* Menu: a segmented bar; the page you are on is the white key in it. */
+@media (min-width: 901px) {
+  .nav { background: var(--bg-2); border-radius: var(--r-md); padding: 4px; gap: 2px; }
+  .nav-item { border-radius: var(--r-sm); min-height: 38px; padding: 8px 14px; color: var(--ink-2); font-weight: 550; }
+  .nav-item:hover { background: var(--brand-tint-2); }
+  .nav-item.active { background: var(--surface); color: var(--ink); font-weight: 650; box-shadow: var(--lift); }
+}
+
+/* Buttons: squared keys, not pills. */
+.button { border-radius: 12px; }
+.button.secondary { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.button.secondary:hover { background: var(--surface-2); }
+
+/* Panels sit on the grey page as white cards. */
+.upload-panel, .profile-add-panel, .document-card, .reminder-card, .member-strip, .empty-card, .empty-row, .answer-card { border-radius: var(--r-card); }
+
+/* People: a segmented switch, the chosen person is the white key. */
+.member-strip { background: transparent; padding: 0; grid-template-columns: auto minmax(0, 1fr); }
+.member-pills { background: var(--bg-2); border-radius: var(--r-md); padding: 4px; gap: 2px; width: max-content; max-width: 100%; }
+.member-pill { background: transparent; border-radius: var(--r-sm); min-height: 44px; }
+.member-pill:hover { background: var(--brand-tint-2); }
+.member-pill.active { background: var(--surface); border-color: transparent; box-shadow: var(--lift); }
+.member-dot { border-radius: 8px; }
+
+/* The card itself. */
+.card-chip { display: none; }
+.coverage-card[data-card="hospital"] { --card: var(--card-hospital); }
+.coverage-card[data-card="cash"] { --card: var(--card-cash); }
+.coverage-card[data-card="death"] { --card: var(--card-death); }
+.coverage-card[data-card="ci"] { --card: var(--card-ci); }
+.coverage-card[data-card="disability"] { --card: var(--card-disability); }
+.coverage-card[data-card="accident"] { --card: var(--card-accident); }
+.coverage-card[data-card="travel"] { --card: var(--card-travel); }
+.coverage-card[data-card="property"] { --card: var(--card-property); }
+.coverage-card[data-card="savings"] { --card: var(--card-savings); }
+.coverage-card[data-card="other"] { --card: var(--card-other); }
+.coverage-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+.coverage-card.covered { position: relative; overflow: hidden; isolation: isolate; background: var(--card); color: var(--on-card); border: 0; border-radius: var(--r-card);
+  min-height: 200px; padding: 18px 20px; gap: 4px; box-shadow: inset 0 1px 0 var(--card-top), var(--card-shadow); transition: transform var(--t-state) var(--ease); }
+.coverage-card.covered::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(120% 80% at 100% 0, var(--card-sheen), transparent 60%), repeating-linear-gradient(115deg, var(--card-grain) 0 2px, transparent 2px 6px); }
+.coverage-card.covered:hover { transform: translateY(-2px); border: 0; }
+.coverage-card.covered .card-chip { display: block; width: 38px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, var(--chip-1), var(--chip-2)); position: relative; }
+.coverage-card.covered .card-chip::after { content: ""; position: absolute; inset: 7px 10px; border: 1px solid var(--chip-mark); border-radius: 3px; }
+.coverage-card.covered .coverage-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.coverage-card.covered .coverage-icon { width: 34px; height: 34px; background: transparent; border: 1.5px solid var(--card-ring); color: var(--on-card); }
+.coverage-card.covered .coverage-icon svg { width: 18px; height: 18px; }
+.coverage-card.covered .evidence-dot { display: none; }
+.coverage-card.covered .coverage-name { min-height: 0; font-weight: 600; }
+.coverage-card.covered .coverage-status { order: 9; font-size: var(--fs-xs); font-weight: 600; color: var(--on-card-2); display: inline-flex; gap: 4px; align-items: center; }
+.coverage-card.covered .coverage-status svg { width: 14px; height: 14px; }
+.coverage-card.covered .coverage-amount { font-size: 26px; font-weight: 700; letter-spacing: -.01em; line-height: 1.1; color: var(--on-card); }
+.coverage-card.covered small { color: var(--on-card-2); font-size: var(--fs-xs); margin-top: 6px; }
+.coverage-card.covered small:last-of-type { font-family: var(--font-mono); font-size: 11px; letter-spacing: .03em; margin-top: auto; padding-top: 10px; }
+/* Cover on file but not confirmed: an empty slot the card will fill. */
+.coverage-card.on_file, .coverage-card.needs_review { background: transparent; border: 2px dashed var(--unresolved-line); border-radius: var(--r-card); }
+.coverage-card.on_file .coverage-icon, .coverage-card.needs_review .coverage-icon { background: var(--surface); }
+.home-not-found { background: transparent; border: 2px dashed var(--slot-line); }
+
+/* Documents: slot a document into the reader. */
+.upload-panel { position: relative; padding-top: 34px; }
+.upload-panel::before { content: ""; position: absolute; left: 20px; right: 20px; top: 14px; height: 8px; border-radius: 4px; background: var(--ink); opacity: .85; }
+.progress-track { border-radius: 4px; }
+.policy-logo { border-radius: 50%; }
+
+/* Family: each person is a member card with their colour as the band. */
+.profile-card[data-person] { padding-top: 0; overflow: hidden; }
+.profile-card[data-person]::before { content: ""; display: block; height: 10px; margin: 0 -16px 14px; background: var(--p); }
+
+/* An answer's figure is printed on a card face. */
+.answer-card-amount { order: -1; margin: -12px -14px 6px; padding: 14px 16px 16px; border-radius: var(--r-card) var(--r-card) 0 0; background: var(--card-other); color: var(--on-card);
+  background-image: radial-gradient(120% 80% at 100% 0, var(--card-sheen), transparent 60%), repeating-linear-gradient(115deg, var(--card-grain) 0 2px, transparent 2px 6px); }
+.answer-card { overflow: hidden; }
+.answer-card-amount strong { color: var(--on-card); font-size: 1.6rem; }
+.answer-card-amount small { color: var(--on-card-2); }
+.answer-card.printed .answer-card-amount { background-color: var(--surface-2); background-image: none; color: var(--ink); }
+.answer-card.printed .answer-card-amount strong { color: var(--ink-2); }
+.answer-card.printed .answer-card-amount small { color: var(--muted); }
+
+/* Page not found: a card that was declined. */
+.declined-card { position: relative; overflow: hidden; isolation: isolate; width: min(340px, 100%); aspect-ratio: 1.586; border-radius: var(--r-card); padding: 18px 20px; margin: 4px 0 28px;
+  background: var(--card-accident); color: var(--on-card); display: flex; flex-direction: column; justify-content: space-between; transform: rotate(-3deg);
+  box-shadow: inset 0 1px 0 var(--card-top), var(--card-shadow); }
+.declined-card::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(120% 80% at 100% 0, var(--card-sheen), transparent 60%), repeating-linear-gradient(115deg, var(--card-grain) 0 2px, transparent 2px 6px); }
+.declined-card .card-chip { display: block; width: 38px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, var(--chip-1), var(--chip-2)); }
+.declined-card .declined-top { display: flex; justify-content: space-between; align-items: center; }
+.declined-card .declined-badge { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--card-ring); display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+.declined-card strong { font-size: 22px; }
+.declined-card .declined-no { font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; color: var(--on-card-2); }
+.declined-card .declined-stamp { position: absolute; right: 18px; bottom: 40px; transform: rotate(-10deg); border: 3px solid var(--critical-tint); color: var(--critical-tint);
+  font-weight: 700; letter-spacing: .14em; padding: 4px 12px; border-radius: 8px; font-size: 18px; text-transform: uppercase; }
+
+@media (max-width: 620px) {
+  .coverage-grid { grid-template-columns: minmax(0, 1fr); }
+  .member-strip { grid-template-columns: minmax(0, 1fr); }
+}
+/* What the household pays a month: the one dark panel on Home, like a statement total. */
+.summary-card.premium-feature { background: var(--accent); border-color: transparent; color: var(--accent-ink); border-radius: var(--r-card); }
+.summary-card.premium-feature .summary-label, .summary-card.premium-feature .summary-sub, .summary-card.premium-feature > strong small, .summary-card.premium-feature .text-link { color: var(--accent-ink); opacity: .85; }
+.summary-card.premium-feature .text-link { opacity: 1; text-decoration: underline; text-underline-offset: 3px; }
+
+/* A drawn card (components/wallet-card.tsx) and the sign-in member card. */
+.wallet-card { --card: var(--card-other); position: relative; overflow: hidden; isolation: isolate; aspect-ratio: 1.586; border-radius: var(--r-card); padding: 18px 20px;
+  background: var(--card); color: var(--on-card); display: flex; flex-direction: column; justify-content: space-between; box-shadow: inset 0 1px 0 var(--card-top), var(--card-shadow); }
+.wallet-card::before, .member-card-face::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(120% 80% at 100% 0, var(--card-sheen), transparent 60%), repeating-linear-gradient(115deg, var(--card-grain) 0 2px, transparent 2px 6px); }
+.wallet-card[data-card="hospital"] { --card: var(--card-hospital); }
+.wallet-card[data-card="death"] { --card: var(--card-death); }
+.wallet-card[data-card="ci"] { --card: var(--card-ci); }
+.wallet-card[data-card="accident"] { --card: var(--card-accident); }
+.wallet-card .card-chip, .member-card-face .card-chip { display: block; width: 38px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, var(--chip-1), var(--chip-2)); }
+.wallet-card-top { display: flex; justify-content: space-between; align-items: center; }
+.wallet-card-mark { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--card-ring); display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+.wallet-card strong { display: flex; gap: 8px; align-items: center; font-size: 20px; }
+.wallet-card strong svg { width: 20px; height: 20px; }
+.wallet-card-no { font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; color: var(--on-card-2); }
+
+.auth-frame .page:has(> .member-card-face), .page:has(> .member-card-face) { background: var(--surface); border-radius: 22px; padding: 0 24px 24px !important; margin-top: clamp(24px, 6vh, 64px); margin-bottom: 40px; overflow: hidden; box-shadow: var(--card-shadow); }
+.member-card-face { position: relative; isolation: isolate; margin: 0 -24px; padding: 22px 24px 28px; background: var(--card-hospital); color: var(--on-card); }
+.member-card-face h1 { color: var(--on-card); margin: 24px 0 6px; }
+.member-card-face .lead { color: var(--on-card-2); margin: 0; }
+.member-card-face .card-chip { position: absolute; left: 24px; top: 22px; }
+.member-card-label { position: absolute; right: 24px; top: 26px; font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--on-card-2); }
+.member-card-face h1 { padding-top: 26px; }
+.member-card-stripe { height: 34px; margin: 0 -24px 20px; background: var(--ink); }
+@media (max-width: 760px) { .auth-frame .page:has(> .member-card-face) { margin-inline: 16px; } }

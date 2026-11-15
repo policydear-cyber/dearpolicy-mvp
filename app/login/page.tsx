@@ -84,8 +84,12 @@ function LoginForm() {
 
   return (
     <div className="page" style={{ maxWidth: 420, paddingTop: 96 }}>
-      <h1>Welcome back</h1>
-      <p className="lead">Sign in to see your family&rsquo;s policies and ask about them.</p>
+      {/* The sign-in form is a member card: its face carries the greeting, the stripe sits above the form. */}
+      <div className="member-card-face"><span className="card-chip" aria-hidden="true" /><span className="member-card-label" aria-hidden="true">Member</span>
+        <h1>Welcome back</h1>
+        <p className="lead">Sign in to see your family&rsquo;s policies and ask about them.</p>
+      </div>
+      <div className="member-card-stripe" aria-hidden="true" />
       {linkError && LINK_ERRORS[linkError] ? (
         <div className="alert error" role="alert">
           {LINK_ERRORS[linkError]}

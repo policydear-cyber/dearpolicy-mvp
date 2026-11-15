@@ -46,22 +46,45 @@ Rules of thumb:
 
 | Token | Light | Dark |
 | --- | --- | --- |
-| `--bg` page | `#ffffff` | `#121614` |
-| `--surface` card | `#f4f5f2` (soft grey fill) | `#1b211e` |
-| `--surface-2` block inside a card | `#eceee9` | `#222924` |
-| `--ink` text | `#16211c` | `#eef2ee` |
-| `--muted` | `#58625c` | `#9aa59e` |
-| `--brand` (fills: your chat bubble, active filter) | `#1f5240` | `#8fd0b0` |
-| `--brand-ink` (links) | `#1f5240` (same green as the buttons; the logo is the only warm colour) | `#8fd0b0` |
-| `--accent` (the one primary button) | `#1f5240` | `#8fd0b0` |
-| `--money` | `#16211c` (figures are told by weight and size) | `#eef2ee` |
+| `--bg` page | `#eef0f3` (cool grey, the wallet) | `#0f1216` |
+| `--surface` card | `#ffffff` | `#191d23` |
+| `--surface-2` block inside a card | `#f3f4f6` | `#20252c` |
+| `--ink` text | `#0d1117` | `#eef0f3` |
+| `--muted` | `#5b6472` | `#99a1ad` |
+| `--brand` (fills: your chat bubble, active filter) | `#0d1117` | `#eef0f3` |
+| `--brand-ink` (links) | `#0d1117` (same ink as the buttons; the logo is the only warm colour) | `#eef0f3` |
+| `--accent` (the one primary button) | `#0d1117` | `#eef0f3` |
+| `--money` | `#0d1117` (figures are told by weight and size) | `#eef0f3` |
 | `--good-text` | `#276b44` | `#8fd0a8` |
 | `--unresolved-text` | `#3f5165` | `#b7c7d7` |
 | `--warn-text` | `#7a5600` | `#ecc46e` |
 | `--critical` | `#a3342a` | `#f08b7d` |
 | `--person-1..4` + `-tint` | blue, plum, teal, indigo | lighter inks, deep tints |
+| `--card-*` cover cards | hospital `#14213d`, hospital cash `#7b2d26`, death `#1f5135`, critical illness `#2f4b7c`, disability `#0f5560`, accident `#3a3f47`, travel `#6b4f1d`, home and motor `#4a3b6b`, savings `#4d3f2a`, other `#374151` | same (cards are objects) |
 
-### Look (15 Nov 2026, "family colours", DC's choice)
+### Look (15 Nov 2026, "Card wallet", DC's choice)
+
+The household's cover is a wallet of cards. Mockups of every page:
+`/mnt/project-files/ux-design/wallet-pages/` (gallery shared with DC).
+
+- Each kind of cover found for a person is a card on Home: the kind's
+  fixed colour (`--card-*`, the same on every page, so navy always means
+  hospital), a gold chip, the kind's icon in a ring, the amount large,
+  and where it comes from in a monospaced line like a card number.
+- Cover on file but not confirmed is an empty dashed slot, never a
+  coloured card. Kinds not found sit in one dashed line under the cards.
+- The page is cool grey; panels are white with an 18px radius. Buttons
+  are near-black squared keys (12px); the menu and the people switch are
+  segmented bars where the chosen item is the white key.
+- Drawn cards elsewhere: the sign-in form is a member card (navy face,
+  chip, magnetic stripe), the landing page holds a fanned hand of cards,
+  a missing page is a grey card stamped DECLINED, an answer's figure is
+  printed on a dark card face. Drawn cards never show a household's
+  figure unless it is the household's own card on Home or in an answer.
+- A member's colour (`data-person` 0–3) is identity only: their initial
+  and the band across the top of their card on Account settings.
+
+### Earlier look (15 Nov 2026, "family colours")
 
 The old cream ground with brown and orange fills was the most common look
 of generated pages in 2025–26. Now: a white page, soft grey cards with
@@ -83,8 +106,9 @@ card borders between siblings are not status cues and are not held to 3:1.
 
 ## Type
 
-One family, Bricolage Grotesque, served from the site by `next/font` and
-set as `--font-face` on the page; the system UI stack in `--font` is the
+One family, Sora, served from the site by `next/font` and set as
+`--font-face` on the page; JetBrains Mono (`--font-mono`) only for the
+number line on a card; the system UI stack in `--font` is the
 fallback, including for CJK names on documents.
 
 | Token | Size | Use |
