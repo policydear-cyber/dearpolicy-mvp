@@ -15,7 +15,7 @@ import { resolve } from "node:path";
 import type { ModelChoice } from "@/lib/ai/providers";
 import { priceFor } from "@/lib/ai/providers";
 import type { ChatContext } from "@/lib/chat/workflow";
-import { runSimpleChat } from "@/lib/simple-chat/hook";
+import { EACH_PERSON_NOTE, runSimpleChat } from "@/lib/simple-chat/hook";
 import { renderLibrary, type Household } from "@/lib/simple-chat/library";
 import { callUsd, MAX_OUTPUT_TOKENS, modelFromChoice, type SimpleModel, type SimpleUsage, type Turn } from "@/lib/simple-chat/model";
 import { SIMPLE_SYSTEM_PROMPT } from "@/lib/simple-chat/prompt";
@@ -28,7 +28,9 @@ import { mergeReadings } from "@/lib/benefit-table/completeness";
 import type { SectionLink } from "@/lib/benefit-table/reading";
 import { chatRows, pagesToSend, renderTable } from "@/lib/benefit-table/chat";
 
-export type AppTurn = { id: string; question: string; model?: string; json?: unknown; answer?: StructuredAnswer; text?: string; report?: VerifyReport; usage?: SimpleUsage; usd?: number; ms?: number; stopReason?: string | null; error?: string };
+export type AppTurn = { id: string; question: string; model?: string; json?: unknown; answer?: StructuredAnswer; text?: string; report?: VerifyReport; usage?: SimpleUsage; usd?: number; ms?: number; stopReason?: string | null; error?: string;
+  /** The second call of a turn that asked whose with no figure (lib/simple-chat/hook.ts asksWhoseOnly): its reply and usage, and whether its answer was kept. `usage` and `usd` are both calls together. */
+  eachPerson?: { json: unknown; usage: SimpleUsage; kept: boolean } };
 
 /** Tokens from characters, set to run high: DC's library read 561k characters as 216k tokens (2.6 per token). */
 const tokensOf = (s: string) => Math.ceil(s.length / 2.5);
@@ -57,8 +59,18 @@ export async function runSet(opts: { household: Household; questions: Question[]
         if (spent + callUsd(opts.price, { input: fresh, cacheWrite: warm ? 0 : prefix, cacheRead: warm ? prefix : 0, output: MAX_OUTPUT_TOKENS }) > opts.maxUsd) { stoppedEarly = true; break; }
       }
       type Saved = { answer: StructuredAnswer; state: { simpleChat?: { turns: { report: VerifyReport }[] } } };
-      const got: { reply?: Awaited<ReturnType<SimpleModel["call"]>>; saved?: Saved } = {};
-      const model: SimpleModel = { choice: opts.model.choice, async call(args) { got.reply = await opts.model.call(args); return got.reply; } };
+      const got: { reply?: Awaited<ReturnType<SimpleModel["call"]>>; again?: Awaited<ReturnType<SimpleModel["call"]>>; saved?: Saved } = {};
+      // A turn may make a second call (asksWhoseOnly): it is admitted at its own worst case against what is left, or refused
+      // (the first answer then stands), and both calls are counted.
+      const model: SimpleModel = { choice: opts.model.choice, async call(args) {
+        if (!got.reply) return (got.reply = await opts.model.call(args));
+        if (opts.price && opts.maxUsd != null) {
+          const fresh = tokensOf(args.question) + history.reduce((n, t) => n + tokensOf(t.text), 0);
+          const so = spent + callUsd(opts.price, got.reply.usage);
+          if (so + callUsd(opts.price, { input: fresh, cacheWrite: prefix, cacheRead: 0, output: MAX_OUTPUT_TOKENS }) > opts.maxUsd) throw new Error("the second call is over the cap");
+        }
+        return (got.again = await opts.model.call(args));
+      } };
       const started = Date.now();
       try {
         await runSimpleChat(contextFor(opts.household, `app-run-${q.id}`, question), {}, {
@@ -70,12 +82,15 @@ export async function runSet(opts: { household: Household; questions: Question[]
         break;
       }
       const r = got.reply!, s = got.saved!;
-      const usd = opts.price ? callUsd(opts.price, r.usage) : 0;
+      const both: SimpleUsage = got.again ? { input: r.usage.input + got.again.usage.input, cacheWrite: r.usage.cacheWrite + got.again.usage.cacheWrite, cacheRead: r.usage.cacheRead + got.again.usage.cacheRead, output: r.usage.output + got.again.usage.output } : r.usage;
+      const usd = opts.price ? callUsd(opts.price, r.usage) + (got.again ? callUsd(opts.price, got.again.usage) : 0) : 0;
+      const kept = (s.state.simpleChat?.turns.at(-1) as { eachPerson?: { kept: boolean } } | undefined)?.eachPerson?.kept ?? false;
       spent += usd;
       // Once a call has written or read the cached prefix, the next one reads it (the cache lives for minutes).
-      warm = r.usage.cacheWrite + r.usage.cacheRead >= prefix * 0.9;
+      warm = both.cacheWrite + both.cacheRead >= prefix * 0.9;
       const text = answerAsText(s.answer);
-      turns.push({ id, question, model: r.model, json: r.json, answer: s.answer, text, report: s.state.simpleChat?.turns.at(-1)?.report, usage: r.usage, usd, ms: Date.now() - started, stopReason: r.stopReason });
+      turns.push({ id, question, model: r.model, json: r.json, answer: s.answer, text, report: s.state.simpleChat?.turns.at(-1)?.report, usage: both, usd, ms: Date.now() - started, stopReason: r.stopReason,
+        ...(got.again ? { eachPerson: { json: got.again.json, usage: got.again.usage, kept } } : {}) });
       history.push({ role: "user", text: question }, { role: "assistant", text });
       opts.onProgress?.(`${id}: ${((Date.now() - started) / 1000).toFixed(1)} s, US$${usd.toFixed(4)} (total US$${spent.toFixed(4)})`);
     }
@@ -116,7 +131,11 @@ export function tableFromRun(dir: string, household: Household): BenefitTable {
 /** A model that answers with the JSON an earlier run recorded, turn by turn, so today's server checks can be re-run free. */
 export function replayModel(recorded: AppTurn[], choice: ModelChoice): SimpleModel {
   let i = 0;
-  return { choice, async call() { const t = recorded[i++]; if (!t?.json) throw new Error("no recorded answer for this turn"); return { json: t.json, stopReason: t.stopReason ?? "end_turn", model: `replay:${t.model ?? "?"}`, usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 } }; } };
+  const none = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
+  return { choice, async call(args) {
+    // A turn's second call (asksWhoseOnly) replays that turn's recorded second reply, when it has one.
+    if (args.question.endsWith(EACH_PERSON_NOTE)) { const t = recorded[i - 1]; if (!t?.eachPerson) throw new Error("no recorded second answer for this turn"); return { json: t.eachPerson.json, stopReason: "end_turn", model: `replay:${t.model ?? "?"}`, usage: none }; }
+    const t = recorded[i++]; if (!t?.json) throw new Error("no recorded answer for this turn"); return { json: t.json, stopReason: t.stopReason ?? "end_turn", model: `replay:${t.model ?? "?"}`, usage: none }; } };
 }
 
 /** The answers as one readable file for grading. */
