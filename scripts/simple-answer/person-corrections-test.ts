@@ -77,7 +77,7 @@ const RAHMANS = makeHouse("dddddddd-0000-4000-8000-000000000002", [
  * - "sticky": also keeps the first person's card from earlier turns (the stale person);
  * - "swapped": gives the intended person's card from another person's row or schedule (the wrong cover). */
 type Behaviour = "faithful" | "sticky" | "swapped";
-function scripted(house: House, intended: () => string[], first: string, behaviour: Behaviour, calls: SimpleModelCall[]): SimpleModel {
+function scripted(house: House, intended: () => string[], first: string, behaviour: Behaviour, calls: SimpleModelCall[], asks: () => string | null = () => null): SimpleModel {
   return { choice: { provider: "anthropic", model: "scripted" }, async call(c) {
     calls.push(c);
     const want = intended();
@@ -95,7 +95,7 @@ function scripted(house: House, intended: () => string[], first: string, behavio
         percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null };
     });
     // The bottom line names everyone the model answered for, as a model's prose would.
-    return { json: { bottomLine: `Here is what the documents print for ${people.join(" and ")}.`, nextSteps: [], question: null, statements },
+    return { json: { bottomLine: `Here is what the documents print for ${people.join(" and ")}.`, nextSteps: [], question: asks(), statements },
       stopReason: "end_turn", model: "scripted", usage: { input: 1, cacheWrite: 0, cacheRead: 0, output: 1 } };
   } };
 }
@@ -105,12 +105,12 @@ type Card = { person: string | null; amount: string };
 type Saved = { answer: { answerId?: string; summary?: string; bottomLine?: string | null; invalidated?: { reason: string }; statements?: { amount?: { text: string } | null; personName?: string | null; text: string }[]; question?: unknown; questions?: { text: string }[] }; state: Record<string, unknown> };
 /** Runs the household's messages through the app's chat turn, one after the other, carrying the saved state and history as
  * the app does (the history read back as conversationTurns reads it). Returns each turn's saved answer and the model calls. */
-async function converse(house: House, messages: string[], intended: string[][], behaviour: Behaviour, table: boolean) {
+async function converse(house: House, messages: string[], intended: string[][], behaviour: Behaviour, table: boolean, questions: (string | null)[] = []) {
   const { runSimpleChat, turnsFromMessages } = await import("@/lib/simple-chat/hook") as typeof import("@/lib/simple-chat/hook") & { turnsFromMessages?: (rows: unknown[], s?: ReadonlySet<string>) => Turn[] };
   const stale = await import("@/lib/chat/stale-answers") as typeof import("@/lib/chat/stale-answers") & { supersededAnswerIds?: (s: unknown) => Set<string> };
   const calls: SimpleModelCall[] = [];
   let turn = 0;
-  const model = scripted(house, () => intended[turn], intended[0][0], behaviour, calls);
+  const model = scripted(house, () => intended[turn], intended[0][0], behaviour, calls, () => questions[turn] ?? null);
   let state: Record<string, unknown> = { subjects: {} };
   const saved: Saved[] = [];
   const stored: { role: string; content: string; answer_json: unknown }[] = [];
@@ -391,6 +391,34 @@ async function main() {
         assert.deepEqual(people(r.saved[2]), [G]);
         assert.equal(r.reopened[0].invalidated?.reason, "superseded", "the replaced answer stays superseded");
       });
+    // ---- Round 4 hardenings.
+    for (const q of ["Daniel, not Grace - how much does she get?", "Actually it's Daniel, not Grace. Is her arm covered?", "Daniel, not Grace. How much would he get?"])
+      await test(`GATE R4-1 Grace then "${q}" (${m}): Grace's answer superseded, the turn left to main's checks`, async () => {
+        const r = await one(TERNS, [OPEN, q], [[G], [D]], table);
+        assert.equal(r.reopened[0].invalidated?.reason, "superseded");
+        assert.deepEqual(people(r.saved[1]), [D]);
+        const sticky = await converse(TERNS, [OPEN, q], [[G], [D]], "sticky", table);
+        assert.deepEqual(people(sticky.saved[1]), [D, G].sort(), "no narrowing: the model's own cards stand, each its own person's");
+        for (const a of sticky.saved) assertNoCrossing(TERNS, a, q);
+      });
+    for (const q of ["Daniel's, not Grace's.", "It's Daniel's, not Grace's. How much?", "Daniel's, not Grace's - how much does she get?", "Not Grace's, Daniel's."])
+      await test(`GATE R4-2 Grace then "${q}" (${m}): no replacement, nothing superseded`, async () => {
+        const r = await one(TERNS, [OPEN, q], [[G], [G]], table);
+        assert.deepEqual(people(r.saved[1]), [G]);
+        assert.ok(!r.reopened.some((a) => a.invalidated));
+      });
+    for (const ask of ["Who was driving?", "Is the policy in Grace's name or Daniel's?"])
+      await test(`GATE R4-3 the answer asked "${ask}", then "Daniel, not Grace." (${m}): an answer, not a correction`, async () => {
+        const r = await converse(TERNS, [OPEN, "Daniel, not Grace."], [[G], [G]], "faithful", table, [ask, null]);
+        assert.deepEqual(people(r.saved[1]), [G]);
+        assert.ok(!r.reopened.some((a) => a.invalidated));
+        assert.doesNotMatch(r.calls[1].question, /corrected who this is about/);
+      });
+    await test(`GATE R4-3 control: no question before, "Daniel, not Grace." still replaces (${m})`, async () => {
+      const r = await converse(TERNS, [OPEN, "Daniel, not Grace."], [[G], [D]], "sticky", table, [null, null]);
+      assert.deepEqual(people(r.saved[1]), [D]);
+      assert.equal(r.reopened[0].invalidated?.reason, "superseded");
+    });
     const BOTH_OPEN = "Grace and Daniel both broke arms, how much?";
     for (const q of ["Actually, Daniel's was a compound fracture, how much does he get?", "Sorry, Daniel's question: does he need a doctor's memo?"])
       await test(`GATE R2-2 both then "${q}" (${m}): nothing superseded`, async () => {
@@ -450,7 +478,7 @@ async function main() {
   await test("S resolveSubjects: only an explicit replacement between members narrows; everything else defers or adds", () => {
     assert.ok(subjects, "lib/simple-chat/subjects.ts exists");
     const r = (...said: string[]) => subjects!.resolveSubjects(TERNS.household, said.reverse());
-    assert.deepEqual(r(OPEN, "actually it's Daniel, not Grace"), { people: [D], change: "replace", replaced: [G], unknown: null });
+    assert.deepEqual(r(OPEN, "actually it's Daniel, not Grace"), { people: [D], change: "replace", replaced: [G], unknown: null, kept: [D] });
     assert.deepEqual(r(OPEN, "not Grace — Daniel").people, [D]);
     assert.deepEqual(r(OPEN, "Sorry, I meant Daniel").people, [D]);
     assert.equal(r(OPEN, "actually it's Daniel, not Grace", "how much for the hip?").people, null, "narrowing lasts the replacement turn only");
@@ -459,6 +487,9 @@ async function main() {
       "Daniel, not Grace. How much does Grace get?", "Daniel - not Grace - was driving."])
       assert.equal(r(OPEN, q).people, null, q);
     assert.equal(r(OPEN, "Wei, not Grace?").unknown, null, "a question about the correction asks nothing");
+    assert.deepEqual(r(OPEN, "Daniel, not Grace - how much does she get?"), { people: null, change: "replace", replaced: [G], unknown: null, kept: [D] });
+    assert.equal(r(OPEN, "Daniel's, not Grace's.").change, "same");
+    assert.equal(subjects!.resolveSubjects(TERNS.household, ["Daniel, not Grace.", OPEN], { askedBefore: true }).change, "same");
     // Not a replacement: main's behaviour.
     for (const q of ["Daniel too", "both of them", "what about Daniel?", "how much for the hip?", "what about my husband?", "What does Grace's husband get?", "I broke my arm too",
       "sorry i meant the hip", "Does Daniel's policy cover her?", "Actually, Daniel's was a compound fracture", "Sorry, Daniel here", "It wasn't Grace's fault, how much does she get?",

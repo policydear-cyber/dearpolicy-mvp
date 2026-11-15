@@ -27,6 +27,9 @@ export type Subjects = {
   replaced: string[];
   /** A name in the latest message that is no member of the household (as written), or null. */
   unknown: string | null;
+  /** The members a replacement is now about (A), even when `people` is left to the other checks (a pronoun after the
+   * correction): an earlier answer that showed one of them is never superseded. */
+  kept?: string[];
 };
 
 const baseName = (n: string) => n.replace(/\s*\([^)]*\)\s*$/, "").trim();
@@ -99,7 +102,12 @@ const TAIL = /^(?:'s)?\s*(?:$|[.!]+(?:\s|$)|(?:,|\s-)\s*(?:how|what|which|when|i
 function marked(text: string, mentions: Mention[], household: Household): { m: string; people: string[] } {
   const people = household.members.map((x) => baseName(x.name));
   let out = "", at = 0;
-  for (const x of mentions) { if (x.start < at) continue; out += text.slice(at, x.start) + `\u0001${people.indexOf(x.person)}\u0002`; at = x.end; }
+  for (const x of mentions) {
+    if (x.start < at) continue;
+    // A possessive stays outside the placeholder ("Daniel's" -> placeholder + "'s"), so a shape can see it.
+    const raw = text.slice(x.start, x.end), poss = /'s$/i.test(raw) && !nameWords(x.person).includes(raw.toLowerCase());
+    out += text.slice(at, x.start) + `\u0001${people.indexOf(x.person)}\u0002${poss ? "'s" : ""}`; at = x.end;
+  }
   return { m: out + text.slice(at), people };
 }
 /** Whether what follows the correction is allowed (TAIL) and never names B again, in any form ("How much does Grace get?"). */
@@ -112,24 +120,33 @@ function tailOk(rest: string, b: string[], household: Household, people: string[
 /** An explicit replacement, only as the whole message or its opening clause (round 3): "Daniel, not Grace", "Actually it's
  * Daniel, not Grace - how much?", "Not Grace, Daniel", "Sorry, I meant Daniel" (right after a turn about B), each with A and
  * B members written as names. Anything after it may only be a short question that does not name B. */
-function replacement(text: string, mentions: Mention[], previous: string[], household: Household): { a: string[]; b: string[] } | null {
+function replacement(text: string, mentions: Mention[], previous: string[], household: Household): { a: string[]; b: string[]; pronoun: boolean } | null {
   const { m, people } = marked(text.trim(), mentions, household);
-  const shapes: [RegExp, (g: RegExpExecArray) => { a: string; b: string | null }][] = [
-    [new RegExp(String.raw`^${OPENER}${P}\s*(?:,|\s-)\s*not\s+${P}`, "iu"), (g) => ({ a: g[1], b: g[2] })],
-    [new RegExp(String.raw`^${OPENER}not\s+${P}\s*(?:,|\s-)\s*(?:(?:it'?s|it\s+was|it\s+is)\s+)?${P}`, "iu"), (g) => ({ a: g[2], b: g[1] })],
+  // A possessive in either slot ("Daniel's, not Grace's") may answer "whose policy?" as well as correct the person: never
+  // a replacement (round 4, R4-2). The shapes match it so that it is refused rather than read some other way.
+  const POSS = String.raw`('s)?`;
+  const shapes: [RegExp, (g: RegExpExecArray) => { a: string; b: string | null; poss?: boolean }][] = [
+    [new RegExp(String.raw`^${OPENER}${P}${POSS}\s*(?:,|\s-)\s*not\s+${P}${POSS}`, "iu"), (g) => ({ a: g[1], b: g[3], poss: !!(g[2] || g[4]) })],
+    [new RegExp(String.raw`^${OPENER}not\s+${P}${POSS}\s*(?:,|\s-)\s*(?:(?:it'?s|it\s+was|it\s+is)\s+)?${P}${POSS}`, "iu"), (g) => ({ a: g[3], b: g[1], poss: !!(g[2] || g[4]) })],
     [new RegExp(String.raw`^(?:(?:sorry|oops|no|actually)\s*[,!.]?\s*)*I\s+mean(?:t)?\s+${P}(?:\s*(?:,|\s-)\s*not\s+${P})?`, "iu"), (g) => ({ a: g[1], b: g[2] ?? null })],
   ];
   for (const [re, pick] of shapes) {
     const g = re.exec(m);
     if (!g) continue;
-    const { a: ai, b: bi } = pick(g);
+    const { a: ai, b: bi, poss } = pick(g);
+    if (poss) return null;
     const a = people[Number(ai)];
     const b = bi != null ? [people[Number(bi)]] : previous.filter((x) => x !== a);
     if (!a || !b.length || b.includes(a) || (bi == null && previous.includes(a))) return null;
-    return tailOk(m.slice(g[0].length), b, household, people) ? { a: [a], b } : null;
+    const rest = m.slice(g[0].length);
+    // A third-person pronoun after the correction may still mean B: supersede, but leave the turn's people to the other
+    // checks (round 4, R4-1).
+    return tailOk(rest, b, household, people) ? { a: [a], b, pronoun: PRONOUN.test(rest) } : null;
   }
   return null;
 }
+
+const PRONOUN = /\b(?:she|her|hers|herself|he|him|his|himself|they|them|their|theirs|themselves)\b/i;
 
 /** "<X>, not <member>" as the whole message or its opening clause, with X written as a name that is no member, no
  * closed-list word, no family word and no word the household's documents print: the only shape that asks who they meant. */
@@ -149,13 +166,15 @@ function unknownName(text: string, mentions: Mention[], household: Household): s
 /** Who the latest message (the first of `said`) is about; the one before it settles only who "I meant <A>" takes back.
  * A replacement narrows its own turn only: later turns go back to the other checks (round 3), while the answers it
  * superseded stay superseded and are never read to the model again. `said`: the household's messages, latest first. */
-export function resolveSubjects(household: Household, said: readonly string[]): Subjects {
+/** `opts.askedBefore`: the answer just before ended with a question; a reply in a replacement's shape ("Daniel, not Grace")
+ * then answers it (who was driving, whose name the policy is in), and corrects nothing (round 4, R4-3). */
+export function resolveSubjects(household: Household, said: readonly string[], opts: { askedBefore?: boolean } = {}): Subjects {
   const latest = norm(said[0] ?? "");
   const previousText = said[1] != null ? norm(said[1]) : "";
   const previous = [...new Set(nameMentions(previousText, household).map((x) => x.person))];
   const mentions = nameMentions(latest, household);
-  const swap = replacement(latest, mentions, previous, household);
-  if (swap) return { people: swap.a, change: "replace", replaced: swap.b.filter((p) => !swap.a.includes(p)), unknown: null };
+  const swap = opts.askedBefore ? null : replacement(latest, mentions, previous, household);
+  if (swap) return { people: swap.pronoun ? null : swap.a, change: "replace", replaced: swap.b.filter((p) => !swap.a.includes(p)), unknown: null, kept: swap.a };
   const unknown = unknownName(latest, mentions, household);
   if (unknown) return { people: [], change: "new", replaced: [], unknown };
   return { people: null, change: ADDS.test(latest) && looselyNamed(latest, household).length ? "add" : "same", replaced: [], unknown: null };

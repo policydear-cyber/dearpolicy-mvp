@@ -331,10 +331,13 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const help = appHelp(message, household.documents.flatMap((d) => [d.insurer ?? "", d.productName ?? ""]));
   // Who this turn is about, from the household's own messages: a replacement, an addition, a new question or the same
   // people (lib/simple-chat/subjects.ts). Only these people's figures are shown.
-  const subjects = resolveSubjects(household, [message, ...heard.filter((t) => t.role === "user").map((t) => t.text).reverse()]);
+  // The answer just before ended with a question: a reply in a replacement's shape answers it (subjects.ts, R4-3).
+  const lastAnswer = [...heard].reverse().find((t) => t.role === "assistant");
+  const askedBefore = !!lastAnswer && /\?\s*$/.test(lastAnswer.text.trim().split("\n").pop() ?? "");
+  const subjects = resolveSubjects(household, [message, ...heard.filter((t) => t.role === "user").map((t) => t.text).reverse()], { askedBefore });
   // The earlier answers this turn's correction replaces are not read back to the model with their figures either.
   const prior = conversation.state as SimpleChatState;
-  const replacedNow = subjects.change === "replace" ? supersededBy(subjects.replaced, prior.simpleChat?.turns ?? [], subjects.people ?? []) : [];
+  const replacedNow = subjects.change === "replace" ? supersededBy(subjects.replaced, prior.simpleChat?.turns ?? [], subjects.kept ?? subjects.people ?? []) : [];
   const history = replacedNow.length ? heard.map((t) => (t.role === "assistant" && t.answerId && replacedNow.includes(t.answerId) ? { role: t.role, text: SUPERSEDED_NOTICE } : t)) : heard;
   if (help) reply = { json: help.answer, stopReason: null, model: `app-help:${help.id}`, usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 } };
   // A household with no documents has nothing to answer from: its fixed answer costs no model call (TE main journeys 11 Nov).
