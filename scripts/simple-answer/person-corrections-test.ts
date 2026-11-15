@@ -225,8 +225,9 @@ async function main() {
     });
   }
 
-  // ---- U: a name the household does not have
-  for (const phrase of ["actually it's Wei, not Grace", "Sorry, I meant Priya", "Marcus broke his arm too", "what about Wei?", "sorry i meant wei"]) for (const table of MODES) {
+  // ---- U: a name the household does not have, in a strict replacement shape: a question back, no amount, no model call,
+  // and no earlier answer superseded (who it is about now is no member: gate C2).
+  for (const phrase of ["actually it's Wei, not Grace", "Sorry, I meant Priya", "Wei, not Grace", "not Grace — Priya"]) for (const table of MODES) {
     await test(`U "${phrase}" (${mode(table)}): a question back, no amount, no model call`, async () => {
       const r = await converse(TERNS, [OPEN, phrase], [[G], [G]], "sticky", table);
       noFigures(TERNS, r.saved[1], phrase);
@@ -235,10 +236,102 @@ async function main() {
       assert.match(asked, /Who did you mean/);
       assert.match(asked, /Grace Tern/); assert.match(asked, /Daniel Tern/);
       for (const a of [...r.saved, ...r.reopened]) assertNoCrossing(TERNS, a, phrase);
-      // "not Grace" or "I meant ..." takes Grace back: her answer is replaced; an addition or a new question leaves it.
-      const takesBack = /not grace|meant/i.test(phrase);
-      assert.equal(r.reopened[0].invalidated?.reason, takesBack ? "superseded" : undefined);
+      assert.equal(r.reopened[0].invalidated, undefined, "Grace's answer is not superseded by an unknown name");
       assert.equal(people(r.saved[0]).join(), G, "the first answer showed Grace's card");
+    });
+  }
+  // Outside that shape the model answers as on main; whatever it shows is labelled for its own person.
+  for (const phrase of ["Marcus broke his arm too", "what about Wei?", "sorry i meant wei"]) for (const table of MODES) {
+    await test(`U2 "${phrase}" (${mode(table)}): no "who did you mean", the model answers, no person crossed`, async () => {
+      const r = await converse(TERNS, [OPEN, phrase], [[G], [G]], "sticky", table);
+      assert.equal(r.calls.length, 2);
+      assert.doesNotMatch(JSON.stringify(r.saved[1]), /Who did you mean/);
+      for (const a of [...r.saved, ...r.reopened]) assertNoCrossing(TERNS, a, phrase);
+      assert.equal(r.reopened[0].invalidated, undefined);
+    });
+  }
+
+  // ---- GATE: the corrections gate's repros (corrections-gate.md, C1-C6): each must answer as main does.
+  const one = async (house: House, messages: string[], intended: string[][], table: boolean) => converse(house, messages, intended, "faithful", table);
+  for (const table of MODES) {
+    const m = mode(table);
+    // C1: ordinary words are never unknown people.
+    for (const q of ["Grace broke her arm, I think it's fractured. How much?", "Grace broke her arm. Physio was 5 sessions, how much?"])
+      await test(`GATE C1 "${q}" (${m}): Grace's own figure`, async () => {
+        const r = await one(TERNS, [q], [[G]], table);
+        assert.deepEqual(cards(r.saved[0]), [{ person: G, amount: "S$20,000" }]);
+      });
+    await test(`GATE C1 "My husband broke his arm. Physio was needed. How much?" (${m}): Daniel's own figure`, async () => {
+      const r = await one(TERNS, ["My husband broke his arm. Physio was needed. How much?"], [[D]], table);
+      assert.deepEqual(cards(r.saved[0]), [{ person: D, amount: "S$60,000" }]);
+    });
+    for (const q of ["Is it covered? It's urgent.", "I hope it's covered, how much would she get?"])
+      await test(`GATE C1 Grace then "${q}" (${m}): Grace's figure stays`, async () => {
+        const r = await one(TERNS, [OPEN, q], [[G], [G]], table);
+        assert.deepEqual(people(r.saved[1]), [G]);
+        assert.ok(!r.reopened.some((a) => a.invalidated));
+      });
+    // C2: a correction of the injury never supersedes the person's answer.
+    for (const q of ["actually it's fractured, not sprained", "I mean broken.", "Sorry, it's Fractured, not sprained"])
+      await test(`GATE C2 Grace then "${q}" (${m}): Grace's answer stands, live and reopened`, async () => {
+        const r = await one(TERNS, [OPEN, q], [[G], [G]], table);
+        assert.deepEqual(people(r.saved[1]), [G]);
+        assert.equal(r.reopened[0].invalidated, undefined);
+        assert.deepEqual(people(r.reopened[0]), [G]);
+      });
+    // C3: a member's name that is an ordinary word is a mention only when written as a name.
+    for (const [other, q] of [["Will Tan", "how much will that be in total?"], ["May Tan", "may I claim for that? how much?"], ["Mark Tan", "can you mark it as urgent? how much?"], ["Rose Tan", "the bill rose a lot, how much is paid?"]] as const)
+      await test(`GATE C3 member ${other}: Grace then "${q}" (${m}): Grace's figure stays`, async () => {
+        const house = makeHouse("dddddddd-0000-4000-8000-0000000000c3", [{ name: G, relationship: "self", sum: 200_000, armPct: 10 }, { name: other, relationship: "spouse", sum: 500_000, armPct: 10 }], 10);
+        const r = await one(house, [OPEN, q], [[G], [G]], table);
+        assert.deepEqual(people(r.saved[1]), [G]);
+        for (const a of r.saved) assertNoCrossing(house, a, q);
+      });
+    await test(`GATE C3 Daniel then "Is there a grace period? How much does he get?" (${m}): Daniel's figure stays`, async () => {
+      const r = await one(TERNS, ["Daniel broke his arm, how much?", "Is there a grace period? How much does he get?"], [[D], [D]], table);
+      assert.deepEqual(people(r.saved[1]), [D]);
+    });
+    await test(`GATE C3 "Will broke his arm" names Will; "Will that be covered?" does not (${m})`, async () => {
+      const house = makeHouse("dddddddd-0000-4000-8000-0000000000c4", [{ name: G, relationship: "self", sum: 200_000, armPct: 10 }, { name: "Will Tan", relationship: "spouse", sum: 500_000, armPct: 10 }], 10);
+      const r = await one(house, [OPEN, "Will broke his arm too"], [[G], [G, "Will Tan"]], table);
+      assert.deepEqual(people(r.saved[1]), ["Grace Tern", "Will Tan"]);
+      const r2 = await one(house, [OPEN, "Will that be covered?"], [[G], [G]], table);
+      assert.deepEqual(people(r2.saved[1]), [G]);
+    });
+    // C4: an addition after a relationship-only turn never narrows the turn to the new name.
+    await test(`GATE C4 "My wife broke her arm" then "and Daniel too, how much for each?" (${m}): both`, async () => {
+      const r = await one(TERNS, ["My wife broke her arm, how much?", "and Daniel too, how much for each?"], [[G], [G, D]], table);
+      assert.deepEqual(people(r.saved[1]), [D, G].sort());
+      for (const a of r.saved) assertNoCrossing(TERNS, a, "C4");
+    });
+    // C5: a member named as a policy's owner is not a new subject.
+    for (const q of ["Does Daniel's policy cover her?", "Is that under Daniel's plan?"])
+      await test(`GATE C5 Grace then "${q}" (${m}): Grace's figure stays`, async () => {
+        const r = await one(TERNS, [OPEN, q], [[G], [G]], table);
+        assert.deepEqual(people(r.saved[1]), [G]);
+        assert.ok(!r.reopened.some((a) => a.invalidated));
+      });
+    // C6: insurer and product names are never unknown people.
+    for (const q of ["what about Prudential?", "what about AIA?", "what about MediShield?", "what about Integrated Shield?"])
+      await test(`GATE C6 Grace then "${q}" (${m}): the model answers`, async () => {
+        const r = await one(TERNS, [OPEN, q], [[G], [G]], table);
+        assert.equal(r.calls.length, 2);
+        assert.doesNotMatch(JSON.stringify(r.saved[1]), /Who did you mean|can't find anyone/);
+      });
+    // Chains the gate found right, kept right.
+    await test(`GATE chain Grace -> "actually Daniel, not Grace" -> "sorry, Grace after all, not Daniel" (${m})`, async () => {
+      const r = await one(TERNS, [OPEN, "actually Daniel, not Grace", "sorry, Grace after all, not Daniel"], [[G], [D], [G]], table);
+      assert.deepEqual(r.saved.map(people), [[G], [D], [G]]);
+      assert.deepEqual(r.reopened.map((a) => a.invalidated?.reason ?? "-"), ["superseded", "superseded", "-"]);
+    });
+    await test(`GATE lowercase "grace broke her arm" -> "actually daniel, not grace" (${m})`, async () => {
+      const r = await one(TERNS, ["grace broke her arm, how much?", "actually daniel, not grace"], [[G], [D]], table);
+      assert.deepEqual(r.saved.map(people), [[G], [D]]);
+      assert.equal(r.reopened[0].invalidated?.reason, "superseded");
+    });
+    await test(`GATE "Grace and Daniel both broke arms" (${m})`, async () => {
+      const r = await one(TERNS, ["Grace and Daniel both broke arms, how much?"], [[G, D]], table);
+      assert.deepEqual(people(r.saved[0]), [D, G].sort());
     });
   }
 
@@ -279,11 +372,22 @@ async function main() {
     assert.deepEqual(r(OPEN, "sorry i meant the hip").people, [G], "a correction of the benefit keeps the people");
     assert.deepEqual(r(OPEN, "how much can I claim for that?").people, [G]);
     assert.equal(r(OPEN, "actually it's Wei, not Grace").unknown, "Wei");
+    assert.equal(r(OPEN, "Sorry, I meant Priya").unknown, "Priya");
+    assert.deepEqual(r(OPEN, "actually it's Wei, not Grace").replaced, [], "an unknown name supersedes nothing");
+    // Gate pure checks: none of these is an unknown person.
+    for (const q of ["Grace broke her arm. Tom was driving.", "Hokkaido was where it happened", "Grab was late", "Covid was also involved", "Casting was needed", "it's swollen",
+      "what if it's serious?", "what about Integrated Shield?", "Raffles was the hospital", "I think it's fractured", "It's urgent.", "Physio was 5 sessions", "actually it's fractured, not sprained", "I mean broken."])
+      assert.equal(r(OPEN, q).unknown, null, q);
+    assert.deepEqual(r(OPEN, "actually it's fractured, not sprained").replaced, []);
+    assert.deepEqual(r(OPEN, "Sorry, how much does Daniel get?").change, "new", "a polite 'sorry' is no correction");
+    assert.deepEqual(r(OPEN, "Does Daniel's policy cover her?").people, [G, D]);
+    assert.equal(r("My wife broke her arm", "and Daniel too").people, null);
     // Words the documents print, and ordinary words, are never taken for an unknown person.
-    for (const q of ["What about Hip?", "And for the Arm (fracture)?", "Actually it was Monday", "It was Kestrel Assurance", "What about the hip?", "sorry i meant the hip", "Actually, how much is it?"])
+    for (const q of ["What about Hip?", "And for the Arm (fracture)?", "Actually it was Monday", "It was Kestrel Assurance", "What about the hip?", "sorry i meant the hip", "Actually, how much is it?", "Marcus broke his arm too", "what about Wei?"])
       assert.equal(r(OPEN, q).unknown, null, q);
     // Only the household's own names: the same words for another household mean nothing.
-    assert.equal(subjects!.resolveSubjects(RAHMANS.household, ["actually it's Daniel, not Grace"]).unknown, "Daniel");
+    assert.equal(subjects!.resolveSubjects(RAHMANS.household, ["actually it's Daniel, not Aisyah"]).unknown, "Daniel");
+    assert.equal(subjects!.resolveSubjects(RAHMANS.household, ["actually it's Daniel, not Grace"]).unknown, null, "Grace is no member there");
   });
   await test("S supersededBy walks back over the replaced person's answers only", () => {
     assert.ok(subjects);
