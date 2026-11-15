@@ -1282,9 +1282,12 @@ function headWords(line: string): string[] {
  * each line prints at least one word (the cap's sentinel and a line of marks alone fail; EP-M1), every word is in
  * PLAIN_HEAD, and "a" or "an" is followed by another plain word and never follows person, insured or section ("Benefits
  * for insured person A", "Section A benefits"; EP-H3); no letter or number outside ASCII, and no currency sign right after
- * person, insured or section (EP-H5). */
-function plainHeads(r: CheckedReading, b: CheckedBenefit): boolean {
+ * person, insured or section (EP-H5); no word of a name the document or the household holds (EP-H6). */
+function plainHeads(r: CheckedReading, b: CheckedBenefit, householdNames: string[] = []): boolean {
   if (!r.tableHeads) return false;
+  // A word of any name the document names or the household holds ("Max", "Sterling") is a person, even where it is also
+  // a plain heading word ("Amount payable for Max", "Amount payable (Sterling)"; each-person gate round 5, EP-H6).
+  const nameWords = new Set([...r.namedPeople, ...r.covers.map((c) => c.person), ...householdNames].flatMap((n) => norm(n).split(" ")).filter(Boolean));
   const plain = (line: string) => {
     if (line.includes("\u0000")) return false;
     // A letter or number outside ASCII ("Benefits for 陈伟明", "insured person Ａ / Α / Ⓐ / 一") is one no word list here can
@@ -1292,12 +1295,13 @@ function plainHeads(r: CheckedReading, b: CheckedBenefit): boolean {
     if (/[^\x00-\x7f]/u.test(line.replace(/[\u00a3\u20ac]/g, "$"))) return false;
     const ws = headWords(line);
     // A currency sign right after person, insured or section ("insured person A$", "insured person £") may be a life's tag.
+    if (norm(line).split(" ").some((w) => nameWords.has(w))) return false;
     return ws.length > 0 && ws.every((w, i) => PLAIN_HEAD.has(w) && !(w === "cur" && i > 0 && NOT_BEFORE_ARTICLE.has(ws[i - 1])) && (!(w === "a" || w === "an")
       || (i + 1 < ws.length && PLAIN_HEAD.has(ws[i + 1]) && ws[i + 1] !== "a" && ws[i + 1] !== "an" && !(i > 0 && NOT_BEFORE_ARTICLE.has(ws[i - 1])))));
   };
   return r.tableHeads.every(plain) && (!(b.column ?? "").trim() || plain(b.column!));
 }
-function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<string>>, ownProof: (documentId: string, coverKey: string) => boolean) {
+function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<string>>, ownProof: (documentId: string, coverKey: string) => boolean, householdNames: string[] = []) {
   const figure = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
   const firstLine = (t: string) => norm(t.split("\n")[0]);
   return (r: CheckedReading, b: CheckedBenefit, coverKey: string): false | "column" | "plain" => {
@@ -1336,7 +1340,7 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
     // With no mark, the document itself must show its one table is read for each insured person (tableIsEachPersons), and
     // the row's label and section print only per-life benefit kinds (perLifeKindLabel), and every title and heading over or
     // inside the table prints only plain table words (plainHeads).
-    if (!marked && (!tableIsEachPersons() || !perLifeKindLabel(b) || !plainHeads(r, b))) return false;
+    if (!marked && (!tableIsEachPersons() || !perLifeKindLabel(b) || !plainHeads(r, b, householdNames))) return false;
     // A note anywhere on the document, off every row's own line, that names a kind of life or an age ("Note: for insured
     // children the limits are 50% of those shown") may change any row for some of the lives (check.ts lifeNotes).
     if ((r.lifeNotes ?? []).length) return false;
@@ -1362,7 +1366,7 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
       && !KIND_OF_LIFE.test(`${x.benefit} ${x.rowText ?? x.source.excerpt} ${x.conditions.join(" ")}`);
     // In a plain table, an unmarked neighbour that is itself a plain row by the document's own print (plainTable: no life,
     // age, share, tier, shared limit or other figure in its words; tableIsEachPersons) changes nothing for some of the lives either.
-    const plainNeighbour = (x: CheckedBenefit) => plain && x.forWhom == null && perLifeKindLabel(x) && plainHeads(r, x) && tableIsEachPersons() && plainTable(r, x, coverKey);
+    const plainNeighbour = (x: CheckedBenefit) => plain && x.forWhom == null && perLifeKindLabel(x) && plainHeads(r, x, householdNames) && tableIsEachPersons() && plainTable(r, x, coverKey);
     if ([...below, ...above].some((x) => x.forWhom !== "each_named_insured" && !shareOfOwnSum(x) && !plainNeighbour(x))) return false;
     const next = below.length || (plain && anotherRowsNote(r, b, b.nextLine)) ? "" : b.nextLine ?? "";
     if (!plain && !perPersonColumnRow(r, b, next)) return false;
@@ -1639,7 +1643,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const columnsOn = new Map(readings.map((r) => [r.documentId, new Set(r.benefits.filter((b) => norm(b.column)).map((b) => `${norm(b.section)}|${norm(b.column)}`))] as const));
   const proofs = new Set(readings.filter((r) => r.kind === "personal_proof").map((r) => r.documentId));
   const ownProof = (documentId: string, coverKey: string) => proofs.has(documentId) && covers.some((c) => c.coverKey === coverKey && c.source.documentId === documentId);
-  const perPersonRow = perPersonRows(readings, columnsOn, ownProof);
+  const perPersonRow = perPersonRows(readings, columnsOn, ownProof, family.flatMap((m) => [m.display_name, m.preferred_name ?? ""]));
   const refusedLinks: BenefitTable["refusedLinks"] = [];
   const linkOf = new Map<string, SectionLink>();
   const ownVersion = ownVersionOf(readings, covers);

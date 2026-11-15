@@ -354,6 +354,34 @@ test("EP-H5 positives: \"(all amounts in SGD)\", \"Amount payable (S$)\", \"TABL
     for (const id of NAMED) assert.equal(fixedOf(un, id).length, 2, `${title}: ${id}`);
   }
 });
+// Round 5 (EP-H6): a plain heading word that is also a word of a person's name ("Max", "Sterling").
+{
+  const lives: Life[] = [{ name: "Max Tan", role: "Policyholder", dob: "11/03/1985", sum: 100000 }, { name: "Sterling Lim", role: "Spouse", dob: "22/07/1983", sum: 80000 },
+    { name: "Kai Tan", role: "Child", dob: "05/09/2016", sum: 20000 }];
+  const fam: FamilyMember[] = [{ id: "m", display_name: "Max Tan", date_of_birth: "1985-03-11" } as FamilyMember, { id: "w", display_name: "Sterling Lim", date_of_birth: "1983-07-22" } as FamilyMember,
+    { id: "k", display_name: "Kai Tan", date_of_birth: "2016-09-05" } as FamilyMember, { id: "o", display_name: "Ah Kow Tan", date_of_birth: "1950-01-01" } as FamilyMember];
+  // The household member not on the document is named with a plain heading word ("Payable Ong", made up) only in that test.
+  const tableFor = (o: Opts, f = fam) => { const d = schedule({ ...o, lives }); return assembleTable([d.r], f, d.links, [], NOW); };
+  test("EP-H6 control: Max Tan, Sterling Lim and Kai Tan under plain headings each get the fixed rows, as when marked", () => {
+    const un = tableFor({ rows: mark(ROWS, null) }), mk = tableFor({ rows: mark(ROWS, "each_named_insured") });
+    assert.deepEqual(everyone(un), everyone(mk));
+    for (const id of NAMED) assert.equal(fixedOf(un, id).length, 2, id);
+  });
+  for (const [what, o] of [
+    ["column heading \"Amount payable for Max\"", { header: "Section\tBenefit\tAmount payable for Max" }],
+    ["column heading \"Max\"", { header: "Section\tBenefit\tMax" }],
+    ["title \"Benefits for Sterling\"", { title: "Benefits for Sterling" }],
+    ["column heading \"Amount payable (Sterling)\"", { header: "Section\tBenefit\tAmount payable (Sterling)" }],
+  ] as [string, Opts][]) {
+    test(`EP-H6: no forWhom, ${what}: no one gets the fixed rows`, () => noneFixed(tableFor({ ...o, rows: mark(ROWS, null) }), what));
+  }
+  test("EP-H6: no forWhom, column heading \"Amount payable for Payable\" naming a household member not on the document (Payable Ong): no one", () => {
+    const f = [...fam.slice(0, 3), { id: "o", display_name: "Payable Ong", preferred_name: "Payable", date_of_birth: "1950-01-01" } as FamilyMember];
+    noneFixed(tableFor({ header: "Section\tBenefit\tAmount payable for Payable", rows: mark(ROWS, null) }, f), "household member");
+    // Without that member, the same heading is plain words only: the guard is the household's name.
+    for (const id of NAMED) assert.equal(fixedOf(tableFor({ header: "Section\tBenefit\tAmount payable for Payable", rows: mark(ROWS, null) }), id).length, 2, id);
+  });
+}
 test("EP-H2 positives: R4's title and headings (\"TABLE OF BENEFITS (all amounts in GBP)\", \"Section Benefit Amount payable\") give the same figures with and without forWhom", () => {
   for (const [money, title] of [[GBP, "TABLE OF BENEFITS (all amounts in GBP)"], [SGD, "SCHEDULE OF BENEFITS (all amounts in Singapore dollars)"], [USD, "Table of benefits - all amounts are in US dollars"]] as const) {
     const un = table(schedule({ money, title, rows: mark(ROWS, null) })), mk = table(schedule({ money, title, rows: mark(ROWS, "each_named_insured") }));
