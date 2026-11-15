@@ -86,6 +86,12 @@ export const CLAIM_GUIDES: LearnGuide[] = [
         ] },
       ] },
       { heading: "What usually limits it", blocks: [
+        { kind: "tiles", caption: "What usually limits outpatient cover. Your policy sets its own.", tiles: [
+          { icon: "receipt", title: "Per visit", text: "A most it pays for each visit." },
+          { icon: "daily", title: "Per year", text: "A most it pays across the year." },
+          { icon: "conditions", title: "What counts", text: "Doctor, specialist, tests, medicines and more." },
+          { icon: "insurer", title: "Panel clinics", text: "Some plans pay more, or pay directly, at listed clinics." },
+        ] },
         { kind: "list", items: [
           "A limit per visit and a limit per year.",
           "A list of what counts: for example a general doctor, a specialist, tests, medicines, physiotherapy or dental care. Each may have its own limit.",
@@ -162,6 +168,11 @@ export const CLAIM_GUIDES: LearnGuide[] = [
         ] },
       ] },
       { heading: "Stages and other cover", blocks: [
+        { kind: "steps", caption: "Stages some policies list, from early to severe. Each policy defines its own, if any.", steps: [
+          { icon: "illness", title: "Early stage", text: "Some policies pay a smaller share." },
+          { icon: "illness", title: "Intermediate stage", text: "Some pay a larger share." },
+          { icon: "illness", title: "Severe stage", text: "Often the main amount, less any earlier stage payment." },
+        ] },
         { kind: "list", items: [
           "Some policies pay at early or intermediate stages, often a smaller share of the sum assured. A later claim for a severe stage may then be reduced by what was paid.",
           "If critical illness is part of a life policy, a claim often brings forward, and so reduces, the death cover. A separate critical illness policy usually does not.",
@@ -200,6 +211,11 @@ export const CLAIM_GUIDES: LearnGuide[] = [
         ] },
       ] },
       { heading: "Who receives the money", blocks: [
+        { kind: "flow", caption: "Who usually receives a death payment. The policy and local law decide.", items: [
+          { icon: "family", title: "Someone was named", text: "Usually the named beneficiary or nominee." },
+          { icon: "schedule", title: "No one was named", text: "Usually the policy owner." },
+          { icon: "keep", title: "The owner has died", text: "Usually the owner's estate, under local rules." },
+        ] },
         { kind: "list", items: [
           "If a beneficiary or nominee was named, the insurer usually pays them, under the policy's terms and local law.",
           "If no one was named, the money usually goes to the policy owner, or to the owner's estate if the person who died owned the policy, under local rules.",
@@ -332,6 +348,12 @@ export const CLAIM_GUIDES: LearnGuide[] = [
         ] },
       ] },
       { heading: "What can reduce the payment", blocks: [
+        { kind: "tiles", caption: "Four things that commonly reduce a home or motor claim.", tiles: [
+          { icon: "fixed", title: "Excess", text: "The part of each claim you pay." },
+          { icon: "percent", title: "Under-insurance", text: "Insured for too little can cut every claim." },
+          { icon: "conditions", title: "Item limits", text: "Caps on single valuable items." },
+          { icon: "renewal", title: "No-claim discount", text: "A motor claim can reduce it at renewal." },
+        ] },
         { kind: "list", items: [
           "An excess, or deductible, you pay on each claim.",
           "Under-insurance: if the amount insured is less than the real value, some policies pay only a share of each claim; some allow a margin first.",

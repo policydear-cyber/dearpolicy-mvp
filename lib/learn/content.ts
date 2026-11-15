@@ -11,6 +11,7 @@
 
 import { SINGAPORE_GUIDES } from "./singapore";
 import { CLAIM_GUIDES } from "./claims";
+import { BASIC_GUIDES } from "./basics";
 
 /** Pictograms drawn in components/learn/pictogram.tsx (self-made SVG, no external images). */
 export type LearnIcon =
@@ -19,7 +20,8 @@ export type LearnIcon =
   | "fixed" | "percent" | "daily" | "receipt"
   | "search" | "read" | "tell" | "approve" | "keep" | "decide"
   | "printed" | "scenario" | "insurer" | "person" | "source" | "conditions" | "question"
-  | "shield" | "wash" | "dress" | "feed" | "toilet" | "walk" | "transfer" | "family";
+  | "shield" | "wash" | "dress" | "feed" | "toilet" | "walk" | "transfer" | "family"
+  | "clock" | "lapse" | "clinic" | "helping" | "smile";
 
 /** A picture with a short label, used by tiles, steps and flows. All words live here so the content tests read them. */
 export type LearnTile = { icon: LearnIcon; title: string; text: string };
@@ -299,6 +301,11 @@ export const GENERAL_GUIDES: LearnGuide[] = [
         ] },
       ] },
       { heading: "Reading them together", blocks: [
+        { kind: "flow", caption: "One way to read a set of documents together. Your own set may differ.", items: [
+          { icon: "schedule", title: "What you hold", text: "The schedule: who, which plan, amounts and dates." },
+          { icon: "wording", title: "What it means", text: "The wording: definitions, conditions and exclusions." },
+          { icon: "endorsement", title: "What changed since", text: "Any later endorsement can update the schedule." },
+        ] },
         { kind: "list", items: [
           "Read the schedule for what you have, and the wording for what it means.",
           "A wording on its own does not prove you have that cover. A schedule or certificate with your name is the usual proof, as of its date.",
@@ -457,6 +464,12 @@ export const GENERAL_GUIDES: LearnGuide[] = [
         ] },
       ] },
       { heading: "Good to know", blocks: [
+        { kind: "tiles", caption: "Things worth keeping together for a claim. The insurer tells the claimant what it needs.", tiles: [
+          { icon: "schedule", title: "The policy", text: "Schedule and wording for the person it covers." },
+          { icon: "receipt", title: "Bills and receipts", text: "The ones you already have." },
+          { icon: "tell", title: "What happened", text: "Dates and a short account, in your own words." },
+          { icon: "decide", title: "The insurer's letters", text: "Including any decision and its reasons." },
+        ] },
         { kind: "list", items: [
           "What the insurer asks for depends on the policy and the event. Your policy wording and the insurer's claim form are the best guide.",
           "One event can be claimable under more than one policy, for example an accident policy and a hospital policy. Policies set their own rules on claiming from more than one.",
@@ -501,6 +514,11 @@ export const GENERAL_GUIDES: LearnGuide[] = [
         ] },
       ] },
       { heading: "When something is missing", blocks: [
+        { kind: "flow", caption: "How DearPolicy decides whether to show a figure.", items: [
+          { icon: "source", title: "Finds the page", text: "In the documents linked to that person." },
+          { icon: "printed", title: "Ties the figure to it", text: "With its currency and conditions." },
+          { icon: "question", title: "Otherwise, no figure", text: "It still explains what the document says." },
+        ] },
         { kind: "list", items: [
           "If DearPolicy cannot tie an amount to a page, it does not show one. It still tells you what the document says about the benefit.",
           "If your documents do not mention something, that does not mean you are not covered. A policy you have not uploaded may cover it.",
@@ -526,6 +544,7 @@ export const GENERAL_GUIDES: LearnGuide[] = [
       ] },
     ],
   },
+  ...BASIC_GUIDES,
   ...CLAIM_GUIDES,
 ];
 
@@ -572,4 +591,32 @@ export function learnSearchIndex(): LearnSearchEntry[] {
       text: [t.term, ...(t.alsoCalled ?? []), t.definition].join(" "),
     })),
   ];
+}
+
+/**
+ * The colour of a guide's sheet in the library, using the wallet's kinds of cover (docs/brand.md, --cover-* tokens).
+ * Decoration only: it groups guides by topic at a glance and never carries a status meaning.
+ */
+export type LearnCover = "hospital" | "cash" | "death" | "ci" | "disability" | "accident" | "travel" | "property" | "savings" | "other";
+const COVER_BY_ICON: Partial<Record<LearnIcon, LearnCover>> = {
+  hospital: "hospital", clinic: "hospital", rider: "hospital", helping: "hospital", receipt: "hospital",
+  illness: "ci", life: "death", family: "death",
+  disability: "disability", walk: "disability", shield: "disability",
+  accident: "accident", travel: "travel", home: "property", motor: "property",
+  savings: "savings", investment: "savings", annuity: "savings", income: "savings", lapse: "savings",
+  daily: "cash", fixed: "cash", percent: "cash", clock: "cash",
+};
+export function learnCover(icon: LearnIcon): LearnCover {
+  return COVER_BY_ICON[icon] ?? "other";
+}
+
+/** Rough reading time in whole minutes, at about 200 words a minute (at least 1). */
+export function readMinutes(guide: LearnGuide): number {
+  const words = [guide.summary, ...guide.sections.flatMap((s) => [s.heading, ...s.blocks.flatMap(blockTexts)])].join(" ").split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+/** Who a country article's facts come from, for the index ("CPF Board", "Ministry of Health"), in source order. */
+export function sourceNames(guide: LearnGuide): string[] {
+  return [...new Set((guide.sources ?? []).map((s) => s.label.split(":")[0].trim()))];
 }

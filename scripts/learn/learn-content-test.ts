@@ -242,12 +242,12 @@ async function main() {
   });
 
   await t("static: the library imports no database, model, network or household code", () => {
-    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "lib/learn/try-it.ts", "lib/learn/singapore.ts", "lib/learn/claims.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", ...walk("components/learn")];
+    const files = ["lib/learn/content.ts", "lib/learn/match.ts", "lib/learn/try-it.ts", "lib/learn/singapore.ts", "lib/learn/claims.ts", "lib/learn/basics.ts", "components/learn-links.tsx", "components/learn-notice.tsx", "app/learn/layout.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", ...walk("components/learn")];
     assert.deepEqual(walk("app/learn").sort(), files.filter((f) => f.startsWith("app/learn")).sort(), "unexpected file under app/learn");
     for (const f of files) {
       const src = readFileSync(f, "utf8");
       const imports = [...src.matchAll(/from\s+"([^"]+)"/g)].map((m) => m[1]);
-      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match|try-it)|@\/components\/learn-notice|@\/components\/learn\/(pictogram|blocks|try-it|search)|\.\/(content|singapore|claims))$/.test(i), `${f} imports ${i}`);
+      for (const i of imports) assert.ok(/^(next\/link|next\/navigation|react|@\/lib\/learn\/(content|match|try-it)|@\/components\/learn-notice|@\/components\/learn\/(pictogram|blocks|try-it|search)|\.\/(content|singapore|claims|basics))$/.test(i), `${f} imports ${i}`);
       assert.doesNotMatch(src, /\bfetch\(|supabase|anthropic|process\.env|localStorage|<img\b/i, f);
       // Only the country articles' source lists carry web addresses; they are checked against the official allow-list below.
       if (f !== "lib/learn/singapore.ts") assert.doesNotMatch(src, /https?:\/\//i, f);
@@ -430,12 +430,32 @@ async function main() {
     for (const g of SINGAPORE_GUIDES) assert.ok(sgShelf.includes(`href="/learn/${g.slug}"`), g.slug);
     const last = SINGAPORE_GUIDES[SINGAPORE_GUIDES.length - 1];
     const lastHtml = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: last.slug }) }));
-    assert.doesNotMatch(lastHtml, /Next: /, "the last Singapore article does not lead into an unrelated shelf");
+    assert.doesNotMatch(lastHtml, /Next on this shelf/, "the last Singapore article does not lead into an unrelated shelf");
     const claimsShelf = html.slice(html.indexOf('data-testid="learn-shelf-claims"'), html.indexOf('data-testid="learn-shelf-dearpolicy"'));
     let pos = -1;
     for (const g of CLAIM_GUIDES) { const i = claimsShelf.indexOf(`href="/learn/${g.slug}"`); assert.ok(i > pos, `claims shelf: ${g.slug} missing or out of order`); pos = i; }
     const firstSg = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: SINGAPORE_GUIDES[0].slug }) }));
-    assert.match(firstSg, new RegExp(`Next: <a class="text-link" href="/learn/${SINGAPORE_GUIDES[1].slug}"`));
+    assert.match(firstSg, new RegExp(`<a class="learn-sheet" data-cover="[a-z]+" href="/learn/${SINGAPORE_GUIDES[1].slug}">.*?Next on this shelf`));
+  });
+
+  await t("pictures: every guide has a hero picture and at least two picture blocks; every block picture is drawn", async () => {
+    const pictureKinds = new Set(["tiles", "steps", "flow", "diagram", "layers", "bill-split", "percent-of-sum"]);
+    for (const g of GUIDES) {
+      const n = g.sections.flatMap((s) => s.blocks).filter((b) => pictureKinds.has(b.kind)).length;
+      assert.ok(n >= 2, `${g.slug}: only ${n} picture block(s)`);
+      const html = renderToStaticMarkup(await LearnGuidePage({ params: Promise.resolve({ slug: g.slug }) }));
+      assert.match(html, new RegExp(`class="lh-picture"><svg[^>]*data-icon="${g.icon}"`), `${g.slug}: no hero picture`);
+      assert.match(html, /class="learn-rail" aria-label="On this page"/, `${g.slug}: no section list`);
+    }
+  });
+
+  await t("index: shelf links jump to each shelf; each guide sheet shows its reading time and, for country articles, who the facts come from", () => {
+    const html = renderToStaticMarkup(LearnIndex());
+    for (const g of LEARN_GROUPS) assert.ok(html.includes(`href="#shelf-${g.id}"`), g.id);
+    assert.match(html, /From CPF Board/);
+    assert.match(html, /From Ministry of Health/);
+    assert.doesNotMatch(html, /From [^<]*(MoneySense|LIA)/);
+    assert.match(html, /\d+ min read/);
   });
 
   await t("search: finds articles and terms by name, short name and a one-letter slip; nothing for unrelated words", () => {
@@ -468,6 +488,17 @@ async function main() {
     assert.equal(first("clinic visit"), "/learn/claims-clinic-visits");
     assert.equal(first("flood"), "/learn/claims-home-motor");
     assert.equal(first("cancer diagnosis"), "/learn/claims-critical-illness");
+    assert.equal(first("eldershield"), "/learn/sg-eldershield");
+    assert.equal(first("elder shield 400"), "/learn/sg-eldershield");
+    assert.equal(first("medifund"), "/learn/sg-medifund");
+    assert.equal(first("can't afford hospital bill"), "/learn/sg-medifund");
+    assert.equal(first("chas blue"), "/learn/sg-chas");
+    assert.equal(first("waiting period"), "/learn/waiting-periods");
+    assert.equal(first("pre-existing"), "/learn/waiting-periods");
+    assert.equal(first("lapsed policy"), "/learn/missed-premiums");
+    assert.equal(first("forgot to pay premium"), "/learn/missed-premiums");
+    assert.equal(first("whole life"), "/learn/life-policy-kinds");
+    assert.equal(first("whose policy"), "/learn/who-is-who");
     assert.deepEqual(searchLearn(index, ""), []);
     assert.deepEqual(searchLearn(index, "zzzz qqqq"), []);
     assert.deepEqual(searchLearn(index, "careshield xylophone"), [], "every word must match");
