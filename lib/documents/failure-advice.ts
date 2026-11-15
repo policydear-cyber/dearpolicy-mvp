@@ -7,8 +7,9 @@ import {
  * the one next step that can actually work for that kind of failure.
  *
  * An allow-list: each stored reason DearPolicy writes (lib/documents/processing-errors.ts) has its own entry. A
- * reading that cannot succeed a second time from the same file (no text in a scan, a damaged or cut-off file, an
- * unreadable photo) never offers "Try reading it again"; a failure of the reading service never says "it will try
+ * reading that cannot succeed a second time from the same file (a damaged or cut-off file, an unreadable photo) never
+ * offers "Try reading it again"; a document with no text found is read again first (never give up on a policy), with
+ * another copy offered beside it; a failure of the reading service never says "it will try
  * again automatically" once nothing is scheduled. Any other value -- including the API's fixed "Analysis stopped"
  * stand-in for a raw error -- gets the plain generic sentence, never its own text.
  *
@@ -23,6 +24,9 @@ export type FailedDocumentAdvice = {
   nextStep: FailedDocumentNextStep;
   /** The button's label for read_again / upload_another. */
   action: string;
+  /** A second button, beside a read_again one, that opens the upload box for another copy (no readable text found:
+   * reading is never given up on, and a clearer copy is offered too). */
+  uploadAction?: string;
 };
 
 const READ_AGAIN = "Try reading it again";
@@ -34,13 +38,14 @@ const READING_LIMIT_HINT = "The limit resets " + READING_LIMIT_RESETS + "; press
 const SAME_FILE = "Reading the same file again won’t change this.";
 
 export const READING_SERVICE_STOPPED_REASON =
-  "DearPolicy couldn’t finish reading this document because its reading service wasn’t available. Nothing is wrong with the file.";
+  "DearPolicy couldn’t finish reading this document because of a connection problem on our side. Nothing is wrong with the file.";
 
 const KNOWN = new Map<string, Omit<FailedDocumentAdvice, "reason"> & { reason?: string }>(Object.entries({
   [PDF_PASSWORD_REQUIRED_MESSAGE]: { kind: "password_missing", nextStep: "unlock", hint: "", action: "" },
   [PDF_PASSWORD_INCORRECT_MESSAGE]: { kind: "password_wrong", nextStep: "unlock", hint: "", action: "" },
-  [UNREADABLE_DOCUMENT_MESSAGE]: { kind: "no_text", nextStep: "upload_another", action: "Upload a clearer copy",
-    hint: SAME_FILE + " Upload the original PDF or a clearer scan, then delete this one." },
+  // Never give up on reading a policy (owner's rule): read it again, and if it still has no text, another copy helps.
+  [UNREADABLE_DOCUMENT_MESSAGE]: { kind: "no_text", nextStep: "read_again", action: READ_AGAIN, uploadAction: "Upload a clearer copy",
+    hint: "Try reading it again. If it still can’t be read, upload the original PDF or a clearer scan, then delete this one." },
   [UNOPENABLE_DOCUMENT_MESSAGE]: { kind: "unopenable", nextStep: "upload_another", action: "Upload another copy",
     hint: SAME_FILE + " Upload the original file (or ask the insurer for a fresh copy), then delete this one." },
   [INCOMPLETE_PDF_MESSAGE]: { kind: "incomplete", nextStep: "upload_another", action: "Upload the new copy",
@@ -88,7 +93,6 @@ const CHAT_WHY: Record<FailedDocumentAdvice["kind"], string> = {
 };
 /** The step for a document the Documents page offers another copy for, by kind. */
 const CHAT_UPLOAD_STEP: Partial<Record<FailedDocumentAdvice["kind"], string>> = {
-  no_text: SAME_FILE + " Upload the original PDF from the insurer, or a clearer scan, on the Documents page, then delete the old one.",
   unopenable: SAME_FILE + " Upload the original file on the Documents page (or ask the insurer for a fresh copy), then delete the old one.",
   incomplete: "Download it again from the insurer’s email or website (or ask the insurer for a fresh copy), upload the new copy on the Documents page, then delete the old one.",
   photo: "Take it again — " + PHOTO_RETAKE + " — then upload the new photo on the Documents page and delete the old one. A PDF from the insurer is even better.",
@@ -106,6 +110,7 @@ export function failedDocumentChatAdvice(error: string | null | undefined, { has
       : advice.nextStep === "read_again"
         ? advice.kind === "service" ? press + " in a little while."
           : advice.kind === "limit" ? press + " after the limit resets " + READING_LIMIT_RESETS + ". There is no need to upload it again."
+          : advice.kind === "no_text" ? press + ". If it still can’t be read, upload the original PDF from the insurer, or a clearer scan, on the Documents page, then delete the old one."
           : press + ". If it still can’t be read, delete it and upload a clearer copy or the original file."
         : CHAT_UPLOAD_STEP[advice.kind] ?? CHAT_UPLOAD_STEP.unknown!;
   return { kind: advice.kind, why, step };

@@ -36,7 +36,7 @@ async function main() {
   const both = [first, reread];
 
   await test("a failure the same file cannot fix never offers 'Try reading it again', first read or re-read", () => {
-    for (const [error, kind] of [[UNREADABLE_DOCUMENT_MESSAGE, "no_text"], [UNOPENABLE_DOCUMENT_MESSAGE, "unopenable"], [INCOMPLETE_PDF_MESSAGE, "incomplete"], [UNREADABLE_PHOTO_MESSAGE, "photo"]] as const) {
+    for (const [error, kind] of [[UNOPENABLE_DOCUMENT_MESSAGE, "unopenable"], [INCOMPLETE_PDF_MESSAGE, "incomplete"], [UNREADABLE_PHOTO_MESSAGE, "photo"]] as const) {
       for (const state of both) {
         const a = failedDocumentAdvice(error, state);
         assert.equal(a.kind, kind, error);
@@ -45,6 +45,19 @@ async function main() {
         assert.ok(a.hint && a.action, "a hint and a button label");
         assert.doesNotMatch(a.action + " " + a.hint, /try reading it again/i);
       }
+    }
+  });
+
+  await test("no readable text found: never given up on -- Read again first, with another copy offered beside it", () => {
+    for (const state of both) {
+      const a = failedDocumentAdvice(UNREADABLE_DOCUMENT_MESSAGE, state);
+      assert.equal(a.kind, "no_text");
+      assert.equal(a.nextStep, "read_again");
+      assert.equal(a.action, "Try reading it again");
+      assert.equal(a.uploadAction, "Upload a clearer copy");
+      assert.equal(a.reason, UNREADABLE_DOCUMENT_MESSAGE);
+      assert.match(a.hint, /clearer scan/);
+      assert.doesNotMatch(a.hint, /won.t change this/i);
     }
   });
 

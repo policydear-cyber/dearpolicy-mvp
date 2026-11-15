@@ -550,7 +550,7 @@ export default function PoliciesPage() {
             return <div className="row-error processing-error" data-testid="document-unreadable" data-failure={advice.kind}><strong>This document could not be read</strong><span>{advice.reason}</span><small>{advice.hint}</small>
               <div className="row-error-actions">{advice.nextStep === "upload_another"
                 ? <button type="button" className="mini-button" onClick={chooseAnother}>{advice.action}</button>
-                : <button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : advice.action}</button>}</div></div>;
+                : <><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : advice.action}</button>{advice.uploadAction && <button type="button" className="mini-button" onClick={chooseAnother}>{advice.uploadAction}</button>}</>}</div></div>;
           })()}
 
           {/* Its numbers and the actions on it come last. */}
