@@ -52,7 +52,7 @@ Rules of thumb:
 | `--ink` text | `#16211c` | `#eef2ee` |
 | `--muted` | `#58625c` | `#9aa59e` |
 | `--brand` (fills: your chat bubble, active filter) | `#1f5240` | `#8fd0b0` |
-| `--brand-ink` (links) | `#7a3f30` (the logo's brown) | `#e0a898` |
+| `--brand-ink` (links) | `#1f5240` (same green as the buttons; the logo is the only warm colour) | `#8fd0b0` |
 | `--accent` (the one primary button) | `#1f5240` | `#8fd0b0` |
 | `--money` | `#16211c` (figures are told by weight and size) | `#eef2ee` |
 | `--good-text` | `#276b44` | `#8fd0a8` |

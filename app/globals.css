@@ -1,8 +1,9 @@
 /* ==========================================================================
    DearPolicy — design tokens. The written brand spec is docs/brand.md.
    Colour has one written meaning each. Spend it on nothing else.
-     --brand       the frame: wordmark brown, headings, nav, links
-     --accent      action: primary buttons
+     --brand       the one accent: links, active nav, primary buttons (green).
+                   The logo is the only warm colour on a page.
+     --accent      action: primary buttons (same green as --brand)
      --money       a figure printed in the household's documents
      --good        confirmed: read, matched, verified, saved
      --unresolved  not settled yet: a page not read, an amount to confirm,
@@ -30,7 +31,7 @@
   --input-line: #858e88;      /* 3.4:1 on --bg */
 
   --brand: #1f5240;
-  --brand-ink: #7a3f30;       /* brand as text, 6.3:1 on --bg */
+  --brand-ink: #1f5240;       /* brand as text: the same green as the buttons, one accent only */
   --brand-tint: #ebeee9;
   --brand-tint-2: #e0e5de;
   --on-brand: #ffffff;        /* text on a --brand fill, 6.9:1 */
@@ -90,7 +91,7 @@
     --bg: #121614; --bg-2: #0e1210; --surface: #1b211e; --surface-2: #222924;
     --ink: #eef2ee; --ink-2: #c4ccc6; --muted: #9aa59e;
     --line: #2b332e; --line-strong: #38423c; --input-line: #7f8a83;
-    --brand-ink: #e0a898; --brand-tint: #232b26; --brand-tint-2: #2c3630;
+    --brand-ink: #8fd0b0; --brand-tint: #232b26; --brand-tint-2: #2c3630;
     --money: #eef2ee; --accent-tint: #232b26;
     --good: #7fc49a; --good-text: #8fd0a8; --good-tint: #1f2f26; --good-line: #33503f;
     --warn: #e8b85a; --warn-text: #ecc46e; --warn-tint: #332b18; --warn-line: #5a4a24;
@@ -192,8 +193,8 @@ table { font-variant-numeric: tabular-nums; }
 .button.secondary { background: var(--brand-tint); color: var(--ink); }
 .button.secondary:hover { background: var(--brand-tint-2); }
 .button.compact { padding: 8px 14px; min-height: 40px; white-space: nowrap; }
-.button:disabled { opacity: .5; cursor: not-allowed; }
-.mini-button { border: 1px solid transparent; background: var(--brand-tint-2); color: var(--ink); border-radius: var(--r-sm); padding: 6px 10px; min-height: 32px; font-size: var(--fs-xs); font-weight: 600; transition: border-color var(--t-hover) var(--ease), background var(--t-hover) var(--ease); }
+.button:disabled, .button.primary:disabled { background: var(--surface-2); color: var(--muted); border-color: var(--line-strong); cursor: not-allowed; }
+.mini-button { border: 1px solid transparent; background: var(--surface-2); color: var(--ink); border-radius: var(--r-sm); padding: 6px 10px; min-height: 32px; font-size: var(--fs-xs); font-weight: 600; transition: border-color var(--t-hover) var(--ease), background var(--t-hover) var(--ease); }
 .mini-button:hover { background: var(--line-strong); }
 a.mini-button { display: inline-flex; align-items: center; text-decoration: none; }
 .mini-button:disabled { opacity: .5; cursor: default; }
@@ -242,7 +243,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .member-pills { display: flex; gap: 8px; overflow-x: auto; padding: 2px; }
 .member-pill { white-space: nowrap; border: 1px solid transparent; background: var(--surface-2); border-radius: var(--r-md); padding: 8px 12px; min-height: 44px; display: flex; align-items: center; gap: 8px; color: var(--ink); transition: border-color var(--t-hover) var(--ease), background var(--t-hover) var(--ease); }
 .member-pill:hover { background: var(--brand-tint-2); }
-.member-pill.active { border-color: var(--p, var(--brand)); background: var(--p-tint, var(--surface-2)); color: var(--p, var(--ink)); }
+.member-pill.active { border-color: var(--p, var(--brand)); background: var(--bg); color: var(--ink); box-shadow: inset 0 0 0 1px var(--p, var(--brand)); }
 .member-pill.add { color: var(--brand-ink); font-weight: 650; }
 .member-dot { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--p, var(--brand-tint)); color: var(--on-p, var(--brand-ink)); font-weight: 650; font-size: var(--fs-xs); }
 .member-pill span:last-child { display: grid; text-align: left; }
@@ -309,7 +310,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .premium-breakdown-value, .payment-amount { text-align: right; display: grid; gap: 2px; font-variant-numeric: tabular-nums; }
 .premium-breakdown-value strong, .payment-amount strong { font-size: var(--fs-md); color: var(--money); }
 .premium-breakdown-value strong small { color: var(--muted); font-size: var(--fs-xs); margin-left: 3px; font-weight: 500; }
-.payment-brand, .policy-logo { width: 36px; height: 36px; border-radius: var(--r-sm); background: var(--brand-tint); color: var(--brand-ink); display: grid; place-items: center; font-size: var(--fs-xs); font-weight: 650; }
+.payment-brand, .policy-logo { width: 36px; height: 36px; border-radius: var(--r-sm); background: var(--surface-2); color: var(--ink-2); display: grid; place-items: center; font-size: var(--fs-xs); font-weight: 650; }
 .dashboard-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .reminder-list { display: grid; gap: 8px; }
 .reminder-card { display: grid; grid-template-columns: 36px 1fr 18px; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--edge); border-radius: var(--r-md); padding: 12px 14px; }
@@ -1565,7 +1566,7 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
 
 /* Visual polish pass (Nov 2026): spacing and layout only, no colour-role changes. */
 /* Home "Not found" kinds read as one sentence: inline links, not 44px-tall flex boxes; padding keeps the tap area. */
-.home-not-found .text-link { display: inline; min-height: 0; padding-block: 6px; }
+.home-not-found .text-link { display: inline; min-height: 0; padding-block: 6px; color: var(--ink); font-weight: 500; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 .home-not-found p { line-height: 1.9; }
 .home-attention + .member-strip { margin-top: 14px; }
 .chat-composer textarea { resize: none; }
@@ -1602,8 +1603,7 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
 [data-person="2"] { --p: var(--person-3); --p-tint: var(--person-3-tint); }
 [data-person="3"] { --p: var(--person-4); --p-tint: var(--person-4-tint); }
 [data-person] { --on-p: var(--bg); }
-.profile-card[data-person] { background: var(--p-tint); }
-.profile-card[data-person] .profile-summary strong { color: var(--p); }
+/* A person's colour sits on their round initial and the selected outline only, never a whole card. */
 
 /* Computer: the menu is a top bar; phones keep the bottom bar. */
 @media (min-width: 901px) {

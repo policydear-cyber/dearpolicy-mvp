@@ -7,7 +7,7 @@ export const metadata = { title: "Page not found · DearPolicy" };
  * landing page and the Learn library (middleware.ts's session hint; it only picks the links). */
 export default async function NotFound() {
   if ((await headers()).get("x-dearpolicy-signed-in") === "0") return <div className="page not-found">
-    <div className="eyebrow">PAGE NOT FOUND</div>
+    <div className="eyebrow">Page not found</div>
     <h1>We couldn&rsquo;t find that page.</h1>
     <p className="lead">The link may be old, or the page may have moved.</p>
     <div className="not-found-actions">
@@ -16,7 +16,7 @@ export default async function NotFound() {
     </div>
   </div>;
   return <div className="page not-found">
-    <div className="eyebrow">PAGE NOT FOUND</div>
+    <div className="eyebrow">Page not found</div>
     <h1>We couldn&rsquo;t find that page.</h1>
     <p className="lead">The link may be old, or the page may have moved.</p>
     <div className="not-found-actions">
