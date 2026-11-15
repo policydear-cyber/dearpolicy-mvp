@@ -1633,18 +1633,27 @@ function dayNumbersAsFigures(t: string): string {
     .replace(new RegExp(String.raw`\b(${words})(?=\s+(?:consecutive\s+|continuous\s+)?days?\b)`, "gi"), (w) => String(NUMBER_WORDS[w.toLowerCase()]));
 }
 /** Every read waiting form in `t`: the unpaid days each gives, and `t` with them taken out. */
-function takeWaiting(t: string, perStayOnly = false): { unpaid: number[]; rest: string } {
+function takeWaiting(t: string, perStayOnly = false): { unpaid: number[]; rest: string; newForm: boolean } {
   const unpaid: number[] = [];
-  let rest = t;
-  for (const f of WAIT_FORMS) rest = rest.replace(f.re, (...args) => {
+  let rest = t, newForm = false;
+  WAIT_FORMS.forEach((f, k) => { rest = rest.replace(f.re, (...args) => {
     const m = args.slice(0, -2) as unknown as RegExpMatchArray;
     // m[3]: the form's per-stay words. Below the row a form without them is left in the words, where it stops the figure.
     if (perStayOnly && !m[3]) return m[0];
     unpaid.push(f.unpaid(Number(m[2]), m));
+    // The negative forms ("does not pay for the first 2 days of any stay") are read since R4 H2-C; "after the 10th day (of
+    // hospital stay)" in the row was read before it, as it still is.
+    if (k >= 2) newForm = true;
     return " ; ";
-  });
-  return { unpaid, rest };
+  }); });
+  return { unpaid, rest, newForm };
 }
+/** The only words a row may keep, past its label, once its daily figure, waiting period, most days and yearly cap are
+ * taken out, when a rule read since R4 H2-C is used (a yearly period, a yearly cap amount, a negative waiting form, or a
+ * waiting sentence below the row): grammar words that change nothing. Any other word ("for all insured persons", "per policy", "for illness", "for
+ * you and your spouse") may change whose cap it is or which stays wait, so no figure is worked out (gate SD-H2b, SD-H4).
+ * An allow-list: no list of sharing or cause words would ever be complete. */
+const ROW_GRAMMAR_WORDS = new Set("a an the of and".split(" "));
 /** The few words a sentence below the row may keep around a waiting form it states and still be about this row: the row's
  * own name words and a handful of grammar words ("The hospital income rider does not pay for the first 2 days ..."). A
  * sentence naming anything else ("The surgical benefit does not pay ...") is not read as this row's. */
@@ -1692,10 +1701,12 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   const tailRest = tailParts.join(" ");
   const fromRow = takeWaiting(rowText);
   unpaid.push(...fromRow.unpaid);
+  const newWaiting = fromRow.newForm || unpaid.length > fromRow.unpaid.length;
   // One waiting period, however many times it is said ("from the 3rd day" and "first 2 days not payable" agree).
   if (!unpaid.length || new Set(unpaid).size !== 1 || unpaid[0] < 0) return null;
   // The row's words end where the lines below begin: a clause never runs on into them.
-  let rule = `${fromRow.rest} ; ${tailRest}`.replace(/\s+/g, " ");
+  // "¶" marks where they begin.
+  let rule = `${fromRow.rest} ;¶ ${tailRest}`.replace(/\s+/g, " ");
   if (WAIT_LEFT.test(rule)) return null;
   const tail = tailRest.replace(MAX_DAY_FIELD, " ");
   // A wrapped period ("up to 365 days per" / "policy year") is the row's own words, read with the row.
@@ -1745,6 +1756,11 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   // Every number of days left printed is the most days: "(30) days" only.
   const dayNumbers = [...rule.matchAll(/(\d+)\)?\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?days?\b/gi)].map((m) => Number(m[1]));
   if (dayNumbers.some((d) => d !== most)) return null;
+  if (period || cap || newWaiting) {
+    const own = withoutMost.split("¶")[0].replace(dailies[0].raw ?? "", " ")
+      .replace(/\b(?:per|a|each)\s+day\b(?:\s+in\s+(?:the\s+)?hospital\b|\s+of\s+(?:continuous\s+)?hospitali[sz]ation\b)?/i, " ").replace("@most", " ");
+    if (!(own.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => labelWords.has(w) || ROW_GRAMMAR_WORDS.has(w))) return null;
+  }
   return { unpaid: unpaid[0], most, period, cap };
 }
 function stayPays(st: ModelStatement, found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[]): Stay | null {

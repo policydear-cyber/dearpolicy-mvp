@@ -265,6 +265,31 @@ const GATE: [string, string, string[], number, string | null | (string | null)[]
   ["W16d cap wrapping below the row (a line below: refused)", CAPPED.replace(" policy year", "").replace("365 days per", "365 days per policy year"), ["policy year"], 20, null],
   ["W13 cap control, 20 days", CAPPED, [], 20, "S$1,000"],
   ["W16 cap 'maximum of S$1,000 per year'", CAPPED.replace("maximum S$1,000 per policy year", "maximum of S$1,000 per year"), [], 20, "S$1,000"],
+  // Round 2 (SD-H2b): a shared cap or day cap stated in the row's own line; past the label only grammar words may remain.
+  ...([", for all insured persons", ", per policy", ", for everyone insured", ", all lives", ". Applies to all insured persons", ", for the whole policy",
+    ", for you and your spouse", "; not per person", ", per certificate", ", across all riders", ", together with the ICU rider"] as const)
+    .map((t): [string, string, string[], number, null] => [`R2 cap '${t}'`, `${CAPPED}${t}`, [], 20, null]),
+  ["R2-12 cap control '.'", `${CAPPED}.`, [], 20, "S$1,000"],
+  ["R2-13 day cap ', for all insured persons', no amount cap", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year, for all insured persons", [], 20, null],
+  ["R2-14 day cap ', across all riders'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 30 days per policy year, across all riders", [], 40, null],
+  ["R2-15 day cap ', for you and your spouse together'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 30 days per policy year, for you and your spouse together", [], 40, null],
+  ["R2-26 day cap '(for all insured)' with the H2-C sentence below", "Hospital income rider\tS$100 per day in hospital, up to 365 days per policy year (for all insured)", [B], 6, null],
+  // Round 2 (SD-H4): a waiting form that names a cause or another condition is not this stay's.
+  ["R2-20 row 'not payable for the first 2 days of any stay for illness'", "Hospital income rider\tS$100 per day in hospital, not payable for the first 2 days of any stay for illness, up to 365 days per policy year", [], 6, null],
+  ["R2-16 below '... of any hospital stay during the first policy year.'", R, ["The rider does not pay for the first 30 days of any hospital stay during the first policy year."], 40, null],
+  ["R2-17 below '... that starts within 90 days of cover.'", R, ["The rider does not pay for the first 30 days of any hospital stay that starts within 90 days of cover."], 40, null],
+  ["R2-18 below '... of any hospital stay for illness.'", R, ["The rider does not pay for the first 30 days of any hospital stay for illness."], 40, null],
+  ["R2-19 below '... of any hospital stay caused by illness.'", R, ["The rider does not pay for the first 2 days of any hospital stay caused by illness."], 6, null],
+  ["R2-29 below '... not payable unless it follows an accident.'", R, ["The first 30 days of each stay are not payable unless it follows an accident."], 40, null],
+  ["R2-30 below '... for each new condition.'", R, ["The rider does not pay for the first 2 days of any hospital stay for each new condition."], 6, null],
+  ["R2-24 H2-C sentence + 'It is for the policy as a whole.'", R, [B, "It is for the policy as a whole."], 6, null],
+  ["R2-25 H2-C sentence + 'Days are counted for all insured persons together.'", R, [B, "Days are counted for all insured persons together."], 6, null],
+  // Round 2 controls: per-stay forms the gate found right.
+  ["R2-22 row 'from the 3rd day of any hospital stay' + cap", "Hospital income rider\tS$100 per day in hospital from the 3rd day of any hospital stay, up to 365 days per policy year, maximum S$1,000 per policy year", [], 20, "S$1,000"],
+  ["R2-23 below 'The rider pays from the 3rd day of any hospital stay.'", R, ["The rider pays from the 3rd day of any hospital stay."], 6, "S$400"],
+  ["R2-27 row 'first 2 days of a stay not paid'", "Hospital income rider\tS$100 per day in hospital, first 2 days of a stay not paid, up to 365 days per policy year", [], 6, "S$400"],
+  ["R2-28 row 'the first 2 days in an admission are not payable'", "Hospital income rider\tS$100 per day in hospital, the first 2 days in an admission are not payable, up to 365 days per policy year", [], 6, "S$400"],
+  ["R2-21 row 'from the 31st day' + per policy year", "Hospital income rider\tS$100 per day in hospital from the 31st day, up to 365 days per policy year", [], 40, [null, "S$1,000"]],
   // Not pinned by the gate: the true figure or none.
   ["W18 day cap 3 a year, 10-day stay", "Hospital income rider\tS$100 per day in hospital, up to 3 days per policy year", [B], 10, [null, "S$300"]],
   ["W19 waiting 40 days, day cap 30, 50-day stay", "Hospital income rider\tS$100 per day in hospital, up to 30 days per policy year", ["The hospital income rider does not pay for the first 40 days of any hospital stay."], 50, [null, "S$1,000"]],
