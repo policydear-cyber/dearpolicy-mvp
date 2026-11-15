@@ -46,17 +46,28 @@ Rules of thumb:
 
 | Token | Light | Dark |
 | --- | --- | --- |
-| `--bg` page | `#f9f5e4` (from the logo ground) | `#1c1512` |
-| `--surface` card | `#ffffff` | `#26201b` |
-| `--ink` text | `#2a1a14` | `#f3ecdc` |
-| `--muted` | `#6e5e56` | `#a89a8e` |
-| `--brand` / `--brand-ink` | `#884939` | `#884939` / `#d3998a` |
-| `--accent` | `#d4975c` | `#d4975c` |
-| `--money` | `#7f4f18` | `#e3a866` |
+| `--bg` page | `#f5f4f0` (stone, low chroma) | `#161513` |
+| `--surface` card | `#ffffff` | `#201e1b` |
+| `--ink` text | `#1c1a17` | `#f1efe9` |
+| `--muted` | `#625e56` | `#a39e94` |
+| `--brand` (fills: your chat bubble, active pill) | `#1c1a17` | `#f1efe9` |
+| `--brand-ink` (links) | `#7a3f30` (the logo's brown) | `#e0a898` |
+| `--accent` (the one primary button) | `#1c1a17` | `#f1efe9` |
+| `--money` | `#1c1a17` (figures are told by weight and size, not hue) | `#f1efe9` |
 | `--good-text` | `#276b44` | `#8fd0a8` |
 | `--unresolved-text` | `#3f5165` | `#b7c7d7` |
 | `--warn-text` | `#7a5600` | `#ecc46e` |
 | `--critical` | `#a3342a` | `#f08b7d` |
+
+### Look (15 Nov 2026, "paper and ink")
+
+The cream ground with brown and orange fills was the most common look of
+generated pages in 2025–26, so the chrome is now neutral: stone ground,
+near-black ink and buttons, colour kept for meaning (status) and for the
+logo. Surfaces are told apart by a tone step, not lines or shadows
+(`--edge` is transparent); tables and inputs keep their lines. No icon
+in a tinted square beside a heading, no small uppercase labels, small
+radii (4–8px).
 
 Contrast is checked by the test, not by eye: text 4.5:1; dots, the
 unresolved dashed edge and input borders 3:1; in both themes. Decorative
@@ -64,8 +75,9 @@ card borders between siblings are not status cues and are not held to 3:1.
 
 ## Type
 
-One family, the system UI stack (`--font`), so every phone shows familiar,
-fast letters, including CJK names on documents.
+One family, Instrument Sans, served from the site by `next/font` and set
+as `--font-face` on the page; the system UI stack in `--font` is the
+fallback, including for CJK names on documents.
 
 | Token | Size | Use |
 | --- | --- | --- |
@@ -85,8 +97,8 @@ Figures are tabular wherever amounts line up.
 - The wordmark is `public/dearpolicy-logo.png`: "DEAR" in brand brown,
   "POLICY" in accent orange. Use it as supplied: never recolour, stretch,
   outline or set it on a photo.
-- It sits on the cream ground it was drawn for. In dark mode it keeps a
-  cream plate (`--logo-plate`) rather than being inverted.
+- It sits on the light stone ground. In dark mode it keeps a cream
+  plate (`--logo-plate`) rather than being inverted.
 - Minimum height 24px on screen; keep clear space of at least the height
   of the "D" around it.
 - Where the wordmark can't be read (favicon, home-screen icon), use the
