@@ -1276,7 +1276,9 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
     // Column headings: two or more cells, no figure, no kind of life, and only words that say what a column is.
     const cells = line.split("\t").map((c) => c.trim()).filter(Boolean);
     if (cells.length >= 2 && !/\d/.test(line) && !LIFE_NOTE.test(line.replace(ROLE_ONLY, " ")) && !named(l).length
-      && !ADMIN_SCOPE.test(l.replace(/\b(?:amounts?|limits?|maximum|max|benefits?|payable|sum|insured|cover)\b/g, " "))) return "admin";
+      // A US currency sign or name ("(US$)", "(U.S.$)", "(US dollars)") is a currency, never the pronoun "us" (ADMIN_SCOPE).
+      && !ADMIN_SCOPE.test(l.replace(/(?<![a-z0-9])u\.?\s?s\.?\s?\$|\b(?:u\.?\s?s\.?|united\s+states)\s+dollars?\b/g, " dollars ")
+        .replace(/\b(?:amounts?|limits?|maximum|max|benefits?|payable|sum|insured|cover)\b/g, " "))) return "admin";
     // The premium the household pays (its figures are never a benefit's: assemble.ts).
     if (/\b(?:premiums?|contributions?|instal?l?ments?|direct\s+debit)\b/i.test(line) && !named(l).length && !LIFE_NOTE.test(line.replace(ROLE_ONLY, " "))) {
       out.premiumFigures.push(...money(line)); return "admin";

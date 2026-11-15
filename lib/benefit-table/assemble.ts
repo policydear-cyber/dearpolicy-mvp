@@ -1266,11 +1266,31 @@ function perLifeKindLabel(b: CheckedBenefit): boolean {
  * Assured", "Employee") may make the table one life's, so its rows stay no one's without the reader's mark. */
 const PLAIN_HEAD = new Set(("table schedule summary of benefit benefits section sections no amount amounts payable limit limits maximum max " +
   "per each insured person persons all are shown stated in for the a an and " +
-  "currency gbp sgd usd myr eur hkd aud rm s us u dollar dollars singapore pound pounds sterling ringgit euro euros").split(" "));
-/** Whether every table head line the document prints (check.ts tableHeads), and the row's own column heading, is plain. */
+  "currency cur gbp sgd usd myr eur hkd aud rm dollar dollars pound pounds sterling ringgit euro euros").split(" "));
+/** Words after which an article starts no plain phrase: "insured person A", "Section A" name one life or part. */
+const NOT_BEFORE_ARTICLE = new Set(["person", "persons", "insured", "section", "sections"]);
+/** A heading line's words, with each currency sign or name read as one token first ("S$", "US$", "U.S.$", "U.S.", "US
+ * dollars", "Singapore dollars"), so no single letter is left to stand for a currency (each-person gate round 3, EP-H3). */
+function headWords(line: string): string[] {
+  const t = ` ${line.toLowerCase()} `
+    .replace(/\b(?:u\.?\s?s\.?|united\s+states|singapore|hong\s+kong|australian)\s+dollars?\b/g, " cur ")
+    .replace(/(?<![a-z0-9])(?:u\.?\s?s\.?\s?\$|s\s?\$|hk\s?\$|a\s?\$|\u00a3|\u20ac)/g, " cur ")
+    .replace(/(?<![a-z0-9])u\.s\.(?![a-z0-9])/g, " cur ");
+  return norm(t).split(" ").filter(Boolean);
+}
+/** Whether every table head line the document prints (check.ts tableHeads), and the row's own column heading, is plain:
+ * each line prints at least one word (the cap's sentinel and a line of marks alone fail; EP-M1), every word is in
+ * PLAIN_HEAD, and "a" or "an" is followed by another plain word and never follows person, insured or section ("Benefits
+ * for insured person A", "Section A benefits"; EP-H3). */
 function plainHeads(r: CheckedReading, b: CheckedBenefit): boolean {
   if (!r.tableHeads) return false;
-  return [...r.tableHeads, b.column ?? ""].every((line) => norm(line).split(" ").filter(Boolean).every((w) => PLAIN_HEAD.has(w)));
+  const plain = (line: string) => {
+    if (line.includes("\u0000")) return false;
+    const ws = headWords(line);
+    return ws.length > 0 && ws.every((w, i) => PLAIN_HEAD.has(w) && (!(w === "a" || w === "an")
+      || (i + 1 < ws.length && PLAIN_HEAD.has(ws[i + 1]) && ws[i + 1] !== "a" && ws[i + 1] !== "an" && !(i > 0 && NOT_BEFORE_ARTICLE.has(ws[i - 1])))));
+  };
+  return r.tableHeads.every(plain) && (!(b.column ?? "").trim() || plain(b.column!));
 }
 function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<string>>, ownProof: (documentId: string, coverKey: string) => boolean) {
   const figure = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
