@@ -71,3 +71,10 @@
   .public-header .button.compact { padding: 8px 12px; }
 }
 .public-main:focus { outline: none; }
+
+/* Sign-in, sign-up and password pages inside the public top bar: the form sits centred, its links look like links. */
+.auth-frame { padding: 0 16px; }
+@media (max-width: 760px) { .auth-frame { padding: 0; } }
+.auth-frame .page { margin-inline: auto; padding-top: clamp(32px, 8vh, 88px) !important; }
+.auth-frame .page a:not(.button) { color: var(--brand-ink); font-weight: 600; }
+.auth-frame .page a:not(.button):hover { text-decoration: underline; }
