@@ -70,7 +70,7 @@ const WRONG = { bottomLine: "Here is what each member's documents show.",
 const MIXED = { ...EACH, statements: [...EACH.statements, ...WRONG.statements] };
 
 type Reply = unknown | Error;
-async function ask(question: string, replies: Reply[], opts: { memberId?: string | null; household?: Household; table?: BenefitTable } = {}) {
+async function ask(question: string, replies: Reply[], opts: { memberId?: string | null; household?: Household; table?: BenefitTable; check?: (calls: number) => Promise<void> } = {}) {
   const calls: SimpleModelCall[] = [];
   const model: SimpleModel = { choice: { provider: "anthropic", model: "test" }, async call(args) {
     calls.push(args);
@@ -86,7 +86,7 @@ async function ask(question: string, replies: Reply[], opts: { memberId?: string
     token: {}, holdings: [],
   } as unknown as ChatContext;
   const saved: { answer: StructuredAnswer; state: SimpleChatState }[] = [];
-  await runSimpleChat(context, {}, { model, household: async () => h, history: async () => [], save: (async (x: unknown) => { saved.push(x as never); }) as never, ledger: false, table: async () => opts.table ?? null,
+  await runSimpleChat(context, { check: opts.check ? () => opts.check!(calls.length) : undefined }, { model, household: async () => h, history: async () => [], save: (async (x: unknown) => { saved.push(x as never); }) as never, ledger: false, table: async () => opts.table ?? null,
     today: () => new Date("2026-11-15T04:00:00Z") });
   const answer = saved[0].answer;
   const figures = (answer.statements ?? []).filter((s) => s.amount).map((s) => ({ person: s.personName ?? null, amount: s.amount!.text, text: s.text }));
@@ -172,11 +172,41 @@ async function main() {
     assert.deepEqual(figures, []);
     assert.equal(turn.eachPerson?.kept, false);
   });
-  await check("F4 the second reply shows both members' figures without the question: kept, each labelled", async () => {
+  await check("F4 the second reply shows both members' figures but no longer asks who: the first answer stands (gate #503 ASK-L1)", async () => {
     const { figures, turn } = await ask(SG1, [WHOSE_ONLY, { ...EACH, question: null }]);
+    assert.deepEqual(figures, []);
+    assert.equal(turn.eachPerson?.kept, false);
+  });
+  await check("F5 the second reply shows figures but asks something other than who: the first answer stands (ASK-L1)", async () => {
+    const { answer, figures, turn } = await ask(SG1, [WHOSE_ONLY, { ...EACH, question: "When were you diagnosed?" }]);
+    assert.deepEqual(figures, []);
+    assert.equal(turn.eachPerson?.kept, false);
+    assert.match(answer.questions[0]?.text ?? "", /Whose diagnosis/);
+  });
+  await check("F6 a who question naming both members, with no 'who' word: kept", async () => {
+    const { figures, turn } = await ask(SG1, [WHOSE_ONLY, { ...EACH, question: `Is this for ${A} or ${B}?` }]);
     noWrongPerson(figures);
     assert.equal(figures.length, 4);
     assert.equal(turn.eachPerson?.kept, true);
+  });
+  await check("M1 the job is cancelled during the first call: no second call is made or paid for (gate #503 ASK-M1)", async () => {
+    let checks = 0, made = -1;
+    const cancelled = new Error("This chat was cancelled.");
+    await assert.rejects(ask(SG1, [WHOSE_ONLY, EACH], { check: async (calls) => { checks++; made = calls; throw cancelled; } }), (e) => e === cancelled);
+    assert.equal(checks, 1);
+    assert.equal(made, 1, "the check ran before the second call");
+  });
+  await check("M2 the job is still wanted: checked before the second call and again before the save", async () => {
+    const seen: number[] = [];
+    const { calls, figures } = await ask(SG1, [WHOSE_ONLY, EACH], { check: async (n) => { seen.push(n); } });
+    assert.equal(calls.length, 2);
+    assert.deepEqual(seen, [1, 2]);
+    assert.equal(figures.length, 4);
+  });
+  await check("M3 control: no second call, the check runs once, before the save", async () => {
+    const seen: number[] = [];
+    await ask(SG1, [EACH], { check: async (n) => { seen.push(n); } });
+    assert.deepEqual(seen, [1]);
   });
   await check("F1 the second call fails: the first answer stands, the turn is saved", async () => {
     const { calls, answer, figures } = await ask(SG1, [WHOSE_ONLY, new Error("overloaded")]);

@@ -10,7 +10,7 @@
  */
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { assertUnderSpendCap, recordUsage } from "@/lib/ai/ledger";
+import { assertUnderSpendCap, overSpendCap, recordUsage } from "@/lib/ai/ledger";
 import { enforceLiveChatMonetaryBoundary } from "@/lib/chat/monetary-boundary";
 import { maskIdentityNumbers } from "@/lib/chat/identity-numbers";
 import { getConversation, historyToken, openConversation, saveTurn, ChatConflict } from "@/lib/chat/store";
@@ -28,7 +28,7 @@ import { amountsFromRows, withheldRows, asksForNobody, namesSomeone, printedDay,
 
 export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; timing?: { loadMs: number; modelMs: number; checkMs: number };
   /** The second call asking for each person's own figures (asksWhoseOnly), and whether its answer was the one kept. */
-  eachPerson?: { model: string; usage: ReturnType<typeof ledgerUsage>; kept: boolean }; report: VerifyReport }[] } };
+  eachPerson?: { model: string; usage: ReturnType<typeof ledgerUsage>; kept: boolean; skipped?: "spend cap" }; report: VerifyReport }[] } };
 type Save = typeof saveTurn;
 export type SimpleDeps = { model?: SimpleModel; household?: (accountId: string) => Promise<Household>; history?: (accountId: string, conversationId: string) => Promise<Turn[]>; save?: Save; ledger?: boolean; today?: () => Date;
   /** The household's benefit table, when it is switched on (lib/benefit-table): its rows are the chat's only amounts. */
@@ -267,6 +267,10 @@ export function asksWhoseOnly(answer: { statements?: { amount?: unknown }[]; que
   const linked = (name: string) => household.documents.some((d) => (d.linkedPeople ?? []).includes(name.replace(/\s*\([^)]*\)\s*$/, "")));
   if (household.members.filter((m) => linked(m.name)).length < 2) return false;
   if (shownAmounts(answer) > 0) return false;
+  return asksWho(answer, household);
+}
+/** Whether an answer's question asks who is meant: "whose"/"who", or naming two members. */
+function asksWho(answer: { questions?: { text: string }[] }, household: Household): boolean {
   const question = (answer.questions ?? []).map((q) => q.text).join(" ");
   if (!question) return false;
   const named = household.members.filter((m) => namesSomeone([question], { ...household, members: [m] }));
@@ -340,29 +344,35 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   let checked = checkReply(reply.json, !!help);
   // A question that says "I" or names no one, in a chat for nobody, answered with only "whose is it?" and no figure (TE
   // EFF-20261115-01, SG1): the model is asked once more for each person's own figures, each labelled with its person,
-  // then whose it is. That reply goes through every check above, and is kept only when a figure survives them (and it
-  // still asks, or shows more than one member's); otherwise the first answer stands. A failed second call never fails the turn.
-  let eachPerson: { model: string; usage: ReturnType<typeof ledgerUsage>; kept: boolean } | null = null;
+  // then whose it is. That reply goes through every check above, and is kept only when a figure survives them and it
+  // still asks who is meant; otherwise the first answer stands. A failed second call never fails the turn.
+  // Like the first call, the second is made only while the job is still wanted (a cancel or a deleted chat ends the turn
+  // before it is paid for: gate #503 ASK-M1) and the household is under its spend cap (checked again, since the first
+  // call may have crossed it; an unreadable ledger skips the call: ASK-H1).
+  let eachPerson: { model: string; usage: ReturnType<typeof ledgerUsage>; kept: boolean; skipped?: "spend cap" } | null = null;
   if (reply.model !== "no-documents" && !help && asksWhoseOnly(checked.answer, message, household, !!context.conversation.family_member_id || spouseNote(household, said) !== "")) {
-    const again = Date.now();
-    let second: Awaited<ReturnType<SimpleModel["call"]>> | null = null;
-    try {
-      const ask = asking();
-      second = await model.call({ ...ask, question: ask.question + EACH_PERSON_NOTE });
-    } catch {
-      second = null;
-    } finally {
-      if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(second ? ledgerUsage(second.usage, LIBRARY_CACHE_WRITE_RATE) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - again, ok: !!second });
-      modelMs += Date.now() - again;
-    }
-    if (second) {
-      const checkedAgain = checkReply(second.json, false);
-      // Kept only with a figure, and still asking whose it is or showing more than one member's figures: one member's
-      // figures alone, with no question, would read as the answer for the person typing.
-      const people = new Set((checkedAgain.answer.statements ?? []).filter((x) => x.amount).map((x) => x.personName ?? ""));
-      const kept = shownAmounts(checkedAgain.answer) > 0 && (checkedAgain.answer.questions.length > 0 || people.size > 1 && !people.has(""));
-      if (kept) checked = checkedAgain;
-      eachPerson = { model: second.model, usage: ledgerUsage(second.usage, LIBRARY_CACHE_WRITE_RATE), kept };
+    await opts.check?.();
+    if (ledger && await overSpendCap(request.accountId).catch(() => true)) eachPerson = { model: "", usage: ledgerUsage({ input: 0, cacheWrite: 0, cacheRead: 0, output: 0 }, LIBRARY_CACHE_WRITE_RATE), kept: false, skipped: "spend cap" };
+    else {
+      const again = Date.now();
+      let second: Awaited<ReturnType<SimpleModel["call"]>> | null = null;
+      try {
+        const ask = asking();
+        second = await model.call({ ...ask, question: ask.question + EACH_PERSON_NOTE });
+      } catch {
+        second = null;
+      } finally {
+        if (ledger) await recordUsage({ accountId: request.accountId, role: "chat", choice: model.choice, ...(second ? ledgerUsage(second.usage, LIBRARY_CACHE_WRITE_RATE) : { input: 0, output: 0, cached: 0 }), durationMs: Date.now() - again, ok: !!second });
+        modelMs += Date.now() - again;
+      }
+      if (second) {
+        const checkedAgain = checkReply(second.json, false);
+        // Kept only with a figure and a question asking who is meant (gate #503 ASK-L1): figures with no such question
+        // would read as the answer for the person typing.
+        const kept = shownAmounts(checkedAgain.answer) > 0 && asksWho(checkedAgain.answer, household);
+        if (kept) checked = checkedAgain;
+        eachPerson = { model: second.model, usage: ledgerUsage(second.usage, LIBRARY_CACHE_WRITE_RATE), kept };
+      }
     }
   }
   const { fromRows, answer, report } = checked;
