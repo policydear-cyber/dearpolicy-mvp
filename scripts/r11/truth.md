@@ -35,7 +35,7 @@ document's printed "Page 1" is stored page 2). Dates relative to early October 2
   S$742 (S$600 MediSave) + rider S$418 cash (p2). Class A: deductible S$3,000 (≤80), co-insurance 10%, private-hospital
   pro-ration 70%, limit S$600,000 (p3). Rider pays 95% / you 5%, cap S$3,000, restructured hospital cash S$80/day (p4).
   Lion Gateway ILP: basic SA S$100,000, fund S$9,195.55 at 30 Jun 2026, death = higher of SA or fund value, no surrender
-  charge after year 5 (p2). HomeShield (Bedok Bay) to 14 Nov 2026: contents S$60,000, valuables S$1,000 per item, excess
+  charge after year 5 (p2). HomeShield (Bedok Bay) to 14 Nov 2027: contents S$60,000, valuables S$1,000 per item, excess
   S$250, sudden burst pipe covered, long-term leak excluded (p2). DriveSafe motor: named driver Aisyah only, excess S$800,
   +S$2,500 young/inexperienced, windscreen S$100, TP injury unlimited, 30% NCD (p2). **AssureTerm 65 lapsed 17 Mar 2026**
   (S$300,000 before lapse), reinstatement until 16 Mar 2028 (p2). Wanderlust Japan travel **expired 14 Dec 2025** (with Aisyah).
