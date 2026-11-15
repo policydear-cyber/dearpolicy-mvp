@@ -168,7 +168,6 @@ for (const [what, change] of [
   ["a row naming a plan", { cell: "GBP 50 per day in hospital (Plan A), payable from the third consecutive day, up to 30 days per accident" }],
   ["a row naming a spouse", { cell: "GBP 50 per day in hospital (spouse: from the first day), payable from the third consecutive day, up to 30 days per accident" }],
   ["a row the reader marks for some", { forWhom: "some_insured" }],
-  ["a row the reader leaves unmarked (the TE's own reading, before the prompt change)", { forWhom: null }],
   ["a row whose figure is a share of the sum insured", { cell: "GBP 50 per day in hospital, or 0.1% of the Sum Insured if less, up to 30 days per accident", fromDay: undefined, conditions: [] }],
 ] as [string, Partial<Row>][]) {
   test(`${what}: hospital cash withheld from every named person`, () => {
@@ -176,6 +175,13 @@ for (const [what, change] of [
     for (const id of [...NAMED, "o"]) assert.deepEqual(shown(table, id, "Hospital cash"), [], id);
   });
 }
+// Changed on purpose (TE-ACC-20261115-R4 H1-C): a plain row the reader leaves unmarked is each named person's by what the
+// schedule itself prints, the same as when the reader marks it (each-person-unmarked-test has the negatives).
+test("a row the reader leaves unmarked (the TE's own reading, and R4's): hospital cash shown for each named person, as when marked", () => {
+  const { table } = schedule({ rows: withRow("5", { forWhom: null }) });
+  for (const id of NAMED) assert.deepEqual(shown(table, id, "Hospital cash"), ["Hospital cash | GBP 50 a day"], id);
+  assert.deepEqual(shown(table, "o", "Hospital cash"), []);
+});
 test("a premium row marked for every named person is never shown as a benefit for each", () => {
   const rows = [...ROWS, { n: "7", benefit: "Annual premium", cell: "GBP 312.00 per year", pays: "amount", value: 312, forWhom: "each_named_insured" } as Row];
   const { table } = schedule({ rows });

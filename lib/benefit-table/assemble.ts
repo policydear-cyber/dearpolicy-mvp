@@ -677,7 +677,7 @@ const LIFE_TAG = /\b(?:mum|mom|mummy|mommy|mother|dad|daddy|father|grand(?:ma|pa
 /** A row of a certificate's one column of per-person limits that is for every insured person the certificate names. All
  * must hold, and any doubt gives no one (a figure for one life is never shown for another):
  * - the reader says the row is for each insured person the document names and nothing on it limits the row to some of
- *   them (forWhom "each_named_insured"; left out, it is no one's): a child's, adult's or senior's row, or "half for
+ *   them (forWhom "each_named_insured"; left out, it is no one's but on a plain family table, plainTable): a child's, adult's or senior's row, or "half for
  *   children" in a note, is said only in words;
  * - its column heading is made only of figure words and says "per (insured) person", and it is the only heading and
  *   column the person's own certificate or schedule prints (figureOnlyHeading): the whole table is per person;
@@ -769,8 +769,8 @@ const PLAIN_TABLE_STOP = /\b(?:plans?|tiers?|options?|packages?|class(?:es)?|fam
 const NAMES_SUM = /\bsum\s+(?:insured|assured|covered)\b|%|\bper\s*cent\b/i;
 /** A family schedule's one plain table of benefits, with one figure per row for every life it names (TE-ACC-20261113 family
  * PA schedule: "5  Hospital cash  GBP 50 per day ..." and "6  Medical expenses  Up to GBP 2,500 ..." under "Section |
- * Benefit | Amount payable", below an insured persons table). The row is each named insured person's only when, beyond
- * the reader's own "each_named_insured" (reading.ts), all of these hold:
+ * Benefit | Amount payable", below an insured persons table). The row is each named insured person's only when, with
+ * the reader's own "each_named_insured" (reading.ts) or with no forWhom at all (never "some_insured"), all of these hold:
  * - the document is a personal schedule or certificate with two or more lives, each holding the one cover the row is
  *   linked to (no other cover, plan or product printed for any of them on it);
  * - every line it prints outside its benefit rows and cover lines is one of the closed set of structural lines (check.ts
@@ -1249,13 +1249,40 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
   const figure = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
   const firstLine = (t: string) => norm(t.split("\n")[0]);
   return (r: CheckedReading, b: CheckedBenefit, coverKey: string): false | "column" | "plain" => {
+    /** With no forWhom from the reader, what the document prints must show its one plain table is read for each insured
+     * person, beyond plainTable's closed set of lines (TE-ACC-20261115-R4 H1-C). All must hold:
+     * - one policy: one policy number on every life's cover line, or none printed (no two policies printed together);
+     * - no benefit printed twice, by one name or one name and the same name with words after it ("Hospital cash" and
+     *   "Hospital cash for a child under 18"): such a document prints its rows per life, even with no word saying whose;
+     * - each life prints its own sum insured on the document, and they are not all the same (one sum shared by the lives,
+     *   as on a joint-life schedule, is no sign);
+     * - another row of the table pays a share of "the Sum Insured" and names no kind of life: a figure only each person's
+     *   own sum can give, so the table is read per person. */
+    const tableIsEachPersons = () => {
+      if (new Set(r.covers.map((c) => norm(c.policyNumber ?? ""))).size > 1) return false;
+      const twice = (a: string, c: string) => { const x = labelWords(a).join(" "), y = labelWords(c).join(" ");
+        return !!x && !!y && (x === y || x.startsWith(`${y} `) || y.startsWith(`${x} `)); };
+      if (r.benefits.some((x, i) => r.benefits.some((y, j) => j > i && twice(x.benefit, y.benefit)))) return false;
+      const sums = r.covers.map((c) => c.sumInsured);
+      if (sums.some((v) => v == null) || new Set(sums).size < 2) return false;
+      return r.benefits.some((x) => x.pays === "percent" && x.percentOf === "sum_insured" && x.forWhom !== "some_insured"
+        && !KIND_OF_LIFE.test(`${x.benefit} ${x.section ?? ""} ${x.rowText ?? x.source.excerpt} ${x.conditions.join(" ")}`));
+    };
     // The reader, which sees the whole document, says the row is each named insured person's and nothing limits it to some
     // (a child's, an adult's, a senior's row; "half for children"): words no layout rule can read (Critic and TE on this rule).
-    if (b.forWhom !== "each_named_insured") return false;
+    // A row the reader says is for some of them is no one's. A row the reader leaves unmarked is each named person's only
+    // by what the document itself prints: a family schedule's one plain table, where every line off the rows is one of the
+    // closed set of structural lines and nothing names a life, a share, a tier or a shared limit (plainTable), with the
+    // rest of this rule as for a marked row (TE-ACC-20261115-R4 H1-C: the reader left forWhom out on "5 Hospital cash"
+    // and "6 Medical expenses", which R3's reader had marked; the figures must not depend on that field).
+    if (b.forWhom != null && b.forWhom !== "each_named_insured") return false;
+    const marked = b.forWhom === "each_named_insured";
     if (b.value == null || b.pays === "percent" || b.pays === "not_covered") return false;
     // A column that says "per (insured) person", or a family schedule's one plain table (plainTable).
     const plain = !PER_PERSON_HEADING.test(b.column ?? "") && plainTable(r, b, coverKey);
-    if (!plain && !PER_PERSON_HEADING.test(b.column ?? "")) return false;
+    if (!plain && (!marked || !PER_PERSON_HEADING.test(b.column ?? ""))) return false;
+    // With no mark, the document itself must show its one table is read for each insured person (tableIsEachPersons).
+    if (!marked && !tableIsEachPersons()) return false;
     // A note anywhere on the document, off every row's own line, that names a kind of life or an age ("Note: for insured
     // children the limits are 50% of those shown") may change any row for some of the lives (check.ts lifeNotes).
     if ((r.lifeNotes ?? []).length) return false;
@@ -1279,7 +1306,10 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
     // is no other life's figure for this row (a family PA schedule's "4  Fracture of skull ...  5% of the Sum Insured").
     const shareOfOwnSum = (x: CheckedBenefit) => plain && x.forWhom == null && x.pays === "percent" && x.percentOf === "sum_insured"
       && !KIND_OF_LIFE.test(`${x.benefit} ${x.rowText ?? x.source.excerpt} ${x.conditions.join(" ")}`);
-    if ([...below, ...above].some((x) => x.forWhom !== "each_named_insured" && !shareOfOwnSum(x))) return false;
+    // In a plain table, an unmarked neighbour that is itself a plain row by the document's own print (plainTable: no life,
+    // age, share, tier, shared limit or other figure in its words; tableIsEachPersons) changes nothing for some of the lives either.
+    const plainNeighbour = (x: CheckedBenefit) => plain && x.forWhom == null && tableIsEachPersons() && plainTable(r, x, coverKey);
+    if ([...below, ...above].some((x) => x.forWhom !== "each_named_insured" && !shareOfOwnSum(x) && !plainNeighbour(x))) return false;
     const next = below.length || (plain && anotherRowsNote(r, b, b.nextLine)) ? "" : b.nextLine ?? "";
     if (!plain && !perPersonColumnRow(r, b, next)) return false;
     // Each number printed may be one of the row's own figures once (amount, cap, days), never twice. The row's own section

@@ -1252,6 +1252,8 @@ export function lifeNotesOf(pages: { text: string }[], reading: Pick<CheckedRead
   const strip = (t: string) => {
     let x = ` ${flat(t)} `;
     for (const n of [reading.product, reading.insurer]) if (n && flat(n).length >= 4) x = x.split(flat(n)).join(" ");
+    // A currency's name is no pronoun: "US dollars" names the currency, never "us" the insurer (ADMIN_SCOPE).
+    x = x.replace(/\b(?:u\.?\s?s\.?|united\s+states)\s+dollars?\b/g, " dollars ");
     // "(all amounts in GBP)": what currency the table is printed in.
     return x.replace(/\(?\s*(?:all\s+)?(?:amounts?|figures?)\s+(?:are\s+)?(?:shown\s+|stated\s+)?in\s+[a-z ]{3,20}\)?/g, " ")
       // A heading over the table: "TABLE OF BENEFITS", "Schedule of benefits", "Benefit schedule".
