@@ -119,8 +119,8 @@ export default function FamilyPage() {
 
       <section className="section">
         <div className="profile-list">
-          {family.map((member) => (
-            <div className="profile-card" key={member.id} data-testid="profile-card">
+          {family.map((member, i) => (
+            <div className="profile-card" key={member.id} data-testid="profile-card" data-person={i % 4}>
               {/* At a glance: who, how they are linked to documents, and what they are covered for. */}
               <div className="profile-summary">
                 <div className="avatar profile-avatar">{(baseline[member.id]?.display_name ?? member.display_name).slice(0,1).toUpperCase()}</div>
