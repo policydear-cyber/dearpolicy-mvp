@@ -144,8 +144,8 @@ const FORMS: [string, string, string[]][] = [
   ["payable from the third day (in words)", "Hospital cash\tS$50 per day, payable from the third day, up to 30 days per policy year", []],
   ["does not pay for the first N days (in the row)", "Hospital cash\tS$50 per day, up to 30 days per policy year; does not pay for the first 2 days of any stay", []],
   ["does not pay for the first N days (below the row)", "Hospital cash\tS$50 per day, up to 30 days per policy year", ["Hospital cash does not pay for the first 2 days of any hospital stay."]],
-  ["excluding the first N days", "Hospital cash\tS$50 per day, excluding the first 2 days, up to 30 days per policy year", []],
-  ["first N days not payable", "Hospital cash\tS$50 per day, up to 30 days per policy year (first 2 days not payable)", []],
+  ["excluding the first N days of each stay", "Hospital cash\tS$50 per day, excluding the first 2 days of each stay, up to 30 days per policy year", []],
+  ["first N days of any admission not payable", "Hospital cash\tS$50 per day, up to 30 days per policy year (first 2 days of any admission not payable)", []],
   ["the first two (2) days of each stay are not payable", "Hospital cash\tS$50 per day, up to 30 days per policy year", ["The first two (2) days of each stay are not payable."]],
 ];
 for (const [form, row, below] of FORMS) test(`waiting form "${form}": 6 days is 4 paid days, S$200`, () => {
@@ -206,6 +206,87 @@ test("a bare $ daily row is never relabelled: no S$ figure, and any worked figur
   // The same row in an S$ policy is S$400; never the bare row's figure relabelled.
   const sgd = ask(household([{ person: TAN, row: H2C_ROW, below: [H2C_WAIT], value: 100, maxDays: 365, conditions: [H2C_WAIT] }]), TAN, ["Tan was in hospital for 6 days"]);
   assert.deepEqual(sgd.amounts, ["S$100", "S$400"]);
+});
+
+// ============ Stay-days gate round 1 (SD-H1, SD-H2, SD-L1): every repro, as the gate asked it ============
+// null: no worked stay card. A string: the worked stay card's amount. An array: any one of these is right (not pinned).
+const R = "Hospital income rider\tS$100 per day in hospital, up to 365 days per policy year";
+const B = "The hospital income rider does not pay for the first 2 days of any hospital stay.";
+const CAPPED = "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year, maximum S$1,000 per policy year";
+const R0 = "Hospital income rider\tS$100 per day in hospital, up to a maximum of 365 days";
+const GATE: [string, string, string[], number, string | null | (string | null)[]][] = [
+  ["W1 control H2-C, 6 days", R, [B], 6, "S$400"],
+  // SD-H1: a "first N days" or "from the Nth day" wording with no per-stay words may be the waiting period from the start
+  // of cover: never read as a stay's.
+  ["W2 'No benefit is payable for the first 30 days.' 40 days", R, ["No benefit is payable for the first 30 days."], 40, null],
+  ["W2b 'No benefit is payable for the first 30 days.' 6 days", R, ["No benefit is payable for the first 30 days."], 6, null],
+  ["W25 '...first 30 days of cover.'", R, ["No benefit is payable for the first 30 days of cover."], 40, null],
+  ["W26 'This rider does not pay for the first 30 days.'", R, ["This rider does not pay for the first 30 days."], 40, null],
+  ["W27 'No benefit is payable under this rider for the first 30 days.'", R, ["No benefit is payable under this rider for the first 30 days."], 40, null],
+  ["W30 'The rider pays from the 31st day.'", R, ["The rider pays from the 31st day."], 40, null],
+  ["W31 'Benefit is payable after the 30th day.'", R, ["Benefit is payable after the 30th day."], 40, null],
+  ["W32 row 'not payable for the first 30 days' (no per-stay words)", "Hospital income rider\tS$100 per day in hospital, not payable for the first 30 days, up to 365 days per policy year", [], 40, null],
+  ["W33 'first 30 days' + 'of cover.' on the next line", R, ["The rider does not pay for the first 30 days", "of cover."], 40, null],
+  ["row 'excluding the first 2 days' (no per-stay words)", "Hospital income rider\tS$100 per day in hospital, excluding the first 2 days, up to 365 days per policy year", [], 6, null],
+  ["row '(first 2 days not payable)' (no per-stay words)", "Hospital income rider\tS$100 per day in hospital, up to 365 days per policy year (first 2 days not payable)", [], 6, null],
+  ["M1 main-shape row + 'The rider pays from the 31st day.'", R0, ["The rider pays from the 31st day."], 40, null],
+  ["M3 main-shape row + 'No benefit is payable for the first 30 days.'", R0, ["No benefit is payable for the first 30 days."], 40, null],
+  ["M4 main-shape row + 'Benefit starts from the 31st day.'", R0, ["Benefit starts from the 31st day."], 40, null],
+  ["M2 main-shape row 'from the 31st day' in the row (as on main)", "Hospital income rider\tS$100 per day in hospital from the 31st day, up to a maximum of 365 days", [], 40, "S$1,000"],
+  // Other waiting words the gate tried: none is read.
+  ["W3 generic sentence after another (no-money) row", R, ["ICU benefit\tDouble the daily amount", "This benefit does not pay for the first 2 days."], 6, null],
+  ["W3b generic sentence after a note row", R, ["Recovery benefit\tPaid once on discharge", "The benefit does not pay for the first 2 days."], 6, null],
+  ["W5 'except for accidents'", R, ["The rider does not pay for the first 2 days of any hospital stay, except for accidents."], 6, null],
+  ["W5b row 'from the 3rd day except after an accident'", "Hospital income rider\tS$100 per day in hospital from the 3rd day except after an accident, up to 365 days per policy year", [], 6, null],
+  ["W6 row 'first 2 days not payable unless warded in ICU'", "Hospital income rider\tS$100 per day in hospital, first 2 days not payable unless warded in ICU, up to 365 days per policy year", [], 6, null],
+  ["W20 sentence names another person", R, ["Lee Mei Ling: the rider does not pay for the first 2 days."], 6, null],
+  ["W21 two waiting periods disagree", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year", ["The rider does not pay for the first 5 days of any hospital stay."], 10, null],
+  ["W22 generic sentence below another daily row", R, ["ICU rider\tS$200 per day in ICU", "The benefit does not pay for the first 2 days."], 6, null],
+  ["W23 'first 2 days in a policy year'", R, ["The rider does not pay for the first 2 days in a policy year."], 6, null],
+  ["W24 'first 2 days of the first hospital stay'", R, ["The rider does not pay for the first 2 days of the first hospital stay."], 6, null],
+  ["W28 '... of any hospital stay for each new illness'", R, ["The rider does not pay for the first 2 days of any hospital stay for each new illness."], 6, null],
+  // Day caps shared or of another period.
+  ["W7 day cap 'for all insured persons'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 30 days per policy year for all insured persons", [], 40, null],
+  ["W8 day cap 'per policy year per policy'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 30 days per policy year per policy", [], 40, null],
+  ["W9 day cap 'for all lives insured under this policy'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 30 days per policy year, for all lives insured under this policy", [], 40, null],
+  ["W9b day cap 'per certificate year'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 30 days per certificate year", [], 40, null],
+  // SD-H2: a yearly cap amount is this person's only when its period ends its clause and nothing is printed below the row.
+  ["W10 yearly cap 'for all insured persons'", `${CAPPED} for all insured persons`, [], 20, null],
+  ["W10b yearly cap 'per policy year per policy'", `${CAPPED} per policy`, [], 20, null],
+  ["W15c cap + 'It is for the policy as a whole.'", CAPPED, ["It is for the policy as a whole."], 20, null],
+  ["W15 cap + 'This maximum also covers the surgical benefit.'", CAPPED, ["This maximum also covers the surgical benefit."], 20, null],
+  ["W15b cap + 'The cap above is for the policy, not each person.'", CAPPED, ["The cap above is for the policy, not each person."], 20, null],
+  ["W14 cap '... per policy year in total'", `${CAPPED} in total`, [], 20, null],
+  ["W11 cap in RM", CAPPED.replace("S$1,000", "RM 1,000"), [], 20, null],
+  ["W12 cap in bare $", CAPPED.replace("S$1,000", "$1,000"), [], 20, null],
+  ["W12b cap in US$", CAPPED.replace("S$1,000", "US$1,000"), [], 20, null],
+  ["W16b cap written after its period", CAPPED.replace("maximum S$1,000 per policy year", "S$1,000 per policy year maximum"), [], 20, null],
+  ["W16c cap 'S$1k'", CAPPED.replace("S$1,000", "S$1k"), [], 20, null],
+  ["W16d cap wrapping below the row (a line below: refused)", CAPPED.replace(" policy year", "").replace("365 days per", "365 days per policy year"), ["policy year"], 20, null],
+  ["W13 cap control, 20 days", CAPPED, [], 20, "S$1,000"],
+  ["W16 cap 'maximum of S$1,000 per year'", CAPPED.replace("maximum S$1,000 per policy year", "maximum of S$1,000 per year"), [], 20, "S$1,000"],
+  // Not pinned by the gate: the true figure or none.
+  ["W18 day cap 3 a year, 10-day stay", "Hospital income rider\tS$100 per day in hospital, up to 3 days per policy year", [B], 10, [null, "S$300"]],
+  ["W19 waiting 40 days, day cap 30, 50-day stay", "Hospital income rider\tS$100 per day in hospital, up to 30 days per policy year", ["The hospital income rider does not pay for the first 40 days of any hospital stay."], 50, [null, "S$1,000"]],
+  ["W29 'first 2 days of each stay are not payable' + 30 days per stay", "Hospital income rider\tS$100 per day in hospital, up to 30 days per stay", ["The first 2 days of each stay are not payable."], 40, [null, "S$3,000"]],
+];
+for (const [name, row, below, days, want] of GATE) test(`gate ${name}`, () => {
+  const a = ask(one(row, below), TAN, [`I was in hospital for ${days} days. How much will I get?`], { perDay: { stayDays: days } });
+  const got = stayCard(a)?.amount?.text ?? null;
+  const ok = Array.isArray(want) ? want.includes(got) : got === want;
+  assert.ok(ok, `${JSON.stringify(got)} vs ${JSON.stringify(want)}: ${JSON.stringify(a.all)}`);
+  // No "pays nothing" either, where no figure is right: an unread waiting period never says a stay pays nothing.
+  if (want === null) assert.ok(!a.kept.some((s) => /ends before this daily benefit starts/.test(s.text)), JSON.stringify(a.kept.map((s) => s.text)));
+  // Only the daily rate and the one worked figure are ever shown.
+  assert.ok(a.all.every((x) => x === "S$100" || x === got), JSON.stringify(a.all));
+});
+test("gate SD-L1: a stay inside the waiting days pays nothing, and its working keeps the yearly period ('per policy year')", () => {
+  for (const days of [1, 2]) {
+    const a = ask(one(R, [B]), TAN, [`I was in hospital for ${days} days. How much will I get?`], { perDay: { stayDays: days } });
+    const st = a.kept.find((s) => /ends before this daily benefit starts/.test(s.text));
+    assert.ok(st, JSON.stringify(a.kept));
+    assert.match(st!.basis ?? "", /paid from day 3, for at most 365 days per policy year/, JSON.stringify(st));
+  }
 });
 
 // ============ Report ============

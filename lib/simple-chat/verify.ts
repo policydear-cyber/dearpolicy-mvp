@@ -1608,17 +1608,21 @@ export const ORDINAL_DAY: Record<string, number> = { first: 1, second: 2, third:
 const ordinalDays = (t: string) => t.replace(new RegExp(String.raw`\b(${Object.keys(ORDINAL_DAY).join("|")})(?=\s+(?:consecutive\s+|full\s+)?days?\b)`, "gi"), (w) => `${ORDINAL_DAY[w.toLowerCase()]}th`);
 /** A waiting period printed in one of a closed set of forms, with the number of unpaid days it gives (R4 H2-C):
  * - "after the 10th day", "after day 10" (10 unpaid); "from the 11th day", "from day 11", "payable from the third day";
- * - "does not pay for the first 2 days", "not payable for the first 2 days", "excluding the first 2 days";
- * - "first 2 days not payable", "the first two (2) days of each stay are not payable".
- * Each may end "of any hospital stay" (or of each stay, admission, confinement). Any other wording ("the first few days",
- * "a waiting period applies", "an excess of 2 days") is not read, so it stays in the words and stops the figure. */
-const OF_STAY = String.raw`(?:\s+(?:of|in)\s+(?:any|each|every|a|an|the|one)\s+(?:(?:hospital|in-?patient)\s+)?(?:stay|admission|confinement|hospitali[sz]ation|period\s+of\s+hospitali[sz]ation))?`;
+ * - "does not pay for the first 2 days of any hospital stay", "not payable for the first 2 days of each admission",
+ *   "excluding the first 2 days of each stay", "the first two (2) days of each stay are not payable".
+ * The second kind is read only with its per-stay words ("of any/each hospital stay", admission, confinement): "No benefit
+ * is payable for the first 30 days" may be a waiting period from the start of cover, never a stay's (gate SD-H1). Below
+ * the row, a form is read only with those words, the first kind too ("The rider pays from the 31st day" is not read).
+ * Any other wording ("the first few days", "a waiting period applies", "an excess of 2 days") is not read, so it stays in
+ * the words and stops the figure. */
+const STAY_NOUN = String.raw`(?:(?:any|each|every|a|an|one)\s+)?(?:(?:hospital|in-?patient)\s+)?(?:stay|admission|confinement|hospitali[sz]ation|period\s+of\s+hospitali[sz]ation)`;
+const OF_STAY = String.raw`\s+(?:of|in)\s+${STAY_NOUN}\b`;
 const WAIT_FORMS: { re: RegExp; unpaid: (n: number, m: RegExpMatchArray) => number }[] = [
-  { re: /\b(?:(?:paid|payable|pays|starting|commencing|benefit\s+starts)\s+)?(after|from)\s+(?:the\s+)?(\d{1,3})\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+|continuous\s+)?day(?:\s+onwards?)?\b/gi, unpaid: (n, m) => (m[1].toLowerCase() === "after" ? n : n - 1) },
-  { re: /\b(?:(?:paid|payable|pays|starting|commencing|benefit\s+starts)\s+)?(after|from)\s+day\s+(\d{1,3})\b(?:\s+onwards?)?/gi, unpaid: (n, m) => (m[1].toLowerCase() === "after" ? n : n - 1) },
-  { re: new RegExp(String.raw`\b(?:(?:does|do|will|shall)\s+not\s+pay|(?:is\s+|are\s+)?not\s+(?:payable|paid)|no\s+benefit\s+is\s+(?:payable|paid))\s+(?:for|during)\s+the\s+first\s+()(\d{1,3})\s+(?:consecutive\s+|continuous\s+)?days${OF_STAY}`, "gi"), unpaid: (n) => n },
-  { re: new RegExp(String.raw`\bexcluding\s+the\s+first\s+()(\d{1,3})\s+(?:consecutive\s+|continuous\s+)?days${OF_STAY}`, "gi"), unpaid: (n) => n },
-  { re: new RegExp(String.raw`\b(?:the\s+)?first\s+()(\d{1,3})\s+(?:consecutive\s+|continuous\s+)?days${OF_STAY}\s+(?:(?:are|is)\s+)?not\s+(?:payable|paid)\b`, "gi"), unpaid: (n) => n },
+  { re: new RegExp(String.raw`\b(?:(?:paid|payable|pays|starting|commencing|benefit\s+starts)\s+)?(after|from)\s+(?:the\s+)?(\d{1,3})\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+|continuous\s+)?day(${OF_STAY})?(?:\s+onwards?)?\b`, "gi"), unpaid: (n, m) => (m[1].toLowerCase() === "after" ? n : n - 1) },
+  { re: new RegExp(String.raw`\b(?:(?:paid|payable|pays|starting|commencing|benefit\s+starts)\s+)?(after|from)\s+day\s+(\d{1,3})\b(${OF_STAY})?(?:\s+onwards?)?`, "gi"), unpaid: (n, m) => (m[1].toLowerCase() === "after" ? n : n - 1) },
+  { re: new RegExp(String.raw`\b(?:(?:does|do|will|shall)\s+not\s+pay|(?:is\s+|are\s+)?not\s+(?:payable|paid)|no\s+benefit\s+is\s+(?:payable|paid))\s+(?:for|during)\s+the\s+first\s+()(\d{1,3})\s+(?:consecutive\s+|continuous\s+)?days(${OF_STAY})`, "gi"), unpaid: (n) => n },
+  { re: new RegExp(String.raw`\bexcluding\s+the\s+first\s+()(\d{1,3})\s+(?:consecutive\s+|continuous\s+)?days(${OF_STAY})`, "gi"), unpaid: (n) => n },
+  { re: new RegExp(String.raw`\b(?:the\s+)?first\s+()(\d{1,3})\s+(?:consecutive\s+|continuous\s+)?days(${OF_STAY})\s+(?:(?:are|is)\s+)?not\s+(?:payable|paid)\b`, "gi"), unpaid: (n) => n },
 ];
 /** Words that, once every read waiting form is taken out, show a waiting rule is still there unread. */
 const WAIT_LEFT = /\b(?:first|after|from|excluding|exclud\w*|waiting|excess|deductible|elimination|deferred|deferment|not\s+(?:paid|payable|covered)|does\s+not\s+pay|onwards?)\b/i;
@@ -1629,10 +1633,16 @@ function dayNumbersAsFigures(t: string): string {
     .replace(new RegExp(String.raw`\b(${words})(?=\s+(?:consecutive\s+|continuous\s+)?days?\b)`, "gi"), (w) => String(NUMBER_WORDS[w.toLowerCase()]));
 }
 /** Every read waiting form in `t`: the unpaid days each gives, and `t` with them taken out. */
-function takeWaiting(t: string): { unpaid: number[]; rest: string } {
+function takeWaiting(t: string, perStayOnly = false): { unpaid: number[]; rest: string } {
   const unpaid: number[] = [];
   let rest = t;
-  for (const f of WAIT_FORMS) rest = rest.replace(f.re, (...args) => { const m = args.slice(0, -2) as unknown as RegExpMatchArray; unpaid.push(f.unpaid(Number(m[2]), m)); return " ; "; });
+  for (const f of WAIT_FORMS) rest = rest.replace(f.re, (...args) => {
+    const m = args.slice(0, -2) as unknown as RegExpMatchArray;
+    // m[3]: the form's per-stay words. Below the row a form without them is left in the words, where it stops the figure.
+    if (perStayOnly && !m[3]) return m[0];
+    unpaid.push(f.unpaid(Number(m[2]), m));
+    return " ; ";
+  });
   return { unpaid, rest };
 }
 /** The few words a sentence below the row may keep around a waiting form it states and still be about this row: the row's
@@ -1672,7 +1682,7 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   // Below the row: each sentence that states a read waiting form about this row (nothing but its name and grammar words
   // left) is taken out; every other word stays and is checked as before.
   const tailParts = prep(tailWords.join(" ")).split(/(?<=[.;])\s+/).map((s) => {
-    const w = takeWaiting(s);
+    const w = takeWaiting(s, true);
     if (!w.unpaid.length) return s;
     const left = (w.rest.toLowerCase().match(/[a-z]+/g) ?? []);
     if (!left.every((x) => labelWords.has(x) || OWN_SENTENCE_WORDS.has(x))) return s;
@@ -1684,7 +1694,8 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   unpaid.push(...fromRow.unpaid);
   // One waiting period, however many times it is said ("from the 3rd day" and "first 2 days not payable" agree).
   if (!unpaid.length || new Set(unpaid).size !== 1 || unpaid[0] < 0) return null;
-  let rule = `${fromRow.rest} ${tailRest}`.replace(/\s+/g, " ");
+  // The row's words end where the lines below begin: a clause never runs on into them.
+  let rule = `${fromRow.rest} ; ${tailRest}`.replace(/\s+/g, " ");
   if (WAIT_LEFT.test(rule)) return null;
   const tail = tailRest.replace(MAX_DAY_FIELD, " ");
   // A wrapped period ("up to 365 days per" / "policy year") is the row's own words, read with the row.
@@ -1710,7 +1721,7 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   const dailies = moneyFiguresIn(rule).filter((f) => /^\s*(?:per|a|each)\s+day\b/i.test(rule.slice(rule.indexOf(f.raw ?? "") + (f.raw ?? "").length)));
   if (dailies.length !== 1 || !sameValue(dailies[0].value, daily)) return null;
   let cap: StayRule["cap"] = null;
-  const capRe = new RegExp(String.raw`(?:[,;]\s*|\band\s+)?(?:up\s+to\s+(?:a\s+)?)?(?:max(?:imum)?\.?(?:\s+of)?|limited\s+to|not\s+exceeding|subject\s+to\s+a\s+maximum\s+of)\s+(\S+\s?\d[\d,]*(?:\.\d+)?)\s+${YEAR_PERIOD}`, "gi");
+  const capRe = new RegExp(String.raw`(?:[,;]\s*|\band\s+)?(?:up\s+to\s+(?:a\s+)?)?(?:max(?:imum)?\.?(?:\s+of)?|limited\s+to|not\s+exceeding|subject\s+to\s+a\s+maximum\s+of)\s+(\S+\s?\d[\d,]*(?:\.\d+)?)\s+${YEAR_PERIOD}(?=\s*(?:$|[.,;]))`, "gi");
   const caps = [...rule.matchAll(capRe)];
   if (caps.length > 1) return null;
   if (caps.length === 1) {
@@ -1719,6 +1730,10 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
     cap = { value: f[0].value, raw: caps[0][1].trim(), period: caps[0][2] ? "policy year" : "year" };
     rule = rule.replace(caps[0][0], " ");
   }
+  // A yearly period on the day cap or a yearly cap amount is the row's own only when nothing else is printed below the row
+  // once its own waiting sentences are taken out: a line below may say whose year it is ("It is for the policy as a
+  // whole", gate SD-H2), and a cap shared with anyone else is never this person's alone.
+  if ((period || cap) && /[\p{L}\d]/u.test(tailRest)) return null;
   if (OTHER_DAY_RULE.test(rule)) return null;
   // Any other money figure or overall limit in the row's words may cap what the stay pays ("Overall annual limit:
   // S$3,000", TE #392 E): no total is worked out past it.
@@ -2860,7 +2875,9 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     // said with the day it starts (stress run 23 Oct, S088).
     if (c.stay && c.stay.payable === 0 && c.amount) {
       const said = `${text.replace(/[.\s]+$/, "")}. ${aDay(c.stay.stay)}-day stay ends before this daily benefit starts, so it pays nothing for that stay.`;
-      statements.push({ id: `s${i + 1}`, kind: "fact", text: said, fullText: said, personName: c.person, amount: null, basis: null, conditions, asOf: null, source, group: null });
+      // Its working is the same rule a paid stay states, the year of a yearly cap with it ("for at most 365 days per policy
+      // year"), so the two never word the row differently (gate SD-L1).
+      statements.push({ id: `s${i + 1}`, kind: "fact", text: said, fullText: said, personName: c.person, amount: null, basis: `${c.stay.rule}, for the stay you described`, conditions, asOf: null, source, group: null });
       return;
     }
     const kind: AnswerStatement["kind"] = c.amount ? (c.amount.illustration ? "calculation" : "benefit_terms") : c.s.kind === "fact" || c.s.kind === "amount" ? "fact" : c.s.kind;
