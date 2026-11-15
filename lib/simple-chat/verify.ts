@@ -816,6 +816,9 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
   /** The row's own printed words (a capped row's statement quotes its cap instead). */
   row: { docIndex: number; page: number; quote: string };
   base: { value: number; docIndex: number; quote: string }; cap: { value: number; docIndex: number; page: number; quote: string } | null;
+  /** The row's benefit name as the table read it: the only words that may sit between a wrapped cell's cap word and its
+   * figure (capIntroduces). Left out, the cap word must stand right before the figure. */
+  benefit?: string;
   /** The row's own printed condition the model named as paying a multiple of its amount in one case ("a compound fracture
    * is paid at double", lib/benefit-table/multiplier.ts noteMultiple): read again here from its stored page, with the row's
    * own words (`own`), `section` and the benefit names of the person's other rows (`others`). When it checks, the card's
@@ -1167,7 +1170,7 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
     const fig = moneyFiguresIn(cf.excerpt).find((f) => sameValue(f.value, sf.cap!.value));
     if (!fig || fig.currency !== sf.currency) return no("the maximum is not printed in the row's currency");
     const i = cf.excerpt.indexOf(fig.raw);
-    if (i < 0 || !CAP_BEFORE.test(cf.excerpt.slice(Math.max(0, i - 40), i))) return no("the maximum is not printed after a cap word");
+    if (!capIntroduces(cf.excerpt, i, sf.benefit)) return no("the maximum is not printed after a cap word");
     cap = { value: fig.value, found: cf };
   } else if (CAP_WORD.test(ownText) && moneyFiguresIn(rowText).some((f) => !sameValue(f.value, sf.base.value))) return no("the row prints a cap but none was given");
   if (child && (sf.cap || CAP_WORD.test(ownText) || moneyFiguresIn(ownText).length)) return no("a child's share on a row that prints a cap or a figure is not worked out");
@@ -1505,7 +1508,45 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
  * "funeral expenses of up to $2,000"): a cap is never shown as a plain amount (Evidence Reviewer, 21 Oct: B1, C2, D1, H10). */
 const CAP_BEFORE = /\b(?:up\s+to|maximum|max\.?|not\s+exceeding|limited\s+to|capped\s+at)(?:\s+(?:a\s+)?(?:maximum|max\.?))?(?:\s+(?:amount\s+)?of)?\s*:?\s*$/i;
 function upTo(excerpt: string, at: number): string {
-  return at >= 0 && CAP_BEFORE.test(excerpt.slice(Math.max(0, at - 40), at)) ? "Up to " : "";
+  // A cap word ending the line above, with only a wrapped name's words before the figure, is a limit too: "Up to " is the
+  // safe side, so the name is not checked here (capIntroduces checks it before a maximum is used).
+  return at >= 0 && (CAP_BEFORE.test(excerpt.slice(Math.max(0, at - 40), at)) || !!wrappedCapGap(excerpt, at)) ? "Up to " : "";
+}
+/** A cell that wraps beside its benefit's wrapped name: the cap word ends one line and the next line starts with a few words
+ * (letters only), then the figure at `at` ("... up to a maximum of\ncoronary artery RM 25,000"). The line with the cap word
+ * and those words, or null. Nothing else may sit between them: no figure, number, %, colon, bar, second line or more than
+ * six words. */
+function wrappedCapGap(excerpt: string, at: number): { line: string; gap: string } | null {
+  if (at <= 0) return null;
+  const start = excerpt.lastIndexOf("\n", at - 1) + 1;
+  if (start === 0) return null;
+  const gap = excerpt.slice(start, at);
+  if (!/^[ \t]*\p{L}[\p{L}'’-]*(?: \p{L}[\p{L}'’-]*){0,5}[ \t]+$/u.test(gap)) return null;
+  const line = excerpt.slice(excerpt.lastIndexOf("\n", start - 2) + 1, start - 1);
+  return CAP_BEFORE.test(line.slice(-40)) ? { line, gap } : null;
+}
+/** Whether the figure at `at` in a cap's printed words is the maximum a cap word introduces in the same cell. Either the cap
+ * word stands right before it ("up to a maximum of RM 25,000", "maximum of\nRM 25,000"), or the cell wraps beside the
+ * benefit's own wrapped name and the rest of that name stands between them (TE-ACC-20261115-R4 HIGH 4: "Angioplasty and
+ * other invasive treatment for 10% of the Sum Covered, up to a maximum of\ncoronary artery RM 25,000"). ALLOW-list for the
+ * second: the words between (wrappedCapGap) are exactly the last words of the row's benefit name as the table read it, the
+ * line with the cap word starts with the rest of that name, and the name is followed there by a column break or the
+ * cell's first figure. So both lines are one row of this benefit, and the words name no other benefit or person. Anything
+ * else, or no name, gives false and no maximum is used. */
+export function capIntroduces(excerpt: string, at: number, benefit: string | null | undefined): boolean {
+  if (at < 0) return false;
+  if (CAP_BEFORE.test(excerpt.slice(Math.max(0, at - 40), at))) return true;
+  const wrapped = benefit ? wrappedCapGap(excerpt, at) : null;
+  if (!wrapped) return false;
+  const words = (t: string) => t.toLowerCase().match(/[\p{L}\d]+/gu) ?? [];
+  const name = words(benefit!), tail = words(wrapped.gap), head = name.slice(0, name.length - tail.length);
+  if (!head.length || !tail.length || tail.some((w, k) => w !== name[head.length + k])) return false;
+  const lineWords = [...wrapped.line.matchAll(/[\p{L}\d]+/gu)];
+  if (lineWords.length <= head.length || head.some((w, k) => lineWords[k][0].toLowerCase() !== w)) return false;
+  // Before the name only spaces; after it a column break (tab, two spaces, a bar) or the cell's first figure.
+  const last = lineWords[head.length - 1];
+  if (/\S/.test(wrapped.line.slice(0, lineWords[0].index))) return false;
+  return /^(?:\t|\s*\||\s{2,}|\s+(?=\d))/.test(wrapped.line.slice(last.index! + last[0].length));
 }
 
 /** What a stay of the given length could pay under a daily benefit (release-set B3, H4), from the quoted words alone. It

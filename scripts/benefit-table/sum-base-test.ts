@@ -17,7 +17,7 @@ import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/li
 import { checkReading, headlineSumShare } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
-import { readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
+import { capIntroduces, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|GEMINI|_API_KEY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network in this test"); }) as typeof fetch;
@@ -541,6 +541,62 @@ for (const blk of ["TPD\tAnnual premium S$450,000", "Face amount\tAnnual premium
   test(`gate R9B: a charge word is no charge unless it is the line's first cell on a line naming no sum or cover (${JSON.stringify(blk)}): no TPD figure`, () => {
     assert.deepEqual(ask(otherLifeDoc(`${R2H}\n${blk}\n${TPD_LINE}\n${R5N}\nDeath\tS$200,000`, "Death\tS$200,000", 200000), DANIEL, /permanent/).amounts, []);
   });
+
+// ---------- TE-ACC-20261115-R4 HIGH 4: a cap word before the figure in its own wrapped cell ----------
+// The benefit's name wraps beside the cell ("Angioplasty and other invasive treatment for" / "coronary artery"), so the rest
+// of its name sits between "up to a maximum of" and the figure. Made-up schedule (RM 300,000 Sum Covered). The words between
+// may only be the rest of the row's own benefit name; another figure, another row, another benefit or a person give none.
+const ANGIO = "Angioplasty and other invasive treatment for coronary artery";
+const WRAPPED = "Angioplasty and other invasive treatment for 10% of the Sum Covered, up to a maximum of\ncoronary artery RM 40,000";
+const capCase = (line: string, capQuote: string, o: { cap?: number; value?: number; benefit?: string } = {}) =>
+  TAKAFUL({ lines: [line], benefits: [{ benefit: o.benefit ?? ANGIO, value: o.value ?? 10, percentOf: "sum_insured", cap: o.cap ?? 40000, capQuote, quote: line }] });
+for (const [what, line, value, shown] of [
+  ["the wrapped cell, the share under the cap", WRAPPED, 10, "RM30,000"],
+  ["the wrapped cell, the share over the cap", WRAPPED.replace("10%", "25%"), 25, "Up to RM40,000"],
+  ["the wrapped cell split by tabs", "Angioplasty and other invasive treatment for\t10% of the Sum Covered, up to a maximum of\ncoronary artery\tRM 40,000", 10, "RM30,000"],
+  ["a same-line cell", `${ANGIO}\t10% of the Sum Covered, up to a maximum of RM 40,000`, 10, "RM30,000"],
+  ["\"maximum of\", a new line, then the figure", `${ANGIO}\t10% of the Sum Covered, up to a maximum of\nRM 40,000`, 10, "RM30,000"],
+] as const) test(`R4-H4 positive: ${what} gives the worked-out share in chat (${shown})`, () => {
+  const h = capCase(line, line, { value });
+  const a = ask(h, AINA, /Angioplasty/);
+  assert.deepEqual(a.amounts, [shown], JSON.stringify(a.refused));
+});
+test("R4-H4 positive: capIntroduces takes the cap word before the figure in the same cell", () => {
+  for (const [excerpt, benefit] of [
+    [WRAPPED, ANGIO], [WRAPPED.replace("for 10%", "for\t10%").replace("artery RM", "artery\tRM"), ANGIO],
+    [`${ANGIO}\t10% of the Sum Covered, up to a maximum of RM 40,000`, ANGIO], [`${ANGIO}\t10% of the Sum Covered, up to a maximum of\nRM 40,000`, ANGIO],
+    [`${ANGIO}\t10% of the Sum Covered, up to a maximum of\nRM 40,000`, null],
+    ["Repair of heart valve 20% of the Sum Covered, maximum\nby keyhole surgery S$15,000", "Repair of heart valve by keyhole surgery"],
+  ] as const) assert.equal(capIntroduces(excerpt, excerpt.lastIndexOf(/RM|S\$/.exec(excerpt.slice(-12))![0]), benefit), true, excerpt);
+});
+const NEG: [string, string, string][] = [
+  ["another figure between the cap word and the figure", "Angioplasty and other invasive treatment for 10% of the Sum Covered, up to a maximum of\ncoronary artery RM 5,000 RM 40,000", ANGIO],
+  ["another figure on the cap word's line after the cap word", "Angioplasty and other invasive treatment for 10% of the Sum Covered, up to a maximum of RM 5,000 for\ncoronary artery RM 40,000", ANGIO],
+  ["a cap word in a different row", "Heart valve surgery 20% of the Sum Covered, up to a maximum of\ncoronary artery RM 40,000", ANGIO],
+  ["a cap word two lines up", "Angioplasty and other invasive treatment for 10% of the Sum Covered, up to a maximum of\nper claim\ncoronary artery RM 40,000", ANGIO],
+  ["a cap word followed by another benefit's name and figure", "Angioplasty and other invasive treatment for 10% of the Sum Covered, up to a maximum of\nHospital cash RM 40,000", ANGIO],
+  ["a cap word followed by a person's name", "Angioplasty and other invasive treatment for 10% of the Sum Covered, up to a maximum of\nFaris Bin Hassan RM 40,000", ANGIO],
+  ["the name's tail followed by more words", "Angioplasty and other invasive treatment for 10% of the Sum Covered, up to a maximum of\ncoronary artery bypass RM 40,000", ANGIO],
+  ["the name's head on the line followed by other words", "Angioplasty and other invasive treatment for heart valves 10% of the Sum Covered, up to a maximum of\ncoronary artery RM 40,000", ANGIO],
+  ["a colon or a cell break between", "Angioplasty and other invasive treatment for 10% of the Sum Covered, up to a maximum of\ncoronary artery: RM 40,000", ANGIO],
+  ["no cap word, only the wrapped name", "Angioplasty and other invasive treatment for 10% of the Sum Covered, payable once\ncoronary artery RM 40,000", ANGIO],
+  ["words between on the same line", `${ANGIO}\t10% of the Sum Covered, up to a maximum of coronary artery RM 40,000`, ANGIO],
+];
+test("R4-H4 control: capIntroduces refuses words between that are not the rest of the row's own name", () => {
+  for (const [what, excerpt, benefit] of NEG) assert.equal(capIntroduces(excerpt, excerpt.lastIndexOf("RM 40,000"), benefit), false, what);
+  assert.equal(capIntroduces(WRAPPED, WRAPPED.lastIndexOf("RM 40,000"), null), false, "no benefit name");
+  assert.equal(capIntroduces(WRAPPED, WRAPPED.lastIndexOf("RM 40,000"), "coronary artery"), false, "the name is only the words between");
+  assert.equal(capIntroduces(WRAPPED, WRAPPED.lastIndexOf("RM 40,000"), "Hospital cash for coronary artery"), false, "another benefit with the same last words");
+});
+for (const [what, line] of NEG) test(`R4-H4 control: ${what} gives no amount in chat`, () => {
+  const a = ask(capCase(line, line), AINA, /Angioplasty/);
+  assert.deepEqual(a.amounts.filter((t) => /30,000|40,000|5,000/.test(t)), [], JSON.stringify(a.amounts));
+});
+test("R4-H4 control: a bare \"$\" after the cap word in a wrapped cell gives no amount", () => {
+  const line = "Angioplasty and other invasive treatment for 10% of the Sum Covered, up to a maximum of\ncoronary artery $40,000";
+  const a = ask(capCase(line, line), AINA, /Angioplasty/);
+  assert.deepEqual(a.amounts.filter((t) => /30,000|40,000/.test(t)), [], JSON.stringify(a.amounts));
+});
 
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
