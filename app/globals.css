@@ -1571,5 +1571,5 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
 .document-card { display: flex; flex-direction: column; }
 .document-card > .document-meta { margin-top: auto; }
 /* Delete is quiet until it is about to act: muted, at the end of the row; red on hover, focus and Confirm. */
-.document-meta .mini-button.danger { margin-left: auto; border-color: var(--line); color: var(--muted); }
+.document-meta .mini-button.danger { margin-left: auto; border-color: var(--line-strong); color: var(--muted); }
 .document-meta .mini-button.danger:hover, .document-meta .mini-button.danger:focus-visible, .document-meta .mini-button.danger.armed { border-color: var(--critical-line); color: var(--critical); }
