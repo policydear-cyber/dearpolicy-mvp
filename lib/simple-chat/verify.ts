@@ -1654,6 +1654,11 @@ function takeWaiting(t: string, perStayOnly = false): { unpaid: number[]; rest: 
  * you and your spouse") may change whose cap it is or which stays wait, so no figure is worked out (gate SD-H2b, SD-H4).
  * An allow-list: no list of sharing or cause words would ever be complete. */
 const ROW_GRAMMAR_WORDS = new Set("a an the of and".split(" "));
+/** The words a daily row's own name may hold when such a rule is used: a closed list of benefit-name words. A name that
+ * says anything else ("Hospital income (all insured persons)", "Hospital income for you and your spouse", "... for
+ * illness or accident") may say whose cap it is or which stays it pays, so no figure is worked out (gate SD-H2c). */
+const BENEFIT_NAME_WORDS = new Set(("hospital hospitalisation hospitalization income cash daily allowance benefit rider in patient inpatient "
+  + "confinement icu intensive care room board").split(" "));
 /** The few words a sentence below the row may keep around a waiting form it states and still be about this row: the row's
  * own name words and a handful of grammar words ("The hospital income rider does not pay for the first 2 days ..."). A
  * sentence naming anything else ("The surgical benefit does not pay ...") is not read as this row's. */
@@ -1757,9 +1762,13 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   const dayNumbers = [...rule.matchAll(/(\d+)\)?\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?days?\b/gi)].map((m) => Number(m[1]));
   if (dayNumbers.some((d) => d !== most)) return null;
   if (period || cap || newWaiting) {
-    const own = withoutMost.split("¶")[0].replace(dailies[0].raw ?? "", " ")
+    // The row's name: benefit-name words only. Past it, grammar words only (its own name words are no exemption).
+    if (!(label.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => BENEFIT_NAME_WORDS.has(w) || ROW_GRAMMAR_WORDS.has(w))) return null;
+    const rowPart = withoutMost.split("¶")[0];
+    const at = label ? rowPart.toLowerCase().indexOf(label.toLowerCase()) : -1;
+    const own = (at >= 0 ? rowPart.slice(0, at) + " " + rowPart.slice(at + label.length) : rowPart).replace(dailies[0].raw ?? "", " ")
       .replace(/\b(?:per|a|each)\s+day\b(?:\s+in\s+(?:the\s+)?hospital\b|\s+of\s+(?:continuous\s+)?hospitali[sz]ation\b)?/i, " ").replace("@most", " ");
-    if (!(own.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => labelWords.has(w) || ROW_GRAMMAR_WORDS.has(w))) return null;
+    if (!(own.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => ROW_GRAMMAR_WORDS.has(w))) return null;
   }
   return { unpaid: unpaid[0], most, period, cap };
 }

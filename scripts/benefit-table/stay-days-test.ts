@@ -187,7 +187,7 @@ test("a per-family yearly limit gives no worked figure", () => {
 test("another person's row: Tan's daily row said for Lee never gives Lee a worked figure", () => {
   const h = household([
     { person: TAN, row: H2C_ROW, below: [H2C_WAIT], value: 100, maxDays: 365, conditions: [H2C_WAIT] },
-    { person: LEE, row: "Ward allowance\tS$60 per day, payable from the 3rd day, up to 30 days per policy year", value: 60, maxDays: 30, fromDay: 3 }]);
+    { person: LEE, row: "Hospital allowance\tS$60 per day, payable from the 3rd day, up to 30 days per policy year", value: 60, maxDays: 30, fromDay: 3 }]);
   const a = ask(h, TAN, ["Lee was in hospital for 6 days. What can she get?"], {}, LEE);
   assert.ok(!a.kept.some((s) => s.personName === LEE && s.amount && /100|400/.test(s.amount.text)), JSON.stringify(a.kept));
   assert.ok(!a.all.includes("S$400"), JSON.stringify(a.all));
@@ -214,6 +214,7 @@ const R = "Hospital income rider\tS$100 per day in hospital, up to 365 days per 
 const B = "The hospital income rider does not pay for the first 2 days of any hospital stay.";
 const CAPPED = "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year, maximum S$1,000 per policy year";
 const R0 = "Hospital income rider\tS$100 per day in hospital, up to a maximum of 365 days";
+const CAPT = ", up to 365 days per policy year, maximum S$1,000 per policy year";
 const GATE: [string, string, string[], number, string | null | (string | null)[]][] = [
   ["W1 control H2-C, 6 days", R, [B], 6, "S$400"],
   // SD-H1: a "first N days" or "from the Nth day" wording with no per-stay words may be the waiting period from the start
@@ -290,6 +291,27 @@ const GATE: [string, string, string[], number, string | null | (string | null)[]
   ["R2-27 row 'first 2 days of a stay not paid'", "Hospital income rider\tS$100 per day in hospital, first 2 days of a stay not paid, up to 365 days per policy year", [], 6, "S$400"],
   ["R2-28 row 'the first 2 days in an admission are not payable'", "Hospital income rider\tS$100 per day in hospital, the first 2 days in an admission are not payable, up to 365 days per policy year", [], 6, "S$400"],
   ["R2-21 row 'from the 31st day' + per policy year", "Hospital income rider\tS$100 per day in hospital from the 31st day, up to 365 days per policy year", [], 40, [null, "S$1,000"]],
+  // Round 3 (SD-H2c): on a row read with a new rule, its name may hold benefit-name words only, and nothing past it but
+  // grammar words; its own name words are no exemption.
+  ["R3-1 label '(all insured persons)' + cap", `Hospital income (all insured persons)\tS$100 per day in hospital from the 3rd day${CAPT}`, [], 20, null],
+  ["R3-2 label '(all insured persons)' + cap + ', for all insured persons'", `Hospital income (all insured persons)\tS$100 per day in hospital from the 3rd day${CAPT}, for all insured persons`, [], 20, null],
+  ["R3-3 label 'Hospital income for all lives', no tab", `Hospital income for all lives S$100 per day in hospital from the 3rd day${CAPT}`, [], 20, null],
+  ["R3-4 label 'Policy hospital income' + ', per policy'", `Policy hospital income\tS$100 per day in hospital from the 3rd day${CAPT}, per policy`, [], 20, null],
+  ["R3-5 label 'Hospital income - whole policy' + ', for the whole policy'", `Hospital income - whole policy\tS$100 per day in hospital from the 3rd day${CAPT}, for the whole policy`, [], 20, null],
+  ["R3-6 label 'Hospital income for you and your spouse'", `Hospital income for you and your spouse\tS$100 per day in hospital from the 3rd day${CAPT}, for you and your spouse`, [], 20, null],
+  ["R3-7 label 'Hospital income for illness or accident' + 'of any stay for illness'", "Hospital income for illness or accident\tS$100 per day in hospital, not payable for the first 2 days of any stay for illness, up to 365 days per policy year", [], 6, null],
+  ["R3-8 label 'Hospital income (per policy)' + day cap per policy year", "Hospital income (per policy)\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year", [], 20, null],
+  ["R3-9 '... of the policy' after the cap", `Hospital income\tS$100 per day in hospital from the 3rd day${CAPT} of the policy`, [], 20, null],
+  ["R3-10 grammar words only after the cap (', and the')", `Hospital income rider\tS$100 per day in hospital from the 3rd day${CAPT}, and the`, [], 20, "S$1,000"],
+  ["R3-11 ', of all' after the cap", `Hospital income rider\tS$100 per day in hospital from the 3rd day${CAPT}, of all`, [], 20, null],
+  // Round 3 main-path boundary: none of these gives a figure, on main or here.
+  ["B1 main shape + ', for all insured persons'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to a maximum of 30 days, for all insured persons", [], 40, null],
+  ["B2 main shape + ', per policy'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to a maximum of 30 days, per policy", [], 40, null],
+  ["B3 main shape + 'for illness'", "Hospital income rider\tS$100 per day in hospital from the 3rd day for illness, up to a maximum of 30 days", [], 40, null],
+  ["B4 main shape + 'per policy year, for all insured persons'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to a maximum of 30 days per policy year, for all insured persons", [], 40, null],
+  ["B5 'after the 2nd day' + 'in any one year, for all insured persons'", "Hospital income rider\tS$100 per day in hospital after the 2nd day, up to 30 days in any one year, for all insured persons", [], 40, null],
+  ["B6 'per year for all insured', no comma", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 30 days per year for all insured", [], 40, null],
+  ["B7 day cap 'per stay' + ', for you and your spouse'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 30 days per stay, for you and your spouse", [], 40, null],
   // Not pinned by the gate: the true figure or none.
   ["W18 day cap 3 a year, 10-day stay", "Hospital income rider\tS$100 per day in hospital, up to 3 days per policy year", [B], 10, [null, "S$300"]],
   ["W19 waiting 40 days, day cap 30, 50-day stay", "Hospital income rider\tS$100 per day in hospital, up to 30 days per policy year", ["The hospital income rider does not pay for the first 40 days of any hospital stay."], 50, [null, "S$1,000"]],
