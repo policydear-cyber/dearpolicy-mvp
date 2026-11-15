@@ -17,38 +17,38 @@
    ========================================================================== */
 :root {
   color-scheme: light;
-  --bg: #f5f4f0;              /* brand off-white, from the logo file */
-  --bg-2: #ecebe5;            /* sidebar / recessed panels */
-  --surface: #ffffff;         /* cards, rows, inputs */
-  --surface-2: #f3f2ee;       /* quiet in-card blocks */
-  --ink: #1c1a17;
-  --ink-2: #4a463f;
-  --muted: #625e56;           /* 5.6:1 on --bg */
-  --line: #e4e1d9;
+  --bg: #ffffff;              /* brand off-white, from the logo file */
+  --bg-2: #f1f3ef;            /* sidebar / recessed panels */
+  --surface: #f4f5f2;         /* cards, rows, inputs */
+  --surface-2: #eceee9;       /* quiet in-card blocks */
+  --ink: #16211c;
+  --ink-2: #45514b;
+  --muted: #58625c;           /* 5.6:1 on --bg */
+  --line: #e3e6e1;
   --edge: transparent;     /* card edges: surfaces are told apart by tone, not lines */
-  --line-strong: #d2cec4;
-  --input-line: #8a857a;      /* 3.4:1 on --bg */
+  --line-strong: #cfd4cd;
+  --input-line: #858e88;      /* 3.4:1 on --bg */
 
-  --brand: #1c1a17;
+  --brand: #1f5240;
   --brand-ink: #7a3f30;       /* brand as text, 6.3:1 on --bg */
-  --brand-tint: #ecebe5;
-  --brand-tint-2: #dfdcd3;
+  --brand-tint: #ebeee9;
+  --brand-tint-2: #e0e5de;
   --on-brand: #ffffff;        /* text on a --brand fill, 6.9:1 */
   --logo-plate: #f9f5e4;      /* the logo's own ground, kept behind it in dark */
 
-  --accent: #1c1a17;
-  --accent-hover: #3a3631;
-  --accent-active: #000000;
+  --accent: #1f5240;
+  --accent-hover: #18443a;
+  --accent-active: #12362e;
   --accent-ink: #ffffff;      /* text on an --accent fill, 6.7:1 */
-  --money: #1c1a17;           /* accent as text, 6.3:1 on --bg */
-  --accent-tint: #efede7;
+  --money: #16211c;           /* accent as text, 6.3:1 on --bg */
+  --accent-tint: #ebeee9;
 
   --good: #2f7a4f;
   --good-text: #276b44;
   --good-tint: #e4f1e8;
   --good-line: #b9d8c4;
 
-  --warn: #b98a1c;
+  --warn: #a67a12;
   --warn-text: #7a5600;
   --warn-tint: #fff3cf;
   --warn-line: #e8cf7a;
@@ -66,37 +66,50 @@
   --info-tint: var(--surface-2);
   --info-line: var(--line-strong);
 
-  --scrim: rgba(20, 18, 16, .28);
+  --scrim: rgba(14, 22, 18, .28);
 
-  --shadow-float: 0 4px 12px rgba(28, 26, 23, .10), 0 1px 2px rgba(28, 26, 23, .06);
-  --focus: 0 0 0 3px rgba(28, 26, 23, .30);
+  --shadow-float: 0 4px 12px rgba(22, 33, 28, .10), 0 1px 2px rgba(22, 33, 28, .06);
+  --focus: 0 0 0 3px rgba(31, 82, 64, .35);
 
-  --r-sm: 4px; --r-md: 6px; --r-lg: 8px;
+  --r-sm: 10px; --r-md: 14px; --r-lg: 20px;
   --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 22px; --fs-2xl: 28px; --fs-3xl: 36px;
   --t-hover: 120ms; --t-state: 240ms; --t-move: 340ms; --ease: cubic-bezier(.2, .7, .2, 1);
   --nav-h: 60px;
   --font: var(--font-face), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
+
+  /* Family members: one identity hue each, by their place in the household.
+     Never green, red, amber or slate: those colours are status. */
+  --person-1: #0d3e75; --person-1-tint: #e3eefa;   /* blue */
+  --person-2: #6a1f63; --person-2-tint: #f6e6f3;   /* plum */
+  --person-3: #0b5560; --person-3-tint: #ddf1f2;   /* teal */
+  --person-4: #3a3590; --person-4-tint: #e9e8fb;   /* indigo */
+
 }
 :root[data-theme="dark"] {
     color-scheme: dark;
-    --bg: #161513; --bg-2: #121110; --surface: #201e1b; --surface-2: #262420;
-    --ink: #f1efe9; --ink-2: #cfcac0; --muted: #a39e94;
-    --line: #302d29; --line-strong: #3d3a35; --input-line: #858076;
-    --brand-ink: #e0a898; --brand-tint: #2a2824; --brand-tint-2: #34312c;
-    --money: #f1efe9; --accent-tint: #2a2824;
+    --bg: #121614; --bg-2: #0e1210; --surface: #1b211e; --surface-2: #222924;
+    --ink: #eef2ee; --ink-2: #c4ccc6; --muted: #9aa59e;
+    --line: #2b332e; --line-strong: #38423c; --input-line: #7f8a83;
+    --brand-ink: #e0a898; --brand-tint: #232b26; --brand-tint-2: #2c3630;
+    --money: #eef2ee; --accent-tint: #232b26;
     --good: #7fc49a; --good-text: #8fd0a8; --good-tint: #1f2f26; --good-line: #33503f;
     --warn: #e8b85a; --warn-text: #ecc46e; --warn-tint: #332b18; --warn-line: #5a4a24;
     --critical: #f08b7d; --critical-tint: #3a211e; --critical-line: #5c332d;
     --unresolved: #93a7bb; --unresolved-text: #b7c7d7; --unresolved-tint: #1f262d; --unresolved-line: #6a7d90;
     --scrim: rgba(0, 0, 0, .5);
     --shadow-float: 0 4px 14px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .3);
-    --focus: 0 0 0 3px rgba(241, 239, 233, .40);
-    --brand: #f1efe9;
-    --on-brand: #161513;
-    --accent: #f1efe9;
-    --accent-hover: #ffffff;
-    --accent-active: #d9d6cf;
-    --accent-ink: #161513;
+    --focus: 0 0 0 3px rgba(143, 208, 176, .45);
+    --brand: #8fd0b0;
+    --on-brand: #0e1210;
+    --accent: #8fd0b0;
+    --accent-hover: #a6dcc1;
+    --accent-active: #7cc2a0;
+    --accent-ink: #0e1210;
+    --person-1: #a9c9f0; --person-1-tint: #182638;
+    --person-2: #e3a9da; --person-2-tint: #321a2f;
+    --person-3: #8fd3da; --person-3-tint: #11292c;
+    --person-4: #bcb8f3; --person-4-tint: #221f3d;
+
 }
 :root[data-theme="dark"] .brand-logo, :root[data-theme="dark"] .big-mark { background: var(--logo-plate); padding: 6px 10px; border-radius: var(--r-sm); }
 
@@ -172,16 +185,16 @@ table { font-variant-numeric: tabular-nums; }
 /* --------------------------------------------------------------------------
    Controls
    -------------------------------------------------------------------------- */
-.button { border: 1px solid transparent; border-radius: var(--r-md); padding: 10px 16px; font-weight: 650; font-size: var(--fs-md); display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; transition: background var(--t-hover) var(--ease), border-color var(--t-hover) var(--ease); }
+.button { border: 1px solid transparent; border-radius: 999px; padding: 10px 16px; font-weight: 650; font-size: var(--fs-md); display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; transition: background var(--t-hover) var(--ease), border-color var(--t-hover) var(--ease); }
 .button.primary { background: var(--accent); color: var(--accent-ink); }
 .button.primary:hover { background: var(--accent-hover); }
 .button.primary:active { background: var(--accent-active); }
-.button.secondary { background: var(--bg-2); color: var(--ink); }
+.button.secondary { background: var(--brand-tint); color: var(--ink); }
 .button.secondary:hover { background: var(--brand-tint-2); }
 .button.compact { padding: 8px 14px; min-height: 40px; white-space: nowrap; }
 .button:disabled { opacity: .5; cursor: not-allowed; }
-.mini-button { border: 1px solid transparent; background: var(--bg-2); color: var(--ink); border-radius: var(--r-sm); padding: 6px 10px; min-height: 32px; font-size: var(--fs-xs); font-weight: 600; transition: border-color var(--t-hover) var(--ease), background var(--t-hover) var(--ease); }
-.mini-button:hover { background: var(--brand-tint-2); }
+.mini-button { border: 1px solid transparent; background: var(--brand-tint-2); color: var(--ink); border-radius: var(--r-sm); padding: 6px 10px; min-height: 32px; font-size: var(--fs-xs); font-weight: 600; transition: border-color var(--t-hover) var(--ease), background var(--t-hover) var(--ease); }
+.mini-button:hover { background: var(--line-strong); }
 a.mini-button { display: inline-flex; align-items: center; text-decoration: none; }
 .mini-button:disabled { opacity: .5; cursor: default; }
 .mini-button.danger { color: var(--critical); }
@@ -227,11 +240,11 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .member-strip-title strong { font-size: var(--fs-sm); }
 .member-strip-title span { color: var(--muted); font-size: var(--fs-xs); }
 .member-pills { display: flex; gap: 8px; overflow-x: auto; padding: 2px; }
-.member-pill { white-space: nowrap; border: 1px solid transparent; background: var(--bg-2); border-radius: var(--r-md); padding: 8px 12px; min-height: 44px; display: flex; align-items: center; gap: 8px; color: var(--ink); transition: border-color var(--t-hover) var(--ease), background var(--t-hover) var(--ease); }
+.member-pill { white-space: nowrap; border: 1px solid transparent; background: var(--surface-2); border-radius: var(--r-md); padding: 8px 12px; min-height: 44px; display: flex; align-items: center; gap: 8px; color: var(--ink); transition: border-color var(--t-hover) var(--ease), background var(--t-hover) var(--ease); }
 .member-pill:hover { background: var(--brand-tint-2); }
-.member-pill.active { border-color: var(--brand); background: var(--surface); }
+.member-pill.active { border-color: var(--p, var(--brand)); background: var(--p-tint, var(--surface-2)); color: var(--p, var(--ink)); }
 .member-pill.add { color: var(--brand-ink); font-weight: 650; }
-.member-dot { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--brand-tint); color: var(--brand-ink); font-weight: 650; font-size: var(--fs-xs); }
+.member-dot { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--p, var(--brand-tint)); color: var(--on-p, var(--brand-ink)); font-weight: 650; font-size: var(--fs-xs); }
 .member-pill span:last-child { display: grid; text-align: left; }
 .member-pill b { font-size: var(--fs-sm); }
 .member-pill small { font-size: var(--fs-xs); color: var(--muted); text-transform: capitalize; }
@@ -245,7 +258,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .family-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .family-card { background: var(--surface); border: 1px solid var(--edge); border-radius: var(--r-lg); padding: 16px; display: flex; align-items: center; gap: 14px; transition: border-color var(--t-hover) var(--ease); }
 .family-card:hover { border-color: var(--brand-ink); }
-.avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--brand-tint); color: var(--brand-ink); display: grid; place-items: center; font-weight: 650; font-size: var(--fs-lg); flex: none; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--p, var(--brand-tint)); color: var(--on-p, var(--brand-ink)); display: grid; place-items: center; font-weight: 650; font-size: var(--fs-lg); flex: none; }
 .avatar.small { width: 36px; height: 36px; font-size: var(--fs-md); }
 .family-copy { display: grid; gap: 2px; }
 .family-copy strong { font-size: var(--fs-md); }
@@ -482,7 +495,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .auto-context { width: 260px; border: 1px solid var(--edge); background: var(--surface); border-radius: var(--r-md); padding: 10px 12px; display: grid; gap: 3px; }
 .auto-context strong { font-size: var(--fs-xs); color: var(--brand-ink); }
 .auto-context span { font-size: var(--fs-xs); line-height: 1.4; color: var(--muted); }
-.chat-window { margin-top: 20px; min-height: 420px; background: var(--surface); border: 1px solid var(--edge); border-radius: var(--r-lg); padding: 24px; display: grid; align-content: start; gap: 18px; }
+.chat-window { margin-top: 20px; min-height: 420px; background: transparent; border: 1px solid var(--edge); border-radius: var(--r-lg); padding: 8px 0 24px; display: grid; align-content: start; gap: 18px; }
 .chat-empty { max-width: 640px; margin: 32px auto 16px; text-align: center; display: grid; justify-items: center; gap: 12px; }
 .big-mark { height: 30px; width: auto; }
 .chat-empty > p { color: var(--ink-2); font-size: var(--fs-md); line-height: 1.55; margin: 0; }
@@ -493,7 +506,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .message.user { justify-self: end; max-width: 70%; }
 .message-label { font-size: var(--fs-xs); font-weight: 650; color: var(--muted); }
 .message.user .message-label { text-align: right; }
-.message-body { background: var(--surface-2); border: 1px solid var(--edge); border-radius: var(--r-lg); padding: 14px 16px; font-size: var(--fs-md); line-height: 1.6; overflow-wrap: anywhere; }
+.message-body { background: var(--surface); border: 1px solid var(--edge); border-radius: var(--r-lg); padding: 14px 16px; font-size: var(--fs-md); line-height: 1.6; overflow-wrap: anywhere; }
 .message.user .message-body { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
 .message-body p { margin-bottom: 10px; }
 .message-body p:last-child { margin-bottom: 0; }
@@ -1579,3 +1592,30 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
 /* Delete is quiet until it is about to act: muted, at the end of the row; red on hover, focus and Confirm. */
 .document-meta .mini-button.danger { margin-left: auto; color: var(--muted); }
 .document-meta .mini-button.danger:hover, .document-meta .mini-button.danger:focus-visible, .document-meta .mini-button.danger.armed { border-color: var(--critical-line); color: var(--critical); }
+
+/* --------------------------------------------------------------------------
+   Family colours (docs/brand.md "Look"). data-person is a member's place in
+   the household (0-3, repeating); it sets --p (ink), --p-tint and --on-p.
+   -------------------------------------------------------------------------- */
+[data-person="0"] { --p: var(--person-1); --p-tint: var(--person-1-tint); }
+[data-person="1"] { --p: var(--person-2); --p-tint: var(--person-2-tint); }
+[data-person="2"] { --p: var(--person-3); --p-tint: var(--person-3-tint); }
+[data-person="3"] { --p: var(--person-4); --p-tint: var(--person-4-tint); }
+[data-person] { --on-p: var(--bg); }
+.profile-card[data-person] { background: var(--p-tint); }
+.profile-card[data-person] .profile-summary strong { color: var(--p); }
+
+/* Computer: the menu is a top bar; phones keep the bottom bar. */
+@media (min-width: 901px) {
+  .app-shell { display: block; }
+  .sidebar { position: sticky; top: 0; z-index: 40; height: auto; overflow: visible; flex-direction: row; align-items: center; gap: 24px; padding: 14px clamp(24px, 3vw, 48px); background: var(--bg); }
+  .brand { padding: 0; }
+  .nav { display: flex; gap: 2px; }
+  .nav .eyebrow { display: none; }
+  .nav-item { min-height: 40px; padding: 8px 14px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+  .nav-item.active { background: var(--bg-2); }
+  .nav-icon { display: none; }
+  .sidebar-footer { margin-top: 0; margin-left: auto; padding: 0; display: flex; align-items: center; gap: 12px; }
+  .sidebar-footer [data-tip]::after { left: auto; right: 0; top: calc(100% + 8px); bottom: auto; transform: none; }
+}
+@media (min-width: 901px) and (max-width: 1240px) { .sidebar .privacy-pill { display: none; } .nav-item { padding: 8px 10px; } }

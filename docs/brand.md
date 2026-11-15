@@ -46,28 +46,36 @@ Rules of thumb:
 
 | Token | Light | Dark |
 | --- | --- | --- |
-| `--bg` page | `#f5f4f0` (stone, low chroma) | `#161513` |
-| `--surface` card | `#ffffff` | `#201e1b` |
-| `--ink` text | `#1c1a17` | `#f1efe9` |
-| `--muted` | `#625e56` | `#a39e94` |
-| `--brand` (fills: your chat bubble, active pill) | `#1c1a17` | `#f1efe9` |
+| `--bg` page | `#ffffff` | `#121614` |
+| `--surface` card | `#f4f5f2` (soft grey fill) | `#1b211e` |
+| `--surface-2` block inside a card | `#eceee9` | `#222924` |
+| `--ink` text | `#16211c` | `#eef2ee` |
+| `--muted` | `#58625c` | `#9aa59e` |
+| `--brand` (fills: your chat bubble, active filter) | `#1f5240` | `#8fd0b0` |
 | `--brand-ink` (links) | `#7a3f30` (the logo's brown) | `#e0a898` |
-| `--accent` (the one primary button) | `#1c1a17` | `#f1efe9` |
-| `--money` | `#1c1a17` (figures are told by weight and size, not hue) | `#f1efe9` |
+| `--accent` (the one primary button) | `#1f5240` | `#8fd0b0` |
+| `--money` | `#16211c` (figures are told by weight and size) | `#eef2ee` |
 | `--good-text` | `#276b44` | `#8fd0a8` |
 | `--unresolved-text` | `#3f5165` | `#b7c7d7` |
 | `--warn-text` | `#7a5600` | `#ecc46e` |
 | `--critical` | `#a3342a` | `#f08b7d` |
+| `--person-1..4` + `-tint` | blue, plum, teal, indigo | lighter inks, deep tints |
 
-### Look (15 Nov 2026, "paper and ink")
+### Look (15 Nov 2026, "family colours", DC's choice)
 
-The cream ground with brown and orange fills was the most common look of
-generated pages in 2025–26, so the chrome is now neutral: stone ground,
-near-black ink and buttons, colour kept for meaning (status) and for the
-logo. Surfaces are told apart by a tone step, not lines or shadows
-(`--edge` is transparent); tables and inputs keep their lines. No icon
-in a tinted square beside a heading, no small uppercase labels, small
-radii (4–8px).
+The old cream ground with brown and orange fills was the most common look
+of generated pages in 2025–26. Now: a white page, soft grey cards with
+large radii (10/14/20px), pill buttons, a top menu bar on computers (the
+bottom bar stays on phones), and **one colour per family member**.
+
+- A member's colour comes from their place in the household
+  (`data-person` 0–3, repeating) and is used only for identity: their
+  avatar, their pill on Home, their card on Account settings.
+- Person colours are never green, red, amber or slate, so status colours
+  keep their meaning. A status is never shown in a person's colour.
+- Surfaces are told apart by tone, not lines or shadows (`--edge` is
+  transparent); tables and inputs keep their lines. No icon in a tinted
+  square beside a heading, no small uppercase labels.
 
 Contrast is checked by the test, not by eye: text 4.5:1; dots, the
 unresolved dashed edge and input borders 3:1; in both themes. Decorative
@@ -75,8 +83,8 @@ card borders between siblings are not status cues and are not held to 3:1.
 
 ## Type
 
-One family, Instrument Sans, served from the site by `next/font` and set
-as `--font-face` on the page; the system UI stack in `--font` is the
+One family, Bricolage Grotesque, served from the site by `next/font` and
+set as `--font-face` on the page; the system UI stack in `--font` is the
 fallback, including for CJK names on documents.
 
 | Token | Size | Use |
@@ -97,7 +105,7 @@ Figures are tabular wherever amounts line up.
 - The wordmark is `public/dearpolicy-logo.png`: "DEAR" in brand brown,
   "POLICY" in accent orange. Use it as supplied: never recolour, stretch,
   outline or set it on a photo.
-- It sits on the light stone ground. In dark mode it keeps a cream
+- It sits on the white page. In dark mode it keeps a cream
   plate (`--logo-plate`) rather than being inverted.
 - Minimum height 24px on screen; keep clear space of at least the height
   of the "D" around it.

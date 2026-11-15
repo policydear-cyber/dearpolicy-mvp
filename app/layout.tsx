@@ -1,12 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Instrument_Sans } from "next/font/google";
+import { Bricolage_Grotesque } from "next/font/google";
 import { headers } from "next/headers";
 import AppShell from "@/components/AppShell";
 import { SITE_DESCRIPTION, siteUrl } from "@/lib/public-site/site";
 
 // The one typeface (docs/brand.md). Served from the site itself; the stack in --font is the fallback.
-const instrument = Instrument_Sans({ subsets: ["latin"], display: "swap" });
+const face = Bricolage_Grotesque({ subsets: ["latin"], display: "swap" });
 
 export const metadata: Metadata = {
   // The page title is set per page by components/AppShell.tsx (signed in) or by each public page's own metadata.
@@ -16,8 +16,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f5f4f0" },
-    { media: "(prefers-color-scheme: dark)", color: "#161513" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#121614" },
   ],
   viewportFit: "cover",
   // Android: the on-screen keyboard shrinks the layout, so the chat box
@@ -29,7 +29,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   // middleware.ts sets this on every public page ("0" = no session); anywhere else it is absent and the app menu shows.
   const signedIn = (await headers()).get("x-dearpolicy-signed-in") !== "0";
   return (
-    <html lang="en" data-theme="light" style={{ "--font-face": instrument.style.fontFamily } as React.CSSProperties} suppressHydrationWarning>
+    <html lang="en" data-theme="light" style={{ "--font-face": face.style.fontFamily } as React.CSSProperties} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem("dearpolicy-theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark")}catch(e){}` }} />
       </head>
