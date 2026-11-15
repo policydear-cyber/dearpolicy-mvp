@@ -1654,6 +1654,19 @@ function takeWaiting(t: string, perStayOnly = false): { unpaid: number[]; rest: 
  * you and your spouse") may change whose cap it is or which stays wait, so no figure is worked out (gate SD-H2b, SD-H4).
  * An allow-list: no list of sharing or cause words would ever be complete. */
 const ROW_GRAMMAR_WORDS = new Set("a an the of and".split(" "));
+/** Words above a daily row that say its limits are not this person's alone (gate SD-H2d). "Per policy year" is a cap's
+ * period, not a sharing word. */
+const SHARED_ABOVE = /\b(?:shared?|sharing|all\s+(?:the\s+)?insured|all\s+lives|per\s+policy\b(?!\s+year)|not\s+per\s+person|famil(?:y|ies)|combined|aggregate|together|collectively)\b/i;
+/** The page's lines above a row, nearest first, back to the nearest heading line (included) or the page's start. */
+function linesAbove(pageText: string, rowStart: number): string {
+  const out: string[] = [];
+  for (const l of pageText.slice(0, rowStart).split("\n").reverse()) {
+    if (!l.trim()) continue;
+    out.push(l);
+    if (headingLine(l)) break;
+  }
+  return out.join("\n");
+}
 /** The words a daily row's own name may hold when such a rule is used: a closed list of benefit-name words. A name that
  * says anything else ("Hospital income (all insured persons)", "Hospital income for you and your spouse", "... for
  * illness or accident") may say whose cap it is or which stays it pays, so no figure is worked out (gate SD-H2c). */
@@ -1750,6 +1763,10 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   // once its own waiting sentences are taken out: a line below may say whose year it is ("It is for the policy as a
   // whole", gate SD-H2), and a cap shared with anyone else is never this person's alone.
   if ((period || cap) && /[\p{L}\d]/u.test(tailRest)) return null;
+  // Nor when the lines above it, back to its section's heading (that heading included) or the page's start, say limits are
+  // shared ("HOSPITAL BENEFITS - LIMITS SHARED BY ALL INSURED PERSONS", "Yearly limits below apply per policy, not per
+  // person", gate SD-H2d).
+  if ((period || cap) && SHARED_ABOVE.test(linesAbove(pageText, rowLine(pageText, offset).start))) return null;
   if (OTHER_DAY_RULE.test(rule)) return null;
   // Any other money figure or overall limit in the row's words may cap what the stay pays ("Overall annual limit:
   // S$3,000", TE #392 E): no total is worked out past it.

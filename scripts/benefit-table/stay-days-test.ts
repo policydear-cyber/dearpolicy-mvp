@@ -37,10 +37,10 @@ const PRODUCT = "Kestrel Term Guard";
 const INSURER = "Kestrel Life Singapore Ltd";
 
 /** One person's schedule: the daily row (and any lines under it) in its benefit table on page 1. */
-function scheduleDoc(person: string, row: string, below: string[] = [], currencyLine = "Policy currency: Singapore dollars (SGD)") {
+function scheduleDoc(person: string, row: string, below: string[] = [], currencyLine = "Policy currency: Singapore dollars (SGD)", above: string[] = []) {
   const id = nid();
   const text = `${INSURER}\n${PRODUCT.toUpperCase()} - POLICY SCHEDULE\nPolicy number: KTG-${n}\tLife assured: ${person}\t${currencyLine}\n`
-    + `Benefit\tSum assured / amount\nDeath\t${currencyLine ? "S$" : "$"}300,000\n${row}\n${below.join("\n")}`;
+    + `Benefit\tSum assured / amount\nDeath\t${currencyLine ? "S$" : "$"}300,000\n${above.map((l) => `${l}\n`).join("")}${row}\n${below.join("\n")}`;
   const doc: Doc = { policyId: id, name: `${person} schedule.pdf`, insurer: INSURER, productName: PRODUCT, policyNumber: `KTG-${n}`, documentType: null, documentRole: "personal_schedule",
     effectiveDate: null, expiryDate: null, uploadedAt: "2026-11-01", uploadedFor: null, linkedPeople: [person], supersededAt: null, processingStatus: "ready", pages: [{ page: 1, text }] };
   return { id, doc, row, below };
@@ -50,8 +50,8 @@ const bn = (o: Record<string, unknown>) => ({ section: "Benefits", column: null,
 
 type Built = { house: Household; rows: ReturnType<typeof chatRows> };
 /** A household of one or two people, each with their own schedule. `who[i]` reads `rows[i]` with `rates[i]`. */
-function household(specs: { person: string; row: string; below?: string[]; value: number; maxDays: number | null; fromDay?: number | null; currencyLine?: string; conditions?: string[] }[]): Built {
-  const built = specs.map((s) => ({ s, d: scheduleDoc(s.person, s.row, s.below ?? [], s.currencyLine ?? "Policy currency: Singapore dollars (SGD)") }));
+function household(specs: { person: string; row: string; below?: string[]; value: number; maxDays: number | null; fromDay?: number | null; currencyLine?: string; conditions?: string[]; above?: string[] }[]): Built {
+  const built = specs.map((s) => ({ s, d: scheduleDoc(s.person, s.row, s.below ?? [], s.currencyLine ?? "Policy currency: Singapore dollars (SGD)", s.above ?? []) }));
   const house: Household = { accountId: ACCT, members: specs.map((s, i) => ({ name: s.person, relationship: i === 0 ? "self" : "spouse" })), documents: built.map((b) => b.d.doc) };
   const fam: FamilyMember[] = specs.map((s, i) => ({ id: `f${i}`, display_name: s.person, relationship: i === 0 ? "self" : "spouse", date_of_birth: null }));
   const readings = built.map(({ s, d }) => {
@@ -84,8 +84,8 @@ function ask(h: Built, rowPerson: string, asked: string[], extra: Record<string,
   return { row, kept, amounts: kept.filter((s) => s.amount && s.personName === saidPerson).map((s) => s.amount!.text), all: kept.filter((s) => s.amount).map((s) => s.amount!.text) };
 }
 const stayCard = (a: ReturnType<typeof ask>) => a.kept.find((s) => s.id?.endsWith("-stay"));
-const one = (row: string, below: string[] = [], o: { value?: number; maxDays?: number | null; fromDay?: number | null } = {}) =>
-  household([{ person: TAN, row, below, value: o.value ?? 100, maxDays: o.maxDays === undefined ? 365 : o.maxDays, fromDay: o.fromDay ?? null }]);
+const one = (row: string, below: string[] = [], o: { value?: number; maxDays?: number | null; fromDay?: number | null; above?: string[] } = {}) =>
+  household([{ person: TAN, row, below, value: o.value ?? 100, maxDays: o.maxDays === undefined ? 365 : o.maxDays, fromDay: o.fromDay ?? null, above: o.above }]);
 
 // ============ The H2-C shape ============
 const H2C_ROW = "Hospital income rider\tS$100 per day in hospital, up to 365 days per\npolicy year";
@@ -325,6 +325,39 @@ for (const [name, row, below, days, want] of GATE) test(`gate ${name}`, () => {
   // No "pays nothing" either, where no figure is right: an unread waiting period never says a stay pays nothing.
   if (want === null) assert.ok(!a.kept.some((s) => /ends before this daily benefit starts/.test(s.text)), JSON.stringify(a.kept.map((s) => s.text)));
   // Only the daily rate and the one worked figure are ever shown.
+  assert.ok(a.all.every((x) => x === "S$100" || x === got), JSON.stringify(a.all));
+});
+// Round 4 (SD-H2d): a heading or line above the row, back to its section's heading, that says limits are shared stops a
+// yearly day period or yearly cap amount. A harmless line above changes nothing.
+const CAP4 = "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year, maximum S$1,000 per policy year";
+const GATE4: [string, string, string[], string[], number, string | null][] = [
+  ["R4-1 heading above: 'LIMITS SHARED BY ALL INSURED PERSONS'", CAP4, ["HOSPITAL BENEFITS - LIMITS SHARED BY ALL INSURED PERSONS"], [], 20, null],
+  ["R4-2 sentence above: 'Yearly limits below apply per policy, not per person.'", CAP4, ["Yearly limits below apply per policy, not per person."], [], 20, null],
+  ["R4-2b sentence above: 'Day limits are for the family together.' (day period only)", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year", ["Day limits are for the family together."], [], 20, null],
+  ["R4-3 '*' + NOTES '* The yearly maximum is shared by all insured persons.'", `${CAP4}*`, [], ["", "NOTES", "* The yearly maximum is shared by all insured persons."], 20, null],
+  ["R4-4 '(a)' + NOTES '(a) Shared by all insured persons.'", `${CAP4} (a)`, [], ["", "NOTES", "(a) Shared by all insured persons."], 20, null],
+  ["R4-5 '¹' + NOTES '¹ Shared by all insured persons.'", `${CAP4}¹`, [], ["", "NOTES", "¹ Shared by all insured persons."], 20, null],
+  ["R4-6 '#' + NOTES '# Per policy, shared by all lives.'", `${CAP4} #`, [], ["", "NOTES", "# Per policy, shared by all lives."], 20, null],
+  ["R4-7 '(1)' + NOTES '(1) Per policy, shared by all lives.'", `${CAP4} (1)`, [], ["", "NOTES", "(1) Per policy, shared by all lives."], 20, null],
+  ["R4-8 day cap '*' + NOTES 'The 30 days are shared'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 30 days per policy year*", [], ["", "NOTES", "* The 30 days are shared by all insured persons."], 40, null],
+  ["R4-9 negative waiting '*' + NOTES 'For illness only'", "Hospital income rider\tS$100 per day in hospital, not payable for the first 2 days of any stay*, up to 365 days per policy year", [], ["", "NOTES", "* For illness only. Accident stays are paid from day 1."], 6, null],
+  ["R4-10 label 'Hospital cash benefit' control", CAP4.replace("Hospital income rider", "Hospital cash benefit"), [], [], 20, "S$1,000"],
+  // An ICU row is never worked out, as on main (an intensive-care day rule may differ).
+  ["R4-11 label 'ICU room and board' + cap", CAP4.replace("Hospital income rider", "ICU room and board"), [], [], 20, null],
+  ["R4-12 label with colon 'Hospital income: all insured persons'", CAP4.replace("Hospital income rider", "Hospital income: all insured persons"), [], [], 20, null],
+  ["R4-13 grammar words after the cap (', and the')", `${CAP4}, and the`, [], [], 20, "S$1,000"],
+  // A marker after the cap's period means the clause does not end there: the cap is not read, so no figure.
+  ["R4-14 '(a)' with no note", `${CAP4} (a)`, [], [], 20, null],
+  // Positives: a harmless line above the row, or a harmless heading, changes nothing.
+  ["R4 positive: harmless line above ('Hospital benefits are paid in Singapore dollars.')", CAP4, ["Hospital benefits are paid in Singapore dollars."], [], 20, "S$1,000"],
+  ["R4 positive: harmless heading above ('HOSPITAL BENEFITS')", CAP4, ["HOSPITAL BENEFITS"], [], 20, "S$1,000"],
+  ["R4 positive: H2-C with a harmless line above", "Hospital income rider\tS$100 per day in hospital, up to 365 days per\npolicy year", ["Benefits are paid once the claim is approved."], [B], 6, "S$400"],
+];
+for (const [name, row, above, below, days, want] of GATE4) test(`gate ${name}`, () => {
+  const a = ask(one(row, below, { above }), TAN, [`I was in hospital for ${days} days. How much will I get?`], { perDay: { stayDays: days } });
+  const got = stayCard(a)?.amount?.text ?? null;
+  assert.equal(got, want, JSON.stringify(a.all));
+  if (want === null) assert.ok(!a.kept.some((s) => /ends before this daily benefit starts/.test(s.text)), JSON.stringify(a.kept.map((s) => s.text)));
   assert.ok(a.all.every((x) => x === "S$100" || x === got), JSON.stringify(a.all));
 });
 test("gate SD-L1: a stay inside the waiting days pays nothing, and its working keeps the yearly period ('per policy year')", () => {
