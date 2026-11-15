@@ -1,4 +1,5 @@
 import { printedDay } from "./dates";
+import { sectionIdOf } from "./section-id";
 
 /** A child's share printed inside a percentage row's own amount cell ("100% of the Sum Insured. For an insured child under
  * 18, limited to 25% of the Sum Insured."). Acceptance run TE-ACC-20261113 R2, H1-B: a child's accidental death on a family
@@ -215,7 +216,7 @@ const LABEL_FILLER = new Set(["the", "and", "for", "of", "any", "all", "per", "b
  * section number ("Section 1", "Sec. 1", "§1"). Null when the label has no key word and no section number is printed. */
 function benefitNamed(benefit: string, section: string | null): RegExp | null {
   const words = [...new Set((benefit.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !LABEL_FILLER.has(w)))];
-  const n = /^\s*(?:section\s+|sec\.?\s*)?(\d{1,3})[.)]?\s*$/i.exec(section ?? "")?.[1];
+  const id = sectionIdOf(section), n = id?.number != null ? id.code : undefined;
   const alts = [...words.map((w) => String.raw`\b${w}s?\b`), ...(n ? [String.raw`(?:\bsections?|\bsec\.?|§)\s*${n}\b`] : [])];
   return alts.length ? new RegExp(alts.join("|"), "i") : null;
 }
@@ -296,7 +297,9 @@ function withoutNonFigures(text: string, thisNamed: RegExp): string {
   return t;
 }
 const flatLabel = (t: string) => t.toLowerCase().replace(/\s+/g, " ").replace(/^(?:section\s+)?\d{1,3}[.)]?\s+/, "").replace(/[\s:.;,-]+$/, "").trim();
-const sectionNo = (s: string | null | undefined) => /^\s*(?:section\s+|sec\.?\s*)?([0-9]{1,3}(?:\.[0-9]{1,2})?(?:\([a-z]\))?|[A-Z]{1,4})[.)]?\s*$/i.exec(s ?? "")?.[1] ?? null;
+/** A row's section number or code: its leading one, bare or with its label ("3", "3 Fracture of arm, wrist or leg";
+ * section-id.ts), else a heading that is only a code ("A", "PA") as before. */
+const sectionNo = (s: string | null | undefined) => sectionIdOf(s)?.code ?? /^\s*(?:section\s+|sec\.?\s*)?([0-9]{1,3}(?:\.[0-9]{1,2})?(?:\([a-z]\))?|[A-Z]{1,4})[.)]?\s*$/i.exec(s ?? "")?.[1] ?? null;
 const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** Words that name a row (gate R8-H1): a key word of its label (and for a death row the common ways to say a death), or its
  * section number standing alone in any form ("Section 1", "Item 1", "S1", "1(a)", "Sections 2 and 1"). */

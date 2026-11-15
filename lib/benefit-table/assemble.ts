@@ -24,6 +24,7 @@ import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, m
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 import { benefitWords } from "./cover-rows";
+import { sectionIdOf } from "./section-id";
 import { childCase, personStatus, personStatusWhy, provenAdult, statusDays, withoutChildLimit, type ChildLimit } from "./child-limit";
 
 export type FamilyMember = { id: string; display_name: string; preferred_name?: string | null;
@@ -849,8 +850,11 @@ function onlyRowShapes(text: string, own = false): boolean {
 }
 /** The notes a footnote mark points to on the document. */
 const plainFootnotes = (r: CheckedReading, mark: string) => (r.footnotes ?? []).filter((f) => f.mark === mark).map((f) => f.text);
-/** The number a row's section heading gives it ("5", "Section 5", "SECTION 2 - MEDICAL BENEFITS"), or null. */
+/** The number a row's section heading gives it ("5", "Section 5", "SECTION 2 - MEDICAL BENEFITS", "5 Hospital cash"), or
+ * null. */
 function sectionNumber(section: string | null): number | null {
+  const id = sectionIdOf(section);
+  if (id?.number != null) return id.number;
   const m = /^\s*(\d{1,3})[.)]?\s*$/.exec(section ?? "") ?? /^\s*(?:section|part|item|benefit)\s+(\d{1,3})\b(?!\s*(?:years?|yrs?|%|[.,]\d))/i.exec(section ?? "");
   return m ? Number(m[1]) : null;
 }
