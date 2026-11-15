@@ -334,7 +334,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const subjects = resolveSubjects(household, [message, ...heard.filter((t) => t.role === "user").map((t) => t.text).reverse()]);
   // The earlier answers this turn's correction replaces are not read back to the model with their figures either.
   const prior = conversation.state as SimpleChatState;
-  const replacedNow = subjects.change === "replace" ? supersededBy(subjects.replaced, prior.simpleChat?.turns ?? []) : [];
+  const replacedNow = subjects.change === "replace" ? supersededBy(subjects.replaced, prior.simpleChat?.turns ?? [], subjects.people ?? []) : [];
   const history = replacedNow.length ? heard.map((t) => (t.role === "assistant" && t.answerId && replacedNow.includes(t.answerId) ? { role: t.role, text: SUPERSEDED_NOTICE } : t)) : heard;
   if (help) reply = { json: help.answer, stopReason: null, model: `app-help:${help.id}`, usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 } };
   // A household with no documents has nothing to answer from: its fixed answer costs no model call (TE main journeys 11 Nov).

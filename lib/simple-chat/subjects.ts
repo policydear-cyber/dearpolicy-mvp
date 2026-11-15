@@ -1,24 +1,24 @@
 /** Who a chat turn is about, read from the household's own messages in this conversation, oldest first. Pure.
  *
- * A follow-up can change the people a scenario is about:
- * - a replacement ("actually it's Daniel, not Grace", "sorry, I meant Daniel", "not Grace - Daniel"): the turn is about the
- *   new person only, and earlier answers about the person replaced are out of date;
- * - an addition ("Daniel too", "and Daniel also broke his arm", "both of them"): the turn is about everyone so far;
- * - a new question naming someone ("what about Daniel?"): about that person only; earlier answers stand for their own
- *   question;
- * - a message naming no one ("how much would that be?"): about the same people as before.
- * A message that names someone the household does not have ("actually it's Wei") is about nobody the household can be
- * told about: no amount is shown, and the household is asked who they mean.
- *
- * Allow-list: `people` is the only set of members whose figures the turn may show. `people: null` means the messages do
- * not settle it (a relationship word, "we", nothing named yet): the chat's other person checks decide, as before.
+ * Default: main's behaviour. `people: null` means the chat's other person checks decide (lib/simple-chat/verify.ts
+ * askedAbout, the rows' own person checks), exactly as before this module. Only one thing ever narrows the people (drops
+ * someone): an explicit replacement between two household members, each written as a name (capitalised and standing on
+ * its own, never inside a longer capitalised phrase such as "Mount Elizabeth" or "Gold Max"), or written in full:
+ * - "<A>, not <B>" ("actually it's Daniel, not Grace", "Daniel who broke his arm, not Grace");
+ * - "not <B>, <A>" ("not Grace - Daniel", "not Grace but Daniel");
+ * - "I meant <A>" (or "I mean <A>") right after a turn about B.
+ * Then the turn, and the turns after it, are about A; earlier answers with B's figures (and none of A's) are out of date.
+ * After a replacement, any later message can only add people: one naming another member adds them; a relationship word
+ * or the speaker ("my husband", "I") goes back to the other checks. Nothing else (an addition, "what about Daniel?",
+ * "actually"/"sorry" alone, a negation) ever drops anyone.
+ * "Who did you mean?" is asked only for "<X>, not <member>" where X is written as a name and is no member.
  * Nothing here knows any household: names come from the household's own member list. */
 import type { Household } from "./library";
 
 export type SubjectChange = "replace" | "add" | "new" | "same";
 export type Subjects = {
   /** The members (full names as the household lists them, without a bracketed note) the turn may show figures for; null
-   * when the messages do not settle it. */
+   * when the messages do not settle it (the default: the other person checks decide). */
   people: string[] | null;
   /** How the latest message changed the people. */
   change: SubjectChange;
@@ -39,31 +39,17 @@ function ownWords(household: Household): Map<string, string[]> {
   return new Map(people.map((p) => [p, nameWords(p).filter((w) => !people.some((o) => o !== p && nameWords(o).includes(w)))]));
 }
 
-/** Words that say "instead of" just before a name (closed list). */
-const NEGATED_BEFORE = String.raw`(?:not|isn't|wasn't|isnt|wasnt|instead\s+of|rather\s+than|no\s+longer|nothing\s+(?:for|about))\s+(?:for\s+|about\s+|to\s+|with\s+|it'?s\s+|its\s+)?`;
 /** Words that add people to the ones already asked about (closed list). */
 const ADDS = /\b(?:too|also|as\s+well|both|in\s+addition|additionally|as\s+well\s+as)\b/i;
-/** Words that take back what was said before (closed list). "Actually" and "sorry" count only right before the name
- * ("actually it's Daniel", "sorry, Daniel"): "Sorry, how much does Daniel get?" corrects nothing. */
-const CORRECTS = /\b(?:i\s+meant|i\s+mean|meant\s+to\s+say|my\s+mistake|my\s+bad|correction|wrong\s+person|i\s+got\s+(?:it|that)\s+wrong)\b/i;
-function correction(message: string, positive: string[], household: Household): boolean {
-  if (CORRECTS.test(message)) return true;
-  const own = ownWords(household);
-  const words = positive.flatMap((p) => own.get(p) ?? []).map(escape).join("|");
-  return !!words && new RegExp(String.raw`\b(?:actually|sorry|oops)\b\s*,?\s*(?:(?:it'?s|it\s+was|it\s+is|its|that'?s|that\s+was)\s+)?(?:${words})\b`, "iu").test(message);
-}
-/** "both", "the two of them", "both of us": every one of two people. */
+/** "both", "the two of them": every one of two people. */
 const BOTH = /\b(?:both|the\s+two\s+of\s+(?:them|us))\b/i;
 /** Words that point at people without naming them: relationships and the household as a whole (closed list). The other
  * person checks decide for these (lib/simple-chat/verify.ts askedAbout, spouseMeant). */
 const POINTS_AT_PEOPLE = /\b(?:husband|wife|spouse|partner|son|sons|daughter|daughters|child|children|kids?|baby|babies|mother|mum|mom|father|dad|parents?|brother|sister|siblings?|grand(?:mother|father|ma|pa|son|daughter|child|children|parents?)|in-laws?|mummy|mommy|mama|daddy|papa|helper|maid|nanny|auntie|aunty|aunt|uncle|cousin|niece|nephew|fianc[eé]e?|boyfriend|girlfriend|family|we|us|our|everyone|everybody|all\s+of\s+us|each\s+of\s+us)\b|妻子|老婆|丈夫|老公|儿子|兒子|女儿|女兒|孩子|妈妈|媽媽|爸爸|父亲|父親|母亲|母親/i;
-
 /** The speaker alone ("I", "me", "my"): the account's own member, whom the chat's other checks resolve (closed list). */
 const FIRST_PERSON = /\b(?:i|me|my|mine|myself|i'm|im|i've|i'd|i'll)\b/i;
-
 /** "I" that only asks or corrects, about no one ("I meant", "can I claim", "tell me"): not the speaker as the subject. */
 const ASKING = /\b(?:i\s+meant|i\s+mean|i\s+think|i\s+guess|i\s+wonder|i\s+want\s+to\s+know|i'?m\s+asking|i\s+was\s+asking|can\s+i|could\s+i|do\s+i|should\s+i|would\s+i|will\s+i|(?:tell|show|give|let)\s+me|my\s+(?:mistake|bad))\b/gi;
-
 /** Capitalised words a household writes that are never a person's name (closed list): sentence openers, pronouns, question
  * and function words, titles, days and months. */
 const NOT_NAMES = new Set(`a about actually after again also am an and any anyway are as at be because been before both but by can could
@@ -74,83 +60,76 @@ two under until up us very was wait we well were what what's when where which wh
 your hi hello hey hmm um uh correction mistake also again instead rather still both either neither then also
 monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september october november december
 today tomorrow yesterday s sgd usd myr rm hkd`.split(/\s+/).filter(Boolean));
+type Mention = { person: string; start: number; end: number };
+const CAPITALISED = /^\p{Lu}[\p{Ll}'-]*$/u;
 
-/** Given names that are also ordinary English words ("will", "may", "a grace period", "the bill rose"), closed list: such a
- * name word counts as a mention only when written as a name (lib/simple-chat/subjects.ts nameMentioned). */
-const WORD_NAMES = new Set(`will may mark rose grace hope joy faith june april august bill pat sue jack rob art frank gene dawn summer autumn
-ray sky amber ruby crystal iris lily daisy ivy jade pearl olive violet holly heather robin wren sunny chase hunter max sterling don guy carol
-sandy rich miles drew gray grey cliff dean earl glen lane mason page reed rock sage stone star wade warren young king penny buck chip chuck
-nick pierce price ward bob sonny victor patience prudence charity mercy honor honour constance felicity destiny harmony melody river rain
-storm brook brooke forest heath moss fern hazel ginger sandy cherry coco bunny precious lucky happy blessing gift noble rich will`.split(/\s+/).filter(Boolean));
-/** What may follow a name that opens a sentence ("Will broke his arm", "Mark's plan"), closed list. */
-const NAME_FOLLOWS = /^(?:'s\b|\s*(?:[,.!?]|$)|\s+(?:broke|breaks|hurt|injured|fell|was|is|has|had|got|needs|did|also|too|and|as\s+well|after\s+all|not|instead)\b)/u;
-
-/** Whether the word at `index` of `text` (as the household wrote it) is a mention of a member: any form for a name word that
- * is not an ordinary word; for one that is (WORD_NAMES), only written as a name: capitalised, and either inside a sentence
- * or opening one with a verb or "'s" after it. */
-function nameMentioned(text: string, index: number, word: string): boolean {
-  if (!WORD_NAMES.has(word)) return true;
-  const at = text.slice(index, index + word.length);
-  if (!/^\p{Lu}/u.test(at)) return false;
-  const before = text.slice(0, index).replace(/["“'(\s]+$/u, "");
-  const opens = !before || /[.!?:;]$/.test(before) || /^(?:actually|sorry|oh|ok|okay|and|but|so|wait)\s*,?$/i.test(before.split(/[.!?]\s*/).pop() ?? "");
-  return !opens || NAME_FOLLOWS.test(text.slice(index + word.length));
-}
-
-/** A member's mentions in a message: where each of their own name words (or their whole name) is written as a name. */
-function mentionsOf(text: string, person: string, words: string[]): number[] {
-  const out: number[] = [];
-  const whole = new RegExp(String.raw`(?<![\p{L}])${nameWords(person).map(escape).join(String.raw`\s+`)}(?![\p{L}])`, "giu");
-  const wholeAt = new Set<number>();
-  if (nameWords(person).length > 1) for (const m of text.matchAll(whole)) { out.push(m.index ?? 0); wholeAt.add(m.index ?? 0); }
-  for (const w of words) for (const m of text.matchAll(new RegExp(String.raw`(?<![\p{L}])${escape(w)}(?![\p{L}])`, "giu"))) {
-    const i = m.index ?? 0;
-    if (!wholeAt.has(i) && nameMentioned(text, i, w)) out.push(i);
+/** A member's mentions written as a name: their full name in any case, or one of their own name words capitalised and
+ * standing on its own: the words joined to it by spaces are only their other name words or closed-list words ("Actually
+ * Daniel", "I meant Daniel"), never another capitalised word ("Mount Elizabeth", "Tan Tock Seng", "HealthShield Gold Max"). */
+function nameMentions(text: string, household: Household): Mention[] {
+  const out: Mention[] = [];
+  const tokens = [...text.matchAll(/\p{L}[\p{L}'-]*/gu)].map((m) => ({ word: m[0], start: m.index ?? 0, end: (m.index ?? 0) + m[0].length }));
+  const spaced = (a: { end: number }, b: { start: number }) => /^ +$/.test(text.slice(a.end, b.start));
+  for (const [person, own] of ownWords(household)) {
+    const all = nameWords(person);
+    // The whole name, in any case.
+    if (all.length > 1) for (const m of text.matchAll(new RegExp(String.raw`(?<![\p{L}])${all.map(escape).join(String.raw`\s+`)}(?![\p{L}])`, "giu")))
+      out.push({ person, start: m.index ?? 0, end: (m.index ?? 0) + m[0].length });
+    tokens.forEach((t, i) => {
+      const lower = t.word.replace(/'s$/i, "").toLowerCase();
+      if (!own.includes(lower) || !CAPITALISED.test(t.word.replace(/'s$/i, "")) || out.some((m) => m.start <= t.start && t.end <= m.end)) return;
+      const joined = (n: { word: string } | undefined) => !!n && CAPITALISED.test(n.word.replace(/'s$/i, "")) && !all.includes(n.word.replace(/'s$/i, "").toLowerCase()) && !NOT_NAMES.has(n.word.toLowerCase());
+      if ((i > 0 && spaced(tokens[i - 1], t) && joined(tokens[i - 1])) || (i + 1 < tokens.length && spaced(t, tokens[i + 1]) && joined(tokens[i + 1]))) return;
+      out.push({ person, start: t.start, end: t.end });
+    });
   }
-  return out.sort((x, y) => x - y);
+  return out.sort((a, b) => a.start - b.start);
+}
+/** Every member whose own name word appears in any case: only ever used to add people. */
+function looselyNamed(text: string, household: Household): string[] {
+  const lower = ` ${text.toLowerCase()} `;
+  return [...ownWords(household)].filter(([, own]) => own.some((w) => new RegExp(String.raw`(?<![\p{L}])${escape(w)}(?![\p{L}])`, "u").test(lower))).map(([p]) => p);
 }
 
-/** Words that say a member is named only as the owner of a policy ("Daniel's policy", "under Daniel's plan"). */
-const POLICY_AFTER = /^(?:'s|s')\s+(?:own\s+)?(?:polic(?:y|ies)|plans?|cover|coverage|insurance|schemes?|certificate|schedule|documents?|benefits?)\b/iu;
+/** Between A and "not B": "A, not B", "A - not B", "A who broke his arm, not B", "A after all, not B". */
+const A_NOT_B = /^(?:'s)?\s*(?:(?:,|-)\s*|\s+(?:after\s+all|instead|then|this\s+time)\s*,?\s*|\s+who\s[^.!?]{0,60}?,?\s+)(?:and\s+)?not\s+(?:for\s+|about\s+)?$/iu;
+/** Between "not B" and A: "not B, A", "not B - A", "not B but A", "not B, it's A". */
+const NOT_B_A = /^(?:'s)?\s*(?:[,;-]\s*|\s+but\s+)(?:(?:it'?s|it\s+was|it\s+is)\s+)?$/iu;
+const NOT_BEFORE = /(?:^|[^\p{L}])not\s+(?:for\s+|about\s+)?$/iu;
 
-/** A name the household does not have, only in a strict replacement shape: "Wei, not Grace", "it's Wei, not Grace", "not
- * Grace - Wei" (the message takes a member back and names no other), or "I meant Wei" (the message names no member and no
- * relationship). The word must be written as a name (a capital, then lower case), and never a closed-list word, a member's
- * name word, a family word or a word the household's documents print. */
-function unknownName(message: string, household: Household, named: string[], negated: string[]): string | null {
-  const positive = named.filter((n) => !negated.includes(n));
-  if (positive.length || POINTS_AT_PEOPLE.test(message)) return null;
-  const slots: RegExp[] = [];
-  if (negated.length) slots.push(/(?:^|[\s,])(\p{Lu}\p{Ll}+)\s*,?\s*(?:-\s*)?not\s/gu, /\bnot\s+[^.!?]*?(?:\s-\s*|,\s*)(\p{Lu}\p{Ll}+)\s*[.!?]*\s*$/gu);
-  else if (!named.length) slots.push(/\b[Ii]\s+meant\s+(\p{Lu}\p{Ll}+)\s*(?:[.!?,]|$)/gu);
-  if (!slots.length) return null;
-  const known = new Set(household.members.flatMap((m) => nameWords(m.name)));
-  const printed = new Set(household.documents.flatMap((d) => [d.name, d.insurer ?? "", d.productName ?? "", ...d.pages.map((p) => p.text)])
-    .join(" ").toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 2));
-  for (const re of slots) for (const m of message.matchAll(re)) {
-    const word = m[1], lower = word.toLowerCase();
-    if (word.length < 2 || NOT_NAMES.has(lower) || known.has(lower) || printed.has(lower) || POINTS_AT_PEOPLE.test(lower)) continue;
-    return word;
+/** An explicit replacement in one message: the members it is now about (A) and those taken back (B). */
+function replacement(text: string, mentions: Mention[], previous: string[]): { a: string[]; b: string[] } | null {
+  for (const ma of mentions) for (const mb of mentions) {
+    if (ma.person === mb.person) continue;
+    if (ma.end <= mb.start && A_NOT_B.test(text.slice(ma.end, mb.start))) return { a: [ma.person], b: [mb.person] };
+    if (mb.end <= ma.start && NOT_BEFORE.test(text.slice(0, mb.start)) && NOT_B_A.test(text.slice(mb.end, ma.start))) return { a: [ma.person], b: [mb.person] };
+  }
+  // "I meant A" right after a turn about other members.
+  for (const ma of mentions) {
+    if (!/(?:^|[^\p{L}])I\s+mean(?:t)?\s+$/iu.test(text.slice(0, ma.start)) || !/^(?:'s)?\s*(?:[.!?,;]|-|$|not\b)/u.test(text.slice(ma.end))) continue;
+    const b = previous.filter((p) => p !== ma.person);
+    if (b.length && !previous.includes(ma.person)) return { a: [ma.person], b };
   }
   return null;
 }
 
-/** The members a message names (as names: mentionsOf), those it names only to take them back ("not Grace"), and those it
- * names only as a policy's owner ("Does Daniel's policy cover her?"). */
-function namedIn(message: string, household: Household): { named: string[]; negated: string[]; owners: string[] } {
-  const text = ` ${norm(message)} `;
-  const named: string[] = [], negated: string[] = [], owners: string[] = [];
-  for (const [person, words] of ownWords(household)) {
-    const mentions = mentionsOf(text, person, words);
-    if (!mentions.length) continue;
-    named.push(person);
-    const before = (i: number) => text.slice(Math.max(0, i - 40), i).toLowerCase();
-    // The person's whole name may stand in the slot ("not Grace Tern"): the words before this one that are also theirs are skipped.
-    const all = nameWords(person).map(escape).join("|");
-    if (mentions.every((i) => new RegExp(String.raw`${NEGATED_BEFORE}(?:(?:${all})\s+)*$`, "u").test(before(i)))) negated.push(person);
-    else if (mentions.every((i) => POLICY_AFTER.test(text.slice(i).replace(new RegExp(String.raw`^(?:(?:${all})\s*)+`, "iu"), "")))) owners.push(person);
+/** "<X>, not <member>" with X written as a name that is no member, no closed-list word, no family word and no word the
+ * household's documents print: the only shape that asks who they meant. */
+function unknownName(text: string, mentions: Mention[], household: Household): string | null {
+  const printed = new Set(household.documents.flatMap((d) => [d.name, d.insurer ?? "", d.productName ?? "", ...d.pages.map((p) => p.text)])
+    .join(" ").toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 2));
+  const known = new Set(household.members.flatMap((m) => nameWords(m.name)));
+  for (const mb of mentions) {
+    const m = /(?:^|[^\p{L}])(\p{Lu}\p{Ll}+)(\s*(?:,|-)\s*(?:and\s+)?not\s+(?:for\s+|about\s+)?)$/u.exec(text.slice(0, mb.start));
+    if (!m) continue;
+    const word = m[1], lower = word.toLowerCase();
+    // Standing on its own: no capitalised word joined to it before ("Mount Elizabeth, not Grace").
+    const before = text.slice(0, mb.start - m[2].length - word.length);
+    if (/\p{Lu}[\p{L}'-]* +$/u.test(before) && !NOT_NAMES.has((/(\p{L}[\p{L}'-]*) +$/u.exec(before)?.[1] ?? "").toLowerCase())) continue;
+    if (NOT_NAMES.has(lower) || known.has(lower) || printed.has(lower) || POINTS_AT_PEOPLE.test(lower)) continue;
+    return word;
   }
-  return { named, negated, owners };
+  return null;
 }
 
 /** The people each message so far settles, oldest first; the result is for the latest message (the first of `said`).
@@ -158,65 +137,39 @@ function namedIn(message: string, household: Household): { named: string[]; nega
 export function resolveSubjects(household: Household, said: readonly string[]): Subjects {
   const members = household.members.map((m) => baseName(m.name));
   let people: string[] | null = null;
+  let previous: string[] = [];
   let last: Subjects = { people: null, change: "same", replaced: [], unknown: null };
-  const mentioned: string[] = [];
-  const messages = [...said].reverse();
-  for (const raw of messages) {
-    const message = norm(raw);
-    const { named, negated, owners } = namedIn(message, household);
-    for (const n of named) { const i = mentioned.indexOf(n); if (i >= 0) mentioned.splice(i, 1); mentioned.push(n); }
-    const positive = named.filter((n) => !negated.includes(n) && !owners.includes(n));
-    const unknown = unknownName(message, household, named, negated);
-    const before = people as string[] | null;
-    const prev: string[] = before ?? [];
-    let change: SubjectChange = "same";
-    let replaced: string[] = [];
-    if (unknown) {
-      // Someone the household does not have: nobody's figures, until the household says who they mean. No earlier answer is
-      // out of date: who it is about now is not a member (only a resolved replacement supersedes).
+  for (const raw of [...said].reverse()) {
+    const text = norm(raw);
+    const mentions = nameMentions(text, household);
+    const before: string[] | null = people;
+    const about = before ?? previous;
+    let change: SubjectChange = "same", replaced: string[] = [], unknown: string | null = null;
+    const swap = replacement(text, mentions, about);
+    if (swap) {
+      // The only narrowing: an explicit replacement between two members.
+      people = [...new Set(swap.a)];
+      replaced = [...new Set([...swap.b, ...about])].filter((p) => !people!.includes(p));
+      change = "replace";
+    } else if ((unknown = unknownName(text, mentions, household))) {
+      // "Wei, not Grace": nobody's figures until the household says who they mean; nothing is superseded.
       people = [];
       change = "new";
-    } else if (negated.length && positive.length) {
-      // "Daniel, not Grace", "not Grace - Daniel": the people named now. Earlier answers for those taken back are out of date.
-      people = positive;
-      change = "replace";
-      replaced = [...new Set([...prev.filter((p) => !positive.includes(p)), ...negated])];
-    } else if (negated.length) {
-      // "Not Grace" alone: the ones before without her, when they were settled; otherwise the other checks decide. Nothing is
-      // superseded until the household says who it is about.
-      people = before ? before.filter((p) => !negated.includes(p)) : null;
-      change = "new";
-    } else if (!positive.length && owners.length) {
-      // "Does Daniel's policy cover her?": the people stay, with the policy's owner beside them; unsettled stays unsettled.
-      people = before ? [...new Set([...before, ...owners])] : null;
-      change = before ? "add" : "same";
-    } else if (BOTH.test(message) && !positive.length) {
-      // "Both of them": the two people of a two-person household, or the two last named.
-      const two = members.length === 2 ? members : mentioned.length >= 2 ? mentioned.slice(-2) : null;
-      if (two) { people = [...new Set([...prev, ...two])]; change = "add"; }
-      else people = null;
-    } else if (positive.length && ADDS.test(message)) {
-      // An addition to people the messages never settled ("My wife broke her arm", then "and Daniel too") is left to the
-      // other checks: it must never narrow the turn to the new name.
-      people = before ? [...new Set([...before, ...positive, ...owners])] : null;
-      change = "add";
-    } else if (positive.length && POINTS_AT_PEOPLE.test(message)) {
-      // "Grace's husband", "Daniel and the kids": a relationship word may point at someone not named. The other checks decide.
+    } else if (before) {
+      // After a replacement: only ever more people. A relationship word or the speaker goes back to the other checks.
+      if (POINTS_AT_PEOPLE.test(text) || FIRST_PERSON.test(text.replace(ASKING, " "))) { people = null; change = "new"; }
+      else {
+        const more: string[] = [...new Set([...before, ...looselyNamed(text, household), ...(BOTH.test(text) && members.length === 2 ? members : [])])];
+        if (more.length > before.length) change = "add";
+        people = more;
+      }
+    } else {
       people = null;
-      change = "new";
-    } else if (positive.length && correction(message, positive, household)) {
-      people = [...new Set([...positive, ...owners])];
-      change = "replace";
-      // Before the people were settled, those taken out are every other member: only answers that showed their figures go.
-      replaced = (before ?? members).filter((p) => !positive.includes(p));
-    } else if (positive.length) {
-      people = [...new Set([...positive, ...owners])];
-      change = before && before.length === people.length && before.every((p) => people!.includes(p)) ? "same" : "new";
-    } else if (POINTS_AT_PEOPLE.test(message) || FIRST_PERSON.test(message.replace(ASKING, " "))) {
-      // "My husband", "I broke my arm": someone not named, whom the other checks resolve.
-      people = null;
-      change = "new";
+      if (ADDS.test(text) && looselyNamed(text, household).length) change = "add";
     }
+    // Never zero people, except when asking who they meant.
+    if (people && !people.length && !unknown) people = null;
+    previous = mentions.length ? [...new Set(mentions.map((m) => m.person))] : people ?? previous;
     last = { people: people ? [...people] : null, change, replaced, unknown };
   }
   return last;
@@ -248,15 +201,16 @@ export function subjectsNote(s: Subjects): string {
 }
 
 /** The earlier answers a replacement makes out of date: walking back from the latest, every answer that showed figures for
- * a replaced person, until one that showed figures for other people only. Answers that showed no figures are passed over.
+ * a replaced person, until one that showed figures for other people only. Answers that showed no figures are passed over;
+ * an answer that already showed a figure for someone the turn is now about (`kept`) is never out of date, and ends the walk.
  * `turns`: each earlier answer's id and the people its figures were for, oldest first. */
-export function supersededBy(replaced: readonly string[], turns: readonly { answerId?: string | null; people?: readonly string[] | null }[]): string[] {
+export function supersededBy(replaced: readonly string[], turns: readonly { answerId?: string | null; people?: readonly string[] | null }[], kept: readonly string[] = []): string[] {
   if (!replaced.length) return [];
   const out: string[] = [];
   for (const t of [...turns].reverse()) {
     const people = t.people ?? [];
     if (!people.length) continue;
-    if (!people.some((p) => replaced.includes(p))) break;
+    if (people.some((p) => kept.includes(p)) || !people.some((p) => replaced.includes(p))) break;
     if (t.answerId) out.push(t.answerId);
   }
   return out;
