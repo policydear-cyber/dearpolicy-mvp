@@ -99,6 +99,8 @@ for (const [label, row] of [["tabbed", H2C_ROW], ["spaced", H2C_ROW.replace("\t"
     assert.match(st.text, /6-day stay, this works out to 4 days/);
     // The chat states its working: the first paid day, the most days and the yearly period, then 4 x S$100.
     assert.match(st.basis ?? "", /paid from day 3, for at most 365 days per policy year \(4 × S\$100\)/);
+    // A yearly cap counts what was already paid that year, by this person or anyone else the cover takes in (gate SD-L2).
+    assert.match(st.basis ?? "", /if nothing was already paid under this benefit in the same year, by you or anyone else it covers$/);
   });
 }
 
@@ -348,6 +350,32 @@ const GATE4: [string, string, string[], string[], number, string | null][] = [
   ["R4-13 grammar words after the cap (', and the')", `${CAP4}, and the`, [], [], 20, "S$1,000"],
   // A marker after the cap's period means the clause does not end there: the cap is not read, so no figure.
   ["R4-14 '(a)' with no note", `${CAP4} (a)`, [], [], 20, null],
+  // Round 5 (SD-M1): every line of the page above the row is read, joined, whatever headings stand between.
+  ["R5-1 sharing note above a heading", CAP4, ["Limits are shared by all insured persons.", "HOSPITAL BENEFITS"], [], 20, null],
+  ["R5-2 sharing note above a Title Case heading", CAP4, ["Limits are shared by all insured persons.", "Hospital Benefits"], [], 20, null],
+  ["R5-3 sharing in the heading itself", CAP4, ["HOSPITAL BENEFITS (SHARED LIMITS)"], [], 20, null],
+  ["R5-4 sharing below a heading, above the row", CAP4, ["HOSPITAL BENEFITS", "Limits are shared by all insured persons."], [], 20, null],
+  ["R5-5 sharing, blank lines, then the row", CAP4, ["Limits are shared by all insured persons.", "", "", ""], [], 20, null],
+  ["R5-6 sharing above a tabbed sub-header", CAP4, ["Limits are shared by all insured persons.", "Benefit\tAmount"], [], 20, null],
+  ["R5-7 sharing above a one-word heading", CAP4, ["Limits are shared by all insured persons.", "HOSPITAL"], [], 20, null],
+  ["R5-8 sharing above a Title Case row name", CAP4, ["Limits are shared by all insured persons.", "Intensive Care Unit"], [], 20, null],
+  ["R5-9 sharing above 'Note 2'", CAP4, ["Limits are shared by all insured persons.", "Note 2"], [], 20, null],
+  // Round 5 (SD-L2): more sharing words, directly above the row.
+  ...([["R5-10", "Yearly limits are for everyone on the policy."], ["R5-11", "Yearly limits apply per certificate."], ["R5-12", "Yearly limits apply per household."],
+    ["R5-13", "Yearly limits are pooled."], ["R5-14", "Yearly limits apply jointly."], ["R5-15", "Yearly limits are split between you and your spouse."],
+    ["R5-16", "Yearly limits cover all persons covered."], ["R5-17", "Yearly limits apply to all members."], ["R5-18", "Yearly limits apply to each policy, not each life."],
+    ["R5-19", "Yearly limits apply to the whole policy."], ["R5-20", "Yearly limits apply per plan."], ["R5-21", "Yearly limits include claims by your dependants."],
+    ["R5-21b", "Yearly limits include claims by your dependents."], ["R5-22", "Per-policy yearly limits apply."]] as const)
+    .map(([id, line]): [string, string, string[], string[], number, null] => [`${id} '${line}' above`, CAP4, [line], [], 20, null]),
+  ["R5-23 'ALL INSURED' wrapped over two lines", CAP4, ["LIMITS FOR ALL", "INSURED PERSONS"], [], 20, null],
+  ["R5-24 day-cap-only row + 'Days are shared by all insured persons.'", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year", ["Days are shared by all insured persons."], [], 20, null],
+  // Round 5 controls.
+  ["R5-25 'Limits are per policy year.' above", CAP4, ["Limits are per policy year."], [], 20, "S$1,000"],
+  ["R5-25b 'Limits are per-policy year.' above", CAP4, ["Limits are per-policy year."], [], 20, "S$1,000"],
+  ["R5-26 neutral note above", CAP4, ["All amounts are in Singapore dollars."], [], 20, "S$1,000"],
+  ["R5-27 'the insured person' above", CAP4, ["Benefits are paid to the insured person."], [], 20, "S$1,000"],
+  // A negative waiting form keeps only grammar words past the row's name, so "per stay" after the day cap gives no figure.
+  ["R5-28 negative waiting, per-stay cap, 'shared' above", "Hospital income rider\tS$100 per day in hospital, not payable for the first 2 days of any stay, up to 30 days per stay", ["Limits are shared by all insured persons."], [], 6, null],
   // Positives: a harmless line above the row, or a harmless heading, changes nothing.
   ["R4 positive: harmless line above ('Hospital benefits are paid in Singapore dollars.')", CAP4, ["Hospital benefits are paid in Singapore dollars."], [], 20, "S$1,000"],
   ["R4 positive: harmless heading above ('HOSPITAL BENEFITS')", CAP4, ["HOSPITAL BENEFITS"], [], 20, "S$1,000"],
