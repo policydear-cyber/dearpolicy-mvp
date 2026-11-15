@@ -24,6 +24,7 @@ import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, m
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 import { benefitWords } from "./cover-rows";
+import { childCase, personStatus, personStatusWhy, provenAdult, statusDays, withoutChildLimit, type ChildLimit } from "./child-limit";
 
 export type FamilyMember = { id: string; display_name: string; preferred_name?: string | null;
   /** The date of birth the household entered on the Family page (YYYY-MM-DD), when it did: tells which age group's row of a
@@ -77,6 +78,12 @@ export type TableRow = {
   /** The last day of the row's cover, as printed, when that cover was for one short term that is over (a single trip):
    * the row is no longer current cover, but it still answers for an event inside that term. */
   coverEnded?: string | null;
+  /** A child's share printed in the row's own cell (CheckedBenefit.childLimit), and whether the cover's own line proves the
+   * person is that child ("child": `percent` is the child's share), is not ("not_child"), or neither (null: no amount). */
+  childLimit?: ChildLimit & { own: number; status: "child" | "not_child" | null; days: number[]; why?: string | null };
+  /** The row's page prints other words about an insured child (CheckedBenefit.childNote): worked out only for a person the
+   * cover's own line proves is not a child, on every one of `days`. */
+  childNote?: { adult: boolean; age: number | null; days: number[] };
   /** The row is the cover's own line as the schedule prints it (check.ts coverLine): its policy wording is not on file. */
   coverLine?: boolean;
 };
@@ -350,23 +357,36 @@ export function sectionsOf(readings: CheckedReading[]): SectionRef[] {
 const PROJECTION = /\bnon[\s-]?guaranteed\b|\billustrat(?:ed|ion|ive)\b|\bprojected\b|\b(?:investment\s+)?rate\s+of\s+return\b|\bassumed\s+(?:investment\s+)?(?:rate|return)|\bat\s+\d+(?:\.\d+)?\s*%\s*(?:p\.?\s?a\b|per\s+annum|a\s+year)/i;
 export const readsAsProjection = (b: Pick<CheckedBenefit, "benefit" | "section" | "column"> & { source: { excerpt: string } }) =>
   PROJECTION.test([b.source.excerpt, b.benefit, b.section ?? "", b.column ?? ""].join("\n"));
-function figureFor(b: CheckedBenefit, cover: PersonCover, fromIllustration: boolean): Figure {
-  const f = baseFigure(b, cover);
+function figureFor(b: CheckedBenefit, cover: PersonCover, fromIllustration: boolean, today: number): Figure {
+  const f = baseFigure(b, cover, today);
   const basis = b.basis === "non_guaranteed" || b.basis === "illustrated" ? b.basis : fromIllustration ? "illustrated" : readsAsProjection(b) ? "non_guaranteed" : null;
   if (basis && f.kind !== "none") return { kind: "projected", amount: f.amount, currency: f.currency, basis, asOf: b.asOf };
   return f;
 }
 /** A percentage printed as a share of the basic (main) plan's or policy's sum. */
 const BASIC_PLAN_SHARE = /%[^\n%]{0,60}\b(?:basic|base|main)\s+(?:plan|policy|contract|benefit)\b|%[^\n%]{0,60}\bof\s+the\s+(?:basic|base|main)\b/i;
-function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
+/** Whether a row's printed child share is the person's (lib/benefit-table/child-limit.ts): "child" or "not_child" from the
+ * cover's own line on every day it could matter (today and the printed period of insurance), or null when not settled. */
+export function childStatusOf(b: Pick<CheckedBenefit, "childLimit">, cover: Pick<PersonCover, "life" | "documentPeriodFrom" | "documentPeriodTo">, today: number) {
+  return b.childLimit ? personStatus(cover.life, b.childLimit, statusDays(today, cover.documentPeriodFrom, cover.documentPeriodTo)) : null;
+}
+/** Why a row's child share is not settled for the person (personStatusWhy), or null when it is. */
+const childWhyOf = (b: Pick<CheckedBenefit, "childLimit">, cover: Pick<PersonCover, "life" | "documentPeriodFrom" | "documentPeriodTo">, today: number) => {
+  if (!b.childLimit) return null;
+  const r = personStatusWhy(cover.life, b.childLimit, statusDays(today, cover.documentPeriodFrom, cover.documentPeriodTo));
+  return r.status ? null : r.why;
+};
+function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figure {
   if (b.pays === "amount" || b.pays === "up_to" || b.pays === "per_day" || b.pays === "per_period")
     return { kind: "printed", amount: b.value!, currency: b.currency, unit: b.pays === "amount" ? "lump_sum" : b.pays, period: b.period };
   if (b.pays === "value") return { kind: "value", amount: b.value!, currency: b.currency, asOf: b.asOf };
+  // A child's share read two ways (check.ts foldChildColumns): no amount for anyone.
+  if (b.pays === "percent" && b.childLimitConflict) return { kind: "none", why: "the row's share for an insured child was read two ways: see the document" };
   if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row"
     : b.pays === "words" && /\d\s*%/.test(b.source.excerpt) ? "paid as a share printed in the row's words, with no amount worked out: see the document" : "no figure printed" };
   // A row whose words say it is capped, with no cap read and checked (or a reading from before caps were read), is never
   // worked out: the uncapped figure could be more than it pays.
-  if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.ownShareNamed ? withoutOwnShareCap(b.source.excerpt, b.value) : b.source.excerpt))) {
+  if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.ownShareNamed ? withoutOwnShareCap(b.source.excerpt, b.value) : withoutChildLimit(b.source.excerpt, b.childLimit)))) {
     const of = shareWords(b);
     return { kind: "none", why: `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that was not captured: see the document`,
       ...(of ? { share: { percent: b.value!, of, capWords: null, capPage: null, capMissing: true } } : {}) };
@@ -388,8 +408,23 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover): Figure {
     // rider's own sum (Critic, #415): no amount, the share stays as printed.
     if (cover.riderOf && BASIC_PLAN_SHARE.test(b.source.excerpt)) return withShare(b, { kind: "none", why: `${b.value}% of the basic plan's sum, which is not this rider's own sum insured` });
     if (cover.sumInsured == null) return withShare(b, { kind: "none", why: `${b.value}% of the sum insured, but no sum insured is printed for ${cover.cover}` });
-    return capped(cents(b.value! * cover.sumInsured / 100), cover.currency,
-      `${b.value}% of ${money(cover.sumInsured, cover.currency)} (${cover.cover}, ${cover.confirmation?.status === "corrected" ? "the figure you gave" : `${cover.source.document} p${cover.source.page}${cover.asOf ? `, as of ${cover.asOf}` : ""}`})`);
+    // A child's share printed in the row's cell ("For an insured child under 18, limited to 25% of the Sum Insured"): the
+    // child's share for a person the schedule's own line proves is that child, the row's own share for one it proves is
+    // not, and no amount otherwise (never one of the two by guess).
+    // The page prints other words about an insured child (a note or footnote, gate R4-H3): the row's share only for a person
+    // the schedule's own line proves is not a child; no amount for anyone else.
+    if (b.childNote && !b.childLimit) {
+      const r = provenAdult(cover.life, b.childNote.age, statusDays(today, cover.documentPeriodFrom, cover.documentPeriodTo));
+      if (!r.adult) return withShare(b, { kind: "none", why: `${b.value}% of the sum insured, and the document also limits what is paid for an insured child${b.childNote.age != null ? ` (under ${b.childNote.age})` : ""}; ${cover.person}'s own line of the schedule ${r.why}: see the document` });
+    }
+    const child = b.childLimit ? childStatusOf(b, cover, today) : null;
+    if (b.childLimit && !child) return { kind: "none", why: `${b.value}% of the sum insured, or ${b.childLimit.percent}% for ${childCase(b.childLimit)}; ${cover.person}'s own line of the schedule ${childWhyOf(b, cover, today) ?? "does not settle which"}: see the document` };
+    const percent = child === "child" ? b.childLimit!.percent : b.value!;
+    const life = cover.life?.birth ? `date of birth ${cover.life.birth}` : `relationship "${cover.life?.relationship ?? ""}"`;
+    const childWords = !b.childLimit ? "" : child === "child" ? ` for ${childCase(b.childLimit)} (${life}, p${cover.source.page})`
+      : `; its ${b.childLimit.percent}% for ${childCase(b.childLimit)} is not for this person (${life}, p${cover.source.page})`;
+    return capped(cents(percent * cover.sumInsured / 100), cover.currency,
+      `${percent}% of ${money(cover.sumInsured, cover.currency)} (${cover.cover}, ${cover.confirmation?.status === "corrected" ? "the figure you gave" : `${cover.source.document} p${cover.source.page}${cover.asOf ? `, as of ${cover.asOf}` : ""}`})${childWords}`);
   }
   return withShare(b, { kind: "none", why: `${b.value}% of a base the page does not state` });
 }
@@ -1578,11 +1613,17 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
       // for an optional cover they did not buy).
       const figure: Figure = tier ? { kind: "none", why: tier }
         : r.documentId !== c.source.documentId && b.pays !== "not_covered" && printedNotCovered(b, notCoveredOn(c, readings))
-          ? { kind: "none", why: "the person's own schedule prints this cover as not covered" } : named ? figureFor(named.b, named.cover, r.kind === "illustration") : figureFor(b, c, r.kind === "illustration");
+          ? { kind: "none", why: "the person's own schedule prints this cover as not covered" } : named ? figureFor(named.b, named.cover, r.kind === "illustration", singaporeDay(now)) : figureFor(b, c, r.kind === "illustration", singaporeDay(now));
       p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,
         conditions: [...(b.limitsHeading && belowSumInsured(figure, c) && !b.conditions.includes(b.source.excerpt) ? [...b.conditions, b.source.excerpt] : b.conditions), ...capNotes], source: b.source, baseSource: named ? named.cover.source : b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
-        percent: b.pays === "percent" ? b.value : null, percentOf: named ? "sum_insured" : b.pays === "percent" ? b.percentOf : null,
+        percent: b.pays !== "percent" ? null : b.childLimit && figure.kind === "worked_out" && childStatusOf(b, named ? named.cover : c, singaporeDay(now)) === "child" ? b.childLimit.percent : b.value,
+        ...(b.childLimit && b.pays === "percent" ? { childLimit: { ...b.childLimit, own: b.value!, status: childStatusOf(b, named ? named.cover : c, singaporeDay(now)),
+          days: statusDays(singaporeDay(now), (named ? named.cover : c).documentPeriodFrom, (named ? named.cover : c).documentPeriodTo),
+          why: childWhyOf(b, named ? named.cover : c, singaporeDay(now)) } } : {}),
+        ...(b.childNote && !b.childLimit && b.pays === "percent" ? { childNote: { adult: provenAdult((named ? named.cover : c).life, b.childNote.age,
+          statusDays(singaporeDay(now), (named ? named.cover : c).documentPeriodFrom, (named ? named.cover : c).documentPeriodTo)).adult, age: b.childNote.age,
+          days: statusDays(singaporeDay(now), (named ? named.cover : c).documentPeriodFrom, (named ? named.cover : c).documentPeriodTo) } } : {}), percentOf: named ? "sum_insured" : b.pays === "percent" ? b.percentOf : null,
         base: named ? named.cover.sumInsured : b.pays !== "percent" ? null : b.percentOf === "sum_insured" ? c.sumInsured : b.percentOf === "fixed_amount" ? b.baseAmount : null,
         baseCorrected: named ? named.cover.confirmation?.status === "corrected" : b.pays === "percent" && b.percentOf === "sum_insured" && c.confirmation?.status === "corrected", capSource: b.capSource ?? null,
         combinedLimit: (b.combinedLimit ?? false) || (!!b.limitsHeading && limitUnderHeading(figure, c)), ...(c.holding ? { holding: c.holding } : {}), coverEnded: c.ended ?? null, ...(b.coverLine ? { coverLine: true } : {}) });

@@ -26,6 +26,7 @@ import type { AnswerStatement, StructuredAnswer } from "@/components/answer-card
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
 import { keepsCapIn, noteMultiple, timesWords } from "@/lib/benefit-table/multiplier";
+import { childCase, childLimitIn, childLimitNotes, childShareAllowed, personStatus, provenAdult, printedLife, withoutChildLimit } from "@/lib/benefit-table/child-limit";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
@@ -819,7 +820,17 @@ export type ServerFigure = { text: string; person: string; quote: string; percen
    * is paid at double", lib/benefit-table/multiplier.ts noteMultiple): read again here from its stored page, with the row's
    * own words (`own`), `section` and the benefit names of the person's other rows (`others`). When it checks, the card's
    * basis adds the multiple as a condition in the note's own words with its figure; the card's amount stays `value`. */
-  times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null; others: string; docNames: string; perDay: boolean } | null };
+  times?: { times: number; docIndex: number; page: number; quote: string; own: string; section: string | null; others: string; docNames: string; perDay: boolean } | null;
+  /** A child's share printed in the row's own cell (lib/benefit-table/child-limit.ts): its share and age, the row's own
+   * share (`own`), whether the table found the
+   * person is that child, and the days that must hold (today and the printed period of insurance). The checks read the
+   * share again from the row's line and the date of birth or relationship again from the person's own line. */
+  child?: { percent: number; belowAge: number | null; own: number; status: "child" | "not_child"; days: number[]; benefit: string; section: string | null; others: { benefit: string; section: string | null }[];
+    sums?: { person: string; sum: number }[] };
+  /** The row's document prints a child-limit sentence outside the row's own cell (lib/benefit-table/child-limit.ts
+   * childLimitNotes) with this highest age: the table found the person is proven not that child on these days; the checks
+   * read the document and the person's own line again. */
+  adult?: { days: number[]; age: number | null } };
 /** The amount a server-worked percentage row pays, checked again from the stored pages and worked out here (TE-ACC-20261113:
  * every percentage of a person's sum insured on a family schedule was refused, because the layout rules below look for the
  * sum under a cover heading or on a page that names one life; the benefit table had already tied each row to the person's
@@ -839,12 +850,30 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const rf = locateQuote(household, sf.row.quote, sf.row.docIndex);
   if (!rf || rf.docIndex !== sf.row.docIndex || rf.page !== sf.row.page) return null;
   const rowText = rowWithContinuation(household.documents[rf.docIndex].pages.find((p) => p.page === rf.page)!.text, rf.offset);
-  const pcts = new Set([...rowText.matchAll(PCTS)].map((m) => Number(m[1])));
-  if (!pcts.has(sf.percent)) return null;
+  // A child's share printed in the row's cell, read again from its line: the same share and age, and nothing else in the
+  // line but the row's own share (lib/benefit-table/child-limit.ts). The card's percentage is the child's share for the
+  // child, the row's own for anyone else.
+  const child = sf.child ? childLimitIn(rowText.replace(/\t/g, " "), sf.child.own) : null;
+  // Other words about an insured child on the row's page (gate R4-H3: a note or footnote; never the row's own line and what
+  // continues it, or a line naming a household member): no child share, and the row's own share only for a person whose
+  // own line proves they are not a child (read again below).
+  const rpage = household.documents[rf.docIndex].pages.find((p) => p.page === rf.page)!.text, rrow = rowLine(rpage, rf.offset);
+  const rpages = household.documents[rf.docIndex].pages, rown = { page: rf.page, from: rrow.start, to: rrow.start + rowText.length };
+  const members = household.members.map((m) => m.name);
+  const notes = childLimitNotes(rpages, rown, members);
+  const childNote = notes.found;
+  // A child's share only when nothing else in the document speaks of children or ages (gate R6-H1).
+  if (child && !childShareAllowed(rpages, rown, members, { benefit: sf.child!.benefit, section: sf.child!.section }, sf.child!.others, sf.child!.sums ?? [])) return null;
+  if ((child && childNote) || (childNote && (!sf.adult?.days.length || sf.adult.age !== notes.age))) return null;
+  if (sf.child && (!child || child.percent !== sf.child.percent || child.belowAge !== sf.child.belowAge
+    || sf.percent !== (sf.child.status === "child" ? child.percent : sf.child.own))) return null;
+  const ownText = child ? withoutChildLimit(rowText, child) : rowText;
+  const pcts = new Set([...ownText.matchAll(PCTS)].map((m) => Number(m[1])));
+  if (!pcts.has(sf.child ? sf.child.own : sf.percent)) return null;
   // One share only: a row whose line or what continues it prints another percentage ("10% ... For an insured child, 5%"),
   // or names a kind of life, is for someone it cannot settle from the line (Critic #449 rounds 4-5).
   if (pcts.size > 1) return null;
-  if (/\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?)\b/i.test(rowText)) return null;
+  if (/\b(?:child(?:ren)?|kids?|minors?|infants?|juniors?|sons?|daughters?|adults?|seniors?|elderly|spouses?|dependants?|dependents?)\b/i.test(ownText)) return null;
   // The base: the person's own line, in a document linked to them.
   const bdoc = household.documents[sf.base.docIndex];
   if (!bdoc || unreadable(bdoc) || !bdoc.linkedPeople.some((p) => baseName(p) === person)) return null;
@@ -860,6 +889,10 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const namesPerson = (lt: Set<string>) => who.every((w) => lt.has(w)) && !longer.some((t) => t.every((w) => lt.has(w)));
   const onLine = moneyFiguresIn(line);
   if (!namesPerson(have) || onLine.length !== 1 || onLine[0].currency !== sf.currency || !sameValue(onLine[0].value, sf.base.value)) return null;
+  // Whom the child's share is for, read again from the person's own line on the base's page.
+  const life = child ? printedLife(bpage.text.split("\n"), at, person, household.members.map((m) => m.name)) : null;
+  if (child && (!sf.child!.days.length || personStatus(life, child, sf.child!.days) !== sf.child!.status)) return null;
+  if (childNote && !provenAdult(printedLife(bpage.text.split("\n"), at, person, household.members.map((m) => m.name)), notes.age, sf.adult!.days).adult) return null;
   // Two sums for the person are doubt. When the row and the sum are printed in the same document, that document settles it
   // and only its own lines count (a renewal schedule's table and its own sums, whatever last year's schedule printed).
   // Otherwise every live document of the same policy counts (a wording's table with a sum from one of two schedules).
@@ -885,7 +918,8 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
     const i = cf.excerpt.indexOf(fig.raw);
     if (i < 0 || !CAP_BEFORE.test(cf.excerpt.slice(Math.max(0, i - 40), i))) return null;
     cap = { value: fig.value, found: cf };
-  } else if (CAP_WORD.test(rowText) && moneyFiguresIn(rowText).some((f) => !sameValue(f.value, sf.base.value))) return null;
+  } else if (CAP_WORD.test(ownText) && moneyFiguresIn(rowText).some((f) => !sameValue(f.value, sf.base.value))) return null;
+  if (child && (sf.cap || CAP_WORD.test(ownText) || moneyFiguresIn(ownText).length)) return null;
   const worked = Math.round(sf.base.value * sf.percent) / 100;
   const capped = !!cap && worked > cap.value;
   const value = capped ? cap!.value : worked;
@@ -893,7 +927,12 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const cur = currencyOf(onLine[0].raw, line, bdoc, bf.page);
   const money = (v: number) => formatMoney(cur.sign, v);
   const where = `${docLabel(household, bdoc)}, page ${bf.page}`;
-  const basis = `${sf.percent}% of ${person}'s sum insured of ${money(sf.base.value)} (${where})${capped ? ` is ${money(worked)}, more than the most it pays, so up to ${money(cap!.value)} (page ${cap!.found.page})` : cap ? `, within its maximum of ${money(cap.value)}` : ""}`;
+  // The child's share with its printed words and what settles it: 'Grace Okafor's date of birth on page 1 is 09/04/2017.'
+  const lifeWords = child ? (life!.birth && child.belowAge != null ? `${person}'s date of birth on page ${bf.page} is ${life!.birth}` : `page ${bf.page} prints ${person} as "${life!.relationship}"`) : "";
+  const childLine = !child ? "" : sf.child!.status === "child"
+    ? `. The policy (page ${rf.page}) says: "${child.words.replace(/[.;]+$/, "")}", and ${lifeWords}`
+    : `. The policy (page ${rf.page}) pays ${child.percent}% for ${childCase(child)}, which ${person} is not: ${lifeWords}`;
+  const basis = `${sf.percent}% of ${person}'s sum insured of ${money(sf.base.value)} (${where})${childLine}${capped ? ` is ${money(worked)}, more than the most it pays, so up to ${money(cap!.value)} (page ${cap!.found.page})` : cap ? `, within its maximum of ${money(cap.value)}` : ""}`;
   return { s: { ...st, kind: "amount", percentOf: null, alternativeGroup: st.alternativeGroup }, found, person, note: null, whole: basis + timesLine(sf, household, cap, money),
     amount: { value, text: (capped ? "Up to " : "") + money(value), currencyResolved: cur.resolved, illustration: true } };
 }
