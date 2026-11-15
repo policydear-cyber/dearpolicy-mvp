@@ -3,14 +3,15 @@
  * Default: main's behaviour. `people: null` means the chat's other person checks decide (lib/simple-chat/verify.ts
  * askedAbout, the rows' own person checks), exactly as before this module. Only one thing ever narrows the people (drops
  * someone): an explicit replacement between two household members, each written as a name (capitalised and standing on
- * its own, never inside a longer capitalised phrase such as "Mount Elizabeth" or "Gold Max"), or written in full:
- * - "<A>, not <B>" ("actually it's Daniel, not Grace", "Daniel who broke his arm, not Grace");
- * - "not <B>, <A>" ("not Grace - Daniel", "not Grace but Daniel");
+ * its own, never inside a longer capitalised phrase such as "Mount Elizabeth" or "Gold Max"), or written in full, as the
+ * whole message or its opening clause:
+ * - "<A>, not <B>" ("Daniel, not Grace", "Actually it's Daniel, not Grace - how much?");
+ * - "not <B>, <A>" ("Not Grace, Daniel", "not Grace - Daniel");
  * - "I meant <A>" (or "I mean <A>") right after a turn about B.
- * Then the turn, and the turns after it, are about A; earlier answers with B's figures (and none of A's) are out of date.
- * After a replacement, any later message can only add people: one naming another member adds them; a relationship word
- * or the speaker ("my husband", "I") goes back to the other checks. Nothing else (an addition, "what about Daniel?",
- * "actually"/"sorry" alone, a negation) ever drops anyone.
+ * Only a short question may follow, and it must not name B. Mid-sentence ("Pay it to Daniel, not Grace"), with a
+ * description ("Daniel who was driving, not Grace") or as a question ("Daniel, not Grace?") it is no replacement.
+ * The replacement narrows its own turn only; earlier answers with B's figures (and none of A's) are out of date, stay so,
+ * and are never read to the model again. Every other turn is main's behaviour.
  * "Who did you mean?" is asked only for "<X>, not <member>" where X is written as a name and is no member.
  * Nothing here knows any household: names come from the household's own member list. */
 import type { Household } from "./library";
@@ -41,15 +42,9 @@ function ownWords(household: Household): Map<string, string[]> {
 
 /** Words that add people to the ones already asked about (closed list). */
 const ADDS = /\b(?:too|also|as\s+well|both|in\s+addition|additionally|as\s+well\s+as)\b/i;
-/** "both", "the two of them": every one of two people. */
-const BOTH = /\b(?:both|the\s+two\s+of\s+(?:them|us))\b/i;
 /** Words that point at people without naming them: relationships and the household as a whole (closed list). The other
  * person checks decide for these (lib/simple-chat/verify.ts askedAbout, spouseMeant). */
 const POINTS_AT_PEOPLE = /\b(?:husband|wife|spouse|partner|son|sons|daughter|daughters|child|children|kids?|baby|babies|mother|mum|mom|father|dad|parents?|brother|sister|siblings?|grand(?:mother|father|ma|pa|son|daughter|child|children|parents?)|in-laws?|mummy|mommy|mama|daddy|papa|helper|maid|nanny|auntie|aunty|aunt|uncle|cousin|niece|nephew|fianc[eé]e?|boyfriend|girlfriend|family|we|us|our|everyone|everybody|all\s+of\s+us|each\s+of\s+us)\b|妻子|老婆|丈夫|老公|儿子|兒子|女儿|女兒|孩子|妈妈|媽媽|爸爸|父亲|父親|母亲|母親/i;
-/** The speaker alone ("I", "me", "my"): the account's own member, whom the chat's other checks resolve (closed list). */
-const FIRST_PERSON = /\b(?:i|me|my|mine|myself|i'm|im|i've|i'd|i'll)\b/i;
-/** "I" that only asks or corrects, about no one ("I meant", "can I claim", "tell me"): not the speaker as the subject. */
-const ASKING = /\b(?:i\s+meant|i\s+mean|i\s+think|i\s+guess|i\s+wonder|i\s+want\s+to\s+know|i'?m\s+asking|i\s+was\s+asking|can\s+i|could\s+i|do\s+i|should\s+i|would\s+i|will\s+i|(?:tell|show|give|let)\s+me|my\s+(?:mistake|bad))\b/gi;
 /** Capitalised words a household writes that are never a person's name (closed list): sentence openers, pronouns, question
  * and function words, titles, days and months. */
 const NOT_NAMES = new Set(`a about actually after again also am an and any anyway are as at be because been before both but by can could
@@ -91,88 +86,79 @@ function looselyNamed(text: string, household: Household): string[] {
   return [...ownWords(household)].filter(([, own]) => own.some((w) => new RegExp(String.raw`(?<![\p{L}])${escape(w)}(?![\p{L}])`, "u").test(lower))).map(([p]) => p);
 }
 
-/** Between A and "not B": "A, not B", "A - not B", "A who broke his arm, not B", "A after all, not B". */
-const A_NOT_B = /^(?:'s)?\s*(?:(?:,|-)\s*|\s+(?:after\s+all|instead|then|this\s+time)\s*,?\s*|\s+who\s[^.!?]{0,60}?,?\s+)(?:and\s+)?not\s+(?:for\s+|about\s+)?$/iu;
-/** Between "not B" and A: "not B, A", "not B - A", "not B but A", "not B, it's A". */
-const NOT_B_A = /^(?:'s)?\s*(?:[,;-]\s*|\s+but\s+)(?:(?:it'?s|it\s+was|it\s+is)\s+)?$/iu;
-const NOT_BEFORE = /(?:^|[^\p{L}])not\s+(?:for\s+|about\s+)?$/iu;
+/** Words that may open a correction ("Actually it's", "Sorry,", "No, it was"), closed list. */
+const OPENER = String.raw`(?:(?:actually|sorry|oops|no|wait|correction|my\s+mistake|my\s+bad)\s*[,!.:;-]?\s*)*(?:(?:it'?s|it\s+was|it\s+is|that'?s|that\s+was)\s+)?`;
+/** A member as a placeholder in the marked text (marked()): \u0001<index>\u0002. */
+const P = String.raw`\u0001(\d+)\u0002`;
+/** What may follow the correction: nothing, an end of sentence and anything, or a short question after a comma or dash
+ * ("Daniel, not Grace - how much?"). Never a description ("Daniel - not Grace - was driving") and never the correction
+ * itself as a question ("Daniel, not Grace?"). */
+const TAIL = /^(?:'s)?\s*(?:$|[.!]+(?:\s|$)|(?:,|\s-)\s*(?:how|what|which|when|is|are|does|do|did|can|could|will|would|so|then|and\s+(?:how|what))\b)/iu;
 
-/** An explicit replacement in one message: the members it is now about (A) and those taken back (B). */
-function replacement(text: string, mentions: Mention[], previous: string[]): { a: string[]; b: string[] } | null {
-  for (const ma of mentions) for (const mb of mentions) {
-    if (ma.person === mb.person) continue;
-    if (ma.end <= mb.start && A_NOT_B.test(text.slice(ma.end, mb.start))) return { a: [ma.person], b: [mb.person] };
-    if (mb.end <= ma.start && NOT_BEFORE.test(text.slice(0, mb.start)) && NOT_B_A.test(text.slice(mb.end, ma.start))) return { a: [ma.person], b: [mb.person] };
-  }
-  // "I meant A" right after a turn about other members.
-  for (const ma of mentions) {
-    if (!/(?:^|[^\p{L}])I\s+mean(?:t)?\s+$/iu.test(text.slice(0, ma.start)) || !/^(?:'s)?\s*(?:[.!?,;]|-|$|not\b)/u.test(text.slice(ma.end))) continue;
-    const b = previous.filter((p) => p !== ma.person);
-    if (b.length && !previous.includes(ma.person)) return { a: [ma.person], b };
+/** The message with each member mention (nameMentions) replaced by a placeholder for that member, and the members by index. */
+function marked(text: string, mentions: Mention[], household: Household): { m: string; people: string[] } {
+  const people = household.members.map((x) => baseName(x.name));
+  let out = "", at = 0;
+  for (const x of mentions) { if (x.start < at) continue; out += text.slice(at, x.start) + `\u0001${people.indexOf(x.person)}\u0002`; at = x.end; }
+  return { m: out + text.slice(at), people };
+}
+/** Whether what follows the correction is allowed (TAIL) and never names B again, in any form ("How much does Grace get?"). */
+function tailOk(rest: string, b: string[], household: Household, people: string[]): boolean {
+  if (!TAIL.test(rest)) return false;
+  const plain = rest.replace(new RegExp(P, "gu"), (_, i: string) => ` ${people[Number(i)]} `);
+  return !looselyNamed(plain, household).some((n) => b.includes(n));
+}
+
+/** An explicit replacement, only as the whole message or its opening clause (round 3): "Daniel, not Grace", "Actually it's
+ * Daniel, not Grace - how much?", "Not Grace, Daniel", "Sorry, I meant Daniel" (right after a turn about B), each with A and
+ * B members written as names. Anything after it may only be a short question that does not name B. */
+function replacement(text: string, mentions: Mention[], previous: string[], household: Household): { a: string[]; b: string[] } | null {
+  const { m, people } = marked(text.trim(), mentions, household);
+  const shapes: [RegExp, (g: RegExpExecArray) => { a: string; b: string | null }][] = [
+    [new RegExp(String.raw`^${OPENER}${P}\s*(?:,|\s-)\s*not\s+${P}`, "iu"), (g) => ({ a: g[1], b: g[2] })],
+    [new RegExp(String.raw`^${OPENER}not\s+${P}\s*(?:,|\s-)\s*(?:(?:it'?s|it\s+was|it\s+is)\s+)?${P}`, "iu"), (g) => ({ a: g[2], b: g[1] })],
+    [new RegExp(String.raw`^(?:(?:sorry|oops|no|actually)\s*[,!.]?\s*)*I\s+mean(?:t)?\s+${P}(?:\s*(?:,|\s-)\s*not\s+${P})?`, "iu"), (g) => ({ a: g[1], b: g[2] ?? null })],
+  ];
+  for (const [re, pick] of shapes) {
+    const g = re.exec(m);
+    if (!g) continue;
+    const { a: ai, b: bi } = pick(g);
+    const a = people[Number(ai)];
+    const b = bi != null ? [people[Number(bi)]] : previous.filter((x) => x !== a);
+    if (!a || !b.length || b.includes(a) || (bi == null && previous.includes(a))) return null;
+    return tailOk(m.slice(g[0].length), b, household, people) ? { a: [a], b } : null;
   }
   return null;
 }
 
-/** "<X>, not <member>" with X written as a name that is no member, no closed-list word, no family word and no word the
- * household's documents print: the only shape that asks who they meant. */
+/** "<X>, not <member>" as the whole message or its opening clause, with X written as a name that is no member, no
+ * closed-list word, no family word and no word the household's documents print: the only shape that asks who they meant. */
 function unknownName(text: string, mentions: Mention[], household: Household): string | null {
+  const { m, people } = marked(text.trim(), mentions, household);
+  // Case-insensitive for the opener; the word itself must be written as a name (checked on its own below).
+  const gi = new RegExp(String.raw`^${OPENER}(\p{L}+)\s*(?:,|\s-)\s*not\s+${P}`, "iu").exec(m);
+  if (!gi || !/^\p{Lu}\p{Ll}+$/u.test(gi[1])) return null;
+  const word = gi[1], lower = word.toLowerCase();
   const printed = new Set(household.documents.flatMap((d) => [d.name, d.insurer ?? "", d.productName ?? "", ...d.pages.map((p) => p.text)])
     .join(" ").toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 2));
-  const known = new Set(household.members.flatMap((m) => nameWords(m.name)));
-  for (const mb of mentions) {
-    const m = /(?:^|[^\p{L}])(\p{Lu}\p{Ll}+)(\s*(?:,|-)\s*(?:and\s+)?not\s+(?:for\s+|about\s+)?)$/u.exec(text.slice(0, mb.start));
-    if (!m) continue;
-    const word = m[1], lower = word.toLowerCase();
-    // Standing on its own: no capitalised word joined to it before ("Mount Elizabeth, not Grace").
-    const before = text.slice(0, mb.start - m[2].length - word.length);
-    if (/\p{Lu}[\p{L}'-]* +$/u.test(before) && !NOT_NAMES.has((/(\p{L}[\p{L}'-]*) +$/u.exec(before)?.[1] ?? "").toLowerCase())) continue;
-    if (NOT_NAMES.has(lower) || known.has(lower) || printed.has(lower) || POINTS_AT_PEOPLE.test(lower)) continue;
-    return word;
-  }
-  return null;
+  const known = new Set(household.members.flatMap((x) => nameWords(x.name)));
+  if (NOT_NAMES.has(lower) || known.has(lower) || printed.has(lower) || POINTS_AT_PEOPLE.test(lower)) return null;
+  return tailOk(m.slice(gi[0].length), [people[Number(gi[2])]], household, people) ? word : null;
 }
 
-/** The people each message so far settles, oldest first; the result is for the latest message (the first of `said`).
- * `said`: the household's messages in this conversation, the latest first (as the chat passes them). */
+/** Who the latest message (the first of `said`) is about; the one before it settles only who "I meant <A>" takes back.
+ * A replacement narrows its own turn only: later turns go back to the other checks (round 3), while the answers it
+ * superseded stay superseded and are never read to the model again. `said`: the household's messages, latest first. */
 export function resolveSubjects(household: Household, said: readonly string[]): Subjects {
-  const members = household.members.map((m) => baseName(m.name));
-  let people: string[] | null = null;
-  let previous: string[] = [];
-  let last: Subjects = { people: null, change: "same", replaced: [], unknown: null };
-  for (const raw of [...said].reverse()) {
-    const text = norm(raw);
-    const mentions = nameMentions(text, household);
-    const before: string[] | null = people;
-    const about = before ?? previous;
-    let change: SubjectChange = "same", replaced: string[] = [], unknown: string | null = null;
-    const swap = replacement(text, mentions, about);
-    if (swap) {
-      // The only narrowing: an explicit replacement between two members.
-      people = [...new Set(swap.a)];
-      replaced = [...new Set([...swap.b, ...about])].filter((p) => !people!.includes(p));
-      change = "replace";
-    } else if ((unknown = unknownName(text, mentions, household))) {
-      // "Wei, not Grace": nobody's figures until the household says who they mean; nothing is superseded.
-      people = [];
-      change = "new";
-    } else if (before) {
-      // After a replacement: only ever more people. A relationship word or the speaker goes back to the other checks.
-      if (POINTS_AT_PEOPLE.test(text) || FIRST_PERSON.test(text.replace(ASKING, " "))) { people = null; change = "new"; }
-      else {
-        const more: string[] = [...new Set([...before, ...looselyNamed(text, household), ...(BOTH.test(text) && members.length === 2 ? members : [])])];
-        if (more.length > before.length) change = "add";
-        people = more;
-      }
-    } else {
-      people = null;
-      if (ADDS.test(text) && looselyNamed(text, household).length) change = "add";
-    }
-    // Never zero people, except when asking who they meant.
-    if (people && !people.length && !unknown) people = null;
-    previous = mentions.length ? [...new Set(mentions.map((m) => m.person))] : people ?? previous;
-    last = { people: people ? [...people] : null, change, replaced, unknown };
-  }
-  return last;
+  const latest = norm(said[0] ?? "");
+  const previousText = said[1] != null ? norm(said[1]) : "";
+  const previous = [...new Set(nameMentions(previousText, household).map((x) => x.person))];
+  const mentions = nameMentions(latest, household);
+  const swap = replacement(latest, mentions, previous, household);
+  if (swap) return { people: swap.a, change: "replace", replaced: swap.b.filter((p) => !swap.a.includes(p)), unknown: null };
+  const unknown = unknownName(latest, mentions, household);
+  if (unknown) return { people: [], change: "new", replaced: [], unknown };
+  return { people: null, change: ADDS.test(latest) && looselyNamed(latest, household).length ? "add" : "same", replaced: [], unknown: null };
 }
 
 /** The fixed reply when the household names someone it does not have: who is in the household, and the question back.
