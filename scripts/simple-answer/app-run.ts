@@ -9,7 +9,8 @@
  *                     its recorded model output is checked and assembled with today's code, nothing is read again
  *
  * A paid call is admitted only if it fits under the cap with no cache hit and a maximum-length answer. One call per turn,
- * no retries; a failed turn ends its conversation. Output holds real household text, so --out must be outside git. */
+ * except a turn that asked whose with no figure (hook.ts asksWhoseOnly), whose second call is admitted the same way and
+ * recorded; no retries; a failed turn ends its conversation. Output holds real household text, so --out must be outside git. */
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { ModelChoice } from "@/lib/ai/providers";

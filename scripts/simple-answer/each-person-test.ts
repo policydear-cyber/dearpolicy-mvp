@@ -143,6 +143,12 @@ async function main() {
     assert.match(answer.questions[0].text, /Who was diagnosed/);
     assert.equal(turn.eachPerson?.kept, true);
   });
+  await check("E3 members with a preferred name ('Wong Kai Ming (KM)'): still asked again", async () => {
+    const named = house([{ name: `${A} (KM)`, relationship: "self" }, { name: `${B} (Lan)`, relationship: "spouse" }]);
+    const { calls, figures } = await ask(SG1, [WHOSE_ONLY, EACH], { household: named });
+    assert.equal(calls.length, 2);
+    assert.equal(figures.length, 4);
+  });
   await check("E2 no member named at all ('what can be claimed?'): asked again too", async () => {
     const { calls, figures } = await ask("An early stage heart attack was diagnosed. What can be claimed?", [WHOSE_ONLY, EACH]);
     assert.equal(calls.length, 2);
@@ -200,6 +206,10 @@ async function main() {
   await check("C4 control: a household of one: never asked again", async () => {
     const one = house([{ name: A, relationship: "self" }], DOCS.slice(0, 2));
     assert.equal((await ask(SG1, [WHOSE_ONLY, EACH], { household: one })).calls.length, 1);
+  });
+  await check("C6 control: only one member has documents: never asked again (only their figures could be given)", async () => {
+    const onlyA = house(undefined, DOCS.slice(0, 2));
+    assert.equal((await ask(SG1, [WHOSE_ONLY, EACH], { household: onlyA })).calls.length, 1);
   });
   await check("C5 control: no question back (a plain not-found answer): never asked again", async () => {
     const { calls } = await ask(SG1, [{ bottomLine: "I couldn't find an early stage benefit for this in your documents.", statements: [], nextSteps: [], question: null }, EACH]);

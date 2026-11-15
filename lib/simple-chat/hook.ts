@@ -257,11 +257,15 @@ export function shownAmounts(answer: { statements?: { amount?: unknown }[] }): n
 /** Words that ask who is meant: "whose", "who", "which of you" (closed list). */
 const ASKS_WHO = /\b(?:whose|who|whom|which\s+(?:of\s+(?:you|them|the)\b|person|member|adult|child))/i;
 /** Whether a checked answer only asks whose it is: the chat is for no one in particular (no member chosen, no spouse the
- * documents settle), the household has more than one member, the message names no member ("I", or no one), and the answer
- * shows no figure but asks who is meant, by "whose"/"who" or by naming two members. General: no name or product is
+ * documents settle), more than one member has a document linked to them (with one, there is only one member's figures to
+ * give, and asking again only costs time: EFF-20261115-02, CL3), the message names no member ("I", or no one), and the
+ * answer shows no figure but asks who is meant, by "whose"/"who" or by naming two members. General: no name or product is
  * written here. */
 export function asksWhoseOnly(answer: { statements?: { amount?: unknown }[]; questions?: { text: string }[] }, message: string, household: Household, personSettled: boolean): boolean {
-  if (personSettled || household.members.length < 2 || namesSomeone([message], household)) return false;
+  if (personSettled || namesSomeone([message], household)) return false;
+  // A member's name may carry their preferred name ("Tan Boon Huat (Ben)"); documents are linked by the name before it.
+  const linked = (name: string) => household.documents.some((d) => (d.linkedPeople ?? []).includes(name.replace(/\s*\([^)]*\)\s*$/, "")));
+  if (household.members.filter((m) => linked(m.name)).length < 2) return false;
   if (shownAmounts(answer) > 0) return false;
   const question = (answer.questions ?? []).map((q) => q.text).join(" ");
   if (!question) return false;
