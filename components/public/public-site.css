@@ -79,18 +79,18 @@
 .auth-frame .page a:not(.button) { color: var(--brand-ink); font-weight: 600; }
 .auth-frame .page a:not(.button):hover { text-decoration: underline; }
 
-/* Card wallet: the hero holds a fanned hand of cover cards above the example answer. */
+/* Wallet of cover: the hero holds a fan of policy sheets above the example answer. */
 .landing-wallet { display: grid; gap: 8px; min-width: 0; }
-.landing-fan { position: relative; height: 230px; }
-.landing-fan .wallet-card { position: absolute; width: min(250px, 54%); top: 30px; }
-.landing-fan .wallet-card:nth-child(1) { left: 0; transform: rotate(-9deg); }
-.landing-fan .wallet-card:nth-child(2) { left: 23%; top: 12px; transform: rotate(-2deg); }
-.landing-fan .wallet-card:nth-child(3) { left: 46%; top: 36px; transform: rotate(6deg); }
+.landing-fan { position: relative; height: 250px; }
+.landing-fan .policy-sheet { position: absolute; width: min(180px, 40%); top: 20px; }
+.landing-fan .policy-sheet:nth-child(1) { left: 6%; transform: rotate(-8deg); }
+.landing-fan .policy-sheet:nth-child(2) { left: 30%; top: 4px; transform: rotate(-1deg); }
+.landing-fan .policy-sheet:nth-child(3) { left: 54%; top: 24px; transform: rotate(6deg); }
 @media (max-width: 640px) {
-  .landing-fan { height: 200px; overflow: hidden; margin: 0 -16px; }
-  .landing-fan .wallet-card { width: 230px; left: 50% !important; margin-left: -115px; top: 20px; }
-  .landing-fan .wallet-card:nth-child(1) { transform: rotate(-12deg) translateX(-34px); }
-  .landing-fan .wallet-card:nth-child(2) { transform: rotate(9deg) translateX(34px); }
-  .landing-fan .wallet-card:nth-child(3) { transform: none; }
+  .landing-fan { height: 220px; overflow: hidden; margin: 0 -16px; }
+  .landing-fan .policy-sheet { width: 150px; }
+  .landing-fan .policy-sheet-head { font-size: 13px; padding: 12px; }
+  .landing-fan .policy-sheet:nth-child(1) { left: 8%; }
+  .landing-fan .policy-sheet:nth-child(2) { left: 31%; }
+  .landing-fan .policy-sheet:nth-child(3) { left: 54%; }
 }
-.landing-fan .wallet-card strong { font-size: 16px; }

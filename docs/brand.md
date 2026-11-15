@@ -60,29 +60,32 @@ Rules of thumb:
 | `--warn-text` | `#7a5600` | `#ecc46e` |
 | `--critical` | `#a3342a` | `#f08b7d` |
 | `--person-1..4` + `-tint` | blue, plum, teal, indigo | lighter inks, deep tints |
-| `--card-*` cover cards | hospital `#14213d`, hospital cash `#7b2d26`, death `#1f5135`, critical illness `#2f4b7c`, disability `#0f5560`, accident `#3a3f47`, travel `#6b4f1d`, home and motor `#4a3b6b`, savings `#4d3f2a`, other `#374151` | same (cards are objects) |
+| `--cover-*` cover sheets | hospital `#14213d`, hospital cash `#7b2d26`, death `#1f5135`, critical illness `#2f4b7c`, disability `#0f5560`, accident `#3a3f47`, travel `#6b4f1d`, home and motor `#4a3b6b`, savings `#4d3f2a`, other `#374151` | same (sheets are objects) |
 
-### Look (15 Nov 2026, "Card wallet", DC's choice)
+### Look (15 Nov 2026, "wallet of cover", DC's choice)
 
-The household's cover is a wallet of cards. Mockups of every page:
-`/mnt/project-files/ux-design/wallet-pages/` (gallery shared with DC).
+DC chose the wallet style, then ruled out credit-card imagery ("we are not
+really working with cards"): no chips, card numbers, card readers or bank
+card shapes anywhere. The household's cover is a wallet of stacked policy
+sheets. Mockups: `/mnt/project-files/ux-design/wallet-pages/`; before and
+after: `/mnt/project-files/ux-design/wallet-no-cards/`.
 
-- Each kind of cover found for a person is a card on Home: the kind's
-  fixed colour (`--card-*`, the same on every page, so navy always means
-  hospital), a gold chip, the kind's icon in a ring, the amount large,
-  and where it comes from in a monospaced line like a card number.
+- Each kind of cover found for a person is a sheet on Home: the kind's
+  fixed colour (`--cover-*`, the same on every page, so navy always means
+  hospital), a folded corner, the policy's pages peeking out underneath,
+  the kind's icon, the amount large, and where it comes from on the
+  sheet's footer line.
 - Cover on file but not confirmed is an empty dashed slot, never a
-  coloured card. Kinds not found sit in one dashed line under the cards.
+  coloured sheet. Kinds not found sit in one dashed line under the sheets.
 - The page is cool grey; panels are white with an 18px radius. Buttons
   are near-black squared keys (12px); the menu and the people switch are
   segmented bars where the chosen item is the white key.
-- Drawn cards elsewhere: the sign-in form is a member card (navy face,
-  chip, magnetic stripe), the landing page holds a fanned hand of cards,
-  a missing page is a grey card stamped DECLINED, an answer's figure is
-  printed on a dark card face. Drawn cards never show a household's
-  figure unless it is the household's own card on Home or in an answer.
+- Drawn sheets elsewhere (`components/policy-sheet.tsx`): the landing page
+  holds a fan of policy sheets; a missing page is a sheet stamped "Not on
+  file"; sign in sits in the household's policy folder with a tab. Drawn
+  sheets never show a household's figure.
 - A member's colour (`data-person` 0–3) is identity only: their initial
-  and the band across the top of their card on Account settings.
+  and the band across the top of their sheet on Account settings.
 
 ### Earlier look (15 Nov 2026, "family colours")
 
@@ -107,8 +110,7 @@ card borders between siblings are not status cues and are not held to 3:1.
 ## Type
 
 One family, Sora, served from the site by `next/font` and set as
-`--font-face` on the page; JetBrains Mono (`--font-mono`) only for the
-number line on a card; the system UI stack in `--font` is the
+`--font-face` on the page; the system UI stack in `--font` is the
 fallback, including for CJK names on documents.
 
 | Token | Size | Use |

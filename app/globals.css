@@ -78,7 +78,6 @@
   --t-hover: 120ms; --t-state: 240ms; --t-move: 340ms; --ease: cubic-bezier(.2, .7, .2, 1);
   --nav-h: 60px;
   --font: var(--font-face), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", sans-serif;
-  --font-mono: var(--font-mono-face), ui-monospace, "SFMono-Regular", Menlo, monospace;
 
   /* Family members: one identity hue each, by their place in the household.
      Never green, red, amber or slate: those colours are status. */
@@ -87,16 +86,17 @@
   --person-3: #0b5560; --person-3-tint: #ddf1f2;   /* teal */
   --person-4: #3a3590; --person-4-tint: #e9e8fb;   /* indigo */
 
-  /* Card wallet (docs/brand.md): each kind of cover is a card with one fixed colour, in both themes.
-     White text on every card fill is at least 7:1. Cards, chips and slots are drawn, not status. */
-  --card-hospital: #14213d; --card-cash: #7b2d26; --card-death: #1f5135; --card-ci: #2f4b7c; --card-disability: #0f5560;
-  --card-accident: #3a3f47; --card-travel: #6b4f1d; --card-property: #4a3b6b; --card-savings: #4d3f2a; --card-other: #374151;
-  --on-card: #ffffff; --on-card-2: rgba(255, 255, 255, .8); --card-ring: rgba(255, 255, 255, .7);
-  --card-sheen: rgba(255, 255, 255, .18); --card-grain: rgba(255, 255, 255, .035); --card-top: rgba(255, 255, 255, .22);
-  --card-shadow: 0 12px 24px -14px rgba(13, 17, 23, .55); --lift: 0 1px 3px rgba(13, 17, 23, .08);
-  --chip-1: #f0d78c; --chip-2: #b8954a; --chip-mark: rgba(0, 0, 0, .25);
+  /* Wallet of cover (docs/brand.md): each kind of cover is a stacked policy sheet with one fixed colour, in both
+     themes. White text on every cover fill is at least 7:1. Sheets and slots are drawn, not status. */
+  --cover-hospital: #14213d; --cover-cash: #7b2d26; --cover-death: #1f5135; --cover-ci: #2f4b7c; --cover-disability: #0f5560;
+  --cover-accident: #3a3f47; --cover-travel: #6b4f1d; --cover-property: #4a3b6b; --cover-savings: #4d3f2a; --cover-other: #374151;
+  --on-cover: #ffffff; --on-cover-2: rgba(255, 255, 255, .8); --cover-ring: rgba(255, 255, 255, .7);
+  --cover-sheen: rgba(255, 255, 255, .18); --cover-grain: rgba(255, 255, 255, .035); --cover-top: rgba(255, 255, 255, .22);
+  --sheet-shadow: 0 12px 24px -14px rgba(13, 17, 23, .55); --lift: 0 1px 3px rgba(13, 17, 23, .08);
+  --paper-fold: rgba(13, 17, 23, .14);
   --slot-line: #a3abb7;
-  --r-card: 18px;
+  --paper: #ffffff; --paper-line: #dfe3e8;
+  --r-sheet: 18px;
 
 }
 :root[data-theme="dark"] {
@@ -126,6 +126,7 @@
 
     --lift: 0 1px 3px rgba(0, 0, 0, .4);
     --slot-line: #5c6573;
+    --paper: #232830; --paper-line: #353c46;
 }
 :root[data-theme="dark"] .brand-logo, :root[data-theme="dark"] .big-mark { background: var(--logo-plate); padding: 6px 10px; border-radius: var(--r-sm); }
 
@@ -1636,10 +1637,12 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
 @media (min-width: 901px) and (max-width: 1240px) { .sidebar .privacy-pill { display: none; } .nav-item { padding: 8px 10px; } }
 
 /* ==========================================================================
-   Card wallet (DC chose it 15 Nov 2026; mockups in docs/brand.md).
-   The household's cover is a wallet of cards: one card per kind of cover, one fixed colour per kind,
-   a gold chip, the insurer's mark, a masked number. Everything else is quiet grey and white, with
-   near-black buttons. Missing cover is an empty dashed slot, never a coloured card.
+   Wallet of cover (DC chose the wallet style 15 Nov 2026, then: no credit-card
+   imagery, "we are not really working with cards"). The household's cover is a
+   wallet of stacked policy sheets: one sheet per kind of cover, one fixed colour
+   per kind, a folded corner, the pages of the policy peeking out underneath.
+   Everything else is quiet grey and white, with near-black buttons. Missing
+   cover is an empty dashed slot, never a coloured sheet.
    ========================================================================== */
 h1 { font-weight: 700; letter-spacing: -.025em; }
 h2 { font-weight: 650; letter-spacing: -.015em; }
@@ -1657,8 +1660,8 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 .button.secondary { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--line-strong); }
 .button.secondary:hover { background: var(--surface-2); }
 
-/* Panels sit on the grey page as white cards. */
-.upload-panel, .profile-add-panel, .document-card, .reminder-card, .member-strip, .empty-card, .empty-row, .answer-card { border-radius: var(--r-card); }
+/* Panels sit on the grey page as white sheets. */
+.upload-panel, .profile-add-panel, .document-card, .reminder-card, .member-strip, .empty-card, .empty-row, .answer-card { border-radius: var(--r-sheet); }
 
 /* People: a segmented switch, the chosen person is the white key. */
 .member-strip { background: transparent; padding: 0; grid-template-columns: auto minmax(0, 1fr); }
@@ -1668,105 +1671,98 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 .member-pill.active { background: var(--surface); border-color: transparent; box-shadow: var(--lift); }
 .member-dot { border-radius: 8px; }
 
-/* The card itself. */
-.card-chip { display: none; }
-.coverage-card[data-card="hospital"] { --card: var(--card-hospital); }
-.coverage-card[data-card="cash"] { --card: var(--card-cash); }
-.coverage-card[data-card="death"] { --card: var(--card-death); }
-.coverage-card[data-card="ci"] { --card: var(--card-ci); }
-.coverage-card[data-card="disability"] { --card: var(--card-disability); }
-.coverage-card[data-card="accident"] { --card: var(--card-accident); }
-.coverage-card[data-card="travel"] { --card: var(--card-travel); }
-.coverage-card[data-card="property"] { --card: var(--card-property); }
-.coverage-card[data-card="savings"] { --card: var(--card-savings); }
-.coverage-card[data-card="other"] { --card: var(--card-other); }
-.coverage-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
-.coverage-card.covered { position: relative; overflow: hidden; isolation: isolate; background: var(--card); color: var(--on-card); border: 0; border-radius: var(--r-card);
-  min-height: 200px; padding: 18px 20px; gap: 4px; box-shadow: inset 0 1px 0 var(--card-top), var(--card-shadow); transition: transform var(--t-state) var(--ease); }
-.coverage-card.covered::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background: radial-gradient(120% 80% at 100% 0, var(--card-sheen), transparent 60%), repeating-linear-gradient(115deg, var(--card-grain) 0 2px, transparent 2px 6px); }
+/* The cover sheet: a coloured policy sheet with its pages stacked underneath and a folded corner. */
+.coverage-card[data-card="hospital"] { --cover: var(--cover-hospital); }
+.coverage-card[data-card="cash"] { --cover: var(--cover-cash); }
+.coverage-card[data-card="death"] { --cover: var(--cover-death); }
+.coverage-card[data-card="ci"] { --cover: var(--cover-ci); }
+.coverage-card[data-card="disability"] { --cover: var(--cover-disability); }
+.coverage-card[data-card="accident"] { --cover: var(--cover-accident); }
+.coverage-card[data-card="travel"] { --cover: var(--cover-travel); }
+.coverage-card[data-card="property"] { --cover: var(--cover-property); }
+.coverage-card[data-card="savings"] { --cover: var(--cover-savings); }
+.coverage-card[data-card="other"] { --cover: var(--cover-other); }
+.coverage-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 26px 18px; padding-bottom: 8px; }
+.coverage-card.covered { position: relative; isolation: isolate; background: var(--cover); color: var(--on-cover); border: 0; border-radius: 6px 26px 14px 14px;
+  min-height: 200px; padding: 18px 20px; gap: 4px;
+  box-shadow: inset 0 1px 0 var(--cover-top), 0 7px 0 -3px color-mix(in srgb, var(--cover) 45%, var(--bg)), 0 14px 0 -7px color-mix(in srgb, var(--cover) 22%, var(--bg)), var(--sheet-shadow);
+  transition: transform var(--t-state) var(--ease); }
+.coverage-card.covered::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(120% 80% at 100% 0, var(--cover-sheen), transparent 60%), repeating-linear-gradient(0deg, var(--cover-grain) 0 1px, transparent 1px 4px); }
+/* The folded corner, top right, like a document's dog-ear. */
+.coverage-card.covered::after { content: ""; position: absolute; top: 0; right: 0; width: 26px; height: 26px; border-radius: 0 26px 0 6px;
+  background: linear-gradient(225deg, var(--bg) 50%, color-mix(in srgb, var(--cover) 70%, var(--on-cover)) 50%); box-shadow: -2px 2px 3px var(--paper-fold); }
 .coverage-card.covered:hover { transform: translateY(-2px); border: 0; }
-.coverage-card.covered .card-chip { display: block; width: 38px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, var(--chip-1), var(--chip-2)); position: relative; }
-.coverage-card.covered .card-chip::after { content: ""; position: absolute; inset: 7px 10px; border: 1px solid var(--chip-mark); border-radius: 3px; }
-.coverage-card.covered .coverage-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.coverage-card.covered .coverage-icon { width: 34px; height: 34px; background: transparent; border: 1.5px solid var(--card-ring); color: var(--on-card); }
+.coverage-card.covered .coverage-top { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 10px; }
+.coverage-card.covered .coverage-icon { width: 38px; height: 38px; border-radius: 12px; background: transparent; border: 1.5px solid var(--cover-ring); color: var(--on-cover); }
 .coverage-card.covered .coverage-icon svg { width: 18px; height: 18px; }
 .coverage-card.covered .evidence-dot { display: none; }
 .coverage-card.covered .coverage-name { min-height: 0; font-weight: 600; }
-.coverage-card.covered .coverage-status { order: 9; font-size: var(--fs-xs); font-weight: 600; color: var(--on-card-2); display: inline-flex; gap: 4px; align-items: center; }
+.coverage-card.covered .coverage-status { order: 9; font-size: var(--fs-xs); font-weight: 600; color: var(--on-cover-2); display: inline-flex; gap: 4px; align-items: center; }
 .coverage-card.covered .coverage-status svg { width: 14px; height: 14px; }
-.coverage-card.covered .coverage-amount { font-size: 26px; font-weight: 700; letter-spacing: -.01em; line-height: 1.1; color: var(--on-card); }
-.coverage-card.covered small { color: var(--on-card-2); font-size: var(--fs-xs); margin-top: 6px; }
-.coverage-card.covered small:last-of-type { font-family: var(--font-mono); font-size: 11px; letter-spacing: .03em; margin-top: auto; padding-top: 10px; }
-/* Cover on file but not confirmed: an empty slot the card will fill. */
-.coverage-card.on_file, .coverage-card.needs_review { background: transparent; border: 2px dashed var(--unresolved-line); border-radius: var(--r-card); }
+.coverage-card.covered .coverage-amount { font-size: 26px; font-weight: 700; letter-spacing: -.01em; line-height: 1.1; color: var(--on-cover); }
+.coverage-card.covered small { color: var(--on-cover-2); font-size: var(--fs-xs); margin-top: 6px; }
+/* Where it comes from: the footer line of the sheet, under a thin rule. */
+.coverage-card.covered small:last-of-type { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--cover-top); }
+/* Cover on file but not confirmed: an empty slot the sheet will fill. */
+.coverage-card.on_file, .coverage-card.needs_review { background: transparent; border: 2px dashed var(--unresolved-line); border-radius: 6px 26px 14px 14px; }
 .coverage-card.on_file .coverage-icon, .coverage-card.needs_review .coverage-icon { background: var(--surface); }
 .home-not-found { background: transparent; border: 2px dashed var(--slot-line); }
 
-/* Documents: slot a document into the reader. */
-.upload-panel { position: relative; padding-top: 34px; }
-.upload-panel::before { content: ""; position: absolute; left: 20px; right: 20px; top: 14px; height: 8px; border-radius: 4px; background: var(--ink); opacity: .85; }
-.progress-track { border-radius: 4px; }
-.policy-logo { border-radius: 50%; }
+/* What the household pays a month: the one dark panel on Home, like a statement total. */
+.summary-card.premium-feature { background: var(--accent); border-color: transparent; color: var(--accent-ink); border-radius: var(--r-sheet); }
+.summary-card.premium-feature .summary-label, .summary-card.premium-feature .summary-sub, .summary-card.premium-feature > strong small, .summary-card.premium-feature .text-link { color: var(--accent-ink); opacity: .85; }
+.summary-card.premium-feature .text-link { opacity: 1; text-decoration: underline; text-underline-offset: 3px; }
 
-/* Family: each person is a member card with their colour as the band. */
+/* Documents: the upload panel is a stack of papers ready to file. */
+.upload-panel { box-shadow: 0 6px 0 -3px var(--paper-line), 0 12px 0 -6px var(--bg-2); margin-bottom: 12px; }
+.policy-logo { border-radius: 10px; }
+
+/* Family: each person's sheet carries their colour as a band across the top. */
 .profile-card[data-person] { padding-top: 0; overflow: hidden; }
 .profile-card[data-person]::before { content: ""; display: block; height: 10px; margin: 0 -16px 14px; background: var(--p); }
 
-/* An answer's figure is printed on a card face. */
-.answer-card-amount { order: -1; margin: -12px -14px 6px; padding: 14px 16px 16px; border-radius: var(--r-card) var(--r-card) 0 0; background: var(--card-other); color: var(--on-card);
-  background-image: radial-gradient(120% 80% at 100% 0, var(--card-sheen), transparent 60%), repeating-linear-gradient(115deg, var(--card-grain) 0 2px, transparent 2px 6px); }
+/* An answer's figure is printed in the dark header of its sheet. */
+.answer-card-amount { order: -1; margin: -12px -14px 6px; padding: 14px 16px 16px; border-radius: var(--r-sheet) var(--r-sheet) 0 0; background: var(--cover-other); color: var(--on-cover); }
 .answer-card { overflow: hidden; }
-.answer-card-amount strong { color: var(--on-card); font-size: 1.6rem; }
-.answer-card-amount small { color: var(--on-card-2); }
-.answer-card.printed .answer-card-amount { background-color: var(--surface-2); background-image: none; color: var(--ink); }
+.answer-card-amount strong { color: var(--on-cover); font-size: 1.6rem; }
+.answer-card-amount small { color: var(--on-cover-2); }
+.answer-card.printed .answer-card-amount { background: var(--surface-2); color: var(--ink); }
 .answer-card.printed .answer-card-amount strong { color: var(--ink-2); }
 .answer-card.printed .answer-card-amount small { color: var(--muted); }
 
-/* Page not found: a card that was declined. */
-.declined-card { position: relative; overflow: hidden; isolation: isolate; width: min(340px, 100%); aspect-ratio: 1.586; border-radius: var(--r-card); padding: 18px 20px; margin: 4px 0 28px;
-  background: var(--card-accident); color: var(--on-card); display: flex; flex-direction: column; justify-content: space-between; transform: rotate(-3deg);
-  box-shadow: inset 0 1px 0 var(--card-top), var(--card-shadow); }
-.declined-card::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(120% 80% at 100% 0, var(--card-sheen), transparent 60%), repeating-linear-gradient(115deg, var(--card-grain) 0 2px, transparent 2px 6px); }
-.declined-card .card-chip { display: block; width: 38px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, var(--chip-1), var(--chip-2)); }
-.declined-card .declined-top { display: flex; justify-content: space-between; align-items: center; }
-.declined-card .declined-badge { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--card-ring); display: grid; place-items: center; font-size: 11px; font-weight: 700; }
-.declined-card strong { font-size: 22px; }
-.declined-card .declined-no { font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; color: var(--on-card-2); }
-.declined-card .declined-stamp { position: absolute; right: 18px; bottom: 40px; transform: rotate(-10deg); border: 3px solid var(--critical-tint); color: var(--critical-tint);
-  font-weight: 700; letter-spacing: .14em; padding: 4px 12px; border-radius: 8px; font-size: 18px; text-transform: uppercase; }
+/* A drawn policy sheet (components/policy-sheet.tsx): the landing page and a missing page. */
+.policy-sheet { --cover: var(--cover-other); position: relative; overflow: hidden; background: var(--paper); color: var(--ink); border-radius: 6px 22px 10px 10px;
+  box-shadow: var(--sheet-shadow), 0 0 0 1px var(--paper-line); display: grid; align-content: start; aspect-ratio: .78; }
+.policy-sheet[data-card="hospital"] { --cover: var(--cover-hospital); }
+.policy-sheet[data-card="death"] { --cover: var(--cover-death); }
+.policy-sheet[data-card="ci"] { --cover: var(--cover-ci); }
+.policy-sheet[data-card="accident"] { --cover: var(--cover-accident); }
+.policy-sheet::after { content: ""; position: absolute; top: 0; right: 0; width: 24px; height: 24px; border-radius: 0 22px 0 6px;
+  background: linear-gradient(225deg, var(--bg) 50%, var(--paper-line) 50%); }
+.policy-sheet-head { background: var(--cover); color: var(--on-cover); padding: 14px 16px; display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 15px; }
+.policy-sheet-head svg { width: 18px; height: 18px; flex: none; }
+.policy-sheet-body { padding: 14px 16px; display: grid; gap: 8px; }
+.policy-sheet-body i { display: block; height: 6px; border-radius: 3px; background: var(--paper-line); }
+.policy-sheet-body i:nth-child(3n+2) { width: 72%; }
+.policy-sheet-body i:nth-child(4n) { width: 55%; }
+.policy-sheet-body b { display: block; height: 10px; width: 46%; border-radius: 3px; background: var(--cover); opacity: .85; margin-top: 4px; }
+
+/* Page not found: a sheet missing from the file, with a stamp. */
+.not-found .policy-sheet { width: min(220px, 70%); margin: 4px 0 28px; transform: rotate(-3deg); }
+.missing-stamp { position: absolute; left: 50%; top: 56%; transform: translate(-50%, -50%) rotate(-12deg); border: 3px solid var(--critical); color: var(--critical);
+  background: var(--paper); font-weight: 700; letter-spacing: .12em; padding: 4px 12px; border-radius: 8px; font-size: 15px; text-transform: uppercase; white-space: nowrap; }
+
+/* Sign in: the form is inside the household's policy folder, its tab says whose it is. */
+.auth-frame .page:has(> .folder-face), .page:has(> .folder-face) { background: var(--surface); border-radius: 6px 22px 22px 22px; padding: 0 24px 24px !important;
+  margin-top: clamp(48px, 9vh, 100px); margin-bottom: 40px; overflow: visible; box-shadow: var(--sheet-shadow); position: relative; }
+.folder-face { position: relative; margin: 0 -24px 22px; padding: 26px 24px 26px; background: var(--cover-hospital); color: var(--on-cover); border-radius: 6px 22px 0 0; }
+.folder-tab { position: absolute; left: 0; bottom: 100%; background: var(--cover-hospital); color: var(--on-cover-2); font-size: 12px; font-weight: 600; padding: 7px 16px 6px; border-radius: 10px 10px 0 0; white-space: nowrap; }
+.folder-face h1 { color: var(--on-cover); margin: 0 0 6px; }
+.folder-face .lead { color: var(--on-cover-2); margin: 0; }
+@media (max-width: 760px) { .auth-frame .page:has(> .folder-face) { margin-inline: 16px; } }
 
 @media (max-width: 620px) {
   .coverage-grid { grid-template-columns: minmax(0, 1fr); }
   .member-strip { grid-template-columns: minmax(0, 1fr); }
 }
-/* What the household pays a month: the one dark panel on Home, like a statement total. */
-.summary-card.premium-feature { background: var(--accent); border-color: transparent; color: var(--accent-ink); border-radius: var(--r-card); }
-.summary-card.premium-feature .summary-label, .summary-card.premium-feature .summary-sub, .summary-card.premium-feature > strong small, .summary-card.premium-feature .text-link { color: var(--accent-ink); opacity: .85; }
-.summary-card.premium-feature .text-link { opacity: 1; text-decoration: underline; text-underline-offset: 3px; }
-
-/* A drawn card (components/wallet-card.tsx) and the sign-in member card. */
-.wallet-card { --card: var(--card-other); position: relative; overflow: hidden; isolation: isolate; aspect-ratio: 1.586; border-radius: var(--r-card); padding: 18px 20px;
-  background: var(--card); color: var(--on-card); display: flex; flex-direction: column; justify-content: space-between; box-shadow: inset 0 1px 0 var(--card-top), var(--card-shadow); }
-.wallet-card::before, .member-card-face::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background: radial-gradient(120% 80% at 100% 0, var(--card-sheen), transparent 60%), repeating-linear-gradient(115deg, var(--card-grain) 0 2px, transparent 2px 6px); }
-.wallet-card[data-card="hospital"] { --card: var(--card-hospital); }
-.wallet-card[data-card="death"] { --card: var(--card-death); }
-.wallet-card[data-card="ci"] { --card: var(--card-ci); }
-.wallet-card[data-card="accident"] { --card: var(--card-accident); }
-.wallet-card .card-chip, .member-card-face .card-chip { display: block; width: 38px; height: 28px; border-radius: 6px; background: linear-gradient(135deg, var(--chip-1), var(--chip-2)); }
-.wallet-card-top { display: flex; justify-content: space-between; align-items: center; }
-.wallet-card-mark { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--card-ring); display: grid; place-items: center; font-size: 11px; font-weight: 700; }
-.wallet-card strong { display: flex; gap: 8px; align-items: center; font-size: 20px; }
-.wallet-card strong svg { width: 20px; height: 20px; }
-.wallet-card-no { font-family: var(--font-mono); font-size: 12px; letter-spacing: .12em; color: var(--on-card-2); }
-
-.auth-frame .page:has(> .member-card-face), .page:has(> .member-card-face) { background: var(--surface); border-radius: 22px; padding: 0 24px 24px !important; margin-top: clamp(24px, 6vh, 64px); margin-bottom: 40px; overflow: hidden; box-shadow: var(--card-shadow); }
-.member-card-face { position: relative; isolation: isolate; margin: 0 -24px; padding: 22px 24px 28px; background: var(--card-hospital); color: var(--on-card); }
-.member-card-face h1 { color: var(--on-card); margin: 24px 0 6px; }
-.member-card-face .lead { color: var(--on-card-2); margin: 0; }
-.member-card-face .card-chip { position: absolute; left: 24px; top: 22px; }
-.member-card-label { position: absolute; right: 24px; top: 26px; font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--on-card-2); }
-.member-card-face h1 { padding-top: 26px; }
-.member-card-stripe { height: 34px; margin: 0 -24px 20px; background: var(--ink); }
-@media (max-width: 760px) { .auth-frame .page:has(> .member-card-face) { margin-inline: 16px; } }

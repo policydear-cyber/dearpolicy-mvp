@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon, type IconName } from "@/components/icons";
-import { WalletCard } from "@/components/wallet-card";
+import { PolicySheet } from "@/components/policy-sheet";
 import { GUIDES } from "@/lib/learn/content";
 import { SITE_DESCRIPTION } from "@/lib/public-site/site";
 
@@ -60,11 +60,11 @@ export default function WelcomePage() {
           <p className="landing-small">It explains your policies. It doesn&rsquo;t sell you one.</p>
         </div>
         <div className="landing-wallet">
-        {/* A fanned hand of cover cards, drawn: one card per kind of cover is how Home shows a person's cover. */}
+        {/* A fan of policy sheets, drawn: one sheet per kind of cover is how Home shows a person's cover. */}
         <div className="landing-fan">
-          <WalletCard card="ci" icon="pulse" title="Critical illness" line="•••• 2231" mark="LP" />
-          <WalletCard card="death" icon="heart" title="Death" line="•••• 7850" mark="GS" />
-          <WalletCard card="hospital" icon="hospital" title="Hospital stay" line="•••• 0412" mark="AS" />
+          <PolicySheet card="ci" icon="pulse" title="Critical illness" />
+          <PolicySheet card="death" icon="heart" title="Death" />
+          <PolicySheet card="hospital" icon="hospital" title="Hospital stay" />
         </div>
         <figure className="landing-example" aria-label="Example question and answer, using a made-up family and insurer">
           <figcaption>Example with a made-up family and insurer</figcaption>
