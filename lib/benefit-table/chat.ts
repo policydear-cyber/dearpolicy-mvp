@@ -11,7 +11,7 @@ import { benefitNamesRead, figureText, periodWords } from "./assemble";
 import { benefitName, benefitNames, qualifierText } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, stayBlock, STAY_BLOCK_WORDS, MAX_DAY_FIELD, verifyAnswer } from "@/lib/simple-chat/verify";
+import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, readStayRule, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { noteMultiple, sameNote, type Multiplier, type RowFacts } from "./multiplier";
 import { withoutChildLimit } from "./child-limit";
@@ -1616,26 +1616,19 @@ function sameBenefit(a: string, b: string): boolean {
 const sameFigure = (a: Figure, b: Figure) => (a.kind === "printed" || a.kind === "worked_out") && (b.kind === "printed" || b.kind === "worked_out")
   && Math.abs(a.amount - b.amount) < 0.005 && (a.kind === "printed" ? a.unit : "lump_sum") === (b.kind === "printed" ? b.unit : "lump_sum");
 
-/** Whether a daily row's printed words (its line, the lines that continue it, and its quote) hold no limit but its most
- * days: no money figure other than the daily rate, and no cap word once "max 30 days" is taken out. A stay is never worked
- * out past an overall limit ("S$100 a day, max 30 days, overall limit S$2,000", Critic R108-1). */
-// "Maximum 30 days", "up to a maximum of 30 days", or "up to 30 days": the most days the rate is paid, not a money cap.
-const MAX_DAYS = /\b(?:(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?\d+\)?\s*(?:continuous\s+|consecutive\s+)?days?\b|up\s+to\s+\(?\d+\)?\s*(?:continuous\s+|consecutive\s+)?days?\b(?=\s*(?:$|[,.;:)\n]|(?:per|each|a|an|in\s+(?:any|one|a|each|total|all)|for\s+(?:any|one|each|all)|of\s+(?:(?:continuous|consecutive)\s+)?(?:hospital\w*|confinement|stay|admission|in-?patient\w*)|in\s+hospital|during)\b)))/gi;
+/** Whether a daily row's printed words (its line, the lines that continue it, and its quote) give a stay rule the checks
+ * can work out: no money figure other than the daily rate and a yearly cap in its own currency, and no other cap word. A
+ * stay is never worked out past an overall limit ("S$100 a day, max 30 days, overall limit S$2,000", Critic R108-1). */
 function dailyRateAlone(row: ChatRow, household: Household): boolean {
   if (row.figure.kind !== "printed") return false;
   const found = locateQuote(household, row.source.excerpt, row.docIndex);
   const page = found && household.documents[found.docIndex].pages.find((p) => p.page === found.page);
   if (!found || !page) return false;
-  // The row with every line under it up to the next heading, non-benefit fields left out (stayBlock): a limit, aggregate,
-  // day rule or condition anywhere below the row gives no total (Critic P392, TE #392).
-  const block = stayBlock(page.text, found.offset);
-  const below = block.tail.replace(MAX_DAY_FIELD, " ");
-  if (STAY_BLOCK_WORDS.test(below)) return false;
-  const words = `${block.text}\n${found.excerpt}`;
-  const daily = row.figure.amount;
-  if (moneyFiguresIn(words).some((f) => Math.abs(f.value - daily) > 0.005)) return false;
-  const rest = words.replace(MAX_DAYS, " ");
-  return !CAP_WORDS.test(rest) && !/\b(?:limit|aggregate|overall|in\s+total)\b/i.test(rest);
+  // The same reading the checks work a stay out from (readStayRule): the row and every line under it, non-benefit fields
+  // left out (stayBlock); one waiting period in a read form, one most days (a year of cover may be its period) and at
+  // most one yearly cap in the row's own currency. A limit, aggregate, day rule or condition anywhere else below the row
+  // gives no total (Critic P392, TE #392, R4 H2-C).
+  return readStayRule(page.text, found.offset, found.excerpt, row.figure.amount) != null;
 }
 
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is
