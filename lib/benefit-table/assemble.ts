@@ -1245,6 +1245,20 @@ function perPersonColumnRow(r: CheckedReading, b: CheckedBenefit, next: string):
   }
   return true;
 }
+/** The words a row's label may print, all of them, for an unmarked row to be each named person's (each-person gate round 1,
+ * EP-H1): a closed set of per-life benefit kinds and connector words. Any other word ("Maternity", "Orphan", "Funeral",
+ * "Household", "Weekly income", "Employee", "for her") may limit the row to some lives or to the family, so the row stays
+ * no one's without the reader's mark. An allow-list, never a list of words to refuse. */
+const PER_LIFE_KIND = new Set(("hospital hospitalisation hospitalization daily cash medical expenses expense treatment reimbursement ambulance " +
+  "fracture fractures burns dental physiotherapy outpatient inpatient surgical room board icu and of for per day in the a an").split(" "));
+/** Whether every word of a row's label, and of its section heading (its number and the word "section" aside), is a
+ * per-life benefit kind (PER_LIFE_KIND). */
+function perLifeKindLabel(b: CheckedBenefit): boolean {
+  const words = (t: string) => norm(t.replace(/&/g, " and ")).replace(/[^a-z0-9 ]+/g, " ").split(" ").filter(Boolean);
+  const label = words(b.benefit);
+  const section = words(b.section ?? "").filter((w) => !/^\d+[a-z]?$/.test(w) && w !== "section");
+  return label.length > 0 && [...label, ...section].every((w) => PER_LIFE_KIND.has(w));
+}
 function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<string>>, ownProof: (documentId: string, coverKey: string) => boolean) {
   const figure = (x: CheckedBenefit) => `${x.pays}|${x.value}|${x.currency ?? ""}|${x.period ?? ""}`;
   const firstLine = (t: string) => norm(t.split("\n")[0]);
@@ -1281,8 +1295,9 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
     // A column that says "per (insured) person", or a family schedule's one plain table (plainTable).
     const plain = !PER_PERSON_HEADING.test(b.column ?? "") && plainTable(r, b, coverKey);
     if (!plain && (!marked || !PER_PERSON_HEADING.test(b.column ?? ""))) return false;
-    // With no mark, the document itself must show its one table is read for each insured person (tableIsEachPersons).
-    if (!marked && !tableIsEachPersons()) return false;
+    // With no mark, the document itself must show its one table is read for each insured person (tableIsEachPersons), and
+    // the row's label and section print only per-life benefit kinds (perLifeKindLabel).
+    if (!marked && (!tableIsEachPersons() || !perLifeKindLabel(b))) return false;
     // A note anywhere on the document, off every row's own line, that names a kind of life or an age ("Note: for insured
     // children the limits are 50% of those shown") may change any row for some of the lives (check.ts lifeNotes).
     if ((r.lifeNotes ?? []).length) return false;
@@ -1308,7 +1323,7 @@ function perPersonRows(readings: CheckedReading[], columnsOn: Map<string, Set<st
       && !KIND_OF_LIFE.test(`${x.benefit} ${x.rowText ?? x.source.excerpt} ${x.conditions.join(" ")}`);
     // In a plain table, an unmarked neighbour that is itself a plain row by the document's own print (plainTable: no life,
     // age, share, tier, shared limit or other figure in its words; tableIsEachPersons) changes nothing for some of the lives either.
-    const plainNeighbour = (x: CheckedBenefit) => plain && x.forWhom == null && tableIsEachPersons() && plainTable(r, x, coverKey);
+    const plainNeighbour = (x: CheckedBenefit) => plain && x.forWhom == null && perLifeKindLabel(x) && tableIsEachPersons() && plainTable(r, x, coverKey);
     if ([...below, ...above].some((x) => x.forWhom !== "each_named_insured" && !shareOfOwnSum(x) && !plainNeighbour(x))) return false;
     const next = below.length || (plain && anotherRowsNote(r, b, b.nextLine)) ? "" : b.nextLine ?? "";
     if (!plain && !perPersonColumnRow(r, b, next)) return false;

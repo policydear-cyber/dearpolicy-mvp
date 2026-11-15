@@ -13,6 +13,8 @@
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, figureText, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
+import { chatRows } from "@/lib/benefit-table/chat";
+import type { Household } from "@/lib/simple-chat/library";
 import { BASE_FAMILY, CASES, NAME, build, type Case } from "./per-person-adversarial-cases";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|GEMINI|_API_KEY/i.test(k)) delete process.env[k];
@@ -196,6 +198,82 @@ test("no forWhom: a two-policy household (Mei Lin and Wei Jie on one schedule, K
     rows: withRow(mark(ROWS, "each_named_insured"), "Hospital cash", { cell: (m) => `${fmt(m, 30)} per day in hospital, payable from the third consecutive day, up to 30 days per accident`, value: 30 }), lives: LIVES.slice(2), policyOf: () => "MPA-99001-S" }));
   assert.deepEqual(everyone(t), everyone(marked));
 });
+
+// ---------------------------------------------------------------- each-person gate round 1, EP-H1: labels whose meaning limits the row
+/** Labels that print no life, name or age but may be for some lives only, for others than the insured, for working adults,
+ * or once for the family (the gate's sweep, scripts/zz/ep.ts). With no forWhom, each stays no one's (main's behaviour); the
+ * label must print only per-life benefit kinds (assemble.ts perLifeKindLabel). */
+const EP_H1: [string, string, number, string | null][] = [
+  ["Maternity benefit", "S$500", 500, null], ["Pregnancy complications", "Up to S$2,000", 2000, null], ["Paternity benefit", "S$300", 300, null],
+  ["Breast cancer benefit", "S$5,000", 5000, null], ["Prostate cancer benefit", "S$5,000", 5000, null], ["Girls cancer benefit", "S$2,000", 2000, null],
+  ["Boys cover", "S$2,000", 2000, null], ["Ladies benefit", "S$2,000", 2000, null], ["Women's cancer", "S$2,000", 2000, null],
+  ["Hospital cash for her", "S$50 per day in hospital", 50, "day"], ["Hospital cash for him", "S$50 per day in hospital", 50, "day"],
+  ["Orphan benefit", "S$10,000", 10000, null], ["Newborn benefit", "S$1,000", 1000, null], ["Education grant", "S$5,000", 5000, null],
+  ["School fees benefit", "Up to S$3,000 per year", 3000, "year"], ["Tuition benefit", "S$5,000", 5000, null], ["Childcare benefit", "S$1,500", 1500, null],
+  ["Funeral expenses", "Up to S$5,000", 5000, null], ["Bereavement benefit", "S$2,000", 2000, null], ["Survivor benefit", "S$5,000", 5000, null],
+  ["Widow benefit", "S$5,000", 5000, null], ["Next of kin travel", "Up to S$3,000", 3000, null], ["Relative visit", "Up to S$3,000", 3000, null],
+  ["Compassionate visit", "Up to S$3,000", 3000, null], ["Household hospital cash", "S$100 per day in hospital", 100, "day"], ["Home modification", "Up to S$10,000", 10000, null],
+  ["Mortgage relief", "Up to S$1,000 per month", 1000, "month"], ["Domestic help", "S$500", 500, null], ["Weekly income benefit", "S$500 per week", 500, "week"],
+  ["Loss of income", "S$200 per week", 200, "week"], ["Breadwinner benefit", "S$25,000", 25000, null], ["Hospital cash (working insureds)", "S$50 per day in hospital", 50, "day"],
+  ["Employee hospital cash", "S$50 per day in hospital", 50, "day"], ["Member hospital cash", "S$50 per day in hospital", 50, "day"], ["Owner's hospital cash", "S$50 per day in hospital", 50, "day"],
+  ["Proposer hospital cash", "S$50 per day in hospital", 50, "day"], ["Policy owner benefit", "S$500", 500, null], ["Insured's hospital cash", "S$50 per day in hospital", 50, "day"],
+  ["Caregiver benefit", "S$1,500", 1500, null], ["Carer benefit", "S$3,000", 3000, null], ["Guardian benefit", "S$3,000", 3000, null], ["Eldercare benefit", "S$2,000", 2000, null],
+  ["Dependent benefit", "S$3,000", 3000, null], ["Youth sports injury", "S$500", 500, null], ["Retiree benefit", "S$500", 500, null], ["Overall medical limit", "Up to S$5,000", 5000, null],
+];
+const labelRow = (benefit: string, cell: string, value: number, period: string | null, n = "4"): Row =>
+  ({ n, benefit, cell: () => cell, pays: period === "day" ? "per_day" : cell.startsWith("Up to") ? "up_to" : "amount", value });
+/** The S$ schedule with the hospital cash row replaced by `row`, and the household the chat reads it for. */
+function labelled(rows: Row[]) {
+  const s = schedule({ rows });
+  const page = (t: string) => t;
+  const house: Household = { accountId: "11111111-1111-4111-8111-111111111111", members: LIVES.map((l) => ({ name: l.name, relationship: l.role === "Child" ? "child" : l.role === "Spouse" ? "spouse" : "self" })),
+    documents: [{ policyId: DOC_A, name: "Family-PA-Schedule-2026.pdf", insurer: "Merlion Mutual Assurance Ltd", productName: "FAMILY PERSONAL ACCIDENT PLAN", policyNumber: "MPA-20417-S", documentType: null,
+      documentRole: "personal_schedule", effectiveDate: null, expiryDate: null, uploadedAt: "2026-10-01", uploadedFor: null, linkedPeople: LIVES.map((l) => page(l.name)), supersededAt: null,
+      processingStatus: "ready", pages: [] } as never] };
+  const t = table(s);
+  return { t, chat: chatRows(t, house) };
+}
+for (const [label, cell, value, period] of EP_H1) {
+  test(`EP-H1: unmarked "${label} ${cell}" is no one's, in the table and in the chat's rows`, () => {
+    const { t, chat } = labelled(ROWS.map((r) => r.benefit === "Hospital cash" ? labelRow(label, cell, value, period) : r));
+    for (const p of t.people) assert.deepEqual(p.rows.filter((x) => x.benefit === label && x.figure.kind !== "none").map((x) => figureText(x.figure)), [], p.id);
+    assert.deepEqual(chat.filter((x) => x.benefit === label && x.figure.kind !== "none").map((x) => `${x.person}: ${x.benefit}`), [], "no chat row gives anyone the figure");
+  });
+}
+test("EP-H1 chat cases: maternity for the father and for the 9-year-old, orphan benefit for the mother, breast cancer for the father: no row, so no figure", () => {
+  for (const [label, cell, value, who] of [["Maternity benefit", "S$500", 500, "Wei Jie Tan"], ["Maternity benefit", "S$500", 500, "Kai Tan"], ["Orphan benefit", "S$10,000", 10000, "Mei Lin Tan"],
+    ["Breast cancer benefit", "S$5,000", 5000, "Wei Jie Tan"]] as const) {
+    const { chat } = labelled(ROWS.map((r) => r.benefit === "Hospital cash" ? labelRow(label, cell, value, null) : r));
+    assert.ok(!chat.some((x) => x.person.startsWith(who) && x.benefit === label && x.figure.kind !== "none"), `${who} ${label}`);
+  }
+});
+for (const [a, b] of [[["Hospital cash", "S$50 per day in hospital", 50, "day"], ["Orphan benefit", "S$10,000", 10000, null]],
+  [["Maternity benefit", "S$500", 500, null], ["Medical expenses", "Up to S$2,500 per accident", 2500, null]]] as [string, string, number, string | null][][]) {
+  test(`EP-H1 neighbours: unmarked "${a[0]}" beside unmarked "${b[0]}": neither is given to anyone`, () => {
+    const rows = [...ROWS.filter((r) => r.pays === "percent"), labelRow(...a, "4"), labelRow(...b, "5")];
+    const { t } = labelled(rows);
+    for (const p of t.people) assert.deepEqual(p.rows.filter((x) => [a[0], b[0]].includes(x.benefit) && x.figure.kind !== "none").map((x) => x.benefit), [], p.id);
+  });
+}
+test("EP-H1: a per-life label under a section heading that is not one (\"Maternity\" over \"Hospital cash\") is no one's", () => {
+  const s = schedule({ rows: mark(ROWS, null) });
+  for (const b of s.r.benefits) if (b.benefit === "Hospital cash") b.section = "Maternity";
+  const t = table(s);
+  for (const id of [...NAMED, "o"]) assert.deepEqual(fixedOf(t, id).filter((x) => x.startsWith("Hospital cash")), [], id);
+});
+test("EP-H1: the same labels marked each_named_insured by the reader keep main's behaviour (the marked path is unchanged)", () => {
+  const { t } = labelled(ROWS.map((r) => r.benefit === "Hospital cash" ? { ...labelRow("Ambulance", "S$500 per event", 500, null), forWhom: "each_named_insured" } : r));
+  for (const id of NAMED) assert.ok(t.people.find((p) => p.id === id)!.rows.some((x) => x.benefit === "Ambulance" && x.figure.kind !== "none"), id);
+});
+for (const [label, cell, value, period] of [["Ambulance", "Up to S$500 per accident", 500, null], ["Dental treatment", "Up to S$1,000 per accident", 1000, null],
+  ["Inpatient surgical expenses", "Up to S$3,000 per accident", 3000, null], ["Outpatient physiotherapy", "Up to S$800 per accident", 800, null]] as [string, string, number, string | null][]) {
+  test(`per-life kind "${label}" with no forWhom: each named person, as when marked`, () => {
+    const rows = ROWS.map((r) => r.benefit === "Hospital cash" ? labelRow(label, cell, value, period) : r);
+    const un = labelled(mark(rows, null)).t, mk = labelled(rows.map((r) => r.pays === "percent" ? r : { ...r, forWhom: "each_named_insured" })).t;
+    assert.deepEqual(everyone(un), everyone(mk));
+    for (const id of NAMED) assert.ok(un.people.find((p) => p.id === id)!.rows.some((x) => x.benefit === label && x.figure.kind !== "none"), id);
+  });
+}
 
 // ---------------------------------------------------------------- #464/#466's adversarial matrix with every row unmarked
 /** Each adversarial certificate with every row's forWhom left out, with and (stripped) without its column heading. UNSAFE:
