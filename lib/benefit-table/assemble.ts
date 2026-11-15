@@ -1260,13 +1260,13 @@ function perLifeKindLabel(b: CheckedBenefit): boolean {
   return label.length > 0 && [...label, ...section].every((w) => PER_LIFE_KIND.has(w));
 }
 /** The words a line printed over or inside a plain table (its title, column headings, a sub-heading) may print, all of
- * them, for an unmarked row to be each named person's (each-person gate round 2, EP-H2): "table / schedule / summary of
+ * them ("max" and "sterling" are no words of it: "Maximum", and "pound sterling" read as a currency; EP-L1), for an unmarked row to be each named person's (each-person gate round 2, EP-H2): "table / schedule / summary of
  * benefits", section, benefit, amount, payable, limit, maximum, "per / each insured person", an "all amounts in <currency>"
  * note and connector words. Any other word ("BENEFITS FOR THE POLICYHOLDER", "Amount payable for her", "... to the Life
  * Assured", "Employee") may make the table one life's, so its rows stay no one's without the reader's mark. */
-const PLAIN_HEAD = new Set(("table schedule summary of benefit benefits section sections no amount amounts payable limit limits maximum max " +
+const PLAIN_HEAD = new Set(("table schedule summary of benefit benefits section sections no amount amounts payable limit limits maximum " +
   "per each insured person persons all are shown stated in for the a an and " +
-  "currency cur gbp sgd usd myr eur hkd aud rm dollar dollars pound pounds sterling ringgit euro euros").split(" "));
+  "currency cur gbp sgd usd myr eur hkd aud rm dollar dollars pound pounds ringgit euro euros").split(" "));
 /** Words after which an article starts no plain phrase: "insured person A", "Section A" name one life or part. */
 const NOT_BEFORE_ARTICLE = new Set(["person", "persons", "insured", "section", "sections"]);
 /** A heading line's words, with each currency sign or name read as one token first ("S$", "US$", "U.S.$", "U.S.", "US
@@ -1274,6 +1274,8 @@ const NOT_BEFORE_ARTICLE = new Set(["person", "persons", "insured", "section", "
 function headWords(line: string): string[] {
   const t = ` ${line.toLowerCase()} `
     .replace(/\b(?:u\.?\s?s\.?|united\s+states|singapore|hong\s+kong|australian)\s+dollars?\b/g, " cur ")
+    // "Pound sterling": "sterling" only right after "pound", never alone (a nickname: each-person gate EP-L1).
+    .replace(/\bpounds?\s+sterling\b/g, " cur ")
     .replace(/(?<![a-z0-9])(?:u\.?\s?s\.?\s?\$|s\s?\$|hk\s?\$|a\s?\$|\u00a3|\u20ac)/g, " cur ")
     .replace(/(?<![a-z0-9])u\.s\.(?![a-z0-9])/g, " cur ");
   return norm(t).split(" ").filter(Boolean);

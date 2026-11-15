@@ -382,6 +382,26 @@ test("EP-H5 positives: \"(all amounts in SGD)\", \"Amount payable (S$)\", \"TABL
     for (const id of NAMED) assert.equal(fixedOf(tableFor({ header: "Section\tBenefit\tAmount payable for Payable", rows: mark(ROWS, null) }), id).length, 2, id);
   });
 }
+// EP-L1: "max" and "sterling" are no plain heading words, so a nickname ("for Max" when the policyholder is Maximilian) gives
+// no one; "Maximum" and "Pound sterling" (read as a currency) stay plain.
+{
+  const lives: Life[] = [{ name: "Maximilian Tan", role: "Policyholder", dob: "11/03/1985", sum: 100000 }, { name: "Mei Lin Tan", role: "Spouse", dob: "22/07/1983", sum: 80000 },
+    { name: "Kai Tan", role: "Child", dob: "05/09/2016", sum: 20000 }];
+  const fam: FamilyMember[] = [{ id: "m", display_name: "Maximilian Tan", date_of_birth: "1985-03-11" } as FamilyMember, { id: "w", display_name: "Mei Lin Tan", date_of_birth: "1983-07-22" } as FamilyMember,
+    { id: "k", display_name: "Kai Tan", date_of_birth: "2016-09-05" } as FamilyMember, { id: "o", display_name: "Ah Kow Tan", date_of_birth: "1950-01-01" } as FamilyMember];
+  const tableFor = (o: Opts) => { const d = schedule({ ...o, lives }); return assembleTable([d.r], fam, d.links, [], NOW); };
+  for (const header of ["Section\tBenefit\tAmount payable for Max", "Section\tBenefit\tAmount payable for Sterling", "Section\tBenefit\tMax"]) {
+    test(`EP-L1: no forWhom, column heading "${header.split("\t")[2]}" with Maximilian Tan the policyholder: no one`, () => noneFixed(tableFor({ header, rows: mark(ROWS, null) }), header));
+  }
+  for (const [money, o] of [[SGD, { header: "Section\tBenefit\tMaximum amount payable" }], [GBP, { header: "Section\tBenefit\tAmount payable (Pound sterling)" }],
+    [GBP, { title: "TABLE OF BENEFITS (all amounts in pounds sterling)" }]] as [Money, Opts][]) {
+    test(`EP-L1 positives: no forWhom, ${o.header ? `column heading "${o.header.split("\t")[2]}"` : `title "${o.title}"`}: each named person, as when marked`, () => {
+      const un = tableFor({ ...o, money, rows: mark(ROWS, null) }), mk = tableFor({ ...o, money, rows: mark(ROWS, "each_named_insured") });
+      assert.deepEqual(everyone(un), everyone(mk));
+      for (const id of NAMED) assert.equal(fixedOf(un, id).length, 2, id);
+    });
+  }
+}
 test("EP-H2 positives: R4's title and headings (\"TABLE OF BENEFITS (all amounts in GBP)\", \"Section Benefit Amount payable\") give the same figures with and without forWhom", () => {
   for (const [money, title] of [[GBP, "TABLE OF BENEFITS (all amounts in GBP)"], [SGD, "SCHEDULE OF BENEFITS (all amounts in Singapore dollars)"], [USD, "Table of benefits - all amounts are in US dollars"]] as const) {
     const un = table(schedule({ money, title, rows: mark(ROWS, null) })), mk = table(schedule({ money, title, rows: mark(ROWS, "each_named_insured") }));
