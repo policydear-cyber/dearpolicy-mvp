@@ -168,13 +168,13 @@ DOCS["SafeGuard_Junior_PA_Schedule"] = (build(s, INS), base(documentType="Policy
 INS = "Bedok Bay General Insurance"
 s = [P(f"{INS} (fictitious)", H1), P("HOMESHIELD CONTENTS PLUS - POLICY SCHEDULE", H2),
      kv([["Policy number", "BBG-HC-6603381"], ["Insured", "Rahman bin Yusof"], ["Insured address", "Blk 812 Tampines Avenue 4, #08-215, Singapore 520812"],
-         ["Period of insurance", "15 November 2025 to 14 November 2026"], ["Annual premium", "S$214.00 including GST"]]),
+         ["Period of insurance", "15 November 2026 to 14 November 2027"], ["Annual premium", "S$214.00 including GST"]]),
      Spacer(1, 8), P("SECTIONS OF COVER", H2),
      tbl([["Section", "Limit"], ["Household contents", "S$60,000"], ["Renovations", "S$20,000"], ["Valuables (jewellery, watches)", "S$5,000 in total, S$1,000 for any one item"],
           ["Personal liability", "S$500,000"], ["Alternative accommodation", "S$100 a day, up to S$6,000"], ["Excess", "S$250 for each claim"]], [80*mm, 94*mm]),
      Spacer(1, 6), P("Damage caused by gradual wear and tear, termites or a leaking pipe over a long period is excluded. Water damage from a sudden burst pipe is covered.", S)]
 DOCS["HomeShield_Contents_Schedule"] = (build(s, INS), base(documentType="Policy Schedule", documentRole="personal_schedule", insurer=INS + " (fictitious)", productName="HomeShield Contents Plus",
-    policyNumber="BBG-HC-6603381", policyType="Home", policyholder="Rahman bin Yusof", startDate="2025-11-15", renewalOrExpiryDate="2026-11-14",
+    policyNumber="BBG-HC-6603381", policyType="Home", policyholder="Rahman bin Yusof", startDate="2026-11-15", renewalOrExpiryDate="2027-11-14",
     insuredPeople=[person("Rahman bin Yusof", "self", cov("Home", 60000, 2, "S$60,000", "Household contents"))],
     premium={"amount": 214.0, "currency": "SGD", "frequency": "annual"}))
 
