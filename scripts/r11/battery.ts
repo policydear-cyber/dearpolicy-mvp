@@ -151,7 +151,7 @@ export function battery(): Conv[] {
     c("rh-18", "rh", "claims", [t("Our kitchen pipe burst and flooded the floor, does the home insurance cover it?", { must: [/burst/i, $("250")], cite: [{ doc: HOME, page: 2 }] })]),
     c("rh-19", "rh", "cover", [t("A slow leak from the bathroom pipe damaged the floor over months, can claim?", { must: [/exclu/i], cite: [{ doc: HOME, page: 2 }], notCoveredOk: true })]),
     c("rh-20", "rh", "claims", [t("My mum's gold bangle worth $3,000 was stolen from home", { askOk: true, notAsk: /what happened|what was (?:stolen|damaged)/i, must: [$("1,000")], figures: [3000], cite: [{ doc: HOME, page: 2 }] })]),
-    c("rh-21", "rh", "renewals", [t("When does the home insurance need renewing?", { must: [/14 November 2026|14 Nov 2026|15 November 2026/i], cite: [{ doc: HOME, page: 2 }] })]),
+    c("rh-21", "rh", "renewals", [t("When does the home insurance need renewing?", { must: [/14 November 2027|14 Nov 2027|15 November 2027/i], cite: [{ doc: HOME, page: 2 }] })]),
     c("rh-22", "rh", "cover", [t("Can Irfan drive my car?", { must: [/named driver|Aisyah/i], any: [/not insured|only/i], cite: [{ doc: CAR, page: 2 }], notCoveredOk: true })]),
     c("rh-23", "rh", "money", [t("Aisyah scratched the car, what's the excess?", { must: [$("800"), $("2,500")], person: ["AI"], cite: [{ doc: CAR, page: 2 }] })]),
     c("rh-24", "rh", "money", [t("Windscreen cracked, how much do I pay?", { must: [$("100")], cite: [{ doc: CAR, page: 2 }] })]),

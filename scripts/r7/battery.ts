@@ -20,10 +20,20 @@ const SGT = (d: Date) => new Date(d.getTime() + 8 * 3600_000).toISOString().slic
 export const daysUntil = (iso: string, now = new Date()) => Math.round((Date.parse(iso + "T00:00:00Z") - Date.parse(SGT(now) + "T00:00:00Z")) / 86400_000);
 // On the day itself, "ends today" answers "how many days left" as well as "0 days" does (CI on 14 Nov 2026).
 const ahead = (iso: string, ended: RegExp, label: string): RegExp => { const n = daysUntil(iso); return n > 0 ? new RegExp("\\b" + n + " days?\\b") : n === 0 ? /\b0 days?\b|\b(?:ends?|expires?|ending|expiring|lapses?)\s+today\b/i : new RegExp(ended.source + "|" + label, "i"); };
-const HOME_DAYS = ahead("2026-11-14", /ended|expired/, "14 November 2026");
+const HOME_DAYS = ahead("2027-11-14", /ended|expired/, "14 November 2027");
 const SHIELD_DAYS = ahead("2027-01-31", /ended|expired/, "31 January 2027");
 const CAR_DAYS = ahead("2027-08-07", /ended|expired/, "7 August 2027");
 const GRACE_PAST = daysUntil("2026-10-20") < 0;
+/** Every renewal, end or premium due date the fixture prints for a policy in force, and how an answer names it. */
+const RENEWALS: [string, RegExp][] = [["2027-01-31", /MediGuard|31 January 2027|1 February 2027/], ["2027-02-28", /SafeGuard|28 February 2027/],
+  ["2027-05-31", /HelperCare|31 May 2027/], ["2027-08-07", /DriveSafe|7 August 2027/], ["2026-11-01", /Silver Years|1 November 2026/], ["2027-11-14", /HomeShield|14 November 2027/]];
+/** "Renew in the next 60 days": the plans whose printed date falls in the window; with none in it, the next one due or a plain "none". */
+const RENEW_60 = ((): RegExp => {
+  const upcoming = RENEWALS.filter(([d]) => daysUntil(d) >= 0).sort(([a], [b]) => a.localeCompare(b));
+  const inWindow = upcoming.filter(([d]) => daysUntil(d) <= 60);
+  const pick = inWindow.length ? inWindow : upcoming.slice(0, 1);
+  return new RegExp([...pick.map(([, r]) => r.source), ...(inWindow.length ? [] : ["\\bnone\\b|\\bno (?:policy|policies|plan|plans)\\b"])].join("|"), "i");
+})();
 const ADVICE = /financial adviser|advice/i, SCOPE = /only help|policies and claims|insurance/i, SYSTEM = /can[’']t share|cannot share|how DearPolicy works/i;
 /** Words that would present a lapsed or ended policy as current. */
 const ACTIVE_LAPSED = /AssureTerm 65[^.]*\b(?:is active|is in force|covers you|still covers)\b/i;
@@ -142,10 +152,10 @@ export function battery(): Conversation[] {
 
   // ---- 3. Date maths and status
   for (const [q, e] of [
-    ["How many days left before my home insurance expires?", Y(RAHMAN, [HOME_DAYS, /14 November 2026/], /AssureTerm|Wanderlust|MediGuard/)],
+    ["How many days left before my home insurance expires?", Y(RAHMAN, [HOME_DAYS, /14 November 2027/], /AssureTerm|Wanderlust|MediGuard/)],
     ["How many days until my shield plan ends?", Y(RAHMAN, [SHIELD_DAYS, /31 January 2027/])],
     ["how long more before my car insurance expires", Y(RAHMAN, [CAR_DAYS, /7 August 2027/], /HomeShield/)],
-    ["When does my home insurance expire?", Y(RAHMAN, /14 November 2026/, /MediGuard|DriveSafe/)],
+    ["When does my home insurance expire?", Y(RAHMAN, /14 November 2027/, /MediGuard|DriveSafe/)],
     ["When did my Japan travel insurance end?", Y(RAHMAN, /14 December 2025/)],
     // Changed 31 Oct with DC's yes (DC rule 31 Oct 05:38Z: "ignore all expiry dates ... assume all policies are still in force"; Critic R451):
     // these two used to expect Wanderlust to be called ended or expired because its printed period (to 14 December 2025)
@@ -155,7 +165,7 @@ export function battery(): Conversation[] {
     ["Which of my policies have lapsed?", Y(RAHMAN, /AssureTerm 65/)],
     ["Is Aisyah's policy in its grace period?", Y(AISYAH, /grace period/i)],
     ["When does Aisyah's grace period end?", Y(AISYAH, /20 October 2026/)],
-    ["Which of our policies renew in the next 60 days?", { mentions: /HomeShield|14 November 2026|Silver Years|1 November 2026/ }],
+    ["Which of our policies renew in the next 60 days?", { mentions: RENEW_60 }],
     ["Has my term life ended?", Y(RAHMAN, /lapsed/i, ACTIVE_LAPSED)],
   ] as [string, Expect][]) one("dates:" + q, RAHMAN, q, e);
 
@@ -310,7 +320,7 @@ export function battery(): Conversation[] {
     { say: "renovation?", expect: Y(RAHMAN, /S\$20,000/) },
     { say: "excess?", expect: Y(RAHMAN, /S\$250/, /S\$800/) },
     { say: "is termite damage covered?", expect: Y(RAHMAN, /termite/i) },
-    { say: "when does it expire?", expect: Y(RAHMAN, /14 November 2026/, /DriveSafe/) },
+    { say: "when does it expire?", expect: Y(RAHMAN, /14 November 2027/, /DriveSafe/) },
     { say: "how many days is that from today?", expect: Y(RAHMAN, HOME_DAYS) },
     { say: "and the premium?", expect: Y(RAHMAN, /S\$214/) },
     { say: "which one costs more, car or home?", expect: Y(RAHMAN, [/S\$1,486\.20/, /S\$214/]) },
