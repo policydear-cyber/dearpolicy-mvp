@@ -407,13 +407,21 @@ async function main() {
         assert.deepEqual(people(r.saved[1]), [G]);
         assert.ok(!r.reopened.some((a) => a.invalidated));
       });
-    for (const ask of ["Who was driving?", "Is the policy in Grace's name or Daniel's?"])
+    for (const ask of ["Who was driving?", "Is the policy in Grace's name or Daniel's?", "Who did you mean: Grace Tern or Daniel Tern?", "Whose card is it?", "Which of you was in the car?"])
       await test(`GATE R4-3 the answer asked "${ask}", then "Daniel, not Grace." (${m}): an answer, not a correction`, async () => {
         const r = await converse(TERNS, [OPEN, "Daniel, not Grace."], [[G], [G]], "faithful", table, [ask, null]);
         assert.deepEqual(people(r.saved[1]), [G]);
         assert.ok(!r.reopened.some((a) => a.invalidated));
         assert.doesNotMatch(r.calls[1].question, /corrected who this is about/);
       });
+    for (const ask of ["Was she admitted to hospital?", "Did the doctor say it was a closed fracture?", "How many days was she in hospital?"])
+      for (const reply of ["Actually it's Daniel, not Grace", "Daniel, not Grace."])
+        await test(`GATE N5-1 the answer asked "${ask}", then "${reply}" (${m}): still a correction`, async () => {
+          const r = await converse(TERNS, [OPEN, reply], [[G], [D]], "sticky", table, [ask, null]);
+          assert.deepEqual(people(r.saved[1]), [D]);
+          assert.equal(r.reopened[0].invalidated?.reason, "superseded");
+          assert.match(r.calls[1].question, /corrected who this is about/);
+        });
     await test(`GATE R4-3 control: no question before, "Daniel, not Grace." still replaces (${m})`, async () => {
       const r = await converse(TERNS, [OPEN, "Daniel, not Grace."], [[G], [D]], "sticky", table, [null, null]);
       assert.deepEqual(people(r.saved[1]), [D]);
@@ -489,7 +497,9 @@ async function main() {
     assert.equal(r(OPEN, "Wei, not Grace?").unknown, null, "a question about the correction asks nothing");
     assert.deepEqual(r(OPEN, "Daniel, not Grace - how much does she get?"), { people: null, change: "replace", replaced: [G], unknown: null, kept: [D] });
     assert.equal(r(OPEN, "Daniel's, not Grace's.").change, "same");
-    assert.equal(subjects!.resolveSubjects(TERNS.household, ["Daniel, not Grace.", OPEN], { askedBefore: true }).change, "same");
+    for (const ask of ["Who was driving?", "Is the policy in Grace's name or Daniel's?", "Who did you mean: Grace Tern or Daniel Tern?"])
+      assert.equal(subjects!.resolveSubjects(TERNS.household, ["Daniel, not Grace.", OPEN], { askedBefore: ask }).change, "same", ask);
+    assert.equal(subjects!.resolveSubjects(TERNS.household, ["Actually it's Daniel, not Grace", OPEN], { askedBefore: "Was she admitted to hospital?" }).change, "replace");
     // Not a replacement: main's behaviour.
     for (const q of ["Daniel too", "both of them", "what about Daniel?", "how much for the hip?", "what about my husband?", "What does Grace's husband get?", "I broke my arm too",
       "sorry i meant the hip", "Does Daniel's policy cover her?", "Actually, Daniel's was a compound fracture", "Sorry, Daniel here", "It wasn't Grace's fault, how much does she get?",

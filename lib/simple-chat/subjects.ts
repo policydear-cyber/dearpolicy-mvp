@@ -166,14 +166,22 @@ function unknownName(text: string, mentions: Mention[], household: Household): s
 /** Who the latest message (the first of `said`) is about; the one before it settles only who "I meant <A>" takes back.
  * A replacement narrows its own turn only: later turns go back to the other checks (round 3), while the answers it
  * superseded stay superseded and are never read to the model again. `said`: the household's messages, latest first. */
-/** `opts.askedBefore`: the answer just before ended with a question; a reply in a replacement's shape ("Daniel, not Grace")
- * then answers it (who was driving, whose name the policy is in), and corrects nothing (round 4, R4-3). */
-export function resolveSubjects(household: Household, said: readonly string[], opts: { askedBefore?: boolean } = {}): Subjects {
+/** A question a "<A>, not <B>" reply answers rather than corrects: one asking who ("Who was driving?", "Whose card is it?",
+ * "Which of you…?", "In whose name…?"), closed list (round 5, N5-1). */
+const WHO_QUESTION = /\b(?:who|whom|whose|which\s+of|in\s+whose\s+name)\b/i;
+/** `opts.askedBefore`: the final question of the answer just before, when it ended with one. A reply in a replacement's
+ * shape answers it, and corrects nothing, only when that question asks who, or names both A and B ("Is the policy in
+ * Grace's name or Daniel's?"); after any other question ("Was she admitted to hospital?") it is still a correction
+ * (round 4, R4-3, narrowed in round 5, N5-1). */
+export function resolveSubjects(household: Household, said: readonly string[], opts: { askedBefore?: string | null } = {}): Subjects {
   const latest = norm(said[0] ?? "");
   const previousText = said[1] != null ? norm(said[1]) : "";
   const previous = [...new Set(nameMentions(previousText, household).map((x) => x.person))];
   const mentions = nameMentions(latest, household);
-  const swap = opts.askedBefore ? null : replacement(latest, mentions, previous, household);
+  const found = replacement(latest, mentions, previous, household);
+  const asked = opts.askedBefore ? norm(opts.askedBefore) : "";
+  const answers = !!found && !!asked && (WHO_QUESTION.test(asked) || [...found.a, ...found.b].every((p) => looselyNamed(asked, household).includes(p)));
+  const swap = answers ? null : found;
   if (swap) return { people: swap.pronoun ? null : swap.a, change: "replace", replaced: swap.b.filter((p) => !swap.a.includes(p)), unknown: null, kept: swap.a };
   const unknown = unknownName(latest, mentions, household);
   if (unknown) return { people: [], change: "new", replaced: [], unknown };

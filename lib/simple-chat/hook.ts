@@ -331,9 +331,10 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const help = appHelp(message, household.documents.flatMap((d) => [d.insurer ?? "", d.productName ?? ""]));
   // Who this turn is about, from the household's own messages: a replacement, an addition, a new question or the same
   // people (lib/simple-chat/subjects.ts). Only these people's figures are shown.
-  // The answer just before ended with a question: a reply in a replacement's shape answers it (subjects.ts, R4-3).
+  // The answer just before ended with a question: a reply in a replacement's shape may answer it (subjects.ts, R4-3, N5-1).
   const lastAnswer = [...heard].reverse().find((t) => t.role === "assistant");
-  const askedBefore = !!lastAnswer && /\?\s*$/.test(lastAnswer.text.trim().split("\n").pop() ?? "");
+  const lastLine = lastAnswer?.text.trim().split("\n").pop() ?? "";
+  const askedBefore = /\?\s*$/.test(lastLine) ? lastLine : null;
   const subjects = resolveSubjects(household, [message, ...heard.filter((t) => t.role === "user").map((t) => t.text).reverse()], { askedBefore });
   // The earlier answers this turn's correction replaces are not read back to the model with their figures either.
   const prior = conversation.state as SimpleChatState;
