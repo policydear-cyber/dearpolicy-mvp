@@ -63,6 +63,8 @@ export function invalidatedAnswer(answer: ChatAnswer, reason: InvalidationReason
     factFinding: undefined, composition: undefined, assessmentKind: undefined,
     // (what its figures were bound to and worked out from goes too: a page that draws figures from them must find none)
     figureBindings: [], computations: [], calculations: [],
+    // (the simple chat's cards and bottom line go too: a page or client that reads them must find no figure)
+    ...("statements" in answer ? { statements: [] } : {}), ...("bottomLine" in answer ? { bottomLine: NOTICE[reason] } : {}),
     invalidated: { reason },
   } as ChatAnswer;
 }
@@ -95,15 +97,39 @@ export function withdrawnCalculationIds(conversationState: unknown): Set<string>
   return out;
 }
 
+/** The simple chat's answer ids a later correction of who the chat is about made out of date ("actually it's Daniel, not
+ * Grace"), read from the chat's saved state (lib/simple-chat/hook.ts keeps them under simpleChat.superseded). Plain data. */
+export function supersededAnswerIds(conversationState: unknown): Set<string> {
+  const ids = (conversationState as { simpleChat?: { superseded?: unknown } } | null | undefined)?.simpleChat?.superseded;
+  return new Set(Array.isArray(ids) ? ids.filter((x): x is string => typeof x === "string" && x.length > 0) : []);
+}
+
+/** Whether a saved answer was made out of date by a later turn of its chat, given the chat's saved state: a calculation a
+ * correction withdrew, or a simple-chat answer a correction of who the chat is about replaced. Pure. */
+export function supersededIn(conversationState: unknown): (a: Partial<ChatAnswer> | null | undefined) => boolean {
+  const withdrawn = withdrawnCalculationIds(conversationState);
+  const replaced = supersededAnswerIds(conversationState);
+  return (a) => (withdrawn.size > 0 && (Array.isArray(a?.calculations) ? a!.calculations! : []).some((c) => typeof c?.id === "string" && withdrawn.has(c.id)))
+    || (replaced.size > 0 && typeof a?.answerId === "string" && replaced.has(a.answerId));
+}
+
+/** The answers of a chat as reopened, for the corrections made in it alone (no database): each one a later turn replaced
+ * is its "replaced by the corrected answer below" notice. The deletion checks run on top (invalidateAnswersWithDeletedPolicies). */
+export function correctedAnswers<T extends Partial<ChatAnswer> | null | undefined>(answers: T[], conversationState: unknown): T[] {
+  const superseded = supersededIn(conversationState);
+  return answers.map((a) => (superseded(a) ? (invalidatedAnswer(a as ChatAnswer, "superseded") as unknown as T) : a));
+}
+
 /** Replaces every answer that cites a policy which is no longer active in
  * this household, was about a person since removed from the document it
  * relied on, or (given the chat's saved state) was worked out from something
  * corrected later in the chat. `answers` are already monetary-boundary-sanitised. */
 export async function invalidateAnswersWithDeletedPolicies<T extends Partial<ChatAnswer> | null | undefined>(accountId: string, answers: T[], options?: { conversationState?: unknown }): Promise<T[]> {
   const withdrawn = withdrawnCalculationIds(options?.conversationState);
-  const superseded = (a: Partial<ChatAnswer> | null | undefined) => withdrawn.size > 0 && (Array.isArray(a?.calculations) ? a!.calculations! : []).some((c) => typeof c?.id === "string" && withdrawn.has(c.id));
+  const replaced = supersededAnswerIds(options?.conversationState);
+  const superseded = supersededIn(options?.conversationState);
   const wanted = [...new Set(answers.flatMap((a) => referencedPolicyIds(a)))];
-  if (!wanted.length) return withdrawn.size ? answers.map((a) => (superseded(a) ? (invalidatedAnswer(a as ChatAnswer, "superseded") as unknown as T) : a)) : answers;
+  if (!wanted.length) return withdrawn.size || replaced.size ? answers.map((a) => (superseded(a) ? (invalidatedAnswer(a as ChatAnswer, "superseded") as unknown as T) : a)) : answers;
   const rows = (await query<{ id: string; file_hash: string | null }>(
     `SELECT id::text, to_jsonb(policies)->>'file_hash' AS file_hash FROM policies WHERE account_id=$1 AND id = ANY($2::uuid[]) AND ${activePredicate()}`, [accountId, wanted])).rows;
   const active = new Set(rows.map((r) => r.id));

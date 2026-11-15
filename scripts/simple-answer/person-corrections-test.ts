@@ -1,0 +1,300 @@
+/** Scripted tests: a follow-up that changes who a household chat is about updates the answer, and never mixes people up.
+ * - Replacement ("actually it's Daniel, not Grace", "sorry, I meant Daniel", "not Grace - Daniel"): the turn shows only
+ *   Daniel's figures, from Daniel's own cover; Grace's earlier answer is out of date when the chat is reopened.
+ * - Addition ("Daniel too", "and Daniel also broke his arm", "both of them"): Grace's answer stays; Daniel gets his own.
+ * - A new question ("what about Daniel?"): about Daniel only, never merged into Grace's figures; Grace's answer stands.
+ * - A name the household does not have: a question back, no amount, no model call.
+ * Each case runs through the app's chat turn (runSimpleChat) with a scripted model, the benefit table on and off, then the
+ * chat is reopened from what was saved (the saved state and answers, as the history route re-serves them). The scripted
+ * model also misbehaves (keeps the replaced person's card, names the wrong person's row or document): the server must hold.
+ * For every case: no figure from one person's cover is ever shown as another person's.
+ * Made-up households in S$ (the Terns: Grace and Daniel; the Rahmans: three people, other figures). No model, database or
+ * network.
+ *   npm run -s simple:person-corrections-test */
+import assert from "node:assert/strict";
+import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
+import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
+import { chatRows, type ChatRow } from "@/lib/benefit-table/chat";
+import type { Household } from "@/lib/simple-chat/library";
+import type { SimpleModel, SimpleModelCall, Turn } from "@/lib/simple-chat/model";
+import type { ChatContext } from "@/lib/chat/workflow";
+import { answerAsText } from "@/lib/simple-chat/verify";
+
+for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|PINECONE/i.test(k)) delete process.env[k];
+globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
+
+let passed = 0;
+const failures: string[] = [];
+async function test(name: string, fn: () => Promise<void> | void) {
+  try { await fn(); passed++; } catch (error) { failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`); }
+}
+
+// ------------------------------------------------------------------ households
+type Doc = Household["documents"][number];
+type Person = { name: string; relationship: string; sum: number; armPct: number };
+type House = { household: Household; family: FamilyMember[]; people: Person[]; table: ReturnType<typeof assembleTable>; rows: ChatRow[];
+  /** Each person's own arm-fracture figure, and every figure printed for them alone (sum insured, worked-out amounts). */
+  arm: Map<string, number>; own: Map<string, number[]> };
+const money = (n: number) => `S$${n.toLocaleString("en-US")}`;
+let uuid = 0;
+const id = () => `cccccccc-0000-4000-8000-${String(++uuid).padStart(12, "0")}`;
+
+/** A household on a group scheme: one certificate printing each person's own sum insured, and the scheme's terms paying a
+ * share of the sum insured for a broken arm (the same share for all), plus each person's own schedule printing their own
+ * fracture benefit (used with the table off). */
+function makeHouse(accountId: string, people: Person[], armPct: number): House {
+  const cert: Doc = { policyId: id(), name: "Group certificate.pdf", insurer: "Kestrel Assurance", productName: "Kestrel Group Scheme", policyNumber: null, documentType: null, documentRole: "certificate",
+    effectiveDate: null, expiryDate: null, uploadedAt: "2026-09-01", uploadedFor: null, linkedPeople: people.map((p) => p.name), supersededAt: null, processingStatus: "ready",
+    pages: [{ page: 1, text: ["GROUP PERSONAL ACCIDENT", ...people.map((p) => `${p.name}\t${money(p.sum)}\tAs of 01/01/2026`)].join("\n") }] } as unknown as Doc;
+  const terms: Doc = { ...cert, policyId: id(), name: "Scheme terms.pdf", documentRole: "policy_wording",
+    pages: [{ page: 2, text: `BENEFIT 2: GROUP PERSONAL ACCIDENT\nCompensation Schedule (% of Sum Insured)\nArm (fracture)\t${armPct}%\nHip\t75%` }] } as unknown as Doc;
+  const schedules: Doc[] = people.map((p) => ({ ...cert, policyId: id(), name: `${p.name.split(" ")[0]} schedule.pdf`, documentRole: "personal_schedule", uploadedFor: p.name, linkedPeople: [p.name],
+    pages: [{ page: 1, text: ["KESTREL ASSURANCE - POLICY SCHEDULE", `Life assured: ${p.name}`, "Plan: Kestrel Bone Guard", `Fracture Benefit ${money(p.sum * p.armPct / 100)}`].join("\n") }] } as unknown as Doc));
+  const household: Household = { accountId, members: people.map((p) => ({ name: p.name, relationship: p.relationship })), documents: [cert, terms, ...schedules] };
+  const family: FamilyMember[] = people.map((p, i) => ({ id: `m${i + 1}`, display_name: p.name }));
+  const src = (d: Doc): SourceDoc => ({ id: d.policyId, name: d.name, readable: true, pages: d.pages });
+  const reading = (kind: string, covers: unknown[], benefits: unknown[]) => ({ document: { kind, product: "Kestrel Group Scheme", insurer: null, namedPeople: [], plan: null, periodFrom: null, periodTo: null }, covers, benefits });
+  const certR = checkReading(src(cert), reading("personal_proof", people.map((p) => ({ person: p.name, product: "Kestrel Group Scheme", cover: "Group Personal Accident", plan: null, sumInsured: p.sum, asOf: "01/01/2026", page: 1,
+    quote: `${p.name} ${money(p.sum)} As of 01/01/2026` })), []));
+  const b = (o: Record<string, unknown>) => ({ section: "Accident", column: null, pays: "percent", value: null, percentOf: "sum_insured", baseAmount: null, baseQuote: null, fromDay: null, maxDays: null, conditions: [], page: 2, ...o });
+  const termsR = checkReading(src(terms), reading("scheme_terms", [], [b({ benefit: "Arm (fracture)", value: armPct, quote: `Arm (fracture) ${armPct}%` }), b({ benefit: "Hip", value: 75, quote: "Hip 75%" })]));
+  const links = [{ section: sectionKeyOf(terms.policyId, { section: "Accident", column: null }), cover: coverKeyOf({ product: "Kestrel Group Scheme", cover: "Group Personal Accident", plan: null }), why: "the accident scale" }];
+  const table = assembleTable([certR, termsR], family, links);
+  const rows = chatRows(table, household);
+  const arm = new Map(people.map((p) => [p.name, p.sum * armPct / 100]));
+  const own = new Map(people.map((p) => [p.name, [p.sum, p.sum * armPct / 100, p.sum * 0.75]]));
+  return { household, family, people, table, rows, arm, own };
+}
+const TERNS = makeHouse("dddddddd-0000-4000-8000-000000000001", [
+  { name: "Grace Tern", relationship: "self", sum: 200_000, armPct: 10 }, { name: "Daniel Tern", relationship: "spouse", sum: 600_000, armPct: 10 }], 10);
+const RAHMANS = makeHouse("dddddddd-0000-4000-8000-000000000002", [
+  { name: "Nur Aisyah Rahman", relationship: "self", sum: 150_000, armPct: 15 }, { name: "Kumar Raj Pillai", relationship: "spouse", sum: 90_000, armPct: 15 },
+  { name: "Siti Hajar Rahman", relationship: "mother", sum: 40_000, armPct: 15 }], 15);
+
+// ------------------------------------------------------------------ the scripted model
+/** What the scripted model does with the people it is told to answer for:
+ * - "faithful": one card per intended person, each from that person's own row (or, table off, their own schedule);
+ * - "sticky": also keeps the first person's card from earlier turns (the stale person);
+ * - "swapped": gives the intended person's card from another person's row or schedule (the wrong cover). */
+type Behaviour = "faithful" | "sticky" | "swapped";
+function scripted(house: House, intended: () => string[], first: string, behaviour: Behaviour, calls: SimpleModelCall[]): SimpleModel {
+  return { choice: { provider: "anthropic", model: "scripted" }, async call(c) {
+    calls.push(c);
+    const want = intended();
+    const people = behaviour === "sticky" && !want.includes(first) ? [...want, first] : want;
+    const other = (p: string) => house.people.find((x) => x.name !== p)!.name;
+    const statements = people.map((p) => {
+      const from = behaviour === "swapped" ? other(p) : p;
+      if (c.withRows) {
+        const row = house.rows.find((r) => r.person === from && r.benefit === "Arm (fracture)")!;
+        return { kind: "amount", text: "A broken arm pays a share of the sum insured.", person: p, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null,
+          perDay: null, ofBill: null, row: row.id, rowBenefit: row.benefit, eventFit: "on_list", waiting: null, period: null, multiplierNote: "" };
+      }
+      const di = house.household.documents.findIndex((d) => d.uploadedFor === from);
+      return { kind: "amount", text: "Fracture Benefit.", person: p, document: `D${di + 1}`, quote: `Fracture Benefit ${money(house.arm.get(from)!)}`, amount: money(house.arm.get(from)!),
+        percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null };
+    });
+    // The bottom line names everyone the model answered for, as a model's prose would.
+    return { json: { bottomLine: `Here is what the documents print for ${people.join(" and ")}.`, nextSteps: [], question: null, statements },
+      stopReason: "end_turn", model: "scripted", usage: { input: 1, cacheWrite: 0, cacheRead: 0, output: 1 } };
+  } };
+}
+
+// ------------------------------------------------------------------ one conversation
+type Card = { person: string | null; amount: string };
+type Saved = { answer: { answerId?: string; summary?: string; bottomLine?: string | null; invalidated?: { reason: string }; statements?: { amount?: { text: string } | null; personName?: string | null; text: string }[]; question?: unknown; questions?: { text: string }[] }; state: Record<string, unknown> };
+/** Runs the household's messages through the app's chat turn, one after the other, carrying the saved state and history as
+ * the app does (the history read back as conversationTurns reads it). Returns each turn's saved answer and the model calls. */
+async function converse(house: House, messages: string[], intended: string[][], behaviour: Behaviour, table: boolean) {
+  const { runSimpleChat, turnsFromMessages } = await import("@/lib/simple-chat/hook") as typeof import("@/lib/simple-chat/hook") & { turnsFromMessages?: (rows: unknown[], s?: ReadonlySet<string>) => Turn[] };
+  const stale = await import("@/lib/chat/stale-answers") as typeof import("@/lib/chat/stale-answers") & { supersededAnswerIds?: (s: unknown) => Set<string> };
+  const calls: SimpleModelCall[] = [];
+  let turn = 0;
+  const model = scripted(house, () => intended[turn], intended[0][0], behaviour, calls);
+  let state: Record<string, unknown> = { subjects: {} };
+  const saved: Saved[] = [];
+  const stored: { role: string; content: string; answer_json: unknown }[] = [];
+  for (; turn < messages.length; turn++) {
+    const message = messages[turn];
+    const context = { request: { accountId: house.household.accountId, familyMemberId: null, question: message, submittedQuestion: message },
+      family: house.family.map((f, i) => ({ ...f, preferred_name: null, relationship: house.people[i].relationship })), people: [],
+      conversation: { id: "c1", account_id: house.household.accountId, family_member_id: null, title: "t", revision: turn + 1, state }, token: {}, holdings: [] } as unknown as ChatContext;
+    const superseded = stale.supersededAnswerIds ? stale.supersededAnswerIds(state) : new Set<string>();
+    const history: Turn[] = turnsFromMessages ? turnsFromMessages(stored, superseded)
+      : stored.map((r) => ({ role: r.role === "user" ? "user" as const : "assistant" as const, text: r.role === "user" ? r.content : answerAsText(r.answer_json as never) }));
+    let out: Saved | null = null;
+    await runSimpleChat(context, {}, { model, household: async () => house.household, history: async () => history, ledger: false,
+      save: (async (x: Saved) => { out = JSON.parse(JSON.stringify(x)); }) as never, table: async () => (table ? house.table : null), today: () => new Date("2026-11-15T04:00:00Z") });
+    assert.ok(out, "the turn was saved");
+    const s = out as Saved;
+    saved.push(s);
+    state = s.state;
+    stored.push({ role: "user", content: message, answer_json: null }, { role: "assistant", content: s.answer.summary ?? "", answer_json: s.answer });
+  }
+  // Reopened: every saved answer as the history route re-serves it for the chat's saved state (the database-free part of
+  // invalidateAnswersWithDeletedPolicies: no document here was deleted).
+  const reopened = stale.correctedAnswers ? stale.correctedAnswers(saved.map((s) => s.answer as never), state) as Saved["answer"][] : saved.map((s) => s.answer);
+  return { saved: saved.map((s) => s.answer), reopened, calls, state };
+}
+const cards = (a: Saved["answer"]): Card[] => a.invalidated ? [] : (a.statements ?? []).filter((s) => s.amount).map((s) => ({ person: s.personName ?? null, amount: s.amount!.text }));
+const figure = (t: string) => Number(t.replace(/^[^\d]*/, "").replace(/,/g, ""));
+
+/** No figure from one person's cover is shown as another person's: each card is for one member and its figure is that
+ * member's own arm figure; a figure printed only for another member appears nowhere in the card's statement. */
+function assertNoCrossing(house: House, a: Saved["answer"], label: string) {
+  for (const c of cards(a)) {
+    assert.ok(c.person && house.arm.has(c.person), `${label}: a card for nobody in particular: ${JSON.stringify(c)}`);
+    assert.equal(figure(c.amount), house.arm.get(c.person!), `${label}: ${c.person}'s card shows ${c.amount}, not their own ${money(house.arm.get(c.person!)!)}`);
+  }
+  for (const s of a.invalidated ? [] : a.statements ?? []) {
+    if (!s.personName) continue;
+    const others = house.people.filter((p) => p.name !== s.personName).flatMap((p) => house.own.get(p.name)!).filter((n) => !house.own.get(s.personName!)!.includes(n));
+    const text = JSON.stringify(s);
+    for (const n of others) assert.ok(!text.includes(n.toLocaleString("en-US")), `${label}: ${s.personName}'s statement carries ${money(n)}, another person's figure`);
+  }
+}
+const people = (a: Saved["answer"]) => [...new Set(cards(a).map((c) => c.person))].sort();
+/** No amount, no person's figure at all, anywhere in the answer. */
+const noFigures = (house: House, a: Saved["answer"], label: string) => {
+  assert.deepEqual(cards(a), [], `${label}: no cards`);
+  const text = JSON.stringify({ ...a, answerId: undefined });
+  for (const n of house.people.flatMap((p) => house.own.get(p.name)!)) assert.ok(!text.includes(n.toLocaleString("en-US")), `${label}: ${money(n)} in the answer`);
+};
+
+// ------------------------------------------------------------------ the cases
+const BEHAVIOURS: Behaviour[] = ["faithful", "sticky", "swapped"];
+const MODES = [true, false];
+const mode = (t: boolean) => (t ? "table" : "no table");
+
+async function main() {
+  const G = "Grace Tern", D = "Daniel Tern";
+  const OPEN = "Grace broke her arm, how much can she claim?";
+
+  // ---- R: replacement
+  const REPLACE = ["actually it's Daniel, not Grace", "Sorry, I meant Daniel", "not Grace — Daniel", "Actually it was Daniel who broke his arm, not Grace.", "sorry i meant daniel"];
+  for (const phrase of REPLACE) for (const table of MODES) for (const behaviour of BEHAVIOURS) {
+    await test(`R "${phrase}" (${mode(table)}, ${behaviour} model): Daniel only, from his own cover; Grace's answer replaced on reopening`, async () => {
+      const r = await converse(TERNS, [OPEN, phrase], [[G], [D]], behaviour, table);
+      for (const a of [...r.saved, ...r.reopened]) assertNoCrossing(TERNS, a, phrase);
+      // The corrected turn: no card for Grace, and no Grace figure anywhere in it.
+      assert.ok(!people(r.saved[1]).includes(G), `Grace's card after the correction: ${JSON.stringify(cards(r.saved[1]))}`);
+      assert.doesNotMatch(JSON.stringify(r.saved[1]), /20,000|200,000/, "a Grace figure in the corrected answer");
+      if (behaviour !== "swapped") assert.deepEqual(people(r.saved[1]), [D], "Daniel's own card is shown");
+      else assert.deepEqual(cards(r.saved[1]), [], "Daniel's card from Grace's cover is never shown");
+      // Reopened: the first answer is replaced (no Grace figure), the corrected one stands. (A swapped model's first answer
+      // showed no card at all, so there is nothing to replace.)
+      if (cards(r.saved[0]).length) assert.equal(r.reopened[0].invalidated?.reason, "superseded", "Grace's answer is marked replaced");
+      assert.deepEqual(cards(r.reopened[0]), []);
+      assert.doesNotMatch(JSON.stringify(r.reopened[0].statements ?? []), /20,000/);
+      assert.ok(!r.reopened[1].invalidated);
+      // The model heard the correction, and never heard Grace's figures read back after it.
+      assert.match(r.calls[1].question, /about Daniel Tern only/);
+      assert.doesNotMatch(JSON.stringify(r.calls[1].history.filter((t) => t.role === "assistant")), /20,000/);
+    });
+  }
+  // A follow-up after a replacement stays on the new person.
+  for (const table of MODES) await test(`R2 a follow-up after the replacement stays on Daniel (${mode(table)}, sticky model)`, async () => {
+    const r = await converse(TERNS, [OPEN, "actually it's Daniel, not Grace", "And how much would he get for that?"], [[G], [D], [D]], "sticky", table);
+    assert.deepEqual(people(r.saved[2]), [D]);
+    for (const a of [...r.saved, ...r.reopened]) assertNoCrossing(TERNS, a, "follow-up");
+    assert.equal(r.reopened[0].invalidated?.reason, "superseded");
+    assert.ok(!r.reopened[1].invalidated && !r.reopened[2].invalidated);
+  });
+
+  // ---- A: addition
+  const ADD = ["Daniel broke his arm too", "and Daniel also broke his arm", "both of them", "Daniel as well"];
+  for (const phrase of ADD) for (const table of MODES) for (const behaviour of BEHAVIOURS) {
+    await test(`A "${phrase}" (${mode(table)}, ${behaviour} model): Grace's answer stays; each person's own figure`, async () => {
+      const r = await converse(TERNS, [OPEN, phrase], [[G], [G, D]], behaviour, table);
+      for (const a of [...r.saved, ...r.reopened]) assertNoCrossing(TERNS, a, phrase);
+      if (behaviour !== "swapped") assert.deepEqual(people(r.saved[1]), [D, G].sort(), "a card each");
+      assert.ok(!r.reopened.some((a) => a.invalidated), "nothing is replaced");
+      if (behaviour !== "swapped") assert.deepEqual(people(r.reopened[0]), [G], "Grace's answer stays on reopening");
+    });
+  }
+
+  // ---- N: a new question about someone else ("what about Daniel?")
+  for (const phrase of ["what about Daniel?", "And Daniel?", "How about Daniel"]) for (const table of MODES) for (const behaviour of BEHAVIOURS) {
+    await test(`N "${phrase}" (${mode(table)}, ${behaviour} model): a question about Daniel, never merged with Grace's figures`, async () => {
+      const r = await converse(TERNS, [OPEN, phrase], [[G], [D]], behaviour, table);
+      for (const a of [...r.saved, ...r.reopened]) assertNoCrossing(TERNS, a, phrase);
+      assert.ok(!people(r.saved[1]).includes(G), `Grace's card in the answer about Daniel: ${JSON.stringify(cards(r.saved[1]))}`);
+      assert.doesNotMatch(JSON.stringify(r.saved[1]), /20,000|200,000/);
+      // Grace's own answer answered her own question: it stands on reopening.
+      assert.ok(!r.reopened[0].invalidated);
+    });
+  }
+
+  // ---- U: a name the household does not have
+  for (const phrase of ["actually it's Wei, not Grace", "Sorry, I meant Priya", "Marcus broke his arm too", "what about Wei?", "sorry i meant wei"]) for (const table of MODES) {
+    await test(`U "${phrase}" (${mode(table)}): a question back, no amount, no model call`, async () => {
+      const r = await converse(TERNS, [OPEN, phrase], [[G], [G]], "sticky", table);
+      noFigures(TERNS, r.saved[1], phrase);
+      assert.equal(r.calls.length, 1, "no model call for the unknown name");
+      const asked = JSON.stringify([r.saved[1].question, r.saved[1].questions, r.saved[1].summary]);
+      assert.match(asked, /Who did you mean/);
+      assert.match(asked, /Grace Tern/); assert.match(asked, /Daniel Tern/);
+      for (const a of [...r.saved, ...r.reopened]) assertNoCrossing(TERNS, a, phrase);
+      // "not Grace" or "I meant ..." takes Grace back: her answer is replaced; an addition or a new question leaves it.
+      const takesBack = /not grace|meant/i.test(phrase);
+      assert.equal(r.reopened[0].invalidated?.reason, takesBack ? "superseded" : undefined);
+      assert.equal(people(r.saved[0]).join(), G, "the first answer showed Grace's card");
+    });
+  }
+
+  // ---- H: another household, three people, other figures and names: nothing here knows the Terns.
+  const [NA, KR, SH] = RAHMANS.people.map((p) => p.name);
+  for (const table of MODES) for (const behaviour of BEHAVIOURS) {
+    await test(`H replacement and addition in a three-person household (${mode(table)}, ${behaviour} model)`, async () => {
+      const open = "Aisyah broke her arm. How much?";
+      const rep = await converse(RAHMANS, [open, "sorry, I meant Kumar"], [[NA], [KR]], behaviour, table);
+      for (const a of [...rep.saved, ...rep.reopened]) assertNoCrossing(RAHMANS, a, "rahman replace");
+      assert.ok(!people(rep.saved[1]).includes(NA));
+      if (cards(rep.saved[0]).length) assert.equal(rep.reopened[0].invalidated?.reason, "superseded");
+      const add = await converse(RAHMANS, [open, "Siti also broke her arm"], [[NA], [NA, SH]], behaviour, table);
+      for (const a of [...add.saved, ...add.reopened]) assertNoCrossing(RAHMANS, a, "rahman add");
+      assert.ok(!people(add.saved[1]).includes(KR), "Kumar was never asked about");
+      assert.ok(!add.reopened.some((a) => a.invalidated));
+      const not = await converse(RAHMANS, [open, "not Aisyah — Siti"], [[NA], [SH]], behaviour, table);
+      assert.ok(!people(not.saved[1]).includes(NA));
+      if (cards(not.saved[0]).length) assert.equal(not.reopened[0].invalidated?.reason, "superseded");
+      assert.ok(behaviour === "swapped" || cards(rep.saved[0]).length, "a faithful first answer shows Aisyah's card");
+    });
+  }
+
+  // ---- S: who each message is about (lib/simple-chat/subjects.ts), when the module exists.
+  const subjects = await import("@/lib/simple-chat/subjects").catch(() => null);
+  await test("S resolveSubjects reads replacements, additions, new questions and unknown names", () => {
+    assert.ok(subjects, "lib/simple-chat/subjects.ts exists");
+    const r = (...said: string[]) => subjects!.resolveSubjects(TERNS.household, said.reverse());
+    assert.deepEqual(r(OPEN, "actually it's Daniel, not Grace"), { people: [D], change: "replace", replaced: [G], unknown: null });
+    assert.deepEqual(r(OPEN, "not Grace — Daniel").people, [D]);
+    assert.deepEqual(r(OPEN, "Daniel too").people, [G, D]);
+    assert.deepEqual(r(OPEN, "both of them").people, [G, D]);
+    assert.deepEqual(r(OPEN, "what about Daniel?"), { people: [D], change: "new", replaced: [], unknown: null });
+    assert.deepEqual(r(OPEN, "how much for the hip?").people, [G], "a follow-up naming no one keeps the people");
+    assert.equal(r(OPEN, "what about my husband?").people, null, "a relationship word is left to the other checks");
+    assert.equal(r(OPEN, "What does Grace's husband get?").people, null);
+    assert.equal(r(OPEN, "I broke my arm too").people, null, "the speaker is left to the other checks");
+    assert.deepEqual(r(OPEN, "sorry i meant the hip").people, [G], "a correction of the benefit keeps the people");
+    assert.deepEqual(r(OPEN, "how much can I claim for that?").people, [G]);
+    assert.equal(r(OPEN, "actually it's Wei, not Grace").unknown, "Wei");
+    // Words the documents print, and ordinary words, are never taken for an unknown person.
+    for (const q of ["What about Hip?", "And for the Arm (fracture)?", "Actually it was Monday", "It was Kestrel Assurance", "What about the hip?", "sorry i meant the hip", "Actually, how much is it?"])
+      assert.equal(r(OPEN, q).unknown, null, q);
+    // Only the household's own names: the same words for another household mean nothing.
+    assert.equal(subjects!.resolveSubjects(RAHMANS.household, ["actually it's Daniel, not Grace"]).unknown, "Daniel");
+  });
+  await test("S supersededBy walks back over the replaced person's answers only", () => {
+    assert.ok(subjects);
+    const t = [{ answerId: "a1", people: [G] }, { answerId: "a2", people: [] }, { answerId: "a3", people: [G] }];
+    assert.deepEqual(subjects!.supersededBy([G], t), ["a3", "a1"]);
+    assert.deepEqual(subjects!.supersededBy([G], [{ answerId: "a0", people: [G] }, { answerId: "a1", people: [D] }, { answerId: "a2", people: [G] }]), ["a2"]);
+    assert.deepEqual(subjects!.supersededBy([], t), []);
+  });
+
+  console.log(`person corrections: ${passed} passed, ${failures.length} failed`);
+  for (const f of failures) console.log(`FAIL ${f}`);
+  if (failures.length) process.exit(1);
+}
+main().catch((error) => { console.error(error); process.exit(1); });
