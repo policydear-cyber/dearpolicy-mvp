@@ -181,7 +181,7 @@ async function main() {
       if (kind === "no_text") assert.match(said, /clearer scan/);
       else assert.doesNotMatch(said, /\bscan/i, said);
       if (kind === "service" || kind === "limit") assert.match(chat.why, /nothing is wrong with the file/);
-      if (kind === "service") assert.match(chat.why, /reading service wasn’t available/);
+      if (kind === "service") assert.match(chat.why, /connection problem on our side/);
       if (kind === "limit") assert.match(chat.step, new RegExp("after the limit resets " + fa.READING_LIMIT_RESETS));
     }
     // An unknown reason read before is offered another copy, as on the page; read never, "Try reading it again".

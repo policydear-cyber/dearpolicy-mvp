@@ -86,7 +86,7 @@ const CHAT_WHY: Record<FailedDocumentAdvice["kind"], string> = {
   unopenable: "the file couldn’t be opened — it may be damaged",
   incomplete: "the file is incomplete — it stops part-way, as happens when a download or copy is cut off",
   photo: "it is a photo too blurred, dark or faint to read",
-  service: "DearPolicy’s reading service wasn’t available — nothing is wrong with the file",
+  service: "DearPolicy couldn’t finish reading it because of a connection problem on our side — nothing is wrong with the file",
   limit: "reading was paused when the monthly reading limit was reached — nothing is wrong with the file",
   reading_failed: "DearPolicy couldn’t finish reading it",
   unknown: "DearPolicy couldn’t finish reading it",

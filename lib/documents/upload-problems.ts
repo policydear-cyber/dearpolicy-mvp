@@ -102,3 +102,15 @@ export function readingWaitCopy(stage: string | null | undefined): { title: stri
   if (stage === "ocr") return { title: "Reading scanned pages…", note: "Scanned pages can take a few minutes. You can keep using DearPolicy while this finishes.", eta: "Can take a few minutes" };
   return { title: "Reading this document…", note: "You can keep using the app while this finishes.", eta: "Usually ready in under a minute" };
 }
+
+/** Every "Read again" and "Try reading it again" button on the Documents page: a re-read is a full paid reading (a
+ * weak or empty reading is never cached, so each one asks the readers again), so the first press only arms the button
+ * and the second, on the same document, sends it. Returns what the press did. */
+export function pressReadAgain(armedId: string | null, id: string, actions: { arm: (id: string | null) => void; send: () => void }): "armed" | "sent" {
+  if (armedId !== id) { actions.arm(id); return "armed"; }
+  actions.arm(null);
+  actions.send();
+  return "sent";
+}
+/** The label of an armed button, whatever it said before. */
+export const CONFIRM_READ_AGAIN = "Confirm read again";

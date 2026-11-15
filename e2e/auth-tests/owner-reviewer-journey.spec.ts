@@ -261,7 +261,9 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     const unreadableCard = card(owner, unreadable);
     const retry = unreadableCard.getByRole("button", { name: "Try reading it again" });
     if (await retry.count()) {
+      // A re-read is a paid reading: the first click only arms the button, the confirming click reads (PR #500 H1).
       await retry.click();
+      await unreadableCard.getByRole("button", { name: "Confirm read again" }).click();
       await expect(owner.getByTestId("library-notice")).toContainText("again");
     } else {
       await expect(unreadableCard.getByTestId("document-unreadable")).toContainText(/clearer copy/);

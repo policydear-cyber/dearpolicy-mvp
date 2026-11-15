@@ -8,7 +8,7 @@ import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } f
 import { customerError } from "@/components/customer-text";
 import { coverReadingPending, failedDocumentAdvice, notReadPagesAdvice, readInPartAdvice, unreadablePagesAdvice } from "@/lib/documents/failure-advice";
 import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
-import { documentReadLabel, readingFinishedSummary, readingWaitCopy } from "@/lib/documents/upload-problems";
+import { CONFIRM_READ_AGAIN, documentReadLabel, pressReadAgain, readingFinishedSummary, readingWaitCopy } from "@/lib/documents/upload-problems";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
@@ -325,6 +325,11 @@ export default function PoliciesPage() {
     }
   }
 
+  /** Every Read again button: the first press arms it, the confirming press reads (lib/documents/upload-problems.ts). */
+  function pressRead(policy: Policy) {
+    pressReadAgain(confirmRereadId, policy.id, { arm: setConfirmRereadId, send: () => void retryReading(policy) });
+  }
+
   /** Give the password for a locked PDF that is already in the library:
    * it is read again with that password; nothing is re-uploaded. */
   async function unlock(policy: Policy, password: string) {
@@ -512,7 +517,7 @@ export default function PoliciesPage() {
             const unread = !processing && policy.processing_status === "ready" ? notReadPagesAdvice(policy.processing_message) : null;
             // The retry path, where the card is: the same confirming Read again as the actions row below (re-reading
             // makes this document's cover unavailable for a minute, and that row says so).
-            const readAgainButton = <div className="row-error-actions"><button type="button" className="mini-button" data-testid="read-again-pages" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => { if (confirmRereadId === policy.id) { setConfirmRereadId(null); void retryReading(policy); } else setConfirmRereadId(policy.id); }}>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? "Confirm read again" : "Read again"}</button></div>;
+            const readAgainButton = <div className="row-error-actions"><button type="button" className="mini-button" data-testid="read-again-pages" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : "Read again"}</button></div>;
             return <>
               {missing && <div className="accuracy-warning" data-testid="pages-not-read"><b>{missing.title}</b><span>{missing.what}</span><small>{missing.next}</small>{readAgainButton}</div>}
               {unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>{unread.title}</b><span>{unread.what}</span><small>{unread.next}</small>{!missing && readAgainButton}</div>}
@@ -550,11 +555,11 @@ export default function PoliciesPage() {
             return <div className="row-error processing-error" data-testid="document-unreadable" data-failure={advice.kind}><strong>This document could not be read</strong><span>{advice.reason}</span><small>{advice.hint}</small>
               <div className="row-error-actions">{advice.nextStep === "upload_another"
                 ? <button type="button" className="mini-button" onClick={chooseAnother}>{advice.action}</button>
-                : <><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : advice.action}</button>{advice.uploadAction && <button type="button" className="mini-button" onClick={chooseAnother}>{advice.uploadAction}</button>}</>}</div></div>;
+                : <><button type="button" className="mini-button" data-testid="read-again-failed" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : advice.action}</button>{advice.uploadAction && <button type="button" className="mini-button" onClick={chooseAnother}>{advice.uploadAction}</button>}</>}</div></div>;
           })()}
 
           {/* Its numbers and the actions on it come last. */}
-          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{(policy.quarantine_status === "scan_clean" || policy.quarantine_status === "not_scanned_prototype") && <PreviewLink policy={policy} />}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}><Icon name="list"/>{detailsId === policy.id ? "Hide details" : "Details"}</button>}{!processing && policy.processing_status === "ready" && <button type="button" className="mini-button" title="Read this document again from the file DearPolicy kept. People you chose for it stay chosen." disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => { if (confirmRereadId === policy.id) { setConfirmRereadId(null); void retryReading(policy); } else setConfirmRereadId(policy.id); }}><Icon name="refresh"/>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? "Confirm read again" : "Read again"}</button>}{confirmRereadId === policy.id && <><button type="button" className="mini-button" onClick={() => setConfirmRereadId(null)}>Cancel</button><small className="reread-note" data-testid="reread-note">Coverage for this document is unavailable for a minute while it&rsquo;s read again.</small></>}<button className={`mini-button danger${confirmDeleteId === policy.id ? " armed" : ""}`} disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}><Icon name="trash"/>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{(policy.quarantine_status === "scan_clean" || policy.quarantine_status === "not_scanned_prototype") && <PreviewLink policy={policy} />}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}><Icon name="list"/>{detailsId === policy.id ? "Hide details" : "Details"}</button>}{!processing && policy.processing_status === "ready" && <button type="button" className="mini-button" title="Read this document again from the file DearPolicy kept. People you chose for it stay chosen." disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}><Icon name="refresh"/>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : "Read again"}</button>}{confirmRereadId === policy.id && <><button type="button" className="mini-button" onClick={() => setConfirmRereadId(null)}>Cancel</button><small className="reread-note" data-testid="reread-note">{policy.processing_status === "ready" ? <>Coverage for this document is unavailable for a minute while it&rsquo;s read again.</> : "This reads the whole document again."}</small></>}<button className={`mini-button danger${confirmDeleteId === policy.id ? " armed" : ""}`} disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}><Icon name="trash"/>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
 
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
         </div>;

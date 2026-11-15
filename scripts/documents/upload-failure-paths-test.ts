@@ -424,3 +424,48 @@ test("Home and Coverage count a ready document with an unread page as not fully 
   const result = await notFullyRead(ACCOUNT, ADA);
   assert.deepEqual(result.ids.sort(), [pagesMissing, scansNotRead].sort());
 });
+
+test("every Read again and Try reading it again button asks first: the first press sends nothing, the confirm press reads", async () => {
+  const { pressReadAgain, CONFIRM_READ_AGAIN } = await import("@/lib/documents/upload-problems");
+  const sent: string[] = [];
+  globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+    sent.push(String(url) + " " + String(init?.body ?? ""));
+    return new Response(JSON.stringify({ status: "queued" }), { status: 202 });
+  }) as typeof fetch;
+  // The page's state, as the component holds it: which document's button is armed.
+  let armed: string | null = null;
+  const press = (id: string) => pressReadAgain(armed, id, {
+    arm: (next) => { armed = next; },
+    send: () => void fetch("/api/policies/reprocess", { method: "POST", body: JSON.stringify({ policyId: id }) }),
+  });
+  assert.equal(press("doc-a"), "armed");
+  assert.equal(sent.length, 0, "the first press sends no request");
+  assert.equal(armed, "doc-a");
+  // Pressing another document's button moves the arming there; still nothing is sent.
+  assert.equal(press("doc-b"), "armed");
+  assert.equal(sent.length, 0);
+  assert.equal(press("doc-b"), "sent");
+  assert.deepEqual(sent, ['/api/policies/reprocess {"policyId":"doc-b"}'], "the confirming press sends exactly one request");
+  assert.equal(armed, null, "and disarms the button");
+  assert.equal(press("doc-b"), "armed", "a further read asks again");
+  assert.equal(sent.length, 1);
+  assert.equal(CONFIRM_READ_AGAIN, "Confirm read again");
+
+  // The page: every read-again button (page notes, the failed card's read_again for no text found and the other
+  // reasons, and the actions row) goes through pressRead; nothing else starts a re-read of a read document.
+  const page = readFileSync("app/policies/page.tsx", "utf8");
+  assert.match(page, /function pressRead\(policy: Policy\) \{\n\s*pressReadAgain\(confirmRereadId, policy\.id, \{ arm: setConfirmRereadId, send: \(\) => void retryReading\(policy\) \}\);/);
+  assert.equal(page.match(/onClick=\{\(\) => pressRead\(policy\)\}/g)?.length, 3, "the page-note, failed-card and actions-row buttons");
+  assert.match(page, /data-testid="read-again-pages"[^>]*onClick=\{\(\) => pressRead\(policy\)\}/);
+  assert.match(page, /data-testid="read-again-failed"[^>]*onClick=\{\(\) => pressRead\(policy\)\}>\{retryingId === policy\.id \? "Starting…" : confirmRereadId === policy\.id \? CONFIRM_READ_AGAIN : advice\.action\}/);
+  // retryReading is called in two places only: the confirmed press, and a stalled document's "Try again" (its first
+  // reading never started, so there is nothing to read "again").
+  const calls = [...page.matchAll(/retryReading\(policy\)/g)].map((m) => page.slice(Math.max(0, m.index! - 400), m.index!));
+  assert.equal(calls.length, 2);
+  assert.ok(calls.some((before) => /pressReadAgain\(/.test(before)));
+  assert.ok(calls.some((before) => /policy\.processing_stalled/.test(before)));
+  // No text found offers Read again (confirm-first) with another copy beside it.
+  const advice = failedDocumentAdvice(errors.UNREADABLE_DOCUMENT_MESSAGE, { hasPages: true });
+  assert.equal(advice.nextStep, "read_again");
+  assert.equal(advice.uploadAction, "Upload a clearer copy");
+});
