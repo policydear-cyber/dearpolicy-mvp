@@ -5,6 +5,7 @@ import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { isUuid } from "@/lib/db/client";
 import { recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
 import { acceptPolicyUpload, MULTIPART_MAX_BYTES, resolveUploadFamilyMember, uploadErrorResponse } from "./accept";
 
 export const runtime = "nodejs";
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
     const known = uploadErrorResponse(error, request);
     if (known) return known;
     const authResponse = routeErrorResponse(error, { request, route: "/api/policies/upload" });
-    if (authResponse.status === 500) return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    if (authResponse.status === 500) return NextResponse.json({ error: UPLOAD_COPY.finishFailed }, { status: 500 });
     return authResponse;
   }
 }

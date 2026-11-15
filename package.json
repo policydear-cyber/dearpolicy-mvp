@@ -348,6 +348,7 @@
     "documents:scramble-currency-test": "node --import tsx --test scripts/documents/scramble-currency-test.ts",
     "documents:cover-reading-pending-test": "node --import tsx --test scripts/documents/cover-reading-pending-test.ts",
     "documents:pages-not-read-test": "node --import tsx --test scripts/documents/pages-not-read-test.ts",
+    "documents:upload-failure-paths-test": "node --import tsx --test scripts/documents/upload-failure-paths-test.ts",
     "policies:capped-share-test": "node --import tsx scripts/policies/capped-share-test.ts",
     "policies:page-currency-rows-test": "node --import tsx scripts/policies/page-currency-rows-test.ts",
     "policies:share-cap-test": "node --import tsx scripts/policies/share-cap-test.ts",

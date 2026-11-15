@@ -1,6 +1,6 @@
 import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
 import { NON_COVER_ROLES, PAYMENT_ROLES, ROLE_WORDS, bundleSegments, mendOcrRows, printedOrder, printsPolicyNumber, settleOcrFigures, type BundleSegment } from "@/lib/documents/messy";
-import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READ_IN_PART_FINAL_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, quotaStopReason, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote, notReadPagesNote, withPageNotes } from "@/lib/documents/processing-errors";
+import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READ_IN_PART_FINAL_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, noPagesProblem, quotaStopReason, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote, notReadPagesNote, withPageNotes } from "@/lib/documents/processing-errors";
 import { documentDateFrom, ensureEvidenceSchema, evidenceColumnsReady, policyNumberAppears, printedDateAppears, printedDates } from "@/lib/documents/evidence";
 import { annotateCoverageEvidence, annotateLedgerEvidence, isCopyOf, markConflicts } from "@/lib/documents/evidence-store";
 import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
@@ -501,6 +501,11 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       }));
       if (sniffed.format === "pdf") documentTitle = await pdfDocumentTitle(pdfBytes, args.pdfPassword).catch(() => null);
     }
+
+    // A PDF (or image) with no pages at all: nothing to read, now or on any retry. A Word file with no text keeps its
+    // own "no readable text" reason below.
+    const empty = ocrSourceBytes ? noPagesProblem(pages.length) : null;
+    if (empty) throw empty;
 
     const ocrPageNumbers = ocrSourceBytes ? pagesNeedingOcr(pages) : [];
     if (ocrPageNumbers.length) {
