@@ -566,7 +566,7 @@ ROUND2.push(
   ["R3-2e '(a) Hospital cash (HC)\\t…', 6 days", `(a) ${R3W.replace("Hospital cash", "Hospital cash (HC)")}`, [], { ...R3O, benefit: "Hospital cash (HC)" }, 6, "S$400"],
   ["R3-2f 'Hospital cash (Plan B)' stays a condition: none", R3W.replace("Hospital cash", "Hospital cash (Plan B)"), [], { ...R3O, benefit: "Hospital cash (Plan B)" }, 40, null],
   ["R3-2g 'Hospital cash (see note 3)' stays a condition: none", R3W.replace("Hospital cash", "Hospital cash (see note 3)"), [], { ...R3O, benefit: "Hospital cash (see note 3)" }, 40, null],
-  ["R3-2h 'Hospital cash (XY)' (not its initials) stays a condition: none", R3W.replace("Hospital cash", "Hospital cash (XY)"), [], { ...R3O, benefit: "Hospital cash (XY)" }, 40, null],
+  ["R3-2h 'Hospital cash (XY)' (round 7: capitals in a bracket are a label, as main reads them)", R3W.replace("Hospital cash", "Hospital cash (XY)"), [], { ...R3O, benefit: "Hospital cash (XY)" }, 40, "S$3,000"],
   // HIGH 3: any bracket type, and a trailing ", <x> only" or "- <x> only" clause, is a condition.
   ["R3-3 '[accident only]', 40 days", `${R3W} [accident only]`, [], R3O, 40, null],
   ["R3-3b ', accident only', 40 days", `${R3W}, accident only`, [], R3O, 40, null],
@@ -620,6 +620,13 @@ ROUND2.push(
     "max 30 days in any one policy year", "up to a maximum of 30 days", "maximum 30 days of hospitalisation", "up to 30 days in hospital", "up to 30 days per stay*", "max 30 days per event"]
     .map((b) => [`R6-1 '(${b})', 40 days`, `${R5} (${b})`, [], R3O, 40, "S$3,000"] as [string, string, string[], WrapOpts, number, string | null]),
   ["R6-2 '(max 30 days per stay overseas)' stays a condition: none", `${R5} (max 30 days per stay overseas)`, [], R3O, 40, null],
+  // Round 7: descriptive brackets and capitals labels anywhere in the row keep main's figure; the wrong currency does not.
+  ...[["Hospital Income (Inpatient)", ""], ["Hospital Cash Allowance (Daily)", ""], ["Hospital cash (In-patient)", ""], ["Hospital cash (Per Day)", ""],
+    ["Hospital cash (Hospitalisation)", ""], ["Hospital cash (S$)", ""], ["Hospital cash (SGD)", ""], ["Hospital cash", " (HCB)"], ["Hospital cash", " (H)"], ["Hospital cash", " (HC)"]]
+    .map(([n, t]) => [`R7-1 '${n}${t}', 40 days`, `${R3W.replace("Hospital cash", n)}${t}`, [], { ...R3O, benefit: n }, 40, "S$3,000"] as [string, string, string[], WrapOpts, number, string | null]),
+  ["R7-2 '(USD)' on an S$ row: none", `${R3W} (USD)`, [], R3O, 40, null],
+  ["R7-2b '(ICU)' in the terms: none", `${R3W} (ICU)`, [], R3O, 40, null],
+  ["R7-2c '(OS)': none", `${R3W} (OS)`, [], R3O, 40, null],
   ["R5-2c 'Hospital cash (Child)' stays a condition: none", R3W.replace("Hospital cash", "Hospital cash (Child)"), [], { ...R3O, benefit: "Hospital cash (Child)" }, 40, null],
   ["R5-2 '(max 30 days, accident only)' stays a condition: none", `${R5} (max 30 days, accident only)`, [], R3O, 40, null],
   ["R5-2b '(up to 30 days for all lives)' stays a condition: none", `${R5} (up to 30 days for all lives)`, [], R3O, 40, null],
