@@ -128,8 +128,8 @@ export async function enqueueChat(request:ChatRequest){
 const STUCK_ANALYSIS_MESSAGE="The analysis stopped unexpectedly and could not be finished after several attempts. Your message is saved. Please try sending it again.";
 export async function getChatJob(accountId:string,id:string){
   await initializeQueue();
-  const row=(await query<{id:string;status:string;progress:Progress;result_json:unknown;error:string|null}>(
-    "SELECT id,status,progress,result_json,error FROM chat_analysis_jobs WHERE account_id=$1 AND id=$2",[accountId,id])).rows[0]??null;
+  const row=(await query<{id:string;status:string;progress:Progress;result_json:unknown;error:string|null;conversation_id:string|null}>(
+    "SELECT id,status,progress,result_json,error,conversation_id::text AS conversation_id FROM chat_analysis_jobs WHERE account_id=$1 AND id=$2",[accountId,id])).rows[0]??null;
   if(row&&(row.status==="queued"||row.status==="running")){
     try{
       const healed=await query<{id:string}>(
