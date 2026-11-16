@@ -86,6 +86,9 @@ async function main() {
     const page = "Customer Service Hotline: 1800 333 0333\nClaims Hotline +65 6788 8833\nTel: 62345678 (Mon-Fri)\n24-hour Emergency Assistance: +65 6322 2000\nEmail: claims@income.com.sg\nVisit www.income.com.sg/claims for forms.";
     assert.deepEqual(on(page, "NTUC Income Insurance Co-operative Limited"), ["phone|Phone|1800 333 0333", "phone|Claims|+65 6788 8833", "phone|Emergency assistance|+65 6322 2000", "phone|Phone|62345678", "email|Claims email|claims@income.com.sg", "website|Website|www.income.com.sg/claims"]);
   });
+  await t("Critic #505 LOW: \"Private\" is a generic name word, so an insurer's own heading is still its own", () => {
+    assert.deepEqual(on("AIA Singapore\nCustomer Care: 1800 248 8000", "AIA Singapore Private Limited"), ["phone|Phone|1800 248 8000"]);
+  });
   await t("never the insurer's: a regulator or dispute body, an agent, a hospital, a fax, a policy number, a money figure, a date", () => {
     const page = ["If you are not satisfied, contact FIDReC at 6327 8878 or www.fidrec.com.sg.", "Your agent: John Tan, tel 9123 4567.", "Fax: 6222 1111", "Policy No. 1234 5678 9012 — quote it on all claims.",
       "Claims are paid up to S$ 20 000 per year.", "Call Raffles Hospital on 6311 1111 for admission.", "Period of insurance 01/01/2026 to 31/12/2026", "Contact the Monetary Authority of Singapore (MAS) at 6225 5577.",

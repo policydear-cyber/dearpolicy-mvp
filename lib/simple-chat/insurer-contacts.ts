@@ -84,7 +84,7 @@ function ownContactLine(text: string, at: number, length: number, insurer: strin
 const CLAIM_WORDS = /\bclaims?\b/i;
 const EMERGENCY_WORDS = /\b(?:emergency|assistance|24[- ]?hours?)\b/i;
 
-const GENERIC_NAME_WORDS = new Set("insurance assurance reinsurance life general company co corporation corp limited ltd plc pte berhad bhd inc llc group holdings singapore malaysia international the and of takaful financial services".split(" "));
+const GENERIC_NAME_WORDS = new Set("insurance assurance reinsurance life general company co corporation corp limited ltd plc pte berhad bhd inc llc group holdings singapore malaysia international the and of takaful financial services private public".split(" "));
 /** The insurer's own name words ("Harbourline Assurance plc" → harbourline), for matching an email's or website's domain. */
 const nameWords = (insurer: string) => insurer.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length >= 3 && !GENERIC_NAME_WORDS.has(w));
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
