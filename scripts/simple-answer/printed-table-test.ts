@@ -66,6 +66,35 @@ t("Critic #505 L: two tables of the same width on one page stay two tables, each
   assert.deepEqual(out.map((o) => o.table!.headers), [["Year", "Premiums", "Death", "Surrender"], ["Year", "Bonus", "Death", "Surrender"]]);
   assert.deepEqual(out.map((o) => o.table!.rows), [[["2", "2,000", "50,000", "500"]], [["2", "25", "50,025", "530"]]]);
 });
+// TE1 #505 F1/F2/F5: blank cells, partial rows and two-line headings.
+const BLANKS = ["Table 2", "End of policy year\tAge\tTotal premiums paid\tGuaranteed surrender value\tNon-guaranteed at 4.25%",
+  "5\t40\t12,000\t3,150.50\t4,020", "20\t55\t48,000\t\t31,200"].join("\n");
+const SPACED = ["Table 2", "End of policy year   Age   Total premiums paid   Guaranteed surrender value   Non-guaranteed at 4.25%",
+  "5   40   12,000   3,150.50   4,020", "20   55   48,000      31,200"].join("\n");
+const TWO = ["Table 2", "End of\t\tTotal premiums\tGuaranteed\tNon-guaranteed", "policy year\tAge\tpaid\tsurrender value\tat 4.25%", "5\t40\t12,000\t3,150.50\t4,020"].join("\n");
+const H2 = { accountId: "a", members: [], documents: [doc("B1", "Saver Tabs", BLANKS), doc("B2", "Saver Spaced", SPACED), doc("B3", "Saver Two", TWO)] } as unknown as Household;
+t("TE1 #505 F1: a tab-printed blank cell stays blank, so a figure never moves into the column before it", () => {
+  const out = tablesFromPrintedRows([pt("a", "Saver Tabs", "5 40 12,000 3,150.50 4,020"), pt("b", "Saver Tabs", "20 55 48,000 31,200")], H2, label);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0].table!.headers, ["End of policy year", "Age", "Total premiums paid", "Guaranteed surrender value", "Non-guaranteed at 4.25%"]);
+  assert.deepEqual(out[0].table!.rows[1], ["20", "55", "48,000", "", "31,200"]);
+});
+t("TE1 #505 F1: a row narrower than its table (a blank printed as spaces) is not drawn in the grid; the full rows are", () => {
+  const out = tablesFromPrintedRows([pt("a", "Saver Spaced", "5 40 12,000 3,150.50 4,020"), pt("b", "Saver Spaced", "20 55 48,000 31,200")], H2, label);
+  assert.equal(out.length, 2);
+  assert.deepEqual(out[0].table!.rows, [["5", "40", "12,000", "3,150.50", "4,020"]]);
+  assert.equal(out[1].table, undefined);
+  assert.match(out[1].text, /prints: “20 55 48,000 31,200”/);
+});
+t("TE1 #505 F2: part of a printed row is never drawn as a table row", () => {
+  const out = tablesFromPrintedRows([pt("a", "Saver Tabs", "40 12,000 3,150.50"), pt("b", "Saver Tabs", "12,000 3,150.50 4,020")], H2, label);
+  assert.ok(out.every((o) => !o.table));
+});
+t("TE1 #505 F5: a heading printed over two tab-separated lines is joined column by column", () => {
+  const out = tablesFromPrintedRows([pt("a", "Saver Two", "5 40 12,000 3,150.50 4,020")], H2, label);
+  assert.deepEqual(out[0].table!.headers, ["End of policy year", "Age", "Total premiums paid", "Guaranteed surrender value", "Non-guaranteed at 4.25%"]);
+  assert.deepEqual(out[0].table!.printedAbove, ["Table 2"]);
+});
 t("left alone: an amount card, a point with conditions, a point with its own words, a row not on the cited page, a row of words", () => {
   const st: AnswerStatement[] = [
     pt("x1", "READYBUILDER 10", "10/38 47,909 28,175 1,585 29,760 2,850 31,025", { amount: { text: "S$1", currencyResolved: true, illustration: false } }),

@@ -25,7 +25,13 @@ const FIGURE_CELL = /^(?:[A-Z]{0,3}\$?|[£€¥])?\(?-?\d[\d,]*(?:\.\d+)?\)?%?$|
 /** A line's cells: split at tabs or gaps of two spaces or more; a line spaced only by single spaces is split at its figures
  * (a leading label stays whole), and only when it has at least three figures. */
 export function cellsOf(line: string): string[] | null {
-  const wide = line.trim().split(/\t+|\s{2,}/).map((c) => c.trim()).filter(Boolean);
+  // A tab-separated line keeps its blank cells ("10<TAB>45<TAB>24,000<TAB><TAB>31,200"): a figure never moves into the
+  // column of the one before it (TE1 #505 F1).
+  if (line.includes("\t")) {
+    const tabbed = line.replace(/^[ \t]*?(?=\S)/, "").replace(/ +$/, "").split("\t").map((c) => c.trim());
+    return tabbed.length >= 3 && tabbed.some(Boolean) ? tabbed : null;
+  }
+  const wide = line.trim().split(/\s{2,}/).map((c) => c.trim()).filter(Boolean);
   if (wide.length >= 3) return wide;
   const words = line.trim().split(/\s+/);
   const first = words.findIndex((w) => FIGURE_CELL.test(w));
@@ -36,6 +42,26 @@ export function cellsOf(line: string): string[] | null {
 const figures = (cells: string[]) => cells.filter((c) => FIGURE_CELL.test(c)).length;
 /** A data row: three or more figures, and figures in most of its cells. */
 const isDataRow = (cells: string[] | null): cells is string[] => !!cells && figures(cells) >= 3 && figures(cells) * 2 >= cells.length;
+
+/** Whether a row of `n` cells fills its table: no data row printed in the same run of rows, and no heading line just above
+ * them that splits into columns, is wider. A narrower row has a cell that cannot be placed (a blank printed as spaces). */
+function fitsItsTable(lines: string[], at: number, n: number): boolean {
+  let widest = n;
+  for (const step of [-1, 1]) {
+    for (let i = at + step; i >= 0 && i < lines.length; i += step) {
+      if (!lines[i].trim()) continue;
+      const c = cellsOf(lines[i]);
+      if (isDataRow(c)) { widest = Math.max(widest, c.length); continue; }
+      // The words line just above the rows: when it splits into columns (a tab or a wide gap), its column count counts.
+      if (step < 0 && /\t|\S\s{2,}\S/.test(lines[i].trim())) {
+        const heads = cellsOf(lines[i]) ?? lines[i].trim().split(/\s{2,}/);
+        if (heads.length >= 3 && figures(heads) === 0) widest = Math.max(widest, heads.length);
+      }
+      break;
+    }
+  }
+  return n === widest;
+}
 
 type Row = { st: AnswerStatement; doc: HouseholdDocument; page: number; lineAt: number; cells: string[] };
 
@@ -58,8 +84,16 @@ function headingsFor(lines: string[], at: number, n: number): { headers: string[
     if (isDataRow(cellsOf(line))) { if (above.length) break; continue; }
     if (cells.length === n && figures(cells) === 0 && !above.length) {
       // A heading line over the column headings (a group such as "Illustrated at 4.25% p.a.") is shown as printed with them.
-      const over = lines.slice(Math.max(0, i - 3), i).map((l) => l.trim()).filter((l) => l && l.length <= 160 && !isDataRow(cellsOf(l))).slice(-1);
-      return { headers: cells, printedAbove: over.map((l) => l.replace(/\s+/g, " ")) };
+      // A heading printed over two tab-separated lines, column by column ("Guaranteed" over "surrender value"), is one
+      // heading per column: the two lines are joined in each column, so no column loses its first line (TE1 #505 F5).
+      let j = i - 1;
+      while (j >= 0 && !lines[j].trim()) j--;
+      const upper = j >= 0 && lines[i].includes("\t") && lines[j].includes("\t") ? cellsOf(lines[j]) : null;
+      const twoLine = !!upper && upper.length === n && figures(upper) === 0 && upper.some((c) => !c);
+      const headers = twoLine ? cells.map((c, k) => [upper![k], c].filter(Boolean).join(" ")) : cells;
+      const top = twoLine ? j : i;
+      const over = lines.slice(Math.max(0, top - 3), top).map((l) => l.trim()).filter((l) => l && l.length <= 160 && !isDataRow(cellsOf(l))).slice(-1);
+      return { headers, printedAbove: over.map((l) => l.replace(/\s+/g, " ")) };
     }
     if (line.length <= 160) above.unshift(line.replace(/\s+/g, " "));
   }
@@ -80,9 +114,13 @@ export function tablesFromPrintedRows(statements: AnswerStatement[], household: 
     const at = lineOf(lines, m[2]);
     // Only a row found on the page it is cited from.
     if (at < 0) continue;
-    // The page's own line keeps its tabs; when the quote is not one whole line, the quote's own words are split.
-    const cells = (at >= 0 && flat(lines[at]) === flat(m[2]) ? cellsOf(lines[at]) : null) ?? cellsOf(m[2]);
+    // Only a whole printed line: part of a row has no columns of its own to show (TE1 #505 F2).
+    if (flat(lines[at]) !== flat(m[2])) continue;
+    const cells = cellsOf(lines[at]);
     if (!isDataRow(cells)) continue;
+    // A row narrower than the rows printed with it, or than the column headings just above, has a cell that cannot be
+    // placed (a blank printed as spaces): it is not drawn as a grid, and stays as quoted (TE1 #505 F1).
+    if (!fitsItsTable(lines, at, cells.length)) continue;
     rows.push({ st, doc, page: page.page, lineAt: at, cells });
   }
   if (!rows.length) return statements;

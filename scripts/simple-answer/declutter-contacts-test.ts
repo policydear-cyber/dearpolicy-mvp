@@ -111,7 +111,7 @@ async function main() {
     for (const line of ["This plan is distributed by DBS Bank. Call DBS at 1800 111 1111 for help.", "MediShield Life is administered by the CPF Board. Call 1800 227 1188.",
       "If you have concerns, contact the Singapore Medical Council at 6355 0632.", "For claims, write to the Ministry of Health 6325 9220.",
       "Please call the hotline of HealthPlus TPA at 6100 2000 for claims.", "Emergency assistance is provided by Global Rescue Services. 24-hour hotline 6111 9999.",
-      "Claim ID 1234-5678", "Claims reference 2026 1234 5678", "Please quote Claim No 3456 7890 when you call.",
+      "Claim ID 1234-5678", "Claims reference 2026 1234 5678", "Account for claims payouts: 0123 4567 8901", "Claims period 2026-2027 1 Jan 2026 to 31 Dec 2026", "Please quote Claim No 3456 7890 when you call.",
       "Emergency assistance is provided by Global Rescue Services.\n24-hour hotline: 6111 9999"])
       assert.deepEqual(on(line), [], line);
   });

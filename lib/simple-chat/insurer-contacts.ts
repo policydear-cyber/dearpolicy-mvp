@@ -23,7 +23,7 @@ const WEBSITE = /(?<![\w@./-])(?:https?:\/\/)?www\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-
 /** Words that say a number is a way to reach the insurer. */
 const CONTACT_WORDS = /\b(?:claims?|hotline|helpline|help ?desk|customer (?:service|care|services|centre|center)|contact(?: us| centre| center)?|call(?: us)?|tel(?:ephone)?\.?|phone|enquir(?:y|ies)|emergency|assistance|24[- ]?hours?)\b/i;
 /** Words that say a number is someone else's: a regulator or dispute body, an agent or adviser, a hospital or clinic, a fax. */
-const NOT_INSURER = /\b(?:fax|facsimile|fidrec|ombudsman|monetary authority|mas|sdic|deposit insurance|life insurance association|general insurance association|lia|gia|dispute|mediation|agent|adviser|advisor|representative|broker|intermediary|hospital|clinic|doctor|physician|police|embassy|bank|board|council|ministry|tpa|administrator|distributor|third[- ]party)\b/i;
+const NOT_INSURER = /\b(?:fax|facsimile|fidrec|ombudsman|monetary authority|mas|sdic|deposit insurance|life insurance association|general insurance association|lia|gia|dispute|mediation|agent|adviser|advisor|representative|broker|intermediary|hospital|clinic|doctor|physician|police|embassy|bank|board|council|ministry|tpa|administrator|distributor|third[- ]party|account|period)\b/i;
 /** Words that say a number is an identifier, not a phone: a policy, certificate, member or reference number. */
 const IDENTIFIER_LABEL = /\b(?:policy|certificate|cert|member(?:ship)?|account|reference|ref|nric|passport|identity|id|plan|claim)\s*(?:no\.?|number|#)/i;
 /** A label word that makes the number after it an identifier, with or without "No." */
@@ -124,6 +124,8 @@ export function contactsOnPage(text: string, page: number, policyName: string, i
   const addPhone = (raw: string, at: number) => {
     const n = digits(raw);
     if (n.length < 7 || n.length > 15) return;
+    // A span of years ("Claims period 2026-2027") is never a phone number (TE1 #505 F4).
+    if (/^(?:19|20)\d{2}\s*[-–]\s*(?:19|20)\d{2}$/.test(raw.trim())) return;
     // A figure the page prints as money is never a phone number.
     if (money.has(Number(n) * 100)) return;
     const near = around(text, at, raw.length);

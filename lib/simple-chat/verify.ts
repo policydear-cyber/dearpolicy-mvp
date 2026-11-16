@@ -3014,7 +3014,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     const forWhom = first?.personName ? ` for ${first.personName}` : "";
     const said = first && !first.text.includes("prints: “") ? ` ${first.text.replace(/\s+$/, "")}` : "";
     bottomLine = first
-      ? `Your documents list ${shownAmounts > 1 ? "these benefits" : "this benefit"}${forWhom}.${said ? said.replace(/([^.!?])$/, "$1.") : ""} ${shownAmounts > 1 ? "The amounts are shown below; they are separate and not added together." : "The amount is shown below."}`
+      ? `Your documents list ${shownAmounts > 1 ? "these benefits" : "this benefit"}${forWhom}.${said ? said.replace(/([^.!?])$/, "$1.") : ""} ${shownAmounts > 1 ? "The amounts are shown below." : "The amount is shown below."}`
       : statements.length ? "Here is what your documents say." : NO_ANSWER;
   }
   const questions: ChatQuestion[] = question ? [{ id: "simple_question", text: question, type: "text", why: "This helps me answer from the right part of your documents." }] : [];
