@@ -183,7 +183,7 @@ async function main() {
   await t("DECL-20261116 c1: a question naming one insurer shows only that insurer's contacts, never another cited one's", () => {
     const both = { citations: [{ policyId: "A1" } as never, { policyId: "B1" } as never] };
     // Names Merlion: only Merlion, even though Harbourline is cited first.
-    assert.deepEqual(insurerContactsFor(HOUSE, both, label, "How do I claim from merlion?").map((c) => c.insurer), ["Merlion General Insurance"]);
+    assert.deepEqual(insurerContactsFor(HOUSE, both, label, "How do I claim from Merlion?").map((c) => c.insurer), ["Merlion General Insurance"]);
     // Names Merlion, which the answer does not cite: its contact still comes from its own pages.
     assert.deepEqual(insurerContactsFor(HOUSE, { citations: [{ policyId: "A1" } as never] }, label, "How do I claim with Merlion General?").map((c) => c.insurer), ["Merlion General Insurance"]);
     // Names Orchid Life (no readable page with a contact): nothing, not the cited Harbourline or Merlion numbers.
@@ -202,12 +202,18 @@ async function main() {
     assert.deepEqual(names(h2, cites("Q2"), "Great, so how do I claim for the fracture?"), ["Prudential Assurance Company Singapore"]);
     const h3 = house([d2("R1", "Raffles Health Insurance", "Claims hotline 6311 2000"), d2("R2", "AIA Singapore Private Limited", "Claims hotline 1800 248 8000")]);
     assert.deepEqual(names(h3, cites("R2"), "I was admitted to Raffles Hospital, who do I call?"), ["AIA Singapore Private Limited"]);
-    // Controls: the full name, typed in lower case, does name the insurer.
+    // Controls: a full name typed in lower case, or a one-word name as printed, does name the insurer.
     assert.deepEqual(names(h2, cites("Q2"), "how do i claim with great eastern?"), ["Great Eastern Life Assurance"]);
     assert.deepEqual(names(h3, cites("R2"), "how do I claim from raffles health?"), ["Raffles Health Insurance"]);
-    assert.deepEqual(names(h1, cites("P2"), "who do I call at aia?"), ["AIA Singapore Private Limited"]);
+    assert.deepEqual(names(h1, cites("P2"), "who do I call at AIA?"), ["AIA Singapore Private Limited"]);
     const h4 = house([d2("O1", "Orchid Life Assurance", "Customer hotline 6222 3333"), d2("M1", "Merlion General Insurance Pte Ltd", "Claims hotline 6000 0000")]);
     assert.deepEqual(names(h4, cites("M1"), "How do I claim with Orchid Life?"), ["Orchid Life Assurance"]);
+    // Critic LOW: a one-word name typed as an everyday word in lower case does not name the insurer.
+    const h5 = house([d2("F1", "FWD Singapore Pte Ltd", "Claims hotline 6820 8888"), d2("L1", "Liberty Insurance Pte Ltd", "Claims hotline 6221 8611"), d2("M2", "Merlion General Insurance Pte Ltd", "Claims hotline 6000 0000")]);
+    assert.deepEqual(names(h5, cites("M2"), "can you fwd me the claim form?"), ["Merlion General Insurance Pte Ltd"]);
+    assert.deepEqual(names(h5, cites("M2"), "how do i claim? i want my liberty back"), ["Merlion General Insurance Pte Ltd"]);
+    assert.deepEqual(names(h5, cites("M2"), "how do I claim with FWD?"), ["FWD Singapore Pte Ltd"]);
+    assert.deepEqual(names(h5, cites("M2"), "how do i claim with liberty insurance?"), ["Liberty Insurance Pte Ltd"]);
   });
   await t("a document not read, or replaced by a newer one, gives no contact; no contact found shows nothing", () => {
     assert.deepEqual(insurerContactsFor(HOUSE, { citations: [{ policyId: "C1" } as never, { policyId: "D1" } as never] }, label), []);

@@ -171,7 +171,13 @@ function namedInsurers(household: Household, question: string): Set<string> {
   const out = new Set<string>();
   for (const d of household.documents) {
     const re = d.insurer?.trim() ? insurerNamePattern(d.insurer) : null;
-    if (re && new RegExp(re.source, "i").test(question)) out.add(insurerKey(d.insurer!));
+    if (!re) continue;
+    // A one-word name ("Liberty", "FWD") is an everyday word in lower case: it names the insurer only as printed
+    // (capitalised, an acronym in capitals) or followed by an insurer word ("liberty insurance").
+    const oneWord = nameWords(d.insurer!).length <= 1;
+    const named = oneWord ? namesInsurer(question, d.insurer!) || new RegExp(String.raw`(?<![A-Za-z])${nameWords(d.insurer!)[0] ?? "\0"}\s+${INSURER_WORD}\b`, "i").test(question)
+      : new RegExp(re.source, "i").test(question);
+    if (named) out.add(insurerKey(d.insurer!));
   }
   return out;
 }
