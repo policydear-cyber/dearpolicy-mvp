@@ -50,13 +50,13 @@ const bn = (o: Record<string, unknown>) => ({ section: "Benefits", column: null,
 
 type Built = { house: Household; rows: ReturnType<typeof chatRows> };
 /** A household of one or two people, each with their own schedule. `who[i]` reads `rows[i]` with `rates[i]`. */
-function household(specs: { person: string; row: string; below?: string[]; value: number; maxDays: number | null; fromDay?: number | null; currencyLine?: string; conditions?: string[]; above?: string[] }[]): Built {
+function household(specs: { person: string; row: string; below?: string[]; value: number; maxDays: number | null; fromDay?: number | null; currencyLine?: string; conditions?: string[]; above?: string[]; benefit?: string }[]): Built {
   const built = specs.map((s) => ({ s, d: scheduleDoc(s.person, s.row, s.below ?? [], s.currencyLine ?? "Policy currency: Singapore dollars (SGD)", s.above ?? []) }));
   const house: Household = { accountId: ACCT, members: specs.map((s, i) => ({ name: s.person, relationship: i === 0 ? "self" : "spouse" })), documents: built.map((b) => b.d.doc) };
   const fam: FamilyMember[] = specs.map((s, i) => ({ id: `f${i}`, display_name: s.person, relationship: i === 0 ? "self" : "spouse", date_of_birth: null }));
   const readings = built.map(({ s, d }) => {
     const src: SourceDoc = { id: d.id, name: d.doc.name, readable: true, pages: d.doc.pages };
-    const label = s.row.split(/\t| S\$| \$/)[0];
+    const label = s.benefit ?? s.row.split(/\t| S\$| \$/)[0];
     return checkReading(src, {
       document: { kind: "personal_proof", product: PRODUCT, insurer: INSURER, namedPeople: [s.person], plan: null, periodFrom: null, periodTo: null },
       covers: [{ person: s.person, product: PRODUCT, cover: PRODUCT, plan: null, riderOf: null, policyNumber: d.doc.policyNumber, premium: null, premiumFrequency: null, asOf: null,
@@ -395,6 +395,78 @@ test("gate SD-L1: a stay inside the waiting days pays nothing, and its working k
     assert.ok(st, JSON.stringify(a.kept));
     assert.match(st!.basis ?? "", /paid from day 3, for at most 365 days per policy year/, JSON.stringify(st));
   }
+});
+
+// ============ Wrapped cells and rows in between (stay-wrap, journey retest TE-ACC-20261116) ============
+// The retest's 4 schedules, rebuilt with made-up words: a cell that wraps onto the next line ("up to 365 days per" /
+// "policy year"), a premium row, another benefit's own row or a how-to-claim note between the daily row and its day cap or
+// waiting days. Each shape is worked out; another benefit's own day cap or waiting days, or another person's row, never
+// is this row's (unsure = no figure).
+const US = "Policy currency: United States dollars (US$)";
+const KW = "The hospital income rider does not pay for the first 2 days of any hospital stay.";
+const KROW = "Hospital income\tS$100 per day in hospital, up to 365 days per\npolicy year";
+const PACIFIC_ABOVE = ["Benefit\tWhat is paid", "Early-stage critical illness\t25% of the Sum Insured, up to US$20,000", "Late-stage critical illness\t100% of the Sum Insured, less any early-stage", "amount already paid"];
+const PROW = "Hospital cash\tUS$80 per day in hospital, from the first day,\nup to 20 days per policy year";
+const PWAIT = "Waiting period: 90 days from the cover start date (1 March 2026) for any critical illness.";
+const OROW = "Daily hospital income\tS$150 per day of hospital stay";
+const OICU = ["Intensive care unit (ICU) income\tS$300 per day in ICU, instead of the daily", "hospital income"];
+const OMAX = "Maximum days\t10 days per hospital stay";
+const OWAIT = "Waiting days: no hospital income is paid for the first 2 days of each hospital stay.";
+const MABOVE = ["TABLE OF BENEFITS", "Section\tBenefit\tAmount payable", "3\tFracture of arm, wrist or leg\t2% of the Sum Insured per fracture, maximum S$1,500 per accident"];
+const MROW = "4\tHospital cash\tS$50 per day in hospital, payable from the third consecutive day, up to 30 days per accident";
+const MBELOW = ["5\tMedical expenses\tUp to S$2,500 per accident, after an excess of S$100 per claim",
+  "Exclusions: injury while taking part in motor racing or professional sport; self-inflicted injury.",
+  "How to claim: notify us within 30 days of the accident on 6000 0000 (claims line) and", "send the completed claim form with the hospital discharge summary."];
+type WrapOpts = { value: number; maxDays: number | null; fromDay?: number | null; currencyLine?: string; benefit?: string; above?: string[] };
+const WRAP: [string, string, string[], WrapOpts, number, string | null][] = [
+  // Shape 1: the terms wrap, and the premium row stands between the row and its waiting sentence.
+  ["TE16-1 wrapped 'per' / 'policy year' + premium row + waiting sentence, 6 days", KROW, ["Annual premium\tS$285.00", KW], { value: 100, maxDays: 365 }, 6, "S$400"],
+  ["TE16-1b the same, the quote ending at the row's first line", KROW.split("\n")[0], ["policy year", "Annual premium\tS$285.00", KW], { value: 100, maxDays: 365 }, 6, "S$400"],
+  ["TE16-1c the name and the terms both wrap ('income\\tpolicy year')", "Hospital\tS$100 per day in hospital, up to 365 days per", ["income\tpolicy year", "Annual premium\tS$285.00", KW], { value: 100, maxDays: 365, benefit: "Hospital income" }, 6, "S$400"],
+  ["TE16-1d the name alone wraps ('income')", "Daily hospital\tS$100 per day in hospital, up to 365 days per policy year", ["income", "Annual premium\tS$285.00", "The daily hospital income does not pay for the first 2 days of any hospital stay."], { value: 100, maxDays: 365 }, 6, "S$400"],
+  ["TE16-1e another benefit's own row between the row and its waiting sentence, which names the row", KROW, ["Surgical benefit\tUp to S$2,000 per operation", KW], { value: 100, maxDays: 365 }, 6, "S$400"],
+  ["TE16-1f a wrapped yearly cap ('maximum S$1,000 per' / 'policy year'), 20 days", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year, maximum S$1,000 per", ["policy year"], { value: 100, maxDays: 365 }, 20, "S$1,000"],
+  // Shape 2: the terms wrap after "from the first day,"; the cover-start waiting period names another benefit on the page.
+  ["TE16-2 'from the first day,' / 'up to 20 days per policy year' + another benefit's waiting period, 3 days", PROW, [PWAIT], { value: 80, maxDays: 20, currencyLine: US, above: PACIFIC_ABOVE }, 3, "US$240"],
+  ["TE16-2b the same, 2 days", PROW, [PWAIT], { value: 80, maxDays: 20, currencyLine: US, above: PACIFIC_ABOVE }, 2, "US$160"],
+  // Shape 3: another benefit's own (wrapped) row, then a "Maximum days" row and a "Waiting days:" sentence.
+  ["TE16-3 ICU row 'instead of the daily' / 'hospital income', 'Maximum days' row, 'Waiting days:' sentence, 5 days", OROW, [...OICU, OMAX, OWAIT, "Annual premium: S$420.00"], { value: 150, maxDays: 10 }, 5, "S$450"],
+  // The retest's reading gave the row no most days (they are on a line of their own): the printed line still decides it.
+  ["TE16-3c the same, read with no most days", OROW, [...OICU, OMAX, OWAIT, "Annual premium: S$420.00"], { value: 150, maxDays: null }, 5, "S$450"],
+  ["TE16-3b 'Maximum days' printed under the row itself, 15 days (capped at 10)", OROW, [OMAX, ...OICU, OWAIT], { value: 150, maxDays: 10 }, 15, "S$1,500"],
+  // Shape 4: a numbered table, the next benefit's own row, an exclusions line and a wrapped how-to-claim note below.
+  ["TE16-4 numbered row, 'Medical expenses' row, exclusions and a wrapped how-to-claim note, 5 days", MROW, MBELOW, { value: 50, maxDays: 30, fromDay: 3, benefit: "Hospital cash", above: MABOVE }, 5, "S$150"],
+  // Negatives: unsure means no figure.
+  ["TE16-N1 'Maximum days' past another benefit's row may be that row's: a stay it would cut short gets none", OROW, [...OICU, OMAX, OWAIT], { value: 150, maxDays: 10 }, 15, null],
+  ["TE16-N1b read with no most days, and the most-days line says more ('for all insured persons')", OROW, [OMAX + ", for all insured persons", OWAIT], { value: 150, maxDays: null }, 5, null],
+  ["TE16-N2 a plain ICU row between (no 'instead of this row') still stops the figure", OROW, ["Intensive care unit (ICU) income\tS$300 per day in ICU", OMAX, OWAIT], { value: 150, maxDays: 10 }, 5, null],
+  ["TE16-N3 the next benefit's own wrapped day cap is never this row's", OROW, ["Recovery income\tS$80 per day at home,", "up to 10 days", OWAIT], { value: 150, maxDays: 10 }, 5, null],
+  ["TE16-N4 the next benefit's own day cap (numbered table) is never this row's", "4\tHospital cash\tS$50 per day in hospital, payable from the third consecutive day", ["5\tMedical expenses\tUp to S$2,500 per accident, maximum 30 days"], { value: 50, maxDays: 30, fromDay: 3, benefit: "Hospital cash", above: MABOVE }, 5, null],
+  ["TE16-N5 a waiting sentence under another benefit's row that does not name this row is that row's", KROW, ["Recovery cash\tS$50 per day at home", "This benefit does not pay for the first 2 days of any hospital stay."], { value: 100, maxDays: 365 }, 6, null],
+  ["TE16-N6 a waiting sentence under another benefit's row naming only words both rows share", "Hospital income\tS$100 per day in hospital, up to 365 days per policy year", ["Recovery income rider\tS$50 per day at home", "The income rider does not pay for the first 2 days of any hospital stay."], { value: 100, maxDays: 365 }, 6, null],
+  ["TE16-N7 another benefit's row tied to this one ('combined with') stops the figure", KROW, ["Surgical benefit\tUp to S$2,000 per operation, combined with the benefit above", KW], { value: 100, maxDays: 365 }, 6, null],
+  ["TE16-N8 a lump-sum limit row is not another benefit ('Overall limit')", OROW, ["Overall limit\tS$1,000 per stay", OMAX, OWAIT], { value: 150, maxDays: 10 }, 15, null],
+  ["TE16-N9 a cover-start waiting period naming no benefit", PROW, ["Waiting period: 90 days from the cover start date (1 March 2026)."], { value: 80, maxDays: 20, currencyLine: US, above: PACIFIC_ABOVE }, 3, null],
+  ["TE16-N10 a cover-start waiting period 'for any illness'", PROW, ["Waiting period: 90 days from the cover start date (1 March 2026) for any illness."], { value: 80, maxDays: 20, currencyLine: US, above: PACIFIC_ABOVE }, 3, null],
+  ["TE16-N11 a cover-start waiting period naming a benefit with no row on the page", PROW, [PWAIT], { value: 80, maxDays: 20, currencyLine: US }, 3, null],
+  ["TE16-N12 a how-to-claim note with a penalty stays, and stops the figure", MROW, [MBELOW[0], "How to claim: notify us within 30 days of the accident, otherwise the benefit is reduced by half."], { value: 50, maxDays: 30, fromDay: 3, benefit: "Hospital cash", above: MABOVE }, 5, null],
+  ["TE16-N13 a wrapped line that adds a condition ('for all insured persons') stops the figure", "Hospital income\tS$100 per day in hospital, up to 365 days per policy year,", ["for all insured persons", KW], { value: 100, maxDays: 365 }, 6, null],
+  ["TE16-N14 a wrapped line with a cause ('only after an accident') stops the figure", "Hospital cash\tS$50 per day in hospital, payable from the third consecutive day,", ["up to 30 days, only after an accident"], { value: 50, maxDays: 30, fromDay: 3 }, 5, null],
+  // Two people's rows in one table: the other person's row (and its day cap) is never this person's.
+  ["TE16-P1 two people's rows: the next person's own day cap is not this row's", "Hospital income (Tan Wei Ming)\tS$100 per day in hospital", ["Hospital income (Lee Mei Ling)\tS$100 per day in hospital, up to 30 days per", "policy year", KW], { value: 100, maxDays: 30, benefit: "Hospital income (Tan Wei Ming)" }, 6, null],
+  ["TE16-P2 two people's rows by name cell, both wrapped", "Tan Wei Ming\tHospital income\tS$100 per day in hospital, up to 365 days per", ["policy year", "Lee Mei Ling\tHospital income\tS$100 per day in hospital, up to 30 days per", "policy year", KW], { value: 100, maxDays: 365, benefit: "Hospital income" }, 6, null],
+  ["TE16-P3 the next person's row of another benefit holds the only day cap", "Hospital cash\tS$100 per day in hospital, payable from the 3rd day", ["Lee Mei Ling\tRecovery cash\tS$80 per day, maximum 30 days"], { value: 100, maxDays: 30, fromDay: 3 }, 6, null],
+];
+for (const [name, row, below, o, days, want] of WRAP) test(`stay-wrap ${name}`, () => {
+  const h = household([{ person: TAN, row, below, value: o.value, maxDays: o.maxDays, fromDay: o.fromDay ?? null, currencyLine: o.currencyLine, above: o.above, benefit: o.benefit }]);
+  const a = ask(h, TAN, [`I was in hospital for ${days} days. How much will I get?`], { perDay: { stayDays: days } });
+  assert.ok(a.row, `no daily row: ${JSON.stringify(h.rows.map((r) => [r.benefit, r.pays, r.figure.kind]))}`);
+  const got = stayCard(a)?.amount?.text ?? null;
+  assert.equal(got, want, JSON.stringify(a.kept.map((s) => [s.text, s.amount?.text ?? null, s.basis ?? null])));
+  if (want === null) assert.ok(!a.kept.some((s) => /ends before this daily benefit starts/.test(s.text)), JSON.stringify(a.kept.map((s) => s.text)));
+  // Only the daily rate and the one worked figure are ever shown.
+  const daily = `${o.currencyLine === US ? "US$" : "S$"}${o.value}`;
+  assert.ok(a.all.every((x) => x === daily || x === got), JSON.stringify(a.all));
 });
 
 // ============ Report ============

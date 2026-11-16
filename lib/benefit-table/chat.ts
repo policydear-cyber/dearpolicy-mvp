@@ -11,7 +11,7 @@ import { benefitNamesRead, figureText, periodWords } from "./assemble";
 import { benefitName, benefitNames, qualifierText } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, readStayRule, verifyAnswer } from "@/lib/simple-chat/verify";
+import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, readStayRule, verifyAnswer, type StayRule } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { noteMultiple, sameNote, type Multiplier, type RowFacts } from "./multiplier";
 import { withoutChildLimit } from "./child-limit";
@@ -42,7 +42,7 @@ export type RowReport = { dropped: { why: string; text: string; notFit?: boolean
    * household hears where it is printed (noteLeftOutAmounts), never that it could not be found. */
   withheld?: { note: string } }[]; labels: string[];
   /** For each label of a daily row: the first paid day and the most days the table read for it (one entry per row). */
-  days?: Record<string, { fromDay: number | null; maxDays: number | null; alone: boolean }[]>;
+  days?: Record<string, { fromDay: number | null; maxDays: number | null; alone: boolean; mostBelow?: boolean }[]>;
   /** Each "<benefit> also depends on this: <condition>" point, with the condition's own words and the rows whose cards it
    * is said for; and each row's card as given (its label and person). Read by dropConditionsOnCards. */
   conditionPoints?: { text: string; condition: string; rows: string[] }[];
@@ -1015,7 +1015,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
         if (r.combinedLimit && (raw.eventFit === "on_list" || raw.eventFit === "any_event")) limitsOnEvent.push({ row: r, st });
         (r.premium ? charges : benefits).add(String(st.text));
         if (r.figure.kind === "printed" && r.figure.unit === "per_day")
-          (report.days![String(st.text)] ??= []).push({ fromDay: r.fromDay, maxDays: r.maxDays, alone: dailyRateAlone(r, household) });
+          { const rule = dailyRateRule(r, household); (report.days![String(st.text)] ??= []).push({ fromDay: r.fromDay, maxDays: r.maxDays, alone: rule != null, ...(rule?.mostBelow ? { mostBelow: true } : {}) }); }
       }
       else if (r === row) {
         report.dropped.push({ why: `row ${row.id} has no amount (${figureText(row.figure)})`, text });
@@ -1616,19 +1616,19 @@ function sameBenefit(a: string, b: string): boolean {
 const sameFigure = (a: Figure, b: Figure) => (a.kind === "printed" || a.kind === "worked_out") && (b.kind === "printed" || b.kind === "worked_out")
   && Math.abs(a.amount - b.amount) < 0.005 && (a.kind === "printed" ? a.unit : "lump_sum") === (b.kind === "printed" ? b.unit : "lump_sum");
 
-/** Whether a daily row's printed words (its line, the lines that continue it, and its quote) give a stay rule the checks
- * can work out: no money figure other than the daily rate and a yearly cap in its own currency, and no other cap word. A
+/** The stay rule a daily row's printed words (its line, the lines that continue it, and its quote) give, or null when the
+ * checks cannot work one out: no money figure other than the daily rate and a yearly cap in its own currency, and no other cap word. A
  * stay is never worked out past an overall limit ("S$100 a day, max 30 days, overall limit S$2,000", Critic R108-1). */
-function dailyRateAlone(row: ChatRow, household: Household): boolean {
-  if (row.figure.kind !== "printed") return false;
+function dailyRateRule(row: ChatRow, household: Household): StayRule | null {
+  if (row.figure.kind !== "printed") return null;
   const found = locateQuote(household, row.source.excerpt, row.docIndex);
   const page = found && household.documents[found.docIndex].pages.find((p) => p.page === found.page);
-  if (!found || !page) return false;
+  if (!found || !page) return null;
   // The same reading the checks work a stay out from (readStayRule): the row and every line under it, non-benefit fields
   // left out (stayBlock); one waiting period in a read form, one most days (a year of cover may be its period) and at
   // most one yearly cap in the row's own currency. A limit, aggregate, day rule or condition anywhere else below the row
   // gives no total (Critic P392, TE #392, R4 H2-C).
-  return readStayRule(page.text, found.offset, found.excerpt, row.figure.amount) != null;
+  return readStayRule(page.text, found.offset, found.excerpt, row.figure.amount);
 }
 
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is
@@ -1717,7 +1717,9 @@ export function dropConditionsOnCards<T extends { kind: string; text: string; am
 /** Applied to the checked answer: an amount whose statement is not exactly one of the server's labels lost its label to
  * the checks (or was never labelled), so its amount is refused. One exception: what a stay the household described could
  * pay under a labelled daily row (the checks' own "For a 12-day stay ..." card, release-set B3, H4), kept only when every
- * row with that label was read with the same most days and first paid day the checks found printed. */
+ * row with that label was read with the same most days and first paid day the checks found printed. A reading with no
+ * most days passes only when the printed most days stand on a line of their own below the row, with nothing else left
+ * there (readStayRule mostBelow: "Maximum days\t10 days per hospital stay", TE-ACC-20261116). */
 export function keepLabelledAmounts<T extends { id?: string; amount?: unknown; text: string; basis?: string | null }>(statements: T[], report: RowReport): { kept: T[]; refused: T[] } {
   const labels = new Set(report.labels);
   const stayOf = (st: T) => {
@@ -1725,7 +1727,7 @@ export function keepLabelledAmounts<T extends { id?: string; amount?: unknown; t
     const parent = statements.find((s) => s.id === st.id!.slice(0, -"-stay".length));
     const rule = /paid from day (\d+), for at most (\d+) days/.exec(st.basis ?? "");
     const rows = parent && labels.has(parent.text) ? report.days?.[parent.text] ?? [] : [];
-    return !!rule && rows.length > 0 && rows.every((r) => r.alone && r.maxDays === Number(rule[2]) && (r.fromDay == null || r.fromDay === Number(rule[1])));
+    return !!rule && rows.length > 0 && rows.every((r) => r.alone && (r.maxDays === Number(rule[2]) || (r.maxDays == null && r.mostBelow === true)) && (r.fromDay == null || r.fromDay === Number(rule[1])));
   };
   // What a number of children could pay under a labelled per-child row (the checks' own "For 2 children ..." card,
   // overnight run 23 Oct, N023): kept only when the row's label prints the same per-child words and the same most children,
