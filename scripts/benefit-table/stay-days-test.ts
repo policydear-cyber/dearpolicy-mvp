@@ -615,6 +615,11 @@ ROUND2.push(
   ["R5-1f '(up to 30 days per policy year)', 40 days", `${R5} (up to 30 days per policy year)`, [], R3O, 40, "S$3,000"],
   ["R5-1g 'S$100 per day (max 30 days)' with no waiting words, from the first day, 40 days", "Hospital cash\tS$100 per day, from the first day (max 30 days)", [], { value: 100, maxDays: 30, fromDay: 1 }, 40, "S$3,000"],
   ["R5-1h 'Hospital cash (per life assured)' is each person's own cap (main reads it), 40 days", R3W.replace("Hospital cash", "Hospital cash (per life assured)"), [], { ...R3O, benefit: "Hospital cash (per life assured)" }, 40, "S$3,000"],
+  // Round 6: the full period list, "per life", "of hospitalisation" and a footnote mark in the cap bracket (main reads them).
+  ...["max 30 days per any one accident", "max 30 days per stay, per life", "max 30 days*", "max 30 days per hospitalisation", "max 30 days per sickness or accident",
+    "max 30 days in any one policy year", "up to a maximum of 30 days", "maximum 30 days of hospitalisation", "up to 30 days in hospital", "up to 30 days per stay*", "max 30 days per event"]
+    .map((b) => [`R6-1 '(${b})', 40 days`, `${R5} (${b})`, [], R3O, 40, "S$3,000"] as [string, string, string[], WrapOpts, number, string | null]),
+  ["R6-2 '(max 30 days per stay overseas)' stays a condition: none", `${R5} (max 30 days per stay overseas)`, [], R3O, 40, null],
   ["R5-2c 'Hospital cash (Child)' stays a condition: none", R3W.replace("Hospital cash", "Hospital cash (Child)"), [], { ...R3O, benefit: "Hospital cash (Child)" }, 40, null],
   ["R5-2 '(max 30 days, accident only)' stays a condition: none", `${R5} (max 30 days, accident only)`, [], R3O, 40, null],
   ["R5-2b '(up to 30 days for all lives)' stays a condition: none", `${R5} (up to 30 days for all lives)`, [], R3O, 40, null],
