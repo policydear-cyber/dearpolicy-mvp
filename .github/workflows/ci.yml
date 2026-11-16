@@ -483,6 +483,9 @@ jobs:
       - name: Model-execution staleness alert/processor regression suite
         run: npm run ai:model-execution-staleness-test
 
+      - name: Page-image figure check (off by default; blind page copies confirm OCR figures; documents read before the switch are checked, not shown unchecked)
+        run: npm run benefit-table:image-check-test
+
       - name: Build
         run: npm run build
 

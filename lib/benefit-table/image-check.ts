@@ -27,6 +27,12 @@ import type { Attachment, TableModel, TableReply } from "./model";
 import { claimsOf, type Claim, type GuardRecord, type Per, type Verdict } from "./guards";
 
 export const IMAGE_CHECK_VERSION = "image-2026-11-14.1";
+/** Whether a stored record is this image check (any other version, the text guards' or none, is not). */
+export const isImageCheckRecord = (g: GuardRecord | null | undefined): boolean => g?.version === IMAGE_CHECK_VERSION;
+/** What a reading with no image check of this version shows while the switch is on: every figure "still being checked",
+ * used nowhere, until its check (queued by queueStoredImageChecks, app.ts) has run. A figure on a page with its own text
+ * layer is settled by that check at no cost. */
+export const awaitingImageCheck = (): GuardRecord => ({ version: IMAGE_CHECK_VERSION, at: "", verdicts: {}, spentUsd: 0, calls: 0, stopped: null });
 /** At most this many figures are asked about in one call (a page with more is asked in several calls). */
 export const IMAGE_BATCH = 40;
 /** The page's own size in the prompt, worst case: about 1,600 tokens for the page image and up to 3,000 for any text a
@@ -198,14 +204,17 @@ export const maxTokensFor = (claims: number) => OUT_BASE + OUT_PER_CLAIM * claim
 /** Checks every figure of one document's checked reading (see the module note). claims on text-layer pages are agreed
  * at once; claims on OCR pages are asked page by page. */
 export async function runImageCheck(checked: CheckedReading, source: PageSource, first: ImageChecker, second: ImageChecker, o: ImageCheckOptions): Promise<GuardRecord> {
-  const record: GuardRecord = { version: IMAGE_CHECK_VERSION, at: o.previous?.at ?? (o.now?.() ?? new Date()).toISOString(), verdicts: {},
+  // A check of an earlier version (or the text guards) is not this check: it gets a start time of its own, so its
+  // continuation jobs are never confused with the earlier check's.
+  const same = o.previous?.version === IMAGE_CHECK_VERSION;
+  const record: GuardRecord = { version: IMAGE_CHECK_VERSION, at: (same ? o.previous?.at : undefined) ?? (o.now?.() ?? new Date()).toISOString(), verdicts: {},
     spentUsd: o.previous?.spentUsd ?? o.spentBefore ?? 0, calls: o.previous?.calls ?? 0, stopped: null };
   const all = claimsOf(checked);
   const facts = claimFacts(checked);
   const factsOf = new Map(all.map((c, i) => [c.key, facts[i]]));
   // An earlier run on this same reading (cut off by its time limit): what it settled stays.
   for (const c of all) {
-    const v = o.previous?.version === IMAGE_CHECK_VERSION ? o.previous.verdicts?.[c.key] : undefined;
+    const v = same ? o.previous?.verdicts?.[c.key] : undefined;
     if (v && v.status !== "checking") record.verdicts[c.key] = v;
   }
   const native = new Set(source.nativePages);
