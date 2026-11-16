@@ -247,6 +247,13 @@ async function main() {
       const o = await once(FX as any, sc, "grace fell down and broke her arm");
       check(`B17 (F1) a '${k}' statement carrying the undefined row's result_id shows no amount: S$120,000 appears nowhere (text, calculations, bindings); the row is named once with 'Ask the insurer'`, hidden(o) && /Ask the insurer/.test(rowLine(o.v)) && (o.v.match(/under Other Fracture/g) ?? []).length === 1 && o.shown === o.v, o.v);
     }
+    // F2b: the case name anywhere inside the brackets
+    for (const [tagText, said] of [["(Other Fracture/s)", "Other Fracture"], ["(Other Fracture, see note 3)", "Other Fracture"], ["(other fracture)", "other fracture"]] as const) {
+      const fx2 = { ...FX, DOCS: FX.DOCS.map((d) => ({ ...d, pages: Object.fromEntries(Object.entries(d.pages).map(([n, t]) => [n, String(t).replace(/\(Other Fracture\)/g, tagText)])) })) } as any;
+      const o = await once(fx2, fracScript(G2), "grace fell down and broke her arm");
+      const line = o.v.split("\n").find((l) => l.includes(`under ${said}`)) ?? "";
+      check(`B24 (F2b) a label '${tagText}' is the same undefined case: no S$120,000, the row named with 'Ask the insurer', no 'labelled as neither'`, hidden(o) && /Ask the insurer/.test(line) && !/labelled as neither/.test(o.v), o.v);
+    }
     // F2: the plural label "(Other Fractures)"
     {
       const plural = { ...FX, DOCS: FX.DOCS.map((d) => ({ ...d, pages: Object.fromEntries(Object.entries(d.pages).map(([n, t]) => [n, String(t).replace(/\(Other Fracture\)/g, "(Other Fractures)")])) })) } as any;

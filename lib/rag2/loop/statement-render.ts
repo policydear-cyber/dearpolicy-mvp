@@ -32,7 +32,14 @@ const UNDEFINED_CASE = new WeakSet<object>();
 export const ROW_FOR_PERSON = new WeakMap<object, string>();
 export const isUndefinedCase = (calc: object | null | undefined) => !!calc && UNDEFINED_CASE.has(calc);
 /** The case name a row's label carries in brackets: “(Other Fracture)”, “(Other Fractures)” (Test engineer on #512, F2: the plural). */
-const CASE_TAG = /\s*\(([^)]*\bFractures?)\)\s*$/i;
+// (Test engineer on #512, F2b: the case name anywhere inside the label's closing brackets -- "(Other Fracture/s)", "(Fracture(s))",
+// "(Other Fracture, see note 3)" -- not only straight before the ")")
+const CASE_BRACKET = /\s*\(((?:[^()]|\([^()]*\))*)\)\s*$/;
+const caseOf = (label: string): { tag: string; row: string } | null => {
+  const b = CASE_BRACKET.exec(label);
+  const tag = b ? /\b((?:[A-Za-z]+\s+)?Fracture)(?:s|\/s|\(s\))?(?![A-Za-z])/i.exec(b[1])?.[1] : null;
+  return b && tag ? { tag, row: label.slice(0, b.index) } : null;
+};
 /** A definition that settles which cases a term covers: "means / shall mean / is defined as" with a body of its own. A pointer
  * ("refers to the table in Part 2 above", "means the injuries listed in the Schedule") defines nothing (Test engineer on #512, F5). */
 const settles = (def: Definition) => {
@@ -226,8 +233,8 @@ export function renderCalculation(resultId: string, d: Deps, alt?: { label: stri
     // the reported event is the document's to define, and these documents print no definition of it)
     // (a case a document of theirs defines -- DEFINED_CASE -- keeps its label whole and needs no note)
     const defined = definedCase(d.ctx).has(resultId);
-    const label = pct ? (defined ? pct.label : pct.label.replace(CASE_TAG, "")) : "";
-    const tagged = pct && !defined ? CASE_TAG.exec(pct.label)?.[1] : null;
+    const label = pct ? (defined ? pct.label : caseOf(pct.label)?.row ?? pct.label) : "";
+    const tagged = pct && !defined ? caseOf(pct.label)?.tag ?? null : null;
     // (C4, Policy Evidence Reviewer / UX on C3: beside that figure, plainly: what is not defined, the household's own reported kind of
     // fracture, and that the insurer decides)
     const kind = tagged ? reportedValue(ATTRIBUTES[0], d.ctx.reportedFacts?.get(c.subjectId) ?? []).value : null;
@@ -252,9 +259,10 @@ async function undefinedCaseOf(resultId: string, d: Deps): Promise<{ c: NonNulla
   const c = calcOutcomes(d.ctx).get(resultId);
   if (!c || c.kind !== "conditional_illustration" || c.calculator !== "lump_sum" || c.amount == null) return null;
   const pct = (c.record?.operands ?? []).find((o) => o.source === "document" && o.unit === "percent");
-  const tag = pct ? CASE_TAG.exec(pct.label)?.[1] : null;
+  const cs = pct ? caseOf(pct.label) : null;
+  const tag = cs?.tag ?? null;
   if (!pct || !tag) return null;
-  const row = pct.label.replace(CASE_TAG, "");
+  const row = cs!.row;
   // (a definition of the case printed by THIS policy -- the row's own document, or another of the person's documents with the same
   // policy number, such as its wording -- settles which fractures it covers, and the amount is then shown as before. Another policy's
   // definition of the same words does not define this policy's term: Critic on #512, M2.)

@@ -50,6 +50,12 @@ no promised payment, returned = saved = reopened.
    - **F7:** "how much was that again?" gets the amounts, not "That doesn't change the amounts above."
    - **F8:** a shortened follow-up stores the calculations it restated (`restatedCalculationIds`, never shown). A later correction
      that withdraws them also replaces that follow-up.
+   - **F2b:** the case name is found anywhere inside the label's closing brackets ("(Other Fracture/s)", "(Fracture(s))",
+     "(Other Fracture, see note 3)", lower case). B24.
+   - Not changed: an UNLABELLED row of a benefit named "Simple Fracture or Other Fracture" (a "Hip" row) still shows its amount with
+     the existing note that the row is labelled as neither kind. Its row applies to that bone whichever kind it is, unlike a row the
+     document assigns to one undefined kind. Hiding it too would remove the main fracture amount in every such schedule; that is
+     DC's call, not part of this PR.
    - Checks B17 to B23 in the fracture replay cover these fixes. Each of them failed with the library change removed.
 
 ## Test changes
