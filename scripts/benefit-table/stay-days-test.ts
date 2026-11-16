@@ -657,10 +657,25 @@ ROUND2.push(["Q1e '…of hospitalisation abroad…': none", Q1(" of hospitalisat
 // HIGH 2: a name that carries a person, plan, relation, cause or place gives none on every row.
 for (const name of ["Accidental hospital cash", "Child hospital income", "Spouse hospital cash", "Juvenile hospital cash", "Dependant hospital cash",
   "Hospital cash - accident", "Hospital cash - spouse", "Hospital cash - accident (HCA)", "Child hospital cash (CHC)", "Accident hospital cash (AHC)",
-  "Maternity hospital cash", "Cancer hospital cash", "Hospital cash rider Life 2", "Mei Ling hospital cash", "Hospital cash Plan B", "Hospital cash - Deluxe", "Overseas hospital cash"])
+  "Maternity hospital cash", "Cancer hospital cash", "Hospital cash rider Life 2", "Hospital cash Plan B", "Hospital cash - Deluxe", "Overseas hospital cash"])
   ROUND2.push([`Q2 name '${name}': none`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, null]);
 for (const name of ["Daily hospital income", "Hospital income benefit (HIB)", "Hospitalisation daily allowance"])
   ROUND2.push([`Q2b control name '${name}' keeps main's figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
+// Gate #513 round 2 NEW-HIGH: ordinary names, brands and bracketed currency, per-day or footnote numbers keep main's figure.
+for (const name of ["Hospital Stay Benefit", "Kestrel Hospital Cash", "Hospital Cash Plus", "Enhanced Hospital Cash", "Daily Room and Board Benefit",
+  "Hospital Cash Benefit (Per Day)", "Hospital cash (S$)", "Hospital cash (3)", "Hospital cash*", "Ward cash", "A Benefit of"])
+  ROUND2.push([`Q3 name '${name}' keeps main's figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
+// Still none: a qualifier next to a brand, a tier with a letter, and an unknown name with no stay-benefit core.
+for (const name of ["Kestrel Child Hospital Cash", "Hospital Cash Option B", "Kestrel Accident Hospital Cash", "Hospital cash (Child)", "Recovery payment"])
+  ROUND2.push([`Q3b name '${name}': none`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, null]);
+// A household member's name in the row's name: that person's row, never worked out as another's.
+test("stay-wrap Q2 name 'Mei Ling hospital cash' with Lee Mei Ling in the household: none", () => {
+  const h = household([{ person: TAN, row: Q1(", from the 3rd day, up to 30 days per stay", "Mei Ling hospital cash"), value: 100, maxDays: 30, fromDay: 3, benefit: "Mei Ling hospital cash" },
+    { person: LEE, row: "Hospital cash\tS$50 per day in hospital", value: 50, maxDays: null }]);
+  const a = ask(h, TAN, ["I was in hospital for 40 days. How much will I get?"], { perDay: { stayDays: 40 } });
+  assert.ok(a.row);
+  assert.equal(stayCard(a)?.amount?.text ?? null, null, JSON.stringify(a.kept));
+});
 for (const [name, row, below, o, days, want] of ROUND2) test(`stay-wrap ${name}`, () => {
   const h = household([{ person: TAN, row, below, value: o.value, maxDays: o.maxDays, fromDay: o.fromDay ?? null, currencyLine: o.currencyLine, above: o.above, benefit: o.benefit }]);
   const a = ask(h, TAN, [`I was in hospital for ${days} days. How much will I get?`], { perDay: { stayDays: days } });
