@@ -50,7 +50,7 @@ const caseOf = (label: string): { tag: string; row: string } | null => {
   if (sq && sqTag) return { tag: sqTag, row: label.slice(0, sq.index).trim() };
   const tail = new RegExp(String.raw`\s+[-–—]\s*(${QUALIFIED})\s*$`, "i").exec(label);
   if (tail) return { tag: CASE_TERM.exec(tail[1])![1], row: label.slice(0, tail.index).trim() };
-  const head = new RegExp(String.raw`^\s*(${QUALIFIED})\s*[:–—-]\s*(\S[\s\S]*)$`, "i").exec(label);
+  const head = new RegExp(String.raw`^\s*(${QUALIFIED})\s*(?:\([^()]*\)|[*†‡]+)?\s*[:–—-]\s*(\S[\s\S]*)$`, "i").exec(label);
   if (head) return { tag: CASE_TERM.exec(head[1])![1], row: head[2].trim() };
   return null;
 };
@@ -64,10 +64,12 @@ const headingAbove = (pageText: string, row: string, pct?: number): string | nul
   const withPct = pct != null ? lines.findIndex((l) => starts(l) && new RegExp(String.raw`(?:^|\D)${pct}\s*%`).test(l)) : -1;
   const at = withPct >= 0 ? withPct : lines.findIndex(starts);
   if (at < 0) return null;
-  for (let i = at - 1; i >= Math.max(0, at - 20); i--) {
+  // (Test engineer on #512, F11: a long table -- the heading may be many rows up; the walk stops at a blank line or another heading)
+  for (let i = at - 1; i >= Math.max(0, at - 80); i--) {
     const l = lines[i].trim();
     if (!l) break;
-    const h = new RegExp(String.raw`^\(?(${QUALIFIED})\)?\s*:?$`, "i").exec(l);
+    // (F11: "Other Fracture (see note 2):", "Other Fracture*:", "Other Fracture 2:" -- a note or footnote marker after the case name)
+    const h = new RegExp(String.raw`^\(?(${QUALIFIED})\)?\s*(?:\([^()]*\)|[*†‡]+|\d{1,2})?\s*:?$`, "i").exec(l);
     if (h) return CASE_TERM.exec(h[1])![1];
   }
   return null;

@@ -54,7 +54,8 @@ no promised payment, returned = saved = reopened.
      "(Other Fracture, see note 3)", lower case). B24.
    - **F2c / F10:** the same case written another way ("[Other Fracture]", "… - Other Fracture", "Other Fracture: …"), or printed
      as a sub-heading line above the rows ("Other Fracture:" then "Hip 75%"), is the same undefined case. Outside brackets the case
-     needs its qualifier word, so a plain "Fractures" heading or "Fracture of the skull" row is not a case label. B25.
+     needs its qualifier word, so a plain "Fractures" heading or "Fracture of the skull" row is not a case label. A heading may
+     carry a note ("Other Fracture (see note 2):") and sit many rows up (F11). B25.
    - **Compared with main, more rows than "(Other Fracture)" can now lose their amount** (Critic on #512): any row whose label or
      sub-heading names a case ("Compound Fracture", "Major Fracture", and also "Simple Fracture") that the same policy does not
      define. A labelled "(Simple Fracture)" row was already treated as a case before this PR; the rule now also reads it as a
