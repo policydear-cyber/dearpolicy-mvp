@@ -430,10 +430,14 @@ const WRAP: [string, string, string[], WrapOpts, number, string | null][] = [
   ["TE16-2 'from the first day,' / 'up to 20 days per policy year' + another benefit's waiting period, 3 days", PROW, [PWAIT], { value: 80, maxDays: 20, currencyLine: US, above: PACIFIC_ABOVE }, 3, "US$240"],
   ["TE16-2b the same, 2 days", PROW, [PWAIT], { value: 80, maxDays: 20, currencyLine: US, above: PACIFIC_ABOVE }, 2, "US$160"],
   // Shape 3: another benefit's own (wrapped) row, then a "Maximum days" row and a "Waiting days:" sentence.
-  ["TE16-3 ICU row 'instead of the daily' / 'hospital income', 'Maximum days' row, 'Waiting days:' sentence, 5 days", OROW, [...OICU, OMAX, OWAIT, "Annual premium: S$420.00"], { value: 150, maxDays: 10 }, 5, "S$450"],
-  // The retest's reading gave the row no most days (they are on a line of their own): the printed line still decides it.
-  ["TE16-3c the same, read with no most days", OROW, [...OICU, OMAX, OWAIT, "Annual premium: S$420.00"], { value: 150, maxDays: null }, 5, "S$450"],
-  ["TE16-3b 'Maximum days' printed under the row itself, 15 days (capped at 10)", OROW, [OMAX, ...OICU, OWAIT], { value: 150, maxDays: 10 }, 15, "S$1,500"],
+  // Shape 3 with its ICU row: an alternative to this row ("instead of the daily hospital income") may change what the stay
+  // pays, so the row stays and stops the figure, as a plain ICU row does (gate #508 HIGH 4, MEDIUM 5).
+  ["TE16-3 ICU row 'instead of the daily' / 'hospital income', 'Maximum days' row, 'Waiting days:' sentence, 5 days: none", OROW, [...OICU, OMAX, OWAIT, "Annual premium: S$420.00"], { value: 150, maxDays: 10 }, 5, null],
+  ["TE16-3b 'Maximum days' under the row, then the ICU row: none", OROW, [OMAX, ...OICU, OWAIT], { value: 150, maxDays: 10 }, 15, null],
+  // Shape 3 with another benefit's own row in its place: worked out. The retest's reading gave the row no most days (they
+  // are on a line of their own): the printed line still decides it.
+  ["TE16-3c surgical row, 'Maximum days' row, 'Waiting days:' sentence, read with no most days, 5 days", OROW, ["Surgical benefit\tUp to S$2,000 per operation", OMAX, OWAIT, "Annual premium: S$420.00"], { value: 150, maxDays: null }, 5, "S$450"],
+  ["TE16-3d 'Maximum days' under the row itself, then a surgical row, 15 days (capped at 10)", OROW, [OMAX, "Surgical benefit\tUp to S$2,000 per operation", OWAIT], { value: 150, maxDays: 10 }, 15, "S$1,500"],
   // Shape 4: a numbered table, the next benefit's own row, an exclusions line and a wrapped how-to-claim note below.
   ["TE16-4 numbered row, 'Medical expenses' row, exclusions and a wrapped how-to-claim note, 5 days", MROW, MBELOW, { value: 50, maxDays: 30, fromDay: 3, benefit: "Hospital cash", above: MABOVE }, 5, "S$150"],
   // Negatives: unsure means no figure.
@@ -456,6 +460,33 @@ const WRAP: [string, string, string[], WrapOpts, number, string | null][] = [
   ["TE16-P1 two people's rows: the next person's own day cap is not this row's", "Hospital income (Tan Wei Ming)\tS$100 per day in hospital", ["Hospital income (Lee Mei Ling)\tS$100 per day in hospital, up to 30 days per", "policy year", KW], { value: 100, maxDays: 30, benefit: "Hospital income (Tan Wei Ming)" }, 6, null],
   ["TE16-P2 two people's rows by name cell, both wrapped", "Tan Wei Ming\tHospital income\tS$100 per day in hospital, up to 365 days per", ["policy year", "Lee Mei Ling\tHospital income\tS$100 per day in hospital, up to 30 days per", "policy year", KW], { value: 100, maxDays: 365, benefit: "Hospital income" }, 6, null],
   ["TE16-P3 the next person's row of another benefit holds the only day cap", "Hospital cash\tS$100 per day in hospital, payable from the 3rd day", ["Lee Mei Ling\tRecovery cash\tS$80 per day, maximum 30 days"], { value: 100, maxDays: 30, fromDay: 3 }, 6, null],
+  // Gate #508, round 1: every repro.
+  // NEW-HIGH 1: a pool or shared limit row is never another benefit; it stays and stops the figure.
+  ["G1 'Benefit pool\\tS$3,000' below, 40 days", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year", ["Benefit pool\tS$3,000"], { value: 100, maxDays: 365, fromDay: 3 }, 40, null],
+  ["G2 'Family pool\\tS$5,000 across everyone covered', 60 days", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year", ["Family pool\tS$5,000 across everyone covered"], { value: 100, maxDays: 365, fromDay: 3 }, 60, null],
+  ["G3 'Pool\\tS$3,000', 40 days", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year", ["Pool\tS$3,000"], { value: 100, maxDays: 365, fromDay: 3 }, 40, null],
+  ["G4 yearly cap + 'Benefit pool\\tS$3,000', 60 days", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year, maximum S$5,000 per policy year", ["Benefit pool\tS$3,000"], { value: 100, maxDays: 365, fromDay: 3 }, 60, null],
+  ["G5 'Benefit pool\\tS$1,000' then most days and waiting days, 20 days", OROW, ["Benefit pool\tS$1,000", "Maximum days\t30 days per hospital stay", OWAIT], { value: 150, maxDays: 30 }, 20, null],
+  ["G6 the same, 9 days", OROW, ["Benefit pool\tS$1,000", "Maximum days\t30 days per hospital stay", OWAIT], { value: 150, maxDays: 30 }, 9, null],
+  ["G7 'Overall limit\\tS$2,000 per accident' under a numbered row", MROW, ["5\tOverall limit\tS$2,000 per accident"], { value: 50, maxDays: 30, fromDay: 3, benefit: "Hospital cash", above: MABOVE }, 5, null],
+  // NEW-HIGH 2: a wrapped row is read exactly as it is on one line (main's figures).
+  ["G8 'up to 30 days per' / 'hospital stay', 6 days", "Hospital cash\tS$100 per day in hospital, from the 3rd day, up to 30 days per", ["hospital stay"], { value: 100, maxDays: 30, fromDay: 3 }, 6, "S$400"],
+  ["G9 'up to 30 days' / 'per accident' (the retest's numbered row, wrapped), 5 days", "Hospital cash\tS$50 per day in hospital, payable from the third consecutive day, up to 30 days", ["per accident"], { value: 50, maxDays: 30, fromDay: 3 }, 5, "S$150"],
+  ["G10 'maximum 30 days per' / 'confinement', 6 days", "Hospital cash\tS$100 per day in hospital, from the 3rd day, maximum 30 days per", ["confinement"], { value: 100, maxDays: 30, fromDay: 3 }, 6, "S$400"],
+  ["G11 'up to 30 days' / 'of hospitalisation', 6 days", "Hospital cash\tS$100 per day in hospital, from the 3rd day, up to 30 days", ["of hospitalisation"], { value: 100, maxDays: 30, fromDay: 3 }, 6, "S$400"],
+  ["G12 name wraps: 'Daily hospital' / 'income', per stay, 6 days", "Daily hospital\tS$100 per day in hospital, from the first day, up to 30 days per stay", ["income"], { value: 100, maxDays: 30, fromDay: 1 }, 6, "S$600"],
+  ["G13 name wraps: 'Hospital' / 'cash', per stay, 6 days", "Hospital\tS$100 per day in hospital, from the 3rd day, up to 30 days per stay", ["cash"], { value: 100, maxDays: 30, fromDay: 3 }, 6, "S$400"],
+  // HIGH 3: a row named by a person or plan only may be this benefit for them: nothing below it is taken as this row's.
+  ...(["Lee Mei Ling", "Plan B", "Deluxe", "Spouse", "Child"] as const).map((who): [string, string, string[], WrapOpts, number, string | null] =>
+    [`G14 '${who}\\tS$80 per day' then a waiting sentence and most days, 8 days`, "Hospital cash\tS$150 per day", [`${who}\tS$80 per day`, "No hospital cash is paid for the first 5 days of any hospital stay.", "Maximum days\t30 days per hospital stay"], { value: 150, maxDays: 30 }, 8, null]),
+  // HIGH 4: high dependency and critical care rows stop the figure, as an ICU row does.
+  ["G15 'High dependency unit income\\tS$250 per day in HDU', 5 days", OROW, ["High dependency unit income\tS$250 per day in HDU", OMAX, OWAIT], { value: 150, maxDays: 10 }, 5, null],
+  ["G16 'Critical care cash\\tS$300 per day in critical care', 5 days", OROW, ["Critical care cash\tS$300 per day in critical care", OMAX, OWAIT], { value: 150, maxDays: 10 }, 5, null],
+  // MEDIUM 5: an alternative to this row stops the figure.
+  ["G17 'in place of the daily amount', 5 days", OROW, ["Convalescence benefit\tS$500 lump sum, in place of the daily amount", OMAX, OWAIT], { value: 150, maxDays: 10 }, 5, null],
+  ["G18 'substitutes for the cash', 5 days", OROW, ["Surgical cash\tS$500 per operation, substitutes for the cash", OMAX, OWAIT], { value: 150, maxDays: 10 }, 5, null],
+  ["G19 'replaces the daily amount', 5 days", OROW, ["Surgical cash\tS$500 per operation, replaces the daily amount", OMAX, OWAIT], { value: 150, maxDays: 10 }, 5, null],
+  ["G20 'instead of the daily amount', 5 days", OROW, ["Surgical cash\tS$500 per operation, instead of the daily amount", OMAX, OWAIT], { value: 150, maxDays: 10 }, 5, null],
 ];
 for (const [name, row, below, o, days, want] of WRAP) test(`stay-wrap ${name}`, () => {
   const h = household([{ person: TAN, row, below, value: o.value, maxDays: o.maxDays, fromDay: o.fromDay ?? null, currencyLine: o.currencyLine, above: o.above, benefit: o.benefit }]);
@@ -467,6 +498,14 @@ for (const [name, row, below, o, days, want] of WRAP) test(`stay-wrap ${name}`, 
   // Only the daily rate and the one worked figure are ever shown.
   const daily = `${o.currencyLine === US ? "US$" : "S$"}${o.value}`;
   assert.ok(a.all.every((x) => x === daily || x === got), JSON.stringify(a.all));
+});
+
+test("gate #508 LOW 6: a per-accident day cap printed below the row says 'per accident' in the working", () => {
+  const h = household([{ person: TAN, row: "Hospital cash\tS$100 per day in hospital, from the 3rd day", below: ["Maximum days\t10 days per accident"], value: 100, maxDays: null, fromDay: 3 }]);
+  const a = ask(h, TAN, ["I was in hospital for 15 days. How much will I get?"], { perDay: { stayDays: 15 } });
+  const st = stayCard(a);
+  assert.equal(st?.amount?.text, "S$1,000", JSON.stringify(a.kept));
+  assert.match(st!.basis ?? "", /for at most 10 days per accident/, JSON.stringify(st));
 });
 
 // ============ Report ============

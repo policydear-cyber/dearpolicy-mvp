@@ -437,7 +437,10 @@ export function stayBlock(pageText: string, offset: number): StayBlock {
       continue;
     }
     if (limitHeading && /\t/.test(l) && MONEY_OR_DAYS.test(l)) { kept.push({ text: limitHeading, after }, { text: l, after }); limitHeading = null; continue; }
-    if (table === "rate") { others.push(rowName(l)); after = true; continue; }
+    // Another rate row is left out, as on main; past one named by anything but a benefit kind ("Lee Mei Ling\tS$80 per
+    // day", "Plan B\tS$80 per day": this benefit for another person or plan, gate #508 HIGH 3), no line below is taken as
+    // this row's by its name (its own name stands in for that row's in `others`).
+    if (table === "rate") { const n = rowName(l); others.push(benefitKindName(n) && !CARE_WORD.test(n) ? n : `${label} ${own.labelMore.join(" ")}`); after = true; continue; }
     // Under a later table's heading, a tabbed row that names none of this row's words and prints no limit or rule word is
     // that table's own row ("Trip cancellation\tS$5,000\tS$10,000" under "Travel\tClassic\tBusiness"): left out.
     if (inLaterTable && /\t/.test(l) && !(genericHeading && STAY_WORD.test(l)) && !names.some((w) => (genericHeading || !STAY_WORD.test(w)) && new RegExp(String.raw`\b${w}`, "i").test(l)) && !STAY_BLOCK_WORDS.test((genericHeading ? l : l.replace(CARE_LEVEL, " ")).replace(MAX_DAY_FIELD, " ")) && !CAP_OR_RULE.test(l)) continue;
@@ -516,21 +519,33 @@ const NAME_GENERIC = /^(?:benefits?|daily|the|and|for|per|day|days|plan|cover|am
 const nameWords = (s: string) => (s.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => !NAME_GENERIC.test(w));
 /** Money with its sign ("S$2,500", "US$80", "RM 300"). */
 const MONEY_SIGNED = /(?:[A-Z]{1,3}\$|\$|£|€|¥|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\s?)\s?\d/;
-/** Words in another row's name that say it is a limit, a rule or a field, not a benefit of its own. */
-const OTHER_NAME_STOP = /\b(?:limits?|limited|max\w*|min\w*|most|caps?|capped|ceiling|plafond|aggregate|overall|totals?|combined|shared?|sum|annual\w*|year\w*|month\w*|week\w*|lifetime|policy|plan|per|each|every|all|any|days?|nights?|waiting|excess|deductible|elimination|deferred|deferment|co-?pay\w*|co-?insurance|remaining|balance|other|general|common|global|first|after|from|up|premiums?|thereafter|reduced|half)\b/i;
-/** Words in another row's terms that may tie them to this row or to a limit shared with it. */
-const OTHER_TERMS_STOP = /\b(?:year\w*|annu\w*|policy|lifetime|overall|totals?|aggregate|combined|together|shared?|sharing|in\s+all|includ\w*|inclusive|counts?|counted|also|same|both|above|below|preceding|previous|following|other|these|those|all|any|family|household|limits?|plafond|ceiling|benefits?|instead|replac\w*|reduc\w*|deduct\w*|less|minus|offset|rather)\b/i;
-/** A level of care in a name or terms (one test at a time, no global state). */
-const CARE_WORD = /\b(?:intensive(?:\s+care)?|icu)\b/i;
+/** The words another benefit's own row may be named with (an allow-list, gate #508 HIGH 3 / NEW-HIGH 1): kinds of
+ * benefit only. A row named by anything else (a person, a plan tier, "Spouse", "Deluxe", a pool, an overall or family
+ * limit, a level of care) is never taken for another benefit: it stays in the block, and stops the figure. */
+const OTHER_BENEFIT_NAME_WORDS = new Set(("medical surgical surgery operation operations expenses expense reimbursement treatment fracture fractures "
+  + "dislocation dislocations burns burn dental ambulance physiotherapy funeral repatriation rehabilitation recovery convalescence convalescent "
+  + "home nursing outpatient follow up specialist consultation emergency transport travel accidental death disablement disability permanent "
+  + "partial loss sight hearing limb limbs scarring dismemberment mobility aids prosthesis prosthetic benefit benefits cash "
+  + "income allowance rider of and or a the").split(" "));
+/** Whether a row's name is a benefit kind only (OTHER_BENEFIT_NAME_WORDS), with brackets and hyphens. */
+const benefitKindName = (name: string) => { const w = name.toLowerCase().match(/[\p{L}\d]+/gu) ?? []; return w.length > 0 && w.every((x) => OTHER_BENEFIT_NAME_WORDS.has(x)); };
+/** What another benefit's own terms may hold (an allow-list, gate #508 NEW-HIGH 1, MEDIUM 5): its own money amounts, each
+ * with a unit ("per accident", "per operation"), and a closed set of words around them ("up to", "after an excess of").
+ * A bare lump amount, a pool, a shared or family limit, an alternative to this row ("instead of", "in place of",
+ * "substitutes", "replaces") or any other word keeps the row in the block. */
+const OTHER_TERMS_WORDS = new Set("up to per each a an of after excess payable paid day accident fracture operation claim visit injury procedure surgery event".split(" "));
+const OTHER_TERMS_UNIT = /\b(?:per|each|a)\s+(?:day|accident|fracture|operation|claim|visit|injury|procedure|surgery|event)\b/i;
+/** A level of care in a name or terms (one test at a time, no global state): ICU, intensive, high dependency, critical
+ * care (gate #508 HIGH 4). */
+const CARE_WORD = /\b(?:intensive(?:\s+care)?|icu|hdu|high[\s-]+dependency|critical\s+care)\b/i;
 /** Another benefit's own row under a daily row ("Medical expenses\tUp to S$2,500 per accident, after an excess of S$100
- * per claim", "Intensive care unit (ICU) income\tS$300 per day in ICU, instead of the daily hospital income"), by its
- * name; null when it may be this row's or a limit on it. An allow-list (stay-wrap, TE-ACC-20261116):
+ * per claim", "Surgical benefit\tUp to S$2,000 per operation"), by its name; null when it may be this row's, another
+ * person's or plan's, or a limit on it. Allow-lists (stay-wrap, TE-ACC-20261116; gate #508):
  * - a tabbed row whose name cells come before its first money figure;
- * - the name has a word of its own and no limit, rule, field or hospital-stay word, and shares no word with this row's
- *   name (so another person's row of the same benefit is never one);
- * - its terms name no word of this row's name and no hospital stay, and hold no word that ties them to another row or
- *   to a shared limit; the one exception is "instead of (the) <this row's name>", an alternative to this row;
- * - a level of care (ICU, intensive care) only with that exception: a plain ICU row may change what the stay pays.
+ * - its name is a benefit kind only (OTHER_BENEFIT_NAME_WORDS) and shares no word with this row's name, past generic
+ *   ones (so another person's row of the same benefit is never one);
+ * - its terms are its own amounts with a unit and words of OTHER_TERMS_WORDS only;
+ * - never a level of care (CARE_WORD).
  * Its own day cap, waiting days or limit are then never this row's. */
 function otherBenefitRow(line: string, ownName: string): string | null {
   const cells = line.split("\t").map((c) => c.trim());
@@ -541,15 +556,11 @@ function otherBenefitRow(line: string, ownName: string): string | null {
   // A word of either name that begins a word of the other ("Wardcash" and "Ward cash") is a shared word too.
   const starts = (w: string, t: string) => new RegExp(String.raw`\b${w}`, "i").test(t);
   if (!words.length || !ownWords.length || /[:\d]/.test(name) || words.some((w) => starts(w, ownName)) || ownWords.some((w) => starts(w, name))) return null;
-  if (OTHER_NAME_STOP.test(name) || STAY_WORD.test(name) || STAY_BLOCK_WORDS.test(name.replace(CARE_LEVEL, " ")) || NON_BENEFIT_LABEL.test(name)) return null;
-  const own = ownName.trim().replace(/\s+/g, " ").replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+");
-  const insteadRe = new RegExp(String.raw`,?\s*instead\s+of\s+(?:the\s+)?${own}\b`, "i");
-  const all = cells.slice(at).join(" ");
-  const instead = insteadRe.test(all);
-  const terms = all.replace(insteadRe, " ");
-  if (OTHER_TERMS_STOP.test(terms) || STAY_WORD.test(terms) || ownWords.some((w) => new RegExp(String.raw`\b${w}\b`, "i").test(terms))) return null;
-  if (!instead && (CARE_WORD.test(name) || CARE_WORD.test(terms))) return null;
-  return name;
+  if (!benefitKindName(name) || CARE_WORD.test(name)) return null;
+  const terms = cells.slice(at).join(" ");
+  if (CARE_WORD.test(terms) || !OTHER_TERMS_UNIT.test(terms)) return null;
+  const left = terms.replace(/(?:[A-Z]{1,3}\$|\$|£|€|¥|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\s?)\s?\d[\d,]*(?:\.\d+)?/g, " ").toLowerCase().match(/[\p{L}\d]+/gu) ?? [];
+  return left.every((w) => OTHER_TERMS_WORDS.has(w)) ? name : null;
 }
 /** How to claim, printed as a field under the row ("How to claim: notify us within 30 days of the accident and send the
  * claim form"): steps and a notice period, never what a stay pays. Left out of the block only when, past a notice period
@@ -1793,7 +1804,7 @@ const OWN_SENTENCE_WORDS = new Set("the this a an its it benefit benefits rider 
 const YEAR_PERIOD = String.raw`(?:per|each|every|in\s+(?:any\s+one|any|one|a|each))\s+(?:(policy)\s+year|calendar\s+year|year|annum)\b`;
 /** What the row's own words say a stay pays: the unpaid first days, the most days paid (and whether a year of cover is
  * their period), and a yearly cap amount in the daily figure's own currency, or null when any of these cannot be read. */
-export type StayRule = { unpaid: number; most: number; period: string | null; cap: { value: number; raw: string; period: string } | null; mostUnsure?: boolean; mostBelow?: boolean };
+export type StayRule = { unpaid: number; most: number; period: string | null; cap: { value: number; raw: string; period: string } | null; mostUnsure?: boolean; mostBelow?: boolean; per?: string };
 /** Marks, in the words below a row, where the lines past another benefit's own row begin (stayBlock `after`). */
 const PAST_OTHER = "§";
 /** A field label in front of a waiting sentence ("Waiting days: no hospital income is paid for the first 2 days ..."). */
@@ -1913,6 +1924,10 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   const capEnd = maxes[0].index! + maxes[0][0].length;
   const yearAfterDays = new RegExp(String.raw`^\s*${YEAR_PERIOD}`, "i").exec(rule.slice(capEnd));
   let period: string | null = null;
+  // What the most days are counted by when it is not a year ("per accident", "per hospital stay"): said in the working,
+  // so a per-accident cap is never read as one for the stay alone (gate #508 LOW 6).
+  const unitAfterDays = /^\s*(?:per|each|for\s+(?:any|each|one))\s+(?:hospital\s+)?(stay|admission|confinement|accident|disability)\b/i.exec(rule.slice(capEnd));
+  const per = unitAfterDays ? unitAfterDays[1].toLowerCase() : null;
   if (yearAfterDays) {
     period = yearAfterDays[1] ? "policy year" : "year";
     // "Up to 30 days per family per policy year" never reaches here: "per family" stands between, and stops it below.
@@ -1950,9 +1965,8 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   // Every number of days left printed is the most days: "(30) days" only.
   const dayNumbers = [...rule.matchAll(/(\d+)\)?\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?days?\b/gi)].map((m) => Number(m[1]));
   if (dayNumbers.some((d) => d !== most)) return null;
-  // A row whose cells wrap onto the next line is read this way too: the wrapped words were below the row's line, where
-  // any limit or rule word stopped the figure, so only the read parts and grammar words may be left of them (stay-wrap).
-  if (period || cap || newWaiting || block.wrapped || mostUnsure) {
+  // A row whose cells wrap onto the next line is read exactly as if it were printed on one line (gate #508 NEW-HIGH 2).
+  if (period || cap || newWaiting || mostUnsure) {
     // The row's name: benefit-name words only. Past it, grammar words only (its own name words are no exemption).
     if (!(ownName.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => BENEFIT_NAME_WORDS.has(w) || ROW_GRAMMAR_WORDS.has(w))) return null;
     const rowPart = withoutMost.split("¶")[0];
@@ -1961,7 +1975,7 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
       .replace(/\b(?:per|a|each)\s+day\b(?:\s+in\s+(?:the\s+)?hospital\b|\s+of\s+(?:continuous\s+)?hospitali[sz]ation\b|\s+of\s+(?:a\s+|the\s+)?(?:hospital\s+)?stay\b)?/i, " ").replace("@most", " ");
     if (!(own.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => ROW_GRAMMAR_WORDS.has(w))) return null;
   }
-  return { unpaid: unpaid[0], most, period, cap, ...(mostUnsure ? { mostUnsure } : {}), ...(mostBelow ? { mostBelow } : {}) };
+  return { unpaid: unpaid[0], most, period, cap, ...(mostUnsure ? { mostUnsure } : {}), ...(mostBelow ? { mostBelow } : {}), ...(per && !period ? { per } : {}) };
 }
 function stayPays(st: ModelStatement, found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[]): Stay | null {
   // With none given, only the stay the latest message describes: never one from an earlier turn ("what's the daily amount
@@ -1979,7 +1993,7 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   const days = Math.round(amount.value * payable * 100) / 100;
   const value = cap && days > cap.value ? cap.value : days;
   const sign = amount.text.replace(/^up to\s+/i, "").replace(/[\d,.\s]+$/, "");
-  const per = period ? ` per ${period}` : "";
+  const per = period ? ` per ${period}` : r.per ? ` per ${r.per}` : "";
   const capWords = cap ? `, and at most ${formatMoney(sign, cap.value)} a ${cap.period}` : "";
   // The working, said in full: the paid days, the multiplication and any yearly cap. A yearly cap counts what was already
   // paid in that year, which the household has not said, so the figure is for this stay alone.
