@@ -16,7 +16,7 @@ import { personAmountValue } from "../evaluate";
 import { formatMoney, printedAmount, type BenefitRecord } from "../benefit-records";
 import { loadDocs, loadLinks, loadMembers, pageMap, type DocRow, type LinkRow } from "../store";
 import { cellDate } from "../tables";
-import { ATTRIBUTES, definitionFor, definitionsIn, reportedValue } from "../applicability";
+import { applicabilityOf, ATTRIBUTES, definitionFor, definitionsIn, reportedValue, type Definition } from "../applicability";
 import { documentLabel, profileDocument, standingClause } from "./relation";
 import { checkNotFound, type AbsenceCheck, type PrintedLine } from "./absence-scope";
 
@@ -25,6 +25,22 @@ export const RENDERED = new WeakSet<object>();
 /** Per turn context: results whose row's bracketed case ("(Other Fracture)") a document of the person's defines (see undefinedCaseOf). */
 const DEFINED_CASE = new WeakMap<object, Set<string>>();
 const definedCase = (ctx: object) => { let x = DEFINED_CASE.get(ctx); if (!x) { x = new Set(); DEFINED_CASE.set(ctx, x); } return x; };
+/** Calculations whose row is said without its amount (undefinedCaseOf): no statement of any kind may show their amount, and none is
+ * saved (compose.ts drops a sentence that states one; Test engineer on #512, F1). */
+const UNDEFINED_CASE = new WeakSet<object>();
+/** The server's line naming such a row, and the person whose calculation it was written from (compose.ts reads its citations as theirs). */
+export const ROW_FOR_PERSON = new WeakMap<object, string>();
+export const isUndefinedCase = (calc: object | null | undefined) => !!calc && UNDEFINED_CASE.has(calc);
+/** The case name a row's label carries in brackets: “(Other Fracture)”, “(Other Fractures)” (Test engineer on #512, F2: the plural). */
+const CASE_TAG = /\s*\(([^)]*\bFractures?)\)\s*$/i;
+/** A definition that settles which cases a term covers: "means / shall mean / is defined as" with a body of its own. A pointer
+ * ("refers to the table in Part 2 above", "means the injuries listed in the Schedule") defines nothing (Test engineer on #512, F5). */
+const settles = (def: Definition) => {
+  const m = /\b(means|shall mean|is defined as|refers to)\b([\s\S]*)$/i.exec(def.text);
+  if (!m || /^refers to$/i.test(m[1])) return false;
+  const body = m[2].replace(/^[\s:,]+/, "");
+  return body.length >= 12 && !/^(?:as (?:set out|shown|listed|described|stated)\b|(?:the|any|those|such)?\s*(?:injur\w+|fractures?|items?|cases?)?\s*(?:listed|shown|set out|described) (?:in|under)\b|(?:the )?(?:table|schedule|section|part|clause|appendix|page)\b)/i.test(body);
+};
 /** The relationship note between two documents' tables (written once per answer). */
 const RELATION = new WeakSet<object>();
 /** Contact steps the server wrote for a document linked to the answer's person (checked here, not re-judged by text). */
@@ -210,8 +226,8 @@ export function renderCalculation(resultId: string, d: Deps, alt?: { label: stri
     // the reported event is the document's to define, and these documents print no definition of it)
     // (a case a document of theirs defines -- DEFINED_CASE -- keeps its label whole and needs no note)
     const defined = definedCase(d.ctx).has(resultId);
-    const label = pct ? (defined ? pct.label : pct.label.replace(/\s*\(([^)]*\bFracture)\)\s*$/i, "")) : "";
-    const tagged = pct && !defined ? /\(([^)]*\bFracture)\)\s*$/i.exec(pct.label)?.[1] : null;
+    const label = pct ? (defined ? pct.label : pct.label.replace(CASE_TAG, "")) : "";
+    const tagged = pct && !defined ? CASE_TAG.exec(pct.label)?.[1] : null;
     // (C4, Policy Evidence Reviewer / UX on C3: beside that figure, plainly: what is not defined, the household's own reported kind of
     // fracture, and that the insurer decides)
     const kind = tagged ? reportedValue(ATTRIBUTES[0], d.ctx.reportedFacts?.get(c.subjectId) ?? []).value : null;
@@ -232,12 +248,13 @@ export function renderCalculation(resultId: string, d: Deps, alt?: { label: stri
 
 /** The case name a percentage row's label carries in brackets -- “Arm, Elbow, Wrist or Ribs (Other Fracture)” -- when no document of
  * the household defines that case: whether the row applies to the reported event is then the insurer's to say, not the documents'. */
-async function undefinedCaseOf(resultId: string, d: Deps): Promise<{ c: NonNullable<ReturnType<ReturnType<typeof calcOutcomes>["get"]>>; tag: string; row: string } | null> {
+async function undefinedCaseOf(resultId: string, d: Deps): Promise<{ c: NonNullable<ReturnType<ReturnType<typeof calcOutcomes>["get"]>>; tag: string; row: string; misfit?: { def: Definition; said: string } } | null> {
   const c = calcOutcomes(d.ctx).get(resultId);
   if (!c || c.kind !== "conditional_illustration" || c.calculator !== "lump_sum" || c.amount == null) return null;
   const pct = (c.record?.operands ?? []).find((o) => o.source === "document" && o.unit === "percent");
-  const tag = pct ? /\(([^)]*\bFracture)\)\s*$/i.exec(pct.label)?.[1] : null;
+  const tag = pct ? CASE_TAG.exec(pct.label)?.[1] : null;
   if (!pct || !tag) return null;
+  const row = pct.label.replace(CASE_TAG, "");
   // (a definition of the case printed by THIS policy -- the row's own document, or another of the person's documents with the same
   // policy number, such as its wording -- settles which fractures it covers, and the amount is then shown as before. Another policy's
   // definition of the same words does not define this policy's term: Critic on #512, M2.)
@@ -247,19 +264,27 @@ async function undefinedCaseOf(resultId: string, d: Deps): Promise<{ c: NonNulla
   const keys = new Set([num(own?.policyNumber), num(own?.groupPolicyNumber)].filter(Boolean));
   const mine = new Set([...(d.ctx.benefitRecords?.values() ?? [])].filter((r) => r.memberId === c.subjectId).map((r) => r.policy.id));
   const ids = new Set([c.policyId, ...docs.filter((x) => mine.has(x.id) && keys.size && [num(x.policyNumber), num(x.groupPolicyNumber)].some((k) => k && keys.has(k))).map((x) => x.id)]);
+  const singular = tag.replace(/(Fracture)s$/i, "$1");
   for (const id of ids) {
     const pages = await pageMap(d.ctx.accountId, id).catch(() => new Map<number, string>());
     const defs = definitionsIn([...pages.entries()].sort((x, y) => x[0] - y[0]).map(([page, text]) => ({ page, text })), { id, hash: null });
-    if (definitionFor(tag, defs)) { definedCase(d.ctx).add(resultId); return null; }
+    const def = definitionFor(tag, defs) ?? definitionFor(singular, defs);
+    if (!def || !settles(def)) continue;
+    // (Test engineer on #512, F4: a definition the household's own report does not fit -- "an open fracture", reported closed -- does
+    // not confirm the amount either; the row is named with what the definition says and what was reported)
+    const a = applicabilityOf(def.term, [def], d.ctx.reportedFacts?.get(c.subjectId) ?? []);
+    if (a.status === "inconsistent" && a.reported.value) { UNDEFINED_CASE.add(c); return { c, tag, row, misfit: { def, said: a.attribute.said(a.reported.value) } }; }
+    definedCase(d.ctx).add(resultId); return null;
   }
-  return { c, tag, row: pct.label.replace(/\s*\([^)]*\bFracture\)\s*$/i, "") };
+  UNDEFINED_CASE.add(c);
+  return { c, tag, row };
 }
 /** A1 (Critic site review, 16 Nov 2026; DC: an amount that isn't confirmed is not shown): a row whose case the documents never define is said WITHOUT its amount. Its figure (20% of a
  * S$600,000 sum insured = S$120,000) read on a phone as "S$120,000 for a broken arm", while the answer itself said the documents don't
  * say the row applies. The benefit is still named, with its document and page, so nothing documented is hidden; the amount waits for
  * the insurer to say the row applies. */
 async function renderUndefinedCase(u: NonNullable<Awaited<ReturnType<typeof undefinedCaseOf>>>, d: Deps): Promise<Record<string, unknown> | null> {
-  const { c, tag, row } = u;
+  const { c, tag, row, misfit } = u;
   const rec = [...(d.ctx.benefitRecords?.values() ?? [])].find((r) => r.policy.id === c.policyId && r.benefit === c.benefit && r.memberId === c.subjectId)
     ?? [...(d.ctx.benefitRecords?.values() ?? [])].find((r) => r.policy.id === c.policyId);
   const who = d.nameOf(c.subjectId) ?? "this person";
@@ -269,7 +294,14 @@ async function renderUndefinedCase(u: NonNullable<Awaited<ReturnType<typeof unde
   const own = c.evidence.filter((e) => e.policyId === c.policyId && (page == null || e.page.start <= page && e.page.end >= page));
   const ids = (own.length ? own : c.evidence.filter((e) => e.policyId === c.policyId)).map((e) => d.evidenceId(e));
   if (!ids.length) return null;
-  const s = { kind: "fact", text: `The ${label}${page != null ? ` (page ${page})` : ""} also lists “${row}” under ${tag}, but these documents don't say which fractures count as ${tag}. Ask the insurer whether ${who}'s ${kind ? `${kind} ` : ""}fracture is one.`, evidence_ids: [...new Set(ids)], subject_id: c.subjectId } as Record<string, unknown>;
+  const where = `The ${label}${page != null ? ` (page ${page})` : ""} also lists “${row}” under ${tag}`;
+  const quoted = misfit && misfit.def.text.length <= 240 && !/\d/.test(misfit.def.text) ? misfit.def.text : null;
+  const text = misfit
+    ? `${where}, but ${quoted ? `the document defines it as “${quoted}”, and ` : "the document's definition of it does not fit what was reported: "}${who}'s fracture was reported as ${misfit.said}. Ask the insurer whether this row applies.`
+    : `${where}, but these documents don't say which fractures count as ${tag}. Ask the insurer whether ${who}'s ${kind ? `${kind} ` : ""}fracture is one.`;
+  if (misfit) ids.push(d.evidenceId(misfit.def.evidence));
+  const s = { kind: "fact", text, evidence_ids: [...new Set(ids)], subject_id: c.subjectId } as Record<string, unknown>;
+  ROW_FOR_PERSON.set(s, c.subjectId);
   RENDERED.add(s);
   return s;
 }
@@ -284,9 +316,16 @@ export async function renderStatements(args: Record<string, unknown>, list: Reco
   for (const [i, s] of (list ?? []).entries()) {
     if (!s || typeof s !== "object") continue;
     const kind = typeof s.kind === "string" ? s.kind : null;
+    // (Test engineer on #512, F1: a row said without its amount is said so whatever kind of statement carries its result -- a fact or
+    // an uncertainty with result_id, one result_ids entry, or an id written in the text. Each id is checked here, so compose.ts can
+    // refuse any sentence that would still state the amount.)
+    const refs = [...new Set([...(typeof s.result_id === "string" ? [s.result_id] : []), ...(Array.isArray(s.result_ids) ? (s.result_ids as unknown[]).filter((x): x is string => typeof x === "string") : []), ...(String(s.text ?? "").match(/\br\d+\b/g) ?? [])])];
+    const unds = [];
+    for (const r of refs) { const u = await undefinedCaseOf(r, d); if (u) unds.push(u); }
+    if (kind !== "calculation" && unds.length && refs.length === 1 && list) { const n = await renderUndefinedCase(unds[0], d); if (n) { list[i] = n; namedByDocument = true; continue; } }
     if (kind === "calculation") {
       const rid = typeof s.result_id === "string" ? s.result_id : null;
-      const und = rid ? await undefinedCaseOf(rid, d) : null;
+      const und = rid ? unds.find((u) => u.c === calcOutcomes(d.ctx).get(rid)) ?? null : null;
       if (und && list) { const n = await renderUndefinedCase(und, d); if (n) { list[i] = n; namedByDocument = true; continue; } }
       const text = rid ? renderCalculation(rid, d) : null;
       if (!text) { problems.push(`statement ${i + 1}: kind calculation needs the result_id of an evaluate_benefit result from this turn`); continue; }

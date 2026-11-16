@@ -37,9 +37,12 @@ const isAmountSentence = (x: { kind?: string }) => x.kind === "conditional_illus
  * above." (or "my answer above") plus its next steps. A reply that adds anything of its own (a new fact, a new amount, the household's
  * new detail said back) keeps the earlier sentences it restates beside it: they frame the new part, and dropping them made answers lose
  * a bound amount and its condition (rag2:conv4 R1-R5, r7 trap items, binding, death journey on #512). Critic M1 is moot as a result. */
-export function followUp<T extends { text: string; kind?: string }>(ordered: T[], previous: string[]): { repeated: T[]; fresh: T[]; lead: string | null } {
+/** The household asked for the amount again ("Sorry, how much was that again?"): the answer then says it, not "unchanged" (Test
+ * engineer on #512, F7). */
+export const ASKS_AMOUNT_AGAIN = /\bhow much\b|\bwhat(?:['’]s| is| was) (?:the |that )?(?:amount|figure|sum|payout)\b|\b(?:again|remind me|repeat|say that)\b/i;
+export function followUp<T extends { text: string; kind?: string }>(ordered: T[], previous: string[], question = ""): { repeated: T[]; fresh: T[]; lead: string | null } {
   const said = new Set(previous);
-  if (!ordered.length || !ordered.every((x) => said.has(x.text))) return { repeated: [], fresh: ordered, lead: null };
+  if (!ordered.length || !ordered.every((x) => said.has(x.text)) || ASKS_AMOUNT_AGAIN.test(question)) return { repeated: [], fresh: ordered, lead: null };
   return { repeated: ordered, fresh: [], lead: ordered.some(isAmountSentence) ? UNCHANGED_AMOUNTS : UNCHANGED_ANSWER };
 }
 export const RESUME_NOTE = "When you’re ready, here is the question I was on.";
@@ -283,7 +286,7 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
     // corrected nothing and withdrew nothing, and only an exact repeat: a recalculated amount is a different sentence and is said.
     const prevTurn = state.turns.at(-1);
     const sameThread = !!prevTurn?.composed?.length && !notes.length && !lost.length && (prevTurn.shown?.subjectId ?? null) === (c.subjectId ?? state.subjectId ?? null);
-    const { repeated, fresh, lead: unchanged } = followUp(ordered, sameThread ? prevTurn!.composed! : []);
+    const { repeated, fresh, lead: unchanged } = followUp(ordered, sameThread ? prevTurn!.composed! : [], message);
     const texts = [...(unchanged ? [unchanged] : []), ...fresh.map((x) => x.text)];
     // The insurer's part is said ONCE per answer that shows an amount (DC, 16 Nov 2026: not after every amount); an indicative
     // estimate already carries ESTIMATE_NOTICE, which says it.
@@ -305,6 +308,9 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
     // (A3: a calculation the earlier answer already stated, and this one does not repeat, is that answer's, not this one's)
     const kept = repeated.length ? c.calculations.filter((k) => fresh.some((x) => x.text.includes(k.sentence))) : c.calculations;
     if (kept.length) answer.calculations = kept;
+    // (F8: the calculations it restated without saying, so a later correction withdraws this answer with the one it points back to)
+    const restated = c.calculations.filter((k) => !kept.includes(k)).map((k) => k.id).filter((x): x is string => typeof x === "string" && !!x);
+    if (restated.length) answer.restatedCalculationIds = restated;
     if (c.calcs.length) { const rec = await syncCalcClaimRecord({ accountId: request.accountId, conversationId: conversation.id, state, calcs: c.calcs, existingId: (prior as { claimSessionId?: string | null }).claimSessionId ?? null }); if (rec) answer.claimSessionId = rec.id; }
     answer.citations = await citationsFor(request.accountId, state, c.evidenceIds);
     if (out.reasked?.kind === "fact") {

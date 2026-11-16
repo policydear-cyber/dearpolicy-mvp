@@ -36,6 +36,22 @@ no promised payment, returned = saved = reopened.
    that adds anything of its own keeps the earlier sentences beside it. Dropping them on partial repeats lost a bound amount and its
    condition in rag2:conv4 R1-R5, rag2:binding and the r7 trap items, which pass on main (B15 unit check).
 
+7. (Test engineer on #512, F1 to F8) The rule is closed against the ways around it:
+   - **F1:** a row said without its amount is said so whatever statement carries its result (a `fact` or `uncertainty` with
+     `result_id`, a single `result_ids` entry, or an id in the text). compose.ts also refuses any sentence that would still state
+     that amount, so it is never saved.
+   - **F2:** "(Other Fractures)" in the plural is the same case.
+   - **F4:** a definition the household's report does not fit (defined as open, reported closed) does not unlock the amount either.
+     The row is named with the definition and what was reported, and the household is told to ask the insurer.
+   - **F5:** only "means", "shall mean" or "is defined as" with a body of its own unlocks an amount. "Refers to the table in Part 2
+     above" defines nothing.
+   - **F3:** after a person correction, the new person's undefined row is still named. Its citation is read as that person's,
+     because the server wrote it from their own calculation.
+   - **F7:** "how much was that again?" gets the amounts, not "That doesn't change the amounts above."
+   - **F8:** a shortened follow-up stores the calculations it restated (`restatedCalculationIds`, never shown). A later correction
+     that withdraws them also replaces that follow-up.
+   - Checks B17 to B23 in the fracture replay cover these fixes. Each of them failed with the library change removed.
+
 ## Test changes
 
 | test | check | was | now | reason |
@@ -53,6 +69,7 @@ no promised payment, returned = saved = reopened.
 | same | grader v8 correction journey | verdict PASS | the only failing check may be K2, and K2 must hold without its "not a payment" clause | the registered grader (`scripts/rag2-live/structured-check.ts`) is **not edited**; its K2 still asks for the removed clause |
 | `scripts/reliable-chat-pr57-acceptance-test.ts` | R4 | `/never a total|not to be added/` | no total in any form (no sum, "in total", "combined", "added", "plus") | phrase replaced by behaviour |
 | `scripts/reliable-chat-death-journey.ts` | E13 | Simple S$2,500 and the PA summary's Other Fracture S$300,000 | S$2,500, and the PA summary's Other Fracture row named with its page (page 8) and no S$300,000 | undefined case (DC); both schedules still required |
+| `scripts/reliable-chat-pr57-c4-test.ts` | AC F1 | `ls.length > 0 && ls.every(note)`: at least one Other Fracture illustration, each with the "do not define" note | each illustration from the Other Fracture table still carries the note, OR the undefined row is named without an amount ("… under Other Fracture, but these documents don't say which fractures count as Other Fracture") | that row no longer shows an amount (DC); the missing definition is still said (Test engineer F9) |
 | `e2e/tests/reliable-chat-fx-repairs.spec.ts` | FR1 footnote | certificate paragraph found by its S$120,000 | found by its "also lists … under Other Fracture" line, and S$120,000 must not appear; the footnote checks are unchanged | the amount is no longer shown |
 | `e2e/tests/reliable-chat-fracture.spec.ts` | FR1 | both amounts with "never a total", dated base, relationship note; reply repeats both | as the replay A-checks above | same |
 

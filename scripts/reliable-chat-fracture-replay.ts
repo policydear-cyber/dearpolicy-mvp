@@ -19,7 +19,7 @@ import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
 import * as FX from "./fixtures/reliable-chat/fracture-conversation";
 import { ScriptedLoopModel, type ScriptTurn, type ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
-import { withOtherFractureDefined } from "./fixtures/reliable-chat/other-fracture-defined";
+import { OPEN_FRACTURE_DEFINITION, withOtherFractureDefined } from "./fixtures/reliable-chat/other-fracture-defined";
 import { cellDate } from "@/lib/rag2/tables";
 import { BS, CERT, G, MSG1, MSG2, PS, Q_XRAY, T1, T2, benefitIdOf, call, idsAny, resultIds } from "./fixtures/reliable-chat/fracture-script";
 
@@ -229,6 +229,69 @@ async function main() {
       const line = v.split("\n").find((l) => /under Other Fracture/.test(l)) ?? "";
       check("B16 (M2) another policy's definition does not unlock this policy's row: no S$120,000; the Other Fracture line has no S$ figure and says 'Ask the insurer'", !/S\$120,000|S\$600,000/.test(v + JSON.stringify(sv.answer.calculations ?? [])) && !!line && !/S\$/.test(line) && /Ask the insurer/.test(line), v);
     } finally { installLoopModel(null); }
+  }
+  // B17-B23 (Test engineer on #512, F1-F8): the no-amount rule holds whatever carries the row, and the follow-up rule keeps what was asked.
+  {
+    const G2 = { id: G, mention: "grace", msg: /grace/i };
+    const once = async (fx: any, script: ScriptTurn, text: string) => {
+      const hx = await startHarness(fx);
+      installLoopModel(new ScriptedLoopModel([script]));
+      try { const a = await hx.send(text, {}); const s = await hx.savedAnswer(a.conversationId!); return { v: visible(s.answer), shown: visible(a), answer: s.answer }; } finally { installLoopModel(null); }
+    };
+    const hidden = (o: { v: string; answer: any }) => !/S\$120,000|S\$600,000/.test(o.v + JSON.stringify(o.answer.calculations ?? []) + JSON.stringify(o.answer.figureBindings ?? []) + JSON.stringify(o.answer.computations ?? []));
+    const rowLine = (v: string) => v.split("\n").find((l) => /under Other Fracture/.test(l)) ?? "";
+    // F1: the model states the certificate's result as a "fact" or an "uncertainty" carrying its result_id
+    for (const k of ["fact", "uncertainty"]) {
+      const sc = fracScript(G2);
+      sc.steps[3] = (v) => { const r = resultIds(v); return [call("final_answer", { subject_id: G, sentences: [{ kind: "calculation", text: "-", result_id: r[0] }, { kind: k, text: "If the Other Fracture benefit applies to Grace's case, the conditional illustration is S$120,000: 20% of Grace's sum insured of S$600,000.", result_id: r[1] }], next_steps: ["contact:" + CERT] })]; };
+      const o = await once(FX as any, sc, "grace fell down and broke her arm");
+      check(`B17 (F1) a '${k}' statement carrying the undefined row's result_id shows no amount: S$120,000 appears nowhere (text, calculations, bindings); the row is named once with 'Ask the insurer'`, hidden(o) && /Ask the insurer/.test(rowLine(o.v)) && (o.v.match(/under Other Fracture/g) ?? []).length === 1 && o.shown === o.v, o.v);
+    }
+    // F2: the plural label "(Other Fractures)"
+    {
+      const plural = { ...FX, DOCS: FX.DOCS.map((d) => ({ ...d, pages: Object.fromEntries(Object.entries(d.pages).map(([n, t]) => [n, String(t).replace(/\(Other Fracture\)/g, "(Other Fractures)")])) })) } as any;
+      const o = await once(plural, fracScript(G2), "grace fell down and broke her arm");
+      check("B18 (F2) a plural label '(Other Fractures)' is the same undefined case: no S$120,000, the row named with 'Ask the insurer', no 'labelled as neither'", hidden(o) && /Ask the insurer/.test(rowLine(o.v.replace(/Other Fractures/g, "Other Fracture"))) && !/labelled as neither/.test(o.v), o.v);
+    }
+    // F4: a definition the household's report does not fit ("pierces the skin", reported closed)
+    {
+      const o = await once(withOtherFractureDefined(FX as any, OPEN_FRACTURE_DEFINITION) as any, fracScript(G2), "grace fell down and broke her arm. It was a closed fracture, the skin wasn't broken.");
+      check("B19 (F4) a definition the reported fracture does not fit (open, reported closed) shows no amount: the row is named with the definition and what was reported, 'Ask the insurer'", hidden(o) && /defines it as “Other Fracture means a fracture in which the broken bone pierces the skin\.”/.test(o.v) && /reported as a closed fracture/.test(o.v) && /Ask the insurer/.test(o.v), o.v);
+    }
+    // F5: a pointer is not a definition
+    {
+      const pointer = { ...FX, DOCS: FX.DOCS.map((d) => { if (!Object.values(d.pages).some((t) => /\(Other Fracture\)/.test(String(t)))) return d; const next = Math.max(0, ...Object.keys(d.pages).map(Number)) + 1; return { ...d, pages: { ...d.pages, [next]: "DEFINITIONS\nOther Fracture refers to the table in Part 2 above." } }; }) } as any;
+      const o = await once(pointer, fracScript(G2), "grace fell down and broke her arm");
+      check("B20 (F5) 'Other Fracture refers to the table in Part 2 above.' defines nothing: no S$120,000, the row named with 'Ask the insurer'", hidden(o) && /Ask the insurer/.test(rowLine(o.v)), o.v);
+    }
+    // F7, F8: units
+    {
+      const { followUp } = await import("@/lib/rag2/loop/hook");
+      const { supersededIn } = await import("@/lib/chat/stale-answers");
+      const A = { text: "If X applies, the conditional illustration is S$1,250 ...", kind: "conditional_illustration" };
+      const again = followUp([A], [A.text], "Sorry, how much was that again?"), plain = followUp([A], [A.text], "Yes, the X-ray confirmed it.");
+      check("B21 (F7) asking for the amount again gets the amount (no shortening); a plain pure repeat is still shortened", again.lead === null && again.fresh.length === 1 && plain.lead === "That doesn't change the amounts above.", JSON.stringify({ again, plain }));
+      const state = { ragLoop: { claim: { calcs: { k1: { withdrawn: true } } } } };
+      check("B22 (F8) a shortened answer that restated a withdrawn calculation is replaced with the answer it pointed back to", supersededIn(state)({ restatedCalculationIds: ["k1"] } as any) && !supersededIn(state)({ restatedCalculationIds: ["k2"] } as any), "");
+    }
+    // F3: after "no, it's daniel", Daniel's undefined row is still named (the page was first read in Grace's turn)
+    {
+      const hx = await startHarness(FX as any);
+      const D = FX.M.daniel.id;
+      const corr: ScriptTurn = { user: /daniel/i, steps: [
+        () => [call("resolve_person", { mention: "daniel" })],
+        () => [call("note_facts", { facts: [{ key: "injury", value: "broke arm", words: "broke his arm" }], subject_id: D }), call("person_benefits", { topic: "fracture after a fall", subject_id: D })],
+        (v) => { const ev = (id: string) => call("evaluate_benefit", { case: "broke arm", purpose: "claim", fact_keys: ["injury"], benefit_id: id, subject_id: D, assumption_words: "broke" }); return [ev(benefitIdOf(v, /^Simple Fracture$/i)), ev(benefitIdOf(v, /Simple Fracture or Other Fracture/i))]; },
+        (v) => [call("final_answer", { subject_id: D, sentences: resultIds(v).slice(0, 2).map((r) => ({ kind: "calculation", text: "-", result_id: r })), next_steps: ["contact:" + CERT] })],
+      ] };
+      installLoopModel(new ScriptedLoopModel([fracScript(G2), corr]));
+      try {
+        const a1 = await hx.send("grace fell down and broke her arm", {});
+        const a2 = await hx.send("No, sorry, it's daniel, not grace. He broke his arm.", { id: a1.conversationId!, rev: a1.conversationRevision! });
+        const s2 = await hx.savedAnswer(a2.conversationId!); const v2 = visible(s2.answer);
+        check("B23 (F3) after a person correction, the new person's undefined row is still named: 'Ask the insurer whether Daniel's fracture is one', no S$120,000", /Ask the insurer whether Daniel's fracture is one\./.test(v2) && hidden({ v: v2, answer: s2.answer }), v2);
+      } finally { installLoopModel(null); }
+    }
   }
   // B12: wrong version. A later certificate for the household (S$750,000 for Grace) and the earlier one superseded: only the current one is used; the superseded figure is not cited.
   {

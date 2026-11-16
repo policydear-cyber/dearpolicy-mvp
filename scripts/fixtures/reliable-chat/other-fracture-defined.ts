@@ -9,16 +9,19 @@
  * that defines Other Fracture, so the amount is shown again and the test keeps testing what it was written for. Nothing else changes.
  * This page is not in any real document.
  */
-export const OTHER_FRACTURE_DEFINITION = "DEFINITIONS\nOther Fracture means a fracture in which the broken bone pierces the skin.";
+// (PR #512, F4: the definition says nothing about open or closed, so a journey that reports a closed fracture still tests what it was
+// written for; a definition that a report does not fit hides the amount, and has its own check, fracture replay B19)
+export const OTHER_FRACTURE_DEFINITION = "DEFINITIONS\nOther Fracture means a fracture other than a Simple Fracture, confirmed by X-ray by a registered medical practitioner.";
+export const OPEN_FRACTURE_DEFINITION = "DEFINITIONS\nOther Fracture means a fracture in which the broken bone pierces the skin.";
 
 type Doc = { pages: Record<number, string>; superseded?: boolean };
-export function withOtherFractureDefined<T extends { DOCS: Doc[] }>(fx: T): T {
+export function withOtherFractureDefined<T extends { DOCS: Doc[] }>(fx: T, definition = OTHER_FRACTURE_DEFINITION): T {
   return {
     ...fx,
     DOCS: fx.DOCS.map((d) => {
       if (!Object.values(d.pages).some((t) => /\(Other Fracture\)/.test(t))) return d;
       const next = Math.max(0, ...Object.keys(d.pages).map(Number)) + 1;
-      return { ...d, pages: { ...d.pages, [next]: OTHER_FRACTURE_DEFINITION } };
+      return { ...d, pages: { ...d.pages, [next]: definition } };
     }),
   } as T;
 }
