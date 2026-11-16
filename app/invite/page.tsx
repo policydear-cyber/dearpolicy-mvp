@@ -43,7 +43,7 @@ function InviteForm() {
     <div className="page">
       <header className="page-header compact">
         <div>
-          <div className="eyebrow">INVITATION</div>
+          <div className="eyebrow">Invitation</div>
           <h1>Join a household</h1>
           <p className="lead">Press Join household below. If the box is empty, paste the code from the end of your invitation link (the part after &ldquo;token=&rdquo;).</p>
         </div>

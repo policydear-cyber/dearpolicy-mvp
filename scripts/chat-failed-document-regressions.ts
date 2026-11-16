@@ -77,7 +77,7 @@ async function main() {
     for (const pageCount of [null, 4]) {
       const { lines, none } = await said([{ status: "failed", error: DOCUMENT_READING_SERVICE_MESSAGE, pageCount }]);
       for (const text of [lines, none]) {
-        assert.match(text, /reading service wasn’t available — nothing is wrong with the file/, text);
+        assert.match(text, /connection problem on our side — nothing is wrong with the file/, text);
         assert.match(text, /Press “Try reading it again” on the Documents page in a little while/, text);
         assert.doesNotMatch(text, /readable text|clearer scan|try again automatically/i, text);
       }
@@ -182,7 +182,7 @@ async function main() {
       // Only "no readable text" is told about a clearer scan; a service or provider-quota stop never is.
       if (kind === "no_text") assert.match(text, /clearer scan/, text);
       else assert.doesNotMatch(text, /readable text|\bscan/i, `${kind}: ${text}`);
-      if (kind === "service") assert.match(text, /reading service wasn’t available — nothing is wrong with the file\. Press “Try reading it again” on the Documents page in a little while\./, text);
+      if (kind === "service") assert.match(text, /connection problem on our side — nothing is wrong with the file\. Press “Try reading it again” on the Documents page in a little while\./, text);
       if (kind === "password_missing" || kind === "password_wrong") assert.match(text, /on the Documents page/, text);
       if (kind === "unknown") assert.match(text, /DearPolicy couldn’t finish reading it/, text);
     }

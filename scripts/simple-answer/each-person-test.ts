@@ -278,7 +278,9 @@ async function main() {
     assert.ok(Math.abs(run.spentUsd - 0.2) < 1e-9, `spent ${run.spentUsd}`);
     assert.equal(run.turns[0].eachPerson?.kept, true);
     const replayed = await runSet({ household: house(), questions: [{ id: "SG1", turns: [SG1] }], model: replayModel(run.turns, scripted.choice) });
-    assert.deepEqual(replayed.turns[0].answer, run.turns[0].answer);
+    // Each saved answer gets a fresh random answerId (lib/chat/stale-answers.ts); the rest must be the same.
+    const withoutId = (x: unknown) => { const { answerId: _id, ...rest } = x as Record<string, unknown>; return rest; };
+    assert.deepEqual(withoutId(replayed.turns[0].answer), withoutId(run.turns[0].answer));
     // With room for one call only, the second is refused before it is made and the first answer stands.
     n = 0;
     const tight = await runSet({ household: house(), questions: [{ id: "SG1", turns: [SG1] }], model: scripted, price, maxUsd: 0.105 });

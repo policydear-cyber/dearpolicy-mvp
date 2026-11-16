@@ -5,7 +5,9 @@
 import type { ModelChoice } from "@/lib/ai/providers";
 import { SIMPLE_ANSWER_SCHEMA, SIMPLE_SYSTEM_PROMPT, TABLE_ANSWER_SCHEMA } from "./prompt";
 
-export type Turn = { role: "user" | "assistant"; text: string };
+/** `answerId`: an assistant turn's saved answer id (ChatAnswer.answerId), so a correction in this turn can stop reading it
+ * back (lib/simple-chat/hook.ts). Never sent to the model. */
+export type Turn = { role: "user" | "assistant"; text: string; answerId?: string };
 /** `withRows`: the library carries the benefit table, and each statement names its row (lib/benefit-table/chat.ts). */
 export type SimpleModelCall = { library: string; history: Turn[]; question: string; withRows?: boolean };
 export type SimpleUsage = { input: number; cacheWrite: number; cacheRead: number; output: number };

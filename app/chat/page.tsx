@@ -44,6 +44,11 @@ function rememberConversation(id:string|null){
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 const CHAT_MAX_WAIT_MS=6*60_000;
+// How often a running answer is checked. A finished answer waits for the next check before it is shown: half this on
+// average, all of it at worst (scripts/simple-answer/latency.ts, 15 Nov: the server's own work outside the model is about
+// 0.1 s, so a 1 s gap was the largest wait after the model). Each check is one small read; the drains it starts keep their
+// own per-instance limits (lib/jobs/request-drain.ts).
+const CHAT_POLL_MS=500;
 type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string;conflict?:boolean;noFamily?:boolean;stopped?:boolean;restored?:boolean};
 type SavedChat={id:string;family_member_id:string|null;title:string;updated_at:string;revision:string};
 const factFindingStatusCopy:Record<NonNullable<ChatAnswer["factFinding"]>[number]["status"],string>={
@@ -204,7 +209,7 @@ function ChatContent(){
       }
       await new Promise<void>((resolve,reject)=>{
         const onAbort=()=>{clearTimeout(timer);signal.removeEventListener("abort",onAbort);reject(new DOMException("Cancelled","AbortError"));};
-        const timer=setTimeout(()=>{signal.removeEventListener("abort",onAbort);resolve();},1000);
+        const timer=setTimeout(()=>{signal.removeEventListener("abort",onAbort);resolve();},CHAT_POLL_MS);
         signal.addEventListener("abort",onAbort,{once:true});
       });
     }

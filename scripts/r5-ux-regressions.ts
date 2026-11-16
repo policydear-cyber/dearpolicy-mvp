@@ -163,8 +163,9 @@ async function main() {
     const page = read("app/policies/page.tsx");
     // Offered on ready documents, beside Details; the first click only arms it; the second calls the same
     // in-place re-read as "Try reading it again" (/api/policies/reprocess), so nothing is deleted or re-uploaded.
-    assert.match(page, /policy\.processing_status === "ready" && <button type="button" className="mini-button"[^>]*onClick=\{\(\) => \{ if \(confirmRereadId === policy\.id\) \{ setConfirmRereadId\(null\); void retryReading\(policy\); \} else setConfirmRereadId\(policy\.id\); \}\}>/);
-    assert.match(page, /"Confirm read again" : "Read again"/);
+    assert.match(page, /policy\.processing_status === "ready" && <button type="button" className="mini-button"[^>]*onClick=\{\(\) => pressRead\(policy\)\}>/);
+    assert.match(page, /pressReadAgain\(confirmRereadId, policy\.id, \{ arm: setConfirmRereadId, send: \(\) => void retryReading\(policy\) \}\)/);
+    assert.match(page, /CONFIRM_READ_AGAIN : "Read again"/);
     assert.match(page, /async function retryReading[\s\S]{0,400}\/api\/policies\/reprocess/);
   });
   await test("upload form labels are tied to their inputs", () => {

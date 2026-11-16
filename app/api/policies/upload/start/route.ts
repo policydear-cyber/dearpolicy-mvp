@@ -5,6 +5,7 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 import { createPolicyUploadUrl, policyUploadDriver, policyUploadKey } from "@/lib/storage";
 import { ACCEPTED_FORMATS_MESSAGE, FORMAT_EXTENSIONS, SUPPORTED_UPLOAD_FORMATS } from "@/lib/documents/formats";
 import { MAX_DOCUMENT_BYTES, TOO_LARGE_MESSAGE, resolveUploadFamilyMember, uploadErrorResponse } from "../accept";
+import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
 import { signUploadIntent, UPLOAD_INTENT_TTL_MS } from "../intent-token";
 
 export const runtime = "nodejs";
@@ -56,11 +57,15 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ token, mode: "parts", partUrl: "/api/policies/upload/part", partBytes: UPLOAD_PART_BYTES, maxBytes: MAX_DOCUMENT_BYTES });
   } catch (error) {
-    if (error instanceof z.ZodError) return NextResponse.json({ error: "That file could not be prepared for upload." }, { status: 400 });
+    if (error instanceof z.ZodError) {
+      // The browser always sends a size and a name; only a name past what DearPolicy keeps is the person's to fix.
+      const nameTooLong = error.issues.some((issue) => issue.path[0] === "filename" && issue.code === "too_big");
+      return NextResponse.json({ error: nameTooLong ? UPLOAD_COPY.nameTooLong : UPLOAD_COPY.startFailed, reasonCode: nameTooLong ? "FILENAME_TOO_LONG" : "UPLOAD_NOT_STARTED" }, { status: 400 });
+    }
     const known = uploadErrorResponse(error, request);
     if (known) return known;
     const authResponse = routeErrorResponse(error, { request, route: "/api/policies/upload/start" });
-    if (authResponse.status === 500) return NextResponse.json({ error: "The upload could not be started. Please try again." }, { status: 500 });
+    if (authResponse.status === 500) return NextResponse.json({ error: UPLOAD_COPY.startFailed }, { status: 500 });
     return authResponse;
   }
 }

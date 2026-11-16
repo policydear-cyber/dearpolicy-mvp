@@ -4,6 +4,7 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { readPolicyFile } from "@/lib/storage";
 import { acceptPolicyUpload, MAX_DOCUMENT_BYTES, TOO_LARGE_MESSAGE, uploadErrorResponse } from "../accept";
+import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
 import { verifyUploadIntent } from "../intent-token";
 
 export const runtime = "nodejs";
@@ -34,13 +35,13 @@ export async function POST(request: NextRequest) {
     try {
       bytes = new Uint8Array(await readPolicyFile(intent.storageKey));
     } catch {
-      return NextResponse.json({ error: "The file did not finish uploading. Please try again.", reasonCode: "UPLOAD_INCOMPLETE" }, { status: 409 });
+      return NextResponse.json({ error: UPLOAD_COPY.interrupted, reasonCode: "UPLOAD_INCOMPLETE" }, { status: 409 });
     }
     if (bytes.length > MAX_DOCUMENT_BYTES) {
       return NextResponse.json({ error: TOO_LARGE_MESSAGE, reasonCode: "FILE_TOO_LARGE" }, { status: 400 });
     }
     if (bytes.length !== intent.byteSize) {
-      return NextResponse.json({ error: "The file did not finish uploading. Please try again.", reasonCode: "UPLOAD_INCOMPLETE" }, { status: 409 });
+      return NextResponse.json({ error: UPLOAD_COPY.interrupted, reasonCode: "UPLOAD_INCOMPLETE" }, { status: 409 });
     }
     return await acceptPolicyUpload({
       request, ctx, policyId: intent.policyId, bytes, filename: intent.filename, mimeType: intent.mimeType,
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
     const known = uploadErrorResponse(error, request);
     if (known) return known;
     const authResponse = routeErrorResponse(error, { request, route: "/api/policies/upload/finalize" });
-    if (authResponse.status === 500) return NextResponse.json({ error: "Upload failed. Please try again." }, { status: 500 });
+    if (authResponse.status === 500) return NextResponse.json({ error: UPLOAD_COPY.finishFailed }, { status: 500 });
     return authResponse;
   }
 }

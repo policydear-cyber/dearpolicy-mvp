@@ -24,11 +24,19 @@ import { loadHousehold, renderLibrary, spouseMeant, type Household } from "./lib
 import { LIBRARY_CACHE_WRITE_RATE, ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
 import { answerAsText, NO_ANSWER, NOTHING_SHOWN, noteCoverNotCounted, readModelAnswer, sentences as sentencesOf, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
+import { randomUUID } from "node:crypto";
+import { SUPERSEDED_NOTICE, supersededAnswerIds } from "@/lib/chat/stale-answers";
+import { resolveSubjects, subjectsNote, supersededBy, unknownPersonAnswer, type Subjects } from "./subjects";
+import { matchMember, membersNamedIn } from "./verify";
 import { amountsFromRows, withheldRows, asksForNobody, namesSomeone, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, dropQuotePointers, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
-export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; timing?: { loadMs: number; modelMs: number; checkMs: number };
+/** Each turn's `answerId` is its saved answer's (ChatAnswer.answerId), `people` the members its amounts were shown for, and
+ * `subjects` the members it was allowed to show figures for (lib/simple-chat/subjects.ts; null: not settled). `superseded`:
+ * the ids of earlier answers a later correction of who the chat is about made out of date. */
+export type SimpleChatState = ConversationState & { simpleChat?: { turns: { model: string; usage: ReturnType<typeof ledgerUsage>; ms: number; timing?: { loadMs: number; modelMs: number; checkMs: number }; report: VerifyReport;
+  answerId?: string; people?: string[]; subjects?: string[] | null;
   /** The second call asking for each person's own figures (asksWhoseOnly), and whether its answer was the one kept. */
-  eachPerson?: { model: string; usage: ReturnType<typeof ledgerUsage>; kept: boolean; skipped?: "spend cap" }; report: VerifyReport }[] } };
+  eachPerson?: { model: string; usage: ReturnType<typeof ledgerUsage>; kept: boolean; skipped?: "spend cap" } }[]; superseded?: string[] } };
 type Save = typeof saveTurn;
 export type SimpleDeps = { model?: SimpleModel; household?: (accountId: string) => Promise<Household>; history?: (accountId: string, conversationId: string) => Promise<Turn[]>; save?: Save; ledger?: boolean; today?: () => Date;
   /** The household's benefit table, when it is switched on (lib/benefit-table): its rows are the chat's only amounts. */
@@ -60,13 +68,21 @@ export async function prepareSimpleChat(request: ChatRequest): Promise<ChatConte
 }
 
 /** The conversation so far, as the household saw it (this household's rows only). */
-export async function conversationTurns(accountId: string, conversationId: string): Promise<Turn[]> {
+export async function conversationTurns(accountId: string, conversationId: string, superseded: ReadonlySet<string> = new Set()): Promise<Turn[]> {
   const rows = (await query<{ role: string; content: string; answer_json: unknown }>(
     `SELECT role,content,answer_json FROM (SELECT role,content,answer_json,created_at,message_order FROM chat_messages WHERE account_id=$1 AND conversation_id=$2 ORDER BY created_at DESC,message_order DESC LIMIT 12) m ORDER BY created_at,message_order`,
     [accountId, conversationId])).rows;
+  return turnsFromMessages(rows, superseded);
+}
+/** The saved messages as the model reads them, oldest first. An answer a later correction made out of date (`superseded`,
+ * lib/simple-chat/subjects.ts) is never read to the model again with its figures, which would read them back for the
+ * person taken out: the model hears it was replaced, as the household does on reopening. */
+export function turnsFromMessages(rows: readonly { role: string; content: string; answer_json: unknown }[], superseded: ReadonlySet<string> = new Set()): Turn[] {
   return rows.map((r) => {
     const a = r.answer_json as (ChatAnswer & Parameters<typeof answerAsText>[0]) | null;
-    return { role: r.role === "user" ? "user" as const : "assistant" as const, text: r.role !== "user" && a && typeof a.summary === "string" ? answerAsText({ ...a, nextSteps: a.nextSteps ?? [], questions: a.questions ?? [] }) : String(r.content ?? "") };
+    if (r.role !== "user" && a && typeof a.answerId === "string" && superseded.has(a.answerId)) return { role: "assistant" as const, text: SUPERSEDED_NOTICE };
+    return { role: r.role === "user" ? "user" as const : "assistant" as const, text: r.role !== "user" && a && typeof a.summary === "string" ? answerAsText({ ...a, nextSteps: a.nextSteps ?? [], questions: a.questions ?? [] }) : String(r.content ?? ""),
+      ...(r.role !== "user" && a && typeof a.answerId === "string" ? { answerId: a.answerId } : {}) };
   });
 }
 
@@ -233,6 +249,51 @@ export function dropLateClaims(answer: { summary: string; bottomLine?: string | 
 // N4, N5).
 const INTRODUCES = /:\s*$|\bas\s+follows\b|\bbelow\s*(?:[.:]|$)|(?:^|[.!?]\s+)(?:here(?:'s|’s|\s+is|\s+are)|these\s+are\s+(?!not\b))/i;
 
+/** The model's statements kept to the people the turn is about (subjects.people; null: every statement stays). A statement
+ * whose person is another member is left out, whatever its kind: after "actually it's Daniel, not Grace" nothing is said
+ * for Grace. A statement for no one whose words name only other members goes too. Allow-list: only the people resolved. */
+export function keepToSubjects(json: unknown, subjects: Subjects, household: Household): unknown {
+  if (!subjects.people || !json || typeof json !== "object" || !Array.isArray((json as { statements?: unknown }).statements)) return json;
+  const allowed = new Set(subjects.people);
+  const others = (person: string | null) => !!person && !allowed.has(person);
+  const statements = ((json as { statements: unknown[] }).statements).filter((x) => {
+    if (!x || typeof x !== "object") return true;
+    const st = x as { person?: unknown; text?: unknown };
+    const person = matchMember(household, typeof st.person === "string" ? st.person : null);
+    if (person) return !others(person);
+    const named = membersNamedIn(household, typeof st.text === "string" ? st.text : "");
+    return !(named.length && named.every((n) => others(n)));
+  });
+  const bottomLine = (json as { bottomLine?: unknown }).bottomLine;
+  return { ...(json as object), statements, ...(typeof bottomLine === "string" ? { bottomLine: onlyAbout(bottomLine, allowed, household) } : {}) };
+}
+/** The sentences of a text that name no member, or at least one allowed member. */
+function onlyAbout(text: string, allowed: ReadonlySet<string>, household: Household): string {
+  return sentencesOf(text).filter((s) => { const named = membersNamedIn(household, s); return !named.length || named.some((n) => allowed.has(n)); }).join(" ");
+}
+/** The checked answer kept to the people the turn is about: a card or point for another member goes, and so do bottom-line
+ * sentences naming only other members. Returns what was left out (kept with the turn's report). */
+export function keepAnswerToSubjects(answer: { statements?: { personName?: string | null; text: string; amount?: unknown }[]; bottomLine?: string | null; summary?: string }, subjects: Subjects, household: Household): string[] {
+  if (!subjects.people) return [];
+  const allowed = new Set(subjects.people);
+  const out: string[] = [];
+  const members = new Set(household.members.map((m) => m.name.replace(/\s*\([^)]*\)\s*$/, "").trim()));
+  answer.statements = (answer.statements ?? []).filter((st) => {
+    const person = st.personName && members.has(st.personName) ? st.personName : st.personName ? matchMember(household, st.personName) : null;
+    const named = person ? [person] : membersNamedIn(household, st.text);
+    const keep = !named.length || named.some((n) => allowed.has(n));
+    if (!keep) out.push(st.text);
+    return keep;
+  });
+  for (const key of ["bottomLine", "summary"] as const) {
+    const text = answer[key];
+    if (typeof text !== "string" || !text) continue;
+    const kept = onlyAbout(text, allowed, household);
+    if (kept !== text) { if (key === "bottomLine") out.push(text); answer[key] = kept || "Here is what your documents say."; }
+  }
+  return out;
+}
+
 /** Who "my husband" or "my wife" is, when the documents settle it (lib/simple-chat/library spouseMeant). The latest
  * mention counts: the message, then earlier turns newest first (TE S4). */
 function spouseNote(household: Household, said: string[]): string {
@@ -284,10 +345,10 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const ledger = deps.ledger ?? !deps.model;
   const loadStarted = Date.now();
   // The spend check, the library, the conversation and the benefit table are read side by side: a person is waiting.
-  const [, household, history, live] = await Promise.all([
+  const [, household, heard, live] = await Promise.all([
     ledger ? assertUnderSpendCap(request.accountId) : null,
     (deps.household ?? loadHousehold)(request.accountId),
-    (deps.history ?? conversationTurns)(request.accountId, conversation.id),
+    deps.history ? deps.history(request.accountId, conversation.id) : conversationTurns(request.accountId, conversation.id, supersededAnswerIds(conversation.state)),
     deps.table ? Promise.all([deps.table(request.accountId), deps.tableStates?.(request.accountId) ?? null]).then(([table, states]) => table ? { table, states: states ?? new Map<string, string>() } : null) : liveTable(request.accountId),
   ]);
   const table = live?.table ?? null;
@@ -297,15 +358,28 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   const started = Date.now();
   const loadMs = started - loadStarted;
   let reply: Awaited<ReturnType<SimpleModel["call"]>> | null = null;
+  // A question about DearPolicy itself gets its fixed answer, with no model call (lib/simple-chat/app-help).
+  const help = appHelp(message, household.documents.flatMap((d) => [d.insurer ?? "", d.productName ?? ""]));
+  // Who this turn is about, from the household's own messages: a replacement, an addition, a new question or the same
+  // people (lib/simple-chat/subjects.ts). Only these people's figures are shown.
+  // The answer just before ended with a question: a reply in a replacement's shape may answer it (subjects.ts, R4-3, N5-1).
+  const lastAnswer = [...heard].reverse().find((t) => t.role === "assistant");
+  const lastLine = lastAnswer?.text.trim().split("\n").pop() ?? "";
+  const askedBefore = /\?\s*$/.test(lastLine) ? lastLine : null;
+  const subjects = resolveSubjects(household, [message, ...heard.filter((t) => t.role === "user").map((t) => t.text).reverse()], { askedBefore });
+  // The earlier answers this turn's correction replaces are not read back to the model with their figures either.
+  const prior = conversation.state as SimpleChatState;
+  const replacedNow = subjects.change === "replace" ? supersededBy(subjects.replaced, prior.simpleChat?.turns ?? [], subjects.kept ?? subjects.people ?? []) : [];
+  const history = replacedNow.length ? heard.map((t) => (t.role === "assistant" && t.answerId && replacedNow.includes(t.answerId) ? { role: t.role, text: SUPERSEDED_NOTICE } : t)) : heard;
   const said = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
   // With the table, only the pages its rows come from, and those documents' pages that print a waiting period or an
   // exclusion, are sent with it (about half the cost per question).
-  const asking = () => ({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated(now) + periodsNote(household, now) + datesSaidNote(message, now, claimWindows(household)) + chatFor(context) + spouseNote(household, said) + message });
-  // A question about DearPolicy itself gets its fixed answer, with no model call (lib/simple-chat/app-help).
-  const help = appHelp(message, household.documents.flatMap((d) => [d.insurer ?? "", d.productName ?? ""]));
+  const asking = () => ({ library: renderLibrary(household, rows ? pagesToSend(rows, household) : undefined) + (rows ? renderTable(rows) : ""), withRows: !!rows, history, question: dated(now) + periodsNote(household, now) + datesSaidNote(message, now, claimWindows(household)) + chatFor(context) + subjectsNote(subjects) + spouseNote(household, said) + message });
   if (help) reply = { json: help.answer, stopReason: null, model: `app-help:${help.id}`, usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 } };
   // A household with no documents has nothing to answer from: its fixed answer costs no model call (TE main journeys 11 Nov).
   else if (!household.documents.length) reply = { json: NO_DOCUMENTS_ANSWER, stopReason: null, model: "no-documents", usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 } };
+  // Someone the household does not have: asked who they mean, with no figures and no model call.
+  else if (subjects.unknown) reply = { json: unknownPersonAnswer(household, subjects.unknown), stopReason: null, model: "unknown-person", usage: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 } };
   else try {
     reply = await model.call(asking());
   } finally {
@@ -314,6 +388,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   let modelMs = Date.now() - started;
   // The checks every model reply goes through, in order; a reply asked again (asksWhoseOnly) goes through them all too.
   const checkReply = (json: unknown, fixed: boolean) => {
+    // The model's statements for anyone the turn is not about are left out before anything is built from them.
+    json = keepToSubjects(json, subjects, household);
     // With the benefit table, every amount is rewritten from the row it names (or dropped) before the usual checks.
     const fromRows: { json: unknown; report: RowReport | null } = rows && !fixed ? amountsFromRows(json, rows, household, now, message, history.filter((t) => t.role === "user").map((t) => t.text).reverse(),
       !context.conversation.family_member_id && asksForNobody([message, ...history.filter((t) => t.role === "user").map((t) => t.text)], household, rows), table ? withheldRows(table, household) : []) : { json: json, report: null };
@@ -334,6 +410,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
       answer.statements = noteLeftOutAmounts(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
       answer.statements = noteNarrowedPages(answer.statements, fromRows.report, (id, text) => ({ id, kind: "uncertainty", text, fullText: text, conditions: [] }));
     }
+    // And what the checks built (an owner's label, a card) for anyone the turn is not about goes too.
+    report.sentencesLeftOut.push(...keepAnswerToSubjects(answer, subjects, household));
     // Amounts shown while some of that person's documents gave nothing: never read as the person's whole cover.
     noteCoverNotCounted(answer, household, live?.states ?? null, new Set(fromRows.report?.premiumLabels ?? []));
     // Points were given, none survived the checks, and the bottom line introduces them: the answer says so, never a bare
@@ -350,7 +428,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   // before it is paid for: gate #503 ASK-M1) and the household is under its spend cap (checked again, since the first
   // call may have crossed it; an unreadable ledger skips the call: ASK-H1).
   let eachPerson: { model: string; usage: ReturnType<typeof ledgerUsage>; kept: boolean; skipped?: "spend cap" } | null = null;
-  if (reply.model !== "no-documents" && !help && asksWhoseOnly(checked.answer, message, household, !!context.conversation.family_member_id || spouseNote(household, said) !== "")) {
+  // Not for a fixed answer (no documents, someone the household does not have), and not when the turn's people are settled.
+  if (reply.model !== "no-documents" && reply.model !== "unknown-person" && !help && asksWhoseOnly(checked.answer, message, household, !!context.conversation.family_member_id || subjects.people !== null || spouseNote(household, said) !== "")) {
     await opts.check?.();
     if (ledger && await overSpendCap(request.accountId).catch(() => true)) eachPerson = { model: "", usage: ledgerUsage({ input: 0, cacheWrite: 0, cacheRead: 0, output: 0 }, LIBRARY_CACHE_WRITE_RATE), kept: false, skipped: "spend cap" };
     else {
@@ -384,11 +463,15 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   // What the server left out is kept with the turn: an identity number in it is masked too.
   maskIdentityNumbers(report);
   if (fromRows.report) maskIdentityNumbers(fromRows.report);
-  const prior = conversation.state as SimpleChatState;
+  answer.answerId = randomUUID();
+  const shownFor = [...new Set((answer.statements ?? []).flatMap((st) => st.amount && st.personName ? [st.personName] : []))];
   // Where the time went (kept with the turn, no household text): reading the library and table, the model, the checks.
   const timing = { loadMs, modelMs, checkMs: Date.now() - started - modelMs };
-  const turns = [...(prior.simpleChat?.turns ?? []), { model: reply.model, usage: ledgerUsage(reply.usage, LIBRARY_CACHE_WRITE_RATE), ms: Date.now() - started, timing, ...(eachPerson ? { eachPerson } : {}), report: fromRows.report ? { ...report, dropped: [...fromRows.report.dropped.map((d) => ({ kind: "amount", ...d })), ...report.dropped] } : report }].slice(-12);
-  const next: SimpleChatState = { ...prior, intent: "policy_question", simpleChat: { turns } };
+  const turns = [...(prior.simpleChat?.turns ?? []), { model: reply.model, usage: ledgerUsage(reply.usage, LIBRARY_CACHE_WRITE_RATE), ms: Date.now() - started, timing, ...(eachPerson ? { eachPerson } : {}), answerId: answer.answerId, people: shownFor, subjects: subjects.people, report: fromRows.report ? { ...report, dropped: [...fromRows.report.dropped.map((d) => ({ kind: "amount", ...d })), ...report.dropped] } : report }].slice(-12);
+  // A replacement ("actually it's Daniel, not Grace") makes the earlier answers with the replaced person's figures out of
+  // date: reopening the chat shows them as replaced by this one (lib/chat/stale-answers.ts).
+  const superseded = [...new Set([...(prior.simpleChat?.superseded ?? []), ...replacedNow])].slice(-200);
+  const next: SimpleChatState = { ...prior, intent: "policy_question", simpleChat: { turns, ...(superseded.length ? { superseded } : {}) } };
   delete next.pending;
   await opts.check?.();
   await (deps.save ?? saveTurn)({ conversation, token: context.token, state: next, message, answer, jobId: opts.jobId });

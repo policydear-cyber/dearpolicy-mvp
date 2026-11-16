@@ -22,6 +22,7 @@ import { pool } from "@/lib/db/client";
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { maskIdentityText } from "@/lib/chat/identity-numbers";
+import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
 import { noteOwnerChosen, noteOwnerUnsure } from "@/lib/policies/upload-owner";
 
 /** The largest document DearPolicy accepts. Direct uploads carry it to
@@ -65,7 +66,7 @@ export function uploadErrorResponse(error: unknown, request: NextRequest): NextR
   const correlationId = resolveCorrelationId(request.headers.get("x-correlation-id"));
   const reject = () => void recordEvent({ name: "upload.policy.rejected", correlationId, route: "/api/policies/upload", status: "failure", errorCategory: "validation" });
   if (error instanceof NoFamilyMember) { reject(); return NextResponse.json({ error: "Add the people your policies cover on the Family page first, then upload this document again." }, { status: 400 }); }
-  if (error instanceof FamilyMemberNotFound) { reject(); return NextResponse.json({ error: "Family member not found." }, { status: 404 }); }
+  if (error instanceof FamilyMemberNotFound) { reject(); return NextResponse.json({ error: UPLOAD_COPY.memberGone }, { status: 404 }); }
   if (error instanceof DuplicateDocument) { reject(); return NextResponse.json({ error: `This exact document is already in DearPolicy as ${maskIdentityText(error.filename)}.` }, { status: 409 }); }
   return null;
 }

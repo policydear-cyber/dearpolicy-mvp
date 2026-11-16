@@ -25,6 +25,9 @@ const UNREAD_STATES = new Set(["stalled", "held", "not_readable", "table_unread"
 export const OWNED_BY_MEMBER = (member: string, cache = false) => `(EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id AND pm.family_member_id=${member})
   OR (p.family_member_id=${member} AND NOT EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id)${cache ? ` AND NOT coalesce(p.reading_cache ? '${UNSURE_KEY}',false)` : ""}))`;
 
+/** A ready document's page note (lib/documents/processing-errors.ts unreadablePagesNote, notReadPagesNote): a page that
+ * could not be read, or a scanned page not read yet. Such a document is never fully read, whatever leads its message. */
+const UNREAD_PAGE_NOTE_SQL = String.raw`(could not be read|not been read yet), so anything printed only there is not available\.`;
 /** The reading-did-not-finish rule (the caller adds activePredicate inline, where the lifecycle guard reads it) shared by a person's count and the household's unlinked "Not sure" uploads.
  * Parameters: $1 account, $3 read-in-part notes (exact, or followed by more text), $4 benefit read failure key, $5 no-cover roles, $6 Read again ids,
  * $7 scan-goes-on states, $8 unread ids. */
@@ -33,7 +36,7 @@ const NOT_FULLY_READ = (cache: boolean) => `p.account_id=$1 AND p.superseded_at 
             p.id::text=ANY($8::text[]) OR p.processing_status='failed'
             OR (p.processing_status IN ('uploaded','queued','extracting','indexing') AND (p.updated_at<=now()-interval '30 minutes'
               OR NOT (coalesce(p.quarantine_status,'')=ANY($7::text[]))))
-            OR (p.processing_status='ready' AND (p.processing_message ~ '^Read in part\\M' OR EXISTS(SELECT 1 FROM unnest($3::text[]) AS note(m) WHERE p.processing_message=note.m OR left(p.processing_message,length(note.m)+1)=note.m||' ')
+            OR (p.processing_status='ready' AND (p.processing_message ~ '^Read in part\\M' OR p.processing_message ~ '${UNREAD_PAGE_NOTE_SQL}' OR EXISTS(SELECT 1 FROM unnest($3::text[]) AS note(m) WHERE p.processing_message=note.m OR left(p.processing_message,length(note.m)+1)=note.m||' ')
               OR NOT EXISTS(SELECT 1 FROM policy_pages pp WHERE pp.policy_id=p.id AND pp.account_id=p.account_id)
               ${cache ? "OR p.reading_cache ? $4" : "OR ($4::text IS NULL AND false)"})))))`;
 

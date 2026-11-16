@@ -84,8 +84,11 @@ function LoginForm() {
 
   return (
     <div className="page" style={{ maxWidth: 420, paddingTop: 96 }}>
-      <h1>Welcome back</h1>
-      <p className="lead">Sign in to see your family&rsquo;s policies and ask about them.</p>
+      {/* The sign-in form sits in the household's policy folder: its tab names it, its front carries the greeting. */}
+      <div className="folder-face"><span className="folder-tab" aria-hidden="true">Your family&rsquo;s policies</span>
+        <h1>Welcome back</h1>
+        <p className="lead">Sign in to see your family&rsquo;s policies and ask about them.</p>
+      </div>
       {linkError && LINK_ERRORS[linkError] ? (
         <div className="alert error" role="alert">
           {LINK_ERRORS[linkError]}

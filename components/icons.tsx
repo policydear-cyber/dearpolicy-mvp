@@ -80,3 +80,12 @@ const coverIcons: Record<string, IconName> = {
   "Long-term Care": "care", Travel: "plane", Home: "home", Motor: "car", Savings: "coins", Investment: "trendUp",
 };
 export const coverIcon = (category: string): IconName => coverIcons[category] ?? "shield";
+
+/** The card colour a Home cover tile takes (Card wallet, docs/brand.md): one fixed colour per kind of cover, the same
+ * on every page, so a household learns "navy is hospital". Display only; never a status. */
+const coverCards: Record<string, string> = {
+  Hospitalisation: "hospital", Outpatient: "hospital", "Hospital Cash": "cash", Death: "death", "Critical Illness": "ci", "Early Critical Illness": "ci",
+  "Total Permanent Disability": "disability", "Disability Income": "disability", "Long-term Care": "disability", "Personal Accident": "accident",
+  Travel: "travel", Home: "property", Motor: "property", Savings: "savings", Investment: "savings",
+};
+export const coverCard = (category: string): string => coverCards[category] ?? "other";

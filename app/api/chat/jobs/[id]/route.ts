@@ -6,6 +6,7 @@ import { scheduleChatDrain,scheduleRequestDrain } from "@/lib/jobs/request-drain
 import { cancelChatJob,getChatJob } from "@/lib/chat/jobs";
 import { sanitizeStoredAnswer } from "@/lib/chat/monetary-boundary";
 import { invalidateAnswersWithDeletedPolicies } from "@/lib/chat/stale-answers";
+import { getConversation } from "@/lib/chat/store";
 import type { ChatAnswer } from "@/types";
 
 export const runtime="nodejs";
@@ -24,11 +25,13 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{id:strin
     const job=await getChatJob(ctx.householdId,id);
     if(!job)return NextResponse.json({error:"Analysis not found or its chat was deleted."},{status:404});
     let result:unknown=job.status==="complete"?sanitizeStoredAnswer(job.result_json):null;
-    // An answer that relied on a since-deleted policy is never re-served as current cover.
+    // An answer that relied on a since-deleted policy is never re-served as current cover; nor is one a later turn of its
+    // chat corrected (who it was about: lib/simple-chat/subjects.ts), read from the chat's saved state.
     if(result&&typeof result==="object"){
+      const conversationState=job.conversation_id?(await getConversation(ctx.householdId,job.conversation_id))?.state:undefined;
       const wrapper=result as {answer?:Partial<ChatAnswer>};
-      if(wrapper.answer&&typeof wrapper.answer==="object"){const [current]=await invalidateAnswersWithDeletedPolicies(ctx.householdId,[wrapper.answer]);result={...wrapper,answer:current};}
-      else{const [current]=await invalidateAnswersWithDeletedPolicies(ctx.householdId,[result as Partial<ChatAnswer>]);result=current;}
+      if(wrapper.answer&&typeof wrapper.answer==="object"){const [current]=await invalidateAnswersWithDeletedPolicies(ctx.householdId,[wrapper.answer],{conversationState});result={...wrapper,answer:current};}
+      else{const [current]=await invalidateAnswersWithDeletedPolicies(ctx.householdId,[result as Partial<ChatAnswer>],{conversationState});result=current;}
     }
     return NextResponse.json({job:{id:job.id,status:job.status,progress:job.progress,error:job.error},result});
   }catch(error){
