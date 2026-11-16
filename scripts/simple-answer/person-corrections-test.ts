@@ -249,6 +249,25 @@ async function main() {
     });
   }
 
+  // Gate #510 MEDIUM 1: a calculation id is a hash of its inputs, so two answers may share one. An answer is matched live
+  // by its own answerId only; one without is never marked live (unsure: no figure hidden).
+  await test("L5 answers with shared calculation ids and no answerId: nothing is marked live", async () => {
+    const stale = await import("@/lib/chat/stale-answers");
+    const state = { ragLoop: { claim: { calcs: { Y: { withdrawn: true } } } } };
+    const a1 = { summary: "one", calculations: [{ id: "X" }, { id: "Y" }] }, a2 = { summary: "two", calculations: [{ id: "X" }] }, a3 = { summary: "three", calculations: [{ id: "Z" }] };
+    const replaced = stale.replacedEarlierAnswers([a1, a2] as never[], state, a3 as never);
+    assert.deepEqual(replaced, []);
+    const live = applyReplaced([{ content: "one", answer: a1 }, { content: "two", answer: a2 }] as never[], replaced) as { answer: { invalidated?: unknown } }[];
+    assert.ok(!live.some((x) => x.answer.invalidated));
+    // With their own answerIds, the answer the reopened chat marks is the one marked live, and only that one.
+    const b1 = { ...a1, answerId: "a-1" }, b2 = { ...a2, answerId: "a-2" };
+    const withIds = stale.replacedEarlierAnswers([b1, b2] as never[], state, { ...a3, answerId: "a-3" } as never);
+    const reopened = stale.correctedAnswers([b1, b2] as never[], state) as { invalidated?: { reason: string } }[];
+    assert.deepEqual(withIds.map((r) => r.key), ["answer:a-1"]);
+    assert.equal(reopened[0].invalidated?.reason, "superseded");
+    assert.ok(!reopened[1].invalidated);
+  });
+
   // ---- A: addition
   const ADD = ["Daniel broke his arm too", "and Daniel also broke his arm", "both of them", "Daniel as well"];
   for (const phrase of ADD) for (const table of MODES) for (const behaviour of BEHAVIOURS) {
@@ -467,6 +486,23 @@ async function main() {
           assert.equal(r.reopened[0].invalidated?.reason, "superseded");
           assert.match(r.calls[1].question, /corrected who this is about/);
         });
+    // R6-1 (gate #510 MEDIUM 2): a yes/no question naming one of them is answered by "Daniel, not Grace", never a
+    // correction, so Grace's answer is never replaced, live or reopened. With a pronoun only it stays a correction (N5-1).
+    for (const ask of ["Was Grace driving at the time?", "Grace broke her arm. Was Grace driving at the time?", "Did Grace fall off her bike?", "Was Daniel with her at the time?", "Is Grace left-handed?"])
+      await test(`GATE R6-1 the answer asked "${ask}", then "Daniel, not Grace." (${m}): an answer, nothing replaced live or reopened`, async () => {
+        const r = await converse(TERNS, [OPEN, "Daniel, not Grace."], [[G], [G]], "faithful", table, [ask, null]);
+        assert.deepEqual(people(r.saved[1]), [G]);
+        assert.ok(!r.reopened.some((a) => a.invalidated));
+        assert.ok(!r.live.some((x) => x.answer?.invalidated));
+        assert.doesNotMatch(r.calls[1].question, /corrected who this is about/);
+      });
+    for (const ask of ["Was she driving at the time?", "Did she fall off her bike?"])
+      await test(`GATE R6-1 control: "${ask}" (a pronoun only), then "Daniel, not Grace." (${m}): still a correction`, async () => {
+        const r = await converse(TERNS, [OPEN, "Daniel, not Grace."], [[G], [D]], "sticky", table, [ask, null]);
+        assert.deepEqual(people(r.saved[1]), [D]);
+        assert.equal(r.reopened[0].invalidated?.reason, "superseded");
+        assert.equal(r.live[0].answer?.invalidated?.reason, "superseded");
+      });
     await test(`GATE R4-3 control: no question before, "Daniel, not Grace." still replaces (${m})`, async () => {
       const r = await converse(TERNS, [OPEN, "Daniel, not Grace."], [[G], [D]], "sticky", table, [null, null]);
       assert.deepEqual(people(r.saved[1]), [D]);

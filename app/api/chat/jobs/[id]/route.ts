@@ -7,6 +7,7 @@ import { cancelChatJob,getChatJob } from "@/lib/chat/jobs";
 import { sanitizeStoredAnswer } from "@/lib/chat/monetary-boundary";
 import { invalidateAnswersWithDeletedPolicies, replacedEarlierAnswers } from "@/lib/chat/stale-answers";
 import { query } from "@/lib/db/client";
+import { answerKey } from "@/lib/chat/replaced-live";
 import { getConversation } from "@/lib/chat/store";
 import type { ChatAnswer } from "@/types";
 
@@ -40,7 +41,15 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{id:strin
       if(job.conversation_id&&conversationState){
         const earlier=await query<{answer_json:unknown}>("SELECT answer_json FROM chat_messages WHERE account_id=$1 AND conversation_id=$2 AND role<>'user' AND answer_json IS NOT NULL ORDER BY created_at DESC,message_order DESC LIMIT 200",[ctx.householdId,job.conversation_id]);
         const finished=wrapper.answer&&typeof wrapper.answer==="object"?wrapper.answer:wrapper as Partial<ChatAnswer>;
-        replaced=replacedEarlierAnswers(earlier.rows.map(r=>sanitizeStoredAnswer(r.answer_json) as Partial<ChatAnswer>|null),conversationState,finished);
+        const stored=earlier.rows.map(r=>sanitizeStoredAnswer(r.answer_json) as Partial<ChatAnswer>|null);
+        const marked=replacedEarlierAnswers(stored,conversationState,finished);
+        // Each one as the history route serves it, with the same checks in the same order (a deleted policy's notice comes
+        // first), so the live and the reopened notice are the same (gate #510 LOW 3).
+        if(marked.length){
+          const originals=marked.map(r=>stored.find(a=>answerKey(a)===r.key)??null);
+          const served=await invalidateAnswersWithDeletedPolicies(ctx.householdId,originals,{conversationState});
+          replaced=marked.map((r,i)=>({key:r.key,answer:(served[i]??r.answer) as ChatAnswer}));
+        }
       }
     }
     return NextResponse.json({job:{id:job.id,status:job.status,progress:job.progress,error:job.error},result,...(replaced.length?{replaced}:{})});

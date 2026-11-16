@@ -12,12 +12,12 @@ import type { ChatAnswer } from "@/types";
 /** One earlier answer a later turn replaced: its key (answerKey) and the answer as the reopened chat serves it. */
 export type ReplacedAnswer = { key: string; answer: ChatAnswer };
 
-/** What identifies a saved answer on screen and on the server: its answerId, else its first worked calculation's id. */
+/** What identifies a saved answer on screen and on the server: its own answerId, unique to that answer. An answer with
+ * none (a calculation id is a hash of its inputs, so two answers may share one: gate #510 MEDIUM 1) has no key, and is
+ * never marked live: unsure means a figure is not hidden (the reopened chat still marks it). */
 export function answerKey(a: Partial<ChatAnswer> | null | undefined): string | null {
   if (!a || typeof a !== "object") return null;
-  if (typeof a.answerId === "string" && a.answerId) return `answer:${a.answerId}`;
-  const calc = (Array.isArray(a.calculations) ? a.calculations : []).find((c) => typeof c?.id === "string" && c.id);
-  return calc ? `calc:${calc.id}` : null;
+  return typeof a.answerId === "string" && a.answerId ? `answer:${a.answerId}` : null;
 }
 
 /** The messages on screen with each replaced answer swapped for the server's replacement, and its text for the
