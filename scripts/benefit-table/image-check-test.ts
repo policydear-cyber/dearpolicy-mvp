@@ -466,15 +466,18 @@ async function main() {
 
   await test("queueing: with the image check on, each stored reading with no current check is queued once a day; off, no database call", async () => {
     const { queueStoredImageChecks, queueStoredImageChecksEverywhere } = await import("@/lib/benefit-table/app");
-    const seen: string[] = [];
-    const db: Db = async (sql, p) => { seen.push(sql); if (/FROM benefit_readings br JOIN policies/.test(sql)) { assert.equal(p[0], A); assert.equal(p[1], IMAGE_CHECK_VERSION); return [{ policy_id: "d1", read_at: "t1" }, { policy_id: "d2", read_at: "t2" }]; } return [{ account_id: A }]; };
+    const seen: { sql: string; p: unknown[] }[] = [];
+    const db: Db = async (sql, p) => { seen.push({ sql, p }); if (/AS tries/.test(sql)) { assert.deepEqual(p, [IMAGE_CHECK_VERSION, "2026-12-01", A]); return [{ policy_id: "d1", read_at: "t1", tries: 0 }, { policy_id: "d2", read_at: "t2", tries: 2 }]; } return [{ account_id: A }]; };
     const queued: string[] = [];
     const enqueue = async (id: string, at: string, day: string) => { queued.push(`${id}@${at}@${day}`); };
+    const noGiveUp = async () => { throw new Error("nothing is given up on before MAX_START_TRIES"); };
     const on = { NODE_ENV: "test", DEARPOLICY_IMAGE_FIGURE_CHECK: "1", DEARPOLICY_ALPHA_ACCOUNTS: A } as NodeJS.ProcessEnv;
-    assert.equal(await queueStoredImageChecks(A, db, on, enqueue, () => new Date("2026-12-01T05:00:00Z")), 2);
+    const day = () => new Date("2026-12-01T05:00:00Z");
+    assert.equal(await queueStoredImageChecks(A, db, on, enqueue, day, noGiveUp), 2);
     assert.deepEqual(queued, ["d1@t1@2026-12-01", "d2@t2@2026-12-01"]);
-    const sql = seen.find((q) => /FROM benefit_readings br JOIN policies/.test(q))!;
+    const sql = seen.find((q) => /AS tries/.test(q.sql))!.sql;
     assert.ok(/lifecycle_state='active'/.test(sql) && /superseded_at IS NULL/.test(sql) && /benefit_figure_check/.test(sql), "only current documents nothing is checking");
+    assert.ok(/ORDER BY tries, br\.policy_id/.test(sql), "readings tried on the fewest days first (R504 F1)");
     seen.length = 0; queued.length = 0;
     const off = { NODE_ENV: "test" } as NodeJS.ProcessEnv;
     assert.equal(await queueStoredImageChecks(A, db, off, enqueue), 0);
@@ -483,8 +486,57 @@ async function main() {
     assert.equal(await queueStoredImageChecksEverywhere(db, { ...on, DEARPOLICY_FIGURE_GUARDS: "1", DEARPOLICY_IMAGE_FIGURE_CHECK: "" }, async () => true, async () => 1), 0, "the text guards alone never queue an image check");
     assert.deepEqual(seen, [], "off: no database call");
     assert.equal(await queueStoredImageChecksEverywhere(db, on, async () => true, async (id) => (id === A ? 3 : 0)), 3);
+    assert.ok(/AND NOT \(COALESCE\(policies\.extracted_json/.test((seen as { sql: string }[])[0].sql), "the household list uses the same rules as the readings (R504 F1)");
     assert.equal(await queueStoredImageChecksEverywhere(db, on, async () => false, async () => 3), 0, "a household whose table is off is skipped");
     assert.equal(await queueStoredImageChecksEverywhere(async () => { throw new Error("db down"); }, on, async () => true, async () => 1), 0, "never throws");
+  });
+
+  await test("a household with nothing to queue does not use up the sweep's households (R504 F1)", async () => {
+    const { queueStoredImageChecksEverywhere, IMAGE_CHECK_QUEUE_MAX } = await import("@/lib/benefit-table/app");
+    const on = { NODE_ENV: "test", DEARPOLICY_IMAGE_FIGURE_CHECK: "1", DEARPOLICY_FIGURE_GUARDS_ALL_ACCOUNTS: "1" } as NodeJS.ProcessEnv;
+    const ids = Array.from({ length: IMAGE_CHECK_QUEUE_MAX + 5 }, (_, i) => `acct-${String(i).padStart(2, "0")}`);
+    const db: Db = async () => ids.map((account_id) => ({ account_id }));
+    const asked: string[] = [];
+    const n = await queueStoredImageChecksEverywhere(db, on, async () => true, async (id) => { asked.push(id); return id === ids[ids.length - 1] ? 1 : 0; });
+    assert.equal(n, 1, "the last household is still reached");
+    assert.equal(asked.length, ids.length);
+  });
+
+  await test("a reading whose first check was tried on MAX_START_TRIES days is given up on: its figures go to the household, no model call (R504 F2)", async () => {
+    const { queueStoredImageChecks, MAX_START_TRIES } = await import("@/lib/benefit-table/app");
+    const db: Db = async () => [{ policy_id: "d1", read_at: "t1", tries: MAX_START_TRIES - 1 }, { policy_id: "d2", read_at: "t2", tries: MAX_START_TRIES }];
+    const queued: string[] = [], given: string[] = [];
+    const on = { NODE_ENV: "test", DEARPOLICY_IMAGE_FIGURE_CHECK: "1", DEARPOLICY_ALPHA_ACCOUNTS: A } as NodeJS.ProcessEnv;
+    const n = await queueStoredImageChecks(A, db, on, async (id) => { queued.push(id); }, () => new Date("2026-12-01T00:00:00Z"), async (id) => { given.push(id); return { saved: true }; });
+    assert.equal(n, 2);
+    assert.deepEqual(queued, ["d1"]);
+    assert.deepEqual(given, ["d2"]);
+  });
+
+  await test("giving up: text-layer figures stay confirmed, every OCR figure is asked with none offered, and only on that reading (R504 F2)", async () => {
+    const { giveUpImageCheck } = await import("@/lib/benefit-table/service");
+    envOff();
+    const f = fakeDb(), r1 = readerModel();
+    await readDocument(f.db, r1.model, A, DOC.id);
+    const readAt = f.s.readings.get(DOC.id)!.read_at!;
+    assert.equal((await giveUpImageCheck(f.db, A, DOC.id, "an-older-read-time", [1])).saved, false);
+    assert.equal(JSON.parse(f.s.readings.get(DOC.id)!.reading).guards, undefined);
+    assert.equal((await giveUpImageCheck(f.db, A, DOC.id, readAt, [1])).saved, true);
+    const g = JSON.parse(f.s.readings.get(DOC.id)!.reading).guards as GuardRecord;
+    assert.equal(g.version, IMAGE_CHECK_VERSION);
+    const r = checked();
+    for (const c of claimsOf(r)) {
+      const v = g.verdicts[c.key];
+      if (c.page === 1) assert.equal(v.status, "agreed");
+      else { assert.equal(v.status, "confirm"); assert.deepEqual(v.candidates, [], "the OCR text's own figure is never offered"); }
+    }
+    assert.equal((await giveUpImageCheck(f.db, A, DOC.id, readAt, [1])).saved, false, "never over an image check of this version");
+    envOn();
+    try {
+      const t = await tableFor(f.db, A);
+      assert.equal(tripFigure(t)?.kind, "none");
+      assert.ok(t.figureChecks!.length > 0 && t.figureChecks!.every((c) => c.status === "confirm"), "asked, not 'still being checked' for ever");
+    } finally { envOff(); }
   });
 
   await test("the first-check job's payload is read back with its start mark; the job does nothing while the check is off", async () => {

@@ -735,6 +735,29 @@ export async function setFigureConfirmation(db: Db, accountId: string, userId: s
     [accountId, documentId, claimKey, value, userId]);
 }
 
+/** The first image check of a stored reading could not run, try after try (queueStoredImageChecks, app.ts, MAX_START_TRIES):
+ * its figures are not left "still being checked" for ever, never shown and never asked (Critic, R504 F2). With no model
+ * call: a figure on a page with its own text layer is confirmed by the reading's checks, as in the check itself; every
+ * other figure goes to the household, with no figure offered (the OCR text's own is never offered). Only onto the
+ * reading the tries were for (read_at), and never over an image check of this version. */
+export async function giveUpImageCheck(db: Db, accountId: string, policyId: string, readAt: string, nativePages: number[], now: () => Date = () => new Date()): Promise<{ saved: boolean; why?: string }> {
+  const [doc] = await documents(db, accountId, policyId);
+  if (!doc || !doc.readable) return { saved: false, why: "no readable current document" };
+  const rows = await db("SELECT reading, read_at::text AS read_at FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId]);
+  if (!rows.length || String(rows[0].read_at) !== readAt) return { saved: false, why: "the document was read again since" };
+  const stored = (typeof rows[0].reading === "string" ? JSON.parse(rows[0].reading) : rows[0].reading) as StoredReading;
+  if (isImageCheckRecord(stored.guards)) return { saved: false, why: "the reading already has its image check" };
+  const native = new Set(nativePages);
+  const record: GuardRecord = { version: IMAGE_CHECK_VERSION, at: now().toISOString(), verdicts: {}, spentUsd: Number(stored.guards?.spentUsd ?? 0) || 0, calls: 0, stopped: "error" };
+  for (const c of claimsOf(checkStored(doc, stored)))
+    record.verdicts[c.key] = native.has(c.page)
+      ? { status: "agreed", value: c.value, per: c.per, page: c.page, line: c.excerpt, candidates: [], rounds: 0 }
+      : { status: "confirm", value: null, per: null, page: c.page, line: c.excerpt, candidates: [], rounds: 0 };
+  const saved = await db("UPDATE benefit_readings SET reading=jsonb_set(reading, '{guards}', $3::jsonb) WHERE policy_id=$1 AND account_id=$2 AND read_at::text=$4 RETURNING 1 AS ok",
+    [policyId, accountId, JSON.stringify(record), readAt]);
+  return saved.length ? { saved: true } : { saved: false, why: "the document was read again meanwhile" };
+}
+
 /** Runs the figure guards on a document's stored reading without reading it again: a document read before the guards were
  * switched on, or one whose check was cut off by its time limit (figures left "checking"). Paid: the caller decides when. The stored reading itself is kept; only its guards are replaced. */
 /** continuing: the start time of the check a continuation job is finishing (GuardRecord.at). The job does nothing (and pays

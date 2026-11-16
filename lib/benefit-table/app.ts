@@ -10,14 +10,14 @@ import { ledgerUsage } from "@/lib/simple-chat/model";
 import { anthropicTableModel, type TableModel } from "./model";
 import { policyJobLive, tableReadingJobLive, tableReadingJobPending } from "@/lib/rag/live-job";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
-import { MIN_CALL_MS, OPERATOR_FLAG_AFTER, SAVE_MARGIN_MS, linkRetryDelayMs, readingRetryDelayMs, guardStoredReading, noteUnreadTable, readDocument, relink, tableReady, type Db, type GuardSetup, type OnUsage, type ReadTime, type ReadingProgress } from "./service";
+import { MIN_CALL_MS, OPERATOR_FLAG_AFTER, SAVE_MARGIN_MS, linkRetryDelayMs, readingRetryDelayMs, giveUpImageCheck, guardStoredReading, noteUnreadTable, readDocument, relink, tableReady, type Db, type GuardSetup, type OnUsage, type ReadTime, type ReadingProgress } from "./service";
 import { FIGURE_CHECK_JOB_TYPE, MAX_FIGURE_CHECK_RUNS, enqueueFigureCheck, enqueueStoredImageCheck, figureCheckPayload } from "./figure-check-job";
 import { MAX_TABLE_READING_RUNS, enqueueTableLink, enqueueTableReading, tableReadingPayload } from "./table-reading-job";
 import { checkingCount } from "./guards";
 import { figureCheckMode, guardCapUsd, guardRoster, imageCheckModels, supportsEffort } from "./guard-flag";
 import { IMAGE_CHECK_VERSION } from "./image-check";
 import { truthy } from "@/lib/launch/guards";
-import { pageSourceFor, realPageFileTools } from "./page-source";
+import { nativePagesOf, pageSourceFor, realPageFileTools } from "./page-source";
 
 export const appDb: Db = async (sql, params) => (await query(sql, params)).rows;
 
@@ -162,46 +162,76 @@ export const processFigureCheckJob = async (job: { account_id: string | null; pa
 
 /** At most this many stored readings are queued for their first image check by one sweep. */
 export const IMAGE_CHECK_QUEUE_MAX = 20;
-/** Stored readings of current, active documents with no page-image check of this version (read before the switch was on,
- * or checked by an earlier version) that nothing is reading or checking now: no intake job, no table reading carried or
- * queued, no figure check queued or running. At most `limit`, in a fixed order. */
-export async function readingsAwaitingImageCheck(db: Db, accountId: string, limit: number = IMAGE_CHECK_QUEUE_MAX): Promise<{ policyId: string; readAt: string }[]> {
-  const rows = await db(`SELECT br.policy_id, br.read_at::text AS read_at FROM benefit_readings br JOIN policies ON policies.id=br.policy_id AND policies.account_id=br.account_id
-      WHERE br.account_id=$1 AND ${activePredicate("policies")} AND policies.superseded_at IS NULL
-      AND COALESCE(br.reading->'guards'->>'version','') <> $2
-      AND NOT (COALESCE(policies.extracted_json,'{}'::jsonb) ? '${TABLE_PROGRESS_KEY}') AND NOT (${policyJobLive("policies")}) AND NOT (${tableReadingJobLive("policies")})
-      AND NOT EXISTS (SELECT 1 FROM background_jobs fc WHERE fc.job_type='${FIGURE_CHECK_JOB_TYPE}' AND fc.idempotency_key LIKE policies.id::text || ':figure-check%'
-        AND fc.status IN ('queued','processing','failed_retryable'))
-      ORDER BY br.policy_id LIMIT ${Math.max(1, Math.floor(limit))}`, [accountId, IMAGE_CHECK_VERSION]);
-  return rows.map((r) => ({ policyId: String(r.policy_id), readAt: String(r.read_at) }));
+/** After this many days' tries at a reading's first image check (each one job, one attempt), it is given up on
+ * (giveUpImageCheck): the household is asked for the figures the check could not confirm (Critic, R504 F2). */
+export const MAX_START_TRIES = 3;
+/** SQL over benefit_readings `br` joined to its policy: a stored reading of a current, active document with no page-image
+ * check of this version ($1) that nothing is reading or checking now (no intake job, no table reading carried or queued,
+ * no figure check queued or running) and whose first check was not already queued today ($2). A reading whose table
+ * reading is carried is left to that reading, which gets its own check; a carried reading is never given up on, and its
+ * progress is cleared once it finishes, whichever way (R504 F3). */
+const AWAITING_IMAGE_CHECK = `benefit_readings br JOIN policies ON policies.id=br.policy_id AND policies.account_id=br.account_id
+    WHERE ${activePredicate("policies")} AND policies.superseded_at IS NULL
+    AND COALESCE(br.reading->'guards'->>'version','') <> $1
+    AND NOT (COALESCE(policies.extracted_json,'{}'::jsonb) ? '${TABLE_PROGRESS_KEY}') AND NOT (${policyJobLive("policies")}) AND NOT (${tableReadingJobLive("policies")})
+    AND NOT EXISTS (SELECT 1 FROM background_jobs fc WHERE fc.job_type='${FIGURE_CHECK_JOB_TYPE}' AND fc.idempotency_key LIKE policies.id::text || ':figure-check%'
+      AND fc.status IN ('queued','processing','failed_retryable'))
+    AND NOT EXISTS (SELECT 1 FROM background_jobs ft WHERE ft.job_type='${FIGURE_CHECK_JOB_TYPE}'
+      AND ft.idempotency_key = policies.id::text || ':figure-check-start:' || $1 || ':' || br.read_at::text || ':' || $2)`;
+/** The readings awaiting their first image check (AWAITING_IMAGE_CHECK) in one household, at most `limit`: those tried on
+ * the fewest days first, so readings that keep failing never crowd out the rest (Critic, R504 F1). `tries`: the days their
+ * first check was queued before. */
+export async function readingsAwaitingImageCheck(db: Db, accountId: string, day: string, limit: number = IMAGE_CHECK_QUEUE_MAX): Promise<{ policyId: string; readAt: string; tries: number }[]> {
+  const rows = await db(`SELECT br.policy_id, br.read_at::text AS read_at,
+      (SELECT count(*) FROM background_jobs st WHERE st.job_type='${FIGURE_CHECK_JOB_TYPE}'
+        AND st.idempotency_key LIKE policies.id::text || ':figure-check-start:' || $1 || ':' || br.read_at::text || ':%')::int AS tries
+      FROM ${AWAITING_IMAGE_CHECK} AND br.account_id=$3
+      ORDER BY tries, br.policy_id LIMIT ${Math.max(1, Math.floor(limit))}`, [IMAGE_CHECK_VERSION, day, accountId]);
+  return rows.map((r) => ({ policyId: String(r.policy_id), readAt: String(r.read_at), tries: Number(r.tries) || 0 }));
 }
 /** With the page-image check switched on for the household, queues the first check of each stored reading that has none
  * (readingsAwaitingImageCheck), so documents read before the switch was turned on are checked without being read again:
  * only their OCR pages that hold a figure are paid for (about US$0.015 a page); a digital document costs nothing. Until it
- * has run, such a reading's figures show as "still being checked" (service.ts load). Off, it makes no database call. */
+ * has run, such a reading's figures show as "still being checked" (service.ts load). A reading whose check was queued on
+ * MAX_START_TRIES days and never saved is given up on: its figures go to the household (giveUpImageCheck), with no model
+ * call. Returns how many readings were queued or given up on. Off, it makes no database call. */
 export async function queueStoredImageChecks(accountId: string, db: Db = appDb, env: NodeJS.ProcessEnv = process.env,
   enqueue: (policyId: string, readAt: string, day: string) => Promise<unknown> = (policyId, readAt, day) => enqueueStoredImageCheck(pool, accountId, policyId, readAt, IMAGE_CHECK_VERSION, day),
-  now: () => Date = () => new Date()): Promise<number> {
+  now: () => Date = () => new Date(),
+  giveUp: (policyId: string, readAt: string) => Promise<{ saved: boolean }> = async (policyId, readAt) =>
+    giveUpImageCheck(db, accountId, policyId, readAt, await nativePagesOf(db, accountId, policyId).catch(() => []))): Promise<number> {
   if (figureCheckMode(env, accountId) !== "image") return 0;
   const day = now().toISOString().slice(0, 10);
-  let queued = 0;
-  for (const r of await readingsAwaitingImageCheck(db, accountId)) { await enqueue(r.policyId, r.readAt, day); queued++; }
-  return queued;
+  let handled = 0;
+  for (const r of await readingsAwaitingImageCheck(db, accountId, day)) {
+    if (r.tries >= MAX_START_TRIES) {
+      const g = await giveUp(r.policyId, r.readAt);
+      if (g.saved) { console.warn(`benefit table: the image check of policy ${r.policyId} could not run on ${r.tries} days; its unconfirmed figures were sent to the household (operator: check it)`); handled++; }
+      continue;
+    }
+    await enqueue(r.policyId, r.readAt, day);
+    handled++;
+  }
+  return handled;
 }
-/** queueStoredImageChecks for every household with a stored reading, at most IMAGE_CHECK_QUEUE_MAX households a sweep.
- * Never throws. With the image check off everywhere (DEARPOLICY_IMAGE_FIGURE_CHECK unset) it makes no database call. */
+/** queueStoredImageChecks for every household with a reading awaiting its first image check (the same rules), at most
+ * IMAGE_CHECK_QUEUE_MAX households that had one to queue in a sweep. Never throws. With the image check off everywhere
+ * (DEARPOLICY_IMAGE_FIGURE_CHECK unset) it makes no database call. */
 export async function queueStoredImageChecksEverywhere(db: Db = appDb, env: NodeJS.ProcessEnv = process.env, live: (accountId: string) => Promise<boolean> = benefitTableLive,
-  queue: (accountId: string) => Promise<number> = (accountId) => queueStoredImageChecks(accountId, db, env)): Promise<number> {
+  queue: (accountId: string) => Promise<number> = (accountId) => queueStoredImageChecks(accountId, db, env), now: () => Date = () => new Date()): Promise<number> {
   if (!truthy(env.DEARPOLICY_IMAGE_FIGURE_CHECK)) return 0;
   try {
-    const accounts = await db(`SELECT DISTINCT br.account_id FROM benefit_readings br WHERE COALESCE(br.reading->'guards'->>'version','') <> $1 ORDER BY br.account_id LIMIT 500`, [IMAGE_CHECK_VERSION]);
+    const accounts = await db(`SELECT DISTINCT br.account_id FROM ${AWAITING_IMAGE_CHECK} ORDER BY br.account_id LIMIT 500`, [IMAGE_CHECK_VERSION, now().toISOString().slice(0, 10)]);
     let queued = 0, swept = 0;
     for (const row of accounts) {
       if (swept >= IMAGE_CHECK_QUEUE_MAX) break;
       const accountId = String(row.account_id);
       if (figureCheckMode(env, accountId) !== "image") continue;
-      try { if (await live(accountId)) { swept++; queued += await queue(accountId); } }
-      catch (error) { console.warn(`benefit table: could not queue image checks (${error instanceof Error ? error.name : "unknown"})`); }
+      try {
+        if (!(await live(accountId))) continue;
+        const n = await queue(accountId);
+        if (n > 0) { swept++; queued += n; }
+      } catch (error) { console.warn(`benefit table: could not queue image checks (${error instanceof Error ? error.name : "unknown"})`); }
     }
     return queued;
   } catch (error) {
