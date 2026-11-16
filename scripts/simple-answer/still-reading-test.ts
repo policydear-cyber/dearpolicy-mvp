@@ -441,7 +441,7 @@ async function main() {
       const fact = libraryFact(h, h.documents.find((x) => x.name === file)!);
       assert.ok(fact.startsWith(`${file} could not be read (status: failed), so nothing in it was used. ${advice.why.charAt(0).toUpperCase()}${advice.why.slice(1)}. ${advice.step} `), `${file}: ${fact}`);
       noRaw(fact); noScan(kind, fact);
-      if (kind === "service") assert.match(fact, /reading service wasn’t available — nothing is wrong with the file\. Press “Try reading it again” on the Documents page in a little while\./, fact);
+      if (kind === "service") assert.match(fact, /connection problem on our side — nothing is wrong with the file\. Press “Try reading it again” on the Documents page in a little while\./, fact);
       if (kind === "limit") assert.match(fact, /after the limit resets at the start of next month/, fact);
       if (kind.startsWith("password")) assert.doesNotMatch(fact, /upload(?:ed)? it again|re-?upload/i, fact);
     }
@@ -451,17 +451,17 @@ async function main() {
     const count = answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text);
     assert.equal(count.length, 1, count.join("\n"));
     assert.ok(count[0].startsWith(`Of your 14 uploaded files, 1 was read and 13 could not be read (${FAILED.map((f) => f[0]).join(", ")}).`), count[0]);
-    assert.ok(count[0].includes(" service.pdf and provider-quota.pdf: for each, DearPolicy’s reading service wasn’t available — nothing is wrong with the file. Press “Try reading it again” on the Documents page in a little while."), count[0]);
+    assert.ok(count[0].includes(" service.pdf and provider-quota.pdf: for each, DearPolicy couldn’t finish reading it because of a connection problem on our side — nothing is wrong with the file. Press “Try reading it again” on the Documents page in a little while."), count[0]);
     assert.ok(count[0].includes(" limit.pdf: Reading was paused when the monthly reading limit was reached"), count[0]);
     assert.ok(count[0].includes(" locked.pdf: It is password-protected and was uploaded without its password. Enter its password on the Documents page"), count[0]);
     assert.ok(count[0].includes(" no-text.pdf: DearPolicy found no readable text in it."), count[0]);
-    assert.equal(count[0].match(/reading service wasn’t available/g)?.length, 1, "one reason for the files that share it");
+    assert.equal(count[0].match(/connection problem on our side/g)?.length, 1, "one reason for the files that share it");
     noRaw(count[0]);
     // With each file's own point in the answer, the count does not say the reasons a second time.
     const both = verifyAnswer(h, { bottomLine: "", nextSteps: [], question: null, statements: [st("D7 could not be read."), st("The files (D1, D14) were read.")].map((x, i) => i === 0 ? { ...x, document: "D7" } : x) });
     const texts = both.answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text).join("\n");
-    assert.equal(texts.match(/reading service wasn’t available/g)?.length, 2, texts);
-    assert.ok(texts.includes("service.pdf could not be read (status: failed), so nothing in it was used. DearPolicy’s reading service wasn’t available"), texts);
+    assert.equal(texts.match(/connection problem on our side/g)?.length, 2, texts);
+    assert.ok(texts.includes("service.pdf could not be read (status: failed), so nothing in it was used. DearPolicy couldn’t finish reading it because of a connection problem on our side"), texts);
   });
 
   await check("failed documents (real database): the household read maps the stored reason to the advice", async () => {

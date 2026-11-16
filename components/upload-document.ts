@@ -11,6 +11,8 @@
  *      bytes (type sniffing, size, household, duplicates) and queues the scan
  *      and processing.
  */
+import { uploadFailureMessage, type UploadStep } from "@/lib/documents/upload-problems";
+
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 export const MAX_UPLOAD_LABEL = "50 MB";
 
@@ -31,8 +33,15 @@ type StartResponse =
 async function json(response: Response): Promise<Record<string, unknown>> {
   return response.json().catch(() => ({}));
 }
-function errorOf(body: Record<string, unknown>, fallback: string) {
-  return typeof body.error === "string" && body.error ? body.error : fallback;
+/** The plain message for a step that went wrong: the server's own words only for a refusal it explains (4xx), our
+ * side's fixed copy for a server error or an answer that isn't ours (a gateway page), never a raw code
+ * (lib/documents/upload-problems.ts). */
+function failure(step: UploadStep, status: number, body: Record<string, unknown> = {}) {
+  return new UploadError(uploadFailureMessage(step, { status, serverMessage: typeof body.error === "string" ? body.error : null }), status);
+}
+/** fetch, with a dropped connection (the browser's own "Failed to fetch", "Load failed", "NetworkError…") said plainly. */
+async function send(step: UploadStep, url: string, init: RequestInit): Promise<Response> {
+  try { return await fetch(url, init); } catch { throw failure(step, 0); }
 }
 
 /** PUT with progress (fetch cannot report upload progress). */
@@ -43,8 +52,8 @@ function putWithProgress(url: string, body: Blob, headers: Record<string, string
     for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded); };
     xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
-    xhr.onerror = () => reject(new UploadError("The connection dropped while uploading. Please try again."));
-    xhr.ontimeout = () => reject(new UploadError("The upload took too long. Please try again on a faster connection."));
+    xhr.onerror = () => reject(failure("send", 0));
+    xhr.ontimeout = () => reject(new UploadError(uploadFailureMessage("send", { status: 0, timedOut: true })));
     xhr.send(body);
   });
 }
@@ -59,19 +68,19 @@ export async function uploadPolicyDocument(file: File, options: {
   if (file.size <= 0) throw new UploadError("That file is empty.");
   if (file.size > MAX_UPLOAD_BYTES) throw new UploadError(`Files must be ${MAX_UPLOAD_LABEL} or smaller. Split the document or export it at a lower resolution, then upload it again.`);
 
-  const startResponse = await fetch("/api/policies/upload/start", {
+  const startResponse = await send("start", "/api/policies/upload/start", {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ filename: file.name, mimeType: file.type, byteSize: file.size, familyMemberId: options.familyMemberId || null, supersedesPolicyId: options.supersedesPolicyId || null }),
   });
   const started = await json(startResponse);
-  if (!startResponse.ok) throw new UploadError(errorOf(started, "The upload could not be started. Please try again."), startResponse.status);
+  if (!startResponse.ok) throw failure("start", startResponse.status, started);
   const plan = started as unknown as StartResponse;
   const report = (sent: number) => options.onProgress?.(Math.min(1, sent / file.size));
 
   if (plan.mode === "signed-url") {
     const put = await putWithProgress(plan.uploadUrl, file, { "content-type": STORAGE_CONTENT_TYPE, "x-upsert": "false" }, report);
     if (put.status < 200 || put.status >= 300) {
-      throw new UploadError(put.status === 413 ? `Files must be ${MAX_UPLOAD_LABEL} or smaller.` : "The file could not be sent to secure storage. Please try again.", put.status);
+      throw put.status === 413 ? new UploadError(`Files must be ${MAX_UPLOAD_LABEL} or smaller. Split the document or export it at a lower resolution, then upload it again.`, 413) : failure("send", put.status);
     }
   } else {
     for (let offset = 0; offset < file.size; offset += plan.partBytes) {
@@ -80,17 +89,17 @@ export async function uploadPolicyDocument(file: File, options: {
       if (put.status < 200 || put.status >= 300) {
         let body: Record<string, unknown> = {};
         try { body = JSON.parse(put.text); } catch { /* not JSON */ }
-        throw new UploadError(errorOf(body, "The upload was interrupted. Please try again."), put.status);
+        throw failure("send", put.status, body);
       }
     }
   }
   report(file.size);
 
-  const finalizeResponse = await fetch("/api/policies/upload/finalize", {
+  const finalizeResponse = await send("finalize", "/api/policies/upload/finalize", {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ token: plan.token, pdfPassword: options.pdfPassword || undefined }),
   });
   const finalized = await json(finalizeResponse);
-  if (!finalizeResponse.ok) throw new UploadError(errorOf(finalized, "Upload failed. Please try again."), finalizeResponse.status);
+  if (!finalizeResponse.ok) throw failure("finalize", finalizeResponse.status, finalized);
   return { policyId: String(finalized.policyId ?? "") };
 }

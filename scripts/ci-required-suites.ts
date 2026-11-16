@@ -84,6 +84,7 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "v1:chat-contract-test",
   "v1:chat-fix-test",
   "v11:ingestion-test",
+  "documents:upload-failure-paths-test",
   "v11:answer-test",
   "v11:claims-test",
   "v11:customer-screens-test",

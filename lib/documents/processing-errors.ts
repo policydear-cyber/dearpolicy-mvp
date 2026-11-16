@@ -111,6 +111,13 @@ export class UserActionableProcessingError extends Error {
   }
 }
 
+/** A file that opened but holds no pages at all (a PDF saved with zero pages): nothing in it can ever be read, by any
+ * reader, so it is said to be a file that could not be opened as a document, never "no readable text, try a clearer
+ * scan" (that advice cannot help a file with nothing in it). Null when there is at least one page. */
+export function noPagesProblem(pageCount: number): UserActionableProcessingError | null {
+  return pageCount > 0 ? null : new UserActionableProcessingError(UNOPENABLE_DOCUMENT_MESSAGE);
+}
+
 /** Round 5: a failure of a service DearPolicy depends on (the reading model,
  * hosted OCR), not of the document. Always retried by the durable queue
  * (lib/jobs/pipeline-worker.ts classifyPipelineError), bounded by the job's
