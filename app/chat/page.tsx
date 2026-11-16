@@ -19,6 +19,7 @@ import { AnswerCards,showsCards } from "@/components/answer-cards";
 import { StoppedNotice,isStopped } from "@/components/answer-stopped";
 import { LearnLinks } from "@/components/learn-links";
 import { sendFailure } from "@/components/chat-send-failure";
+import { applyReplaced,type ReplacedAnswer } from "@/lib/chat/replaced-live";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
  * uncertainty, and one next question or action. Internal working -- what the
@@ -49,6 +50,8 @@ const CHAT_MAX_WAIT_MS=6*60_000;
 // 0.1 s, so a 1 s gap was the largest wait after the model). Each check is one small read; the drains it starts keep their
 // own per-instance limits (lib/jobs/request-drain.ts).
 const CHAT_POLL_MS=500;
+/** A finished answer, with the earlier answers of the chat it replaced (lib/chat/replaced-live.ts). */
+type Finished={answer:ChatAnswer;replaced:ReplacedAnswer[]};
 type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string;conflict?:boolean;noFamily?:boolean;stopped?:boolean;restored?:boolean};
 type SavedChat={id:string;family_member_id:string|null;title:string;updated_at:string;revision:string};
 const factFindingStatusCopy:Record<NonNullable<ChatAnswer["factFinding"]>[number]["status"],string>={
@@ -178,13 +181,15 @@ function ChatContent(){
   function reset(){
     stopLocal();setMessages([]);setConversationId(null);setRevision(0);setMessageCursor(null);setQuestion("");setError("");setMemberId("");rememberConversation(null);
   }
-  function accept(answer:ChatAnswer,version:number){
+  function accept({answer,replaced}:Finished,version:number){
     if(version!==requestVersion.current)return;
     if(answer.resolvedFamilyMemberId)setMemberId(answer.resolvedFamilyMemberId);
     setConversationId(answer.conversationId??null);setRevision(answer.conversationRevision??0);
-    setMessages(previous=>[...previous,{role:"assistant",content:answer.summary,answer}]);
+    // An earlier answer this one replaced ("Actually it was Daniel, not Grace") is marked now, with the server's own
+    // replacement (the one the reopened chat shows): never left on screen unmarked until a reload (TE-ACC-20261116).
+    setMessages(previous=>[...applyReplaced(previous,replaced),{role:"assistant",content:answer.summary,answer}]);
   }
-  async function waitForJob(id:string,signal:AbortSignal,version:number):Promise<ChatAnswer>{
+  async function waitForJob(id:string,signal:AbortSignal,version:number):Promise<Finished>{
     jobId.current=id;
     // Never an endless spinner: after this long the turn is reported as not
     // finished, with the message kept, whatever the server still says.
@@ -195,7 +200,7 @@ function ChatContent(){
       const response=await fetch("/api/chat/jobs/"+id,{signal,cache:"no-store"});
       const data=await response.json();
       if(!response.ok)throw new Error(data.error??"DearPolicy lost track of this answer. Please check again in a moment.");
-      if(data.job.status==="complete"){jobId.current=null;return data.result.answer;}
+      if(data.job.status==="complete"){jobId.current=null;return {answer:data.result.answer,replaced:Array.isArray(data.replaced)?data.replaced:[]};}
       // A job this page did not cancel ends "cancelled" only when the chat
       // changed under it (lib/chat/jobs.ts: ChatConflict -> cancelled).
       if(data.job.status==="cancelled")throw new ConflictError();
@@ -272,7 +277,7 @@ function ChatContent(){
       if(version!==requestVersion.current)return;
       setConversationId(data.conversationId);setRevision(data.conversationRevision);rememberConversation(data.conversationId??null);
       const resolved=data.familyMemberId??"";setMemberId(resolved);
-      const answer=await waitForJob(data.jobId,abort.signal,version);accept(answer,version);
+      const finished=await waitForJob(data.jobId,abort.signal,version);accept(finished,version);
       if(version===requestVersion.current)await refreshHistory();
     }catch(e){
       // Marking the message itself -- instead of only a page-level banner --

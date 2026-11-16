@@ -19,6 +19,7 @@ import type { Household } from "@/lib/simple-chat/library";
 import type { SimpleModel, SimpleModelCall, Turn } from "@/lib/simple-chat/model";
 import type { ChatContext } from "@/lib/chat/workflow";
 import { answerAsText } from "@/lib/simple-chat/verify";
+import { applyReplaced } from "@/lib/chat/replaced-live";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|PINECONE/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
@@ -107,12 +108,15 @@ type Saved = { answer: { answerId?: string; summary?: string; bottomLine?: strin
  * the app does (the history read back as conversationTurns reads it). Returns each turn's saved answer and the model calls. */
 async function converse(house: House, messages: string[], intended: string[][], behaviour: Behaviour, table: boolean, questions: (string | null)[] = []) {
   const { runSimpleChat, turnsFromMessages } = await import("@/lib/simple-chat/hook") as typeof import("@/lib/simple-chat/hook") & { turnsFromMessages?: (rows: unknown[], s?: ReadonlySet<string>) => Turn[] };
-  const stale = await import("@/lib/chat/stale-answers") as typeof import("@/lib/chat/stale-answers") & { supersededAnswerIds?: (s: unknown) => Set<string> };
+  const stale = await import("@/lib/chat/stale-answers") as typeof import("@/lib/chat/stale-answers") & { supersededAnswerIds?: (s: unknown) => Set<string>; replacedEarlierAnswers?: typeof import("@/lib/chat/stale-answers").replacedEarlierAnswers };
   const calls: SimpleModelCall[] = [];
   let turn = 0;
   const model = scripted(house, () => intended[turn], intended[0][0], behaviour, calls, () => questions[turn] ?? null);
   let state: Record<string, unknown> = { subjects: {} };
   const saved: Saved[] = [];
+  // The live page, turn by turn: each finished answer arrives with the earlier answers the job route marks replaced
+  // (replacedEarlierAnswers over the stored answers and the chat's state then), applied as the page applies them.
+  let live: { content: string; answer?: Saved["answer"] }[] = [];
   const stored: { role: string; content: string; answer_json: unknown }[] = [];
   for (; turn < messages.length; turn++) {
     const message = messages[turn];
@@ -129,12 +133,16 @@ async function converse(house: House, messages: string[], intended: string[][], 
     const s = out as Saved;
     saved.push(s);
     state = s.state;
+    if (stale.replacedEarlierAnswers) {
+      const replaced = stale.replacedEarlierAnswers(stored.filter((r) => r.role !== "user").map((r) => r.answer_json as never), state, s.answer as never);
+      live = [...applyReplaced(live as never[], replaced), { content: s.answer.summary ?? "", answer: s.answer }] as typeof live;
+    }
     stored.push({ role: "user", content: message, answer_json: null }, { role: "assistant", content: s.answer.summary ?? "", answer_json: s.answer });
   }
   // Reopened: every saved answer as the history route re-serves it for the chat's saved state (the database-free part of
   // invalidateAnswersWithDeletedPolicies: no document here was deleted).
   const reopened = stale.correctedAnswers ? stale.correctedAnswers(saved.map((s) => s.answer as never), state) as Saved["answer"][] : saved.map((s) => s.answer);
-  return { saved: saved.map((s) => s.answer), reopened, calls, state };
+  return { saved: saved.map((s) => s.answer), reopened, calls, state, live };
 }
 const cards = (a: Saved["answer"]): Card[] => a.invalidated ? [] : (a.statements ?? []).filter((s) => s.amount).map((s) => ({ person: s.personName ?? null, amount: s.amount!.text }));
 const figure = (t: string) => Number(t.replace(/^[^\d]*/, "").replace(/,/g, ""));
@@ -203,6 +211,43 @@ async function main() {
     assert.equal(r.reopened[0].invalidated?.reason, "superseded");
     assert.ok(!r.reopened[1].invalidated && !r.reopened[2].invalidated);
   });
+
+  // ---- L: the live page marks a replaced answer as the correcting answer arrives, exactly as the reopened chat does
+  // (TE-ACC-20261116 journey 4); an addition or an unrelated follow-up marks nothing.
+  const parity = (r: Awaited<ReturnType<typeof converse>>, label: string) => {
+    assert.equal(r.live.length, r.reopened.length, label);
+    r.reopened.forEach((a, i) => {
+      assert.equal(r.live[i].answer?.invalidated?.reason, a.invalidated?.reason, `${label}: answer ${i} live vs reopened`);
+      if (a.invalidated) {
+        assert.equal(r.live[i].content, a.summary, `${label}: answer ${i} shows the reopened notice`);
+        assert.deepEqual(cards(r.live[i].answer!), [], `${label}: no figure left on the replaced answer`);
+      }
+    });
+  };
+  for (const table of MODES) {
+    await test(`L1 replace "Actually it was Daniel, not Grace" (${mode(table)}): live marks Grace's answer replaced, as reopened`, async () => {
+      const r = await converse(TERNS, [OPEN, "Actually it was Daniel, not Grace."], [[G], [D]], "faithful", table);
+      assert.equal(r.live[0].answer?.invalidated?.reason, "superseded");
+      assert.ok(!r.live[1].answer?.invalidated);
+      parity(r, "L1");
+    });
+    await test(`L2 add "Daniel broke his arm too" (${mode(table)}): live marks nothing replaced, as reopened`, async () => {
+      const r = await converse(TERNS, [OPEN, "Daniel broke his arm too"], [[G], [G, D]], "faithful", table);
+      assert.ok(!r.live.some((m) => m.answer?.invalidated));
+      parity(r, "L2");
+    });
+    await test(`L3 an unrelated follow-up (${mode(table)}): live marks nothing replaced, as reopened`, async () => {
+      const r = await converse(TERNS, [OPEN, "How do I make the claim?"], [[G], [G]], "faithful", table);
+      assert.ok(!r.live.some((m) => m.answer?.invalidated));
+      parity(r, "L3");
+    });
+    await test(`L4 replace, then a follow-up (${mode(table)}): Grace's answer stays marked live, nothing else is`, async () => {
+      const r = await converse(TERNS, [OPEN, "actually it's Daniel, not Grace", "And how much would he get for that?"], [[G], [D], [D]], "faithful", table);
+      assert.equal(r.live[0].answer?.invalidated?.reason, "superseded");
+      assert.ok(!r.live[1].answer?.invalidated && !r.live[2].answer?.invalidated);
+      parity(r, "L4");
+    });
+  }
 
   // ---- A: addition
   const ADD = ["Daniel broke his arm too", "and Daniel also broke his arm", "both of them", "Daniel as well"];
