@@ -14,7 +14,7 @@
  * The spend is PERSISTED (.trial/ledger.json, bound to the allocation and this Codespace): it survives restarts of this
  * Codespace; an unsettled reservation found at start (the process died mid-call) is counted as spent; a damaged or
  * foreign record is refused. It does NOT follow a deleted or second Codespace (docs/trial/TRIAL.md, "Budget"). When the cap is reached every model request is refused before it is sent
- * and the app shows its normal "the assistant model returned an error" answer.
+ * and the app shows its normal model-error stop ("I couldn’t finish this answer, so I stopped rather than guess").
  */
 import fs from "node:fs";
 import path from "node:path";

@@ -12,7 +12,7 @@ come from the real AI model.
 | The AI model: OpenAI gpt-6-luna, the model production uses | Storage: a database and file folder inside the Codespace. Nothing goes to the production database or the live site. |
 | The cost: every answer spends a little from a fixed **trial allowance of US$0.15** for **one Codespace** (see *Budget* below). The allowance is reserved in advance in the project's spend record, so the automated tests cannot use it. The app counts what this Codespace spends, keeps the count across restarts and refuses model calls past the allowance. This is the app's own counter, not a provider hard limit. | | Sign-in: you are automatically signed in as the test household. There is no sign-up page in the trial. |
 
-When the trial budget is used up, the chat answers "the assistant model returned an error" instead of calling the
+When the trial budget is used up, the chat answers "I couldn’t finish this answer, so I stopped rather than guess" instead of calling the
 model. Uploads still work.
 
 ## One-time setup: add the test key (about 2 minutes)
@@ -111,5 +111,5 @@ To start from scratch instead:
 
 ## If something goes wrong
 - The tab shows an error, or never opens: in the Terminal, run `bash scripts/trial/start.sh`. It restarts the app and prints what it is doing. The app's own log is in `.trial/server.log`.
-- "The assistant model returned an error" on every question: open `/__trial/usage`. If the mode is *preflight*, the secret is missing: add it, then stop and start the codespace. If *remaining* is 0, the trial allowance is used up.
+- "I couldn’t finish this answer" on every question: open `/__trial/usage`. If the mode is *preflight*, the secret is missing: add it, then stop and start the codespace. If *remaining* is 0, the trial allowance is used up.
 - The Terminal says **"[trial] refused: …"**: the start-up checks stopped the trial before it touched anything. The message names the reason (for example a database address that is not local, or a spend record that is damaged or belongs to another codespace). Nothing was set up or spent.

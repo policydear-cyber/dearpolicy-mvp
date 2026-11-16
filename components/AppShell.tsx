@@ -210,8 +210,8 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
               <p>DearPolicy can&rsquo;t be reached right now. Check your connection, then refresh the page.</p>
             </div>
           )}
-          <div className="privacy-pill" data-tip={hosted ? "Your documents and questions are seen only by the people in your household." : "Your documents and questions stay on this computer."} tabIndex={0}
-            aria-label={hosted ? "Private to your household. Your documents and questions are seen only by the people in it." : "Local-first. Your documents and questions stay on this computer."}>
+          <div className="privacy-pill" data-tip={hosted ? "Only people in your household can see your documents and questions in DearPolicy." : "Your documents and questions stay on this computer."} tabIndex={0}
+            aria-label={hosted ? "Private to your household. Only people in your household can see your documents and questions in DearPolicy." : "Local-first. Your documents and questions stay on this computer."}>
             <Icon name="lock" />{hosted ? "Private to your household" : "Local-first"}</div>
         </div>
       </aside>
