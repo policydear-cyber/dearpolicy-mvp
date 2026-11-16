@@ -30,19 +30,56 @@ const IDENTIFIER_LABEL = /\b(?:policy|certificate|cert|member(?:ship)?|account|r
 const LABEL_JUST_BEFORE = /\b(?:id|identity|reference|ref|policy|certificate|cert|member(?:ship)?|account|claim|case|nric|passport|plan|serial|code)s?\s*(?:no\.?|number|#|id)?\s*[:.]?\s*$/i;
 /** The insurer speaking in its own document. */
 const FIRST_PERSON = /\b(?:call us|contact us|reach us|email us|write to us|our (?:\w+ ){0,3}(?:hotline|helpline|line|team|centre|center|number|service|services)|we can be reached)\b/i;
-const namesInsurer = (near: string, insurer: string) => { const w = ` ${near.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `; return nameWords(insurer).some((n) => w.includes(` ${n} `)); };
+/** The insurer named as printed (case kept): its own name words in order ("Great Eastern", "Harbourline"), a single name
+ * word only when it cannot be an everyday word on its own (followed by an insurer word, an acronym such as AIA, or a
+ * long coined name such as Manulife). "Income tax" or "Great savings" never name Income Insurance or Great Eastern. */
+const INSURER_WORD = String.raw`(?:Insurance|Assurance|General|Life|Takaful|Reinsurance|Insurers?)`;
+function insurerNamePattern(insurer: string): RegExp | null {
+  const words = insurer.replace(/[^A-Za-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length >= 2 && !GENERIC_NAME_WORDS.has(w.toLowerCase()));
+  if (!words.length) return null;
+  const esc = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const seq = words.map(esc).join(String.raw`\s+`);
+  const one = words.length === 1;
+  const w = words[0];
+  const strong = !one || /^[A-Z]{2,5}$/.test(w) || w.length >= 7;
+  return new RegExp(String.raw`(?<![A-Za-z])${seq}(?![A-Za-z])${strong ? "" : String.raw`\s+${INSURER_WORD}\b`}`, /^[A-Z]{2,5}$/.test(w) ? "" : "i");
+}
+const namesInsurer = (near: string, insurer: string) => {
+  const re = insurerNamePattern(insurer);
+  if (!re) return false;
+  // Case as printed: a capitalised name, or the whole name in capitals.
+  return [...near.matchAll(new RegExp(re.source, "g" + re.flags.replace("g", "")))].some((m) => /^[A-Z]/.test(m[0]));
+};
+/** An organisation named in the words: a run of capitalised words ending in a word organisations end with ("Global Rescue
+ * Pte Ltd", "Mount Elizabeth Hospital", "HealthPlus Medical Claims Services"), "by <Name>", or "call <Name> at". */
+const ORG_NAME = /\b(?:[A-Z][\w&'.-]*\s+){0,5}(?:Pte|Ltd|Limited|Berhad|Bhd|Inc|LLC|Corporation|Hospital|Clinic|Centre|Center|Services|Bank|Board|Council|Ministry|Authority|Association)\b\.?/g;
+const BY_NAME = /\bby\s+[A-Z][\w&'-]+/;
+const CALL_NAME = /\b(?:call|contact|phone|ring|write to)\s+(?:the\s+)?((?:[A-Z][\w&'-]*\s+){1,5})(?:at|on)\b/g;
+/** Another organisation than the insurer named in the words. */
+function otherOrgIn(words: string, insurer: string): boolean {
+  const re = insurerNamePattern(insurer);
+  const isInsurer = (name: string) => !!re && re.test(name) || name.trim().toLowerCase() === insurer.trim().toLowerCase();
+  if ([...words.matchAll(ORG_NAME)].some((m) => !isInsurer(m[0]))) return true;
+  if (BY_NAME.test(words) && !isInsurer(words.slice(words.search(BY_NAME)))) return true;
+  if ([...words.matchAll(CALL_NAME)].some((m) => !isInsurer(m[1]))) return true;
+  // Another insurer's heading line: a short line that is only a name and a place ("AIA Singapore").
+  return words.split("\n").some((l) => /^\s*(?:[A-Z][\w&'-]*\s+){0,3}(?:Singapore|Malaysia|Hong Kong)\s*$/.test(l) && !isInsurer(l));
+}
 /** Someone other than the insurer named or described just above a number. */
-const OTHER_PARTY = /\b(?:provided|administered|distributed|operated|managed|serviced|handled|arranged) by\b|\bon behalf of\b|\b(?:bank|board|council|ministry|authority|association|agency|administrator|tpa|third[- ]party|distributor|partner|services (?:ltd|limited|pte)|rescue|assist(?:ance)? (?:company|provider))\b/i;
+const OTHER_PARTY = /\b(?:provided|administered|distributed|operated|managed|serviced|handled|arranged) by\b|\bon behalf of\b|\b(?:bank|board|council|ministry|authority|association|agency|administrator|tpa|third[- ]party|distributor|partner|services (?:ltd|limited|pte)|rescue|concierge|hospital|clinic|assist(?:ance)? (?:company|provider))\b/i;
 /** A number on a line of its own with only its contact label ("Claims Hotline: +65 6788 8833"), and no other organisation
  * on that line or the two lines above. */
-function ownContactLine(text: string, at: number, length: number): boolean {
+function ownContactLine(text: string, at: number, length: number, insurer: string): boolean {
   const start = text.lastIndexOf("\n", at - 1) + 1;
   const endAt = text.indexOf("\n", at + length);
   const line = text.slice(start, endAt < 0 ? text.length : endAt);
   const rest = (line.slice(0, at - start) + " " + line.slice(at - start + length)).replace(/\([^)]*\)/g, " ").replace(/[^A-Za-z ]+/g, " ").trim();
   if (rest.split(/\s+/).filter(Boolean).length > 5 || !CONTACT_WORDS.test(rest)) return false;
-  const above = text.slice(Math.max(0, text.lastIndexOf("\n", Math.max(0, text.lastIndexOf("\n", start - 2) - 1)) + 1), start);
-  return !OTHER_PARTY.test(line) && !OTHER_PARTY.test(above);
+  // The block the line sits in: the lines above it up to a blank line, at most eight.
+  const above: string[] = [];
+  for (const l of text.slice(0, start).split("\n").reverse().slice(1)) { if (!l.trim() || above.length >= 8) break; above.unshift(l); }
+  const block = [...above, line].join("\n");
+  return !OTHER_PARTY.test(block) && !NOT_INSURER.test(block) && !otherOrgIn(block, insurer);
 }
 const CLAIM_WORDS = /\bclaims?\b/i;
 const EMERGENCY_WORDS = /\b(?:emergency|assistance|24[- ]?hours?)\b/i;
@@ -95,7 +132,10 @@ export function contactsOnPage(text: string, page: number, policyName: string, i
     if (LABEL_JUST_BEFORE.test(text.slice(Math.max(0, at - 30), at))) return;
     // Kept only when the insurer is the one to call: its own sentence names the insurer or speaks for it ("call us", "our
     // hotline"), or the number stands on a contact line of its own with no other organisation said just above it.
-    if (!namesInsurer(near, insurer) && !FIRST_PERSON.test(near) && !ownContactLine(text, at, raw.length)) return;
+    // Never when its words name someone else to call ("call Allied World at", "HealthPlus ... Services ... Call us").
+    const sentenceBefore = text.slice(Math.max(0, at - 200), at).split(/\n\s*\n/).pop() ?? "";
+    if (otherOrgIn(near, insurer) || (FIRST_PERSON.test(near) && !namesInsurer(near, insurer) && otherOrgIn(sentenceBefore, insurer))) return;
+    if (!namesInsurer(near, insurer) && !FIRST_PERSON.test(near) && !ownContactLine(text, at, raw.length, insurer)) return;
     const lineOf = text.slice(text.lastIndexOf("\n", at - 1) + 1, (() => { const e = text.indexOf("\n", at); return e < 0 ? text.length : e; })());
     const said = CONTACT_WORDS.test(lineOf.replace(raw, " ")) ? lineOf : near;
     const label = CLAIM_WORDS.test(said) ? "Claims" : EMERGENCY_WORDS.test(said) ? "Emergency assistance" : "Phone";

@@ -105,6 +105,21 @@ async function main() {
     assert.deepEqual(on("Questions? Please call our Customer Care team at 6234 5678."), ["phone|Phone|6234 5678"]);
     assert.deepEqual(on("CONTACT\nClaims Hotline: 6345 6789"), ["phone|Claims|6345 6789"]);
   });
+  await t("Critic #505 H1 round 2: an everyday word of the insurer's name, another party a few lines up, another insurer's heading, 'by <Name>', 'call us' in another party's paragraph", () => {
+    assert.deepEqual(on("For income tax queries, call IRAS at 1800 356 8300.", "Income Insurance Limited"), []);
+    assert.deepEqual(on("Great savings! For claims under the travel add-on, call Allied World at 6423 0888.", "Great Eastern Life Assurance"), []);
+    assert.deepEqual(on("EMERGENCY ASSISTANCE SERVICES\nYour overseas emergency assistance partner is Global Rescue Pte Ltd.\nThey operate around the clock.\nWhat to do\n24-hour Hotline: +65 6338 7800"), []);
+    assert.deepEqual(on("Mount Elizabeth Hospital\nAdmissions\nHotline: 6731 2218"), []);
+    assert.deepEqual(on("AIA Singapore\nCustomer Care: 1800 248 8000"), []);
+    assert.deepEqual(on("Medical Concierge by Healix\nCall: 6100 2000"), []);
+    assert.deepEqual(on("HealthPlus Medical Claims Services handles all outpatient claims. Call us at 6100 2000."), []);
+  });
+  await t("Critic #505 H1 round 2 controls: the insurer's own heading, 'our' hotline, the insurer named in full, still kept", () => {
+    assert.deepEqual(on("Harbourline Assurance\nClaims Hotline: +65 6788 8833"), ["phone|Claims|+65 6788 8833"]);
+    assert.deepEqual(on("Please call our Customer Service hotline at 6788 8833."), ["phone|Phone|6788 8833"]);
+    assert.deepEqual(on("For claims, call Income Insurance at 6788 1777.", "Income Insurance Limited"), ["phone|Claims|6788 1777"]);
+    assert.deepEqual(on("Great Eastern Customer Service: 1800 248 2888", "Great Eastern Life Assurance"), ["phone|Phone|1800 248 2888"]);
+  });
   await t("Critic #505 L1: a host that is only part of the insurer's name is not its domain", () => {
     assert.deepEqual(on("Visit www.line.com or email help@line.com"), []);
     assert.deepEqual(on("Email help@dent.sg", "Prudential Assurance Company Singapore"), []);
