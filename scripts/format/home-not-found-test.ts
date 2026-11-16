@@ -37,6 +37,10 @@ test("Home shows a card only for cover it can call Covered; nothing for on-file 
   assert.match(page, /covered\.map\(c=>/);
   assert.doesNotMatch(page, /HomeNotFound|On file, please confirm|onFileNote|Not found/);
   assert.doesNotMatch(page, /"Not covered"|>Not covered</);
+  // A person with documents on file but no card is never told to upload what they already uploaded, nor that they have no
+  // cover (site review Critic, 16 Nov): the upload nudge is only for a person with no document linked.
+  assert.match(page, /\(active\?\.policy_count\?\?0\)>0\?<>No cover card for/);
+  assert.doesNotMatch(page, /No cover for \{name/);
 });
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`home-not-found: ${passed} passed, fetches 0`);
