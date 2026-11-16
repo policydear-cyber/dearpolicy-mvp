@@ -29,16 +29,47 @@ const BLANK = "";
 const TEXTS = [PURE_PLACEHOLDER, PLACEHOLDER_AND_NOISE, REAL_WITH_INLINE, SHORT_REAL, NUMBERS_ONLY, BLANK];
 
 test("the rule: only placeholder or noise is not read; a real word or figure is", () => {
-  for (const notRead of [PURE_PLACEHOLDER, PLACEHOLDER_AND_NOISE, "[unreadable]", "[image]", "[blank]", "[Illegible text]", "(illegible)",
-    "<unreadable>", "{blank page}", "[image: logo]", "[text cut off]", "[...] [?]", "!!!!!!!! ??????", "— — — — —", ". . . . .", "l ; ' i |", "x", "[signature] [stamp]"]) {
+  for (const notRead of [PURE_PLACEHOLDER, PLACEHOLDER_AND_NOISE, "[unreadable]", "[Illegible text]", "(illegible)", "(unclear)",
+    "<unreadable>", "[blurred text]", "[...] [?]", "!!!!!!!! ??????", "— — — — —", ". . . . .", "l ; ' i |", "[illegible] [signature]"]) {
     assert.equal(ocrTextIsPlaceholderOnly(notRead), true, JSON.stringify(notRead));
   }
   for (const read of [REAL_WITH_INLINE, SHORT_REAL, NUMBERS_ONLY, "Page 3", "7", "S$ 50", "Death [illegible] benefit", "[illegible] Intensive care",
-    "(see image) Notes", "[Amount] 400", "[Benefit schedule]", "保险金额", "入院", "ICU", "Ward A1", "Résumé des garanties"]) {
+    "(see image) Notes", "[Amount] 400", "[Benefit schedule]", "保险金额", "入院", "ICU", "Ward A1", "Résumé des garanties", "[Figure 1]", "(continued)"]) {
     assert.equal(ocrTextIsPlaceholderOnly(read), false, JSON.stringify(read));
   }
   // An empty page is the reader's own blank or unreadable verdict, judged as before, never by this rule.
   for (const blank of [BLANK, "   \n\t "]) assert.equal(ocrTextIsPlaceholderOnly(blank), false);
+});
+
+test("a note that the page is blank on purpose, signed, stamped or a picture never makes it unread (every variant)", () => {
+  for (const nothing of ["[Page intentionally left blank]", "[This page is intentionally left blank]", "(This page has been intentionally left blank)",
+    "<page intentionally left blank>", "{intentionally blank}", "【intentionally left blank】", "(blank)", "<blank page>", "[blank]", "[Blank Page]",
+    "[Signature]", "[signature] [stamp]", "[image]", "[image: logo]", "[photo]", "(missing)", "[Signature] ....", "[stamp] — —",
+    "This page is intentionally left blank."]) {
+    assert.equal(ocrTextIsPlaceholderOnly(nothing), false, JSON.stringify(nothing));
+  }
+});
+
+test("a blurred page that kept only its header or footer is not read; a page with any real word or amount is", () => {
+  for (const notRead of ["[illegible] [illegible] Page 3", "[illegible]\n[illegible]\nPage 3 of 8", "[illegible] [illegible]\n3/8", "[illegible] [illegible]\n3",
+    "[illegible text] [illegible text]\nii", "- 3 -\n[illegible] [illegible]", "Policy No. ABC-12345\n[illegible] [illegible] [illegible]",
+    "Reference: RP-2026-0042 [illegible] [illegible] Page 2 of 3", "[illegible] Certificate number 778812 [illegible] 2/3"]) {
+    assert.equal(ocrTextIsPlaceholderOnly(notRead), true, JSON.stringify(notRead));
+  }
+  for (const read of ["[illegible] [illegible] Page 3 Angioplasty", "[illegible] S$25,000 [illegible] Page 3", "[illegible] [illegible]\n25,000",
+    "[illegible]\n1,500.00", "Policy Schedule\n[illegible] [illegible]", "[illegible] Policy No. ABC-12345 Intensive care", "Page 3", "Page 3 of 8", "3/8",
+    "Policy No. ABC-12345", "[illegible] ICU", "[illegible] 4,000"]) {
+    assert.equal(ocrTextIsPlaceholderOnly(read), false, JSON.stringify(read));
+  }
+});
+
+test("more unreadable spellings are caught, and short Indic words are real text", () => {
+  for (const notRead of ["[illeg.]", "[text not legible]", "【illegible】", "[ilegible]", "[cannot read]", "(can't be read)", "（illegible）", "「illegible」 [illeg.]"]) {
+    assert.equal(ocrTextIsPlaceholderOnly(notRead), true, JSON.stringify(notRead));
+  }
+  for (const read of ["किताब", "ভা", "[illegible] किताब", "নাম [illegible]", "தமிழ்"]) {
+    assert.equal(ocrTextIsPlaceholderOnly(read), false, JSON.stringify(read));
+  }
 });
 
 // --- A made-up scanned PDF: page 1 with a text layer, pages 2-7 image only ---------------------------------------

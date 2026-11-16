@@ -428,10 +428,11 @@ export async function completePdfPagesWithHostedOcr(args: {
         // still turned away after trying it upright -- is marked unreadable, not
         // stored as an empty page that looks read. A blank page stays blank.
         if (!text && (reading.legibility === "unreadable" || turnedAway(reading))) return { ...page, unreadable: true };
-        // A page that came back as only placeholders or noise ("[illegible] [illegible] …", "....") was not read
-        // either, whatever legibility the reader gave it: it is marked unreadable and named (TE-ACC-20261116 HIGH 2;
-        // the rule, lib/documents/placeholder-text.ts). Real text with an inline "[illegible]" is read as before.
-        if (ocrTextIsPlaceholderOnly(text)) return { ...page, unreadable: true };
+        // A page that came back as only "could not read" placeholders or noise ("[illegible] [illegible] Page 3",
+        // "....") was not read either: it is marked unreadable and named (TE-ACC-20261116 HIGH 2; the rule,
+        // lib/documents/placeholder-text.ts). Real text with an inline "[illegible]" is read as before, and a page the
+        // reader calls blank, or whose notes only say it is blank or signed ("[Page intentionally left blank]"), is too.
+        if (reading.legibility !== "blank" && ocrTextIsPlaceholderOnly(text)) return { ...page, unreadable: true };
         return { ...page, text, extractionMethod: "ocr" as const, ...(reading.legibility === "poor" ? { legibility: "poor" as const } : {}), ...(turned.has(page.pageNumber) ? { turnedBy: turned.get(page.pageNumber) } : {}) };
       }
       return missing.includes(page.pageNumber) ? { ...page, unreadable: true } : page;
