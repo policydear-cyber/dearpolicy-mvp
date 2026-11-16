@@ -39,20 +39,27 @@ const CASE_TERM = /\b((?:[A-Za-z]+\s+)?Fracture)(?:s|\/s|\(s\))?(?![A-Za-z])/i;
 /** A case name outside brackets needs its qualifier ("Other Fracture", "Compound Fracture"): a plain "Fractures" heading or "Bone
  * Fracture" title names no case. */
 const QUALIFIED = String.raw`(?!(?:bone|bones|the|all|any|for|of)\s)[A-Za-z]+\s+Fractures?`;
-/** The kinds of fracture a benefit's own name prints ("Simple Fracture or Compound Fracture due to Accident" -> simple, compound). */
-const namedKinds = (benefit: string): Set<string> =>
-  new Set([...benefit.matchAll(new RegExp(String.raw`\b(${QUALIFIED})`, "gi"))].map((m) => m[1].toLowerCase().replace(/\s+fractures?$/, "")));
+/** The words that name a kind of fracture (medicine's own closed vocabulary, not a policy's wording): never a body site ("Hip") or
+ * a joining word ("or"; Critic on #516, M1, M3). */
+const KIND_WORDS = "simple|compound|open|closed|complicated|uncomplicated|other|major|minor|multiple|comminuted|displaced|undisplaced|non-displaced|stress|hairline|greenstick|complete|incomplete|pathological";
+/** The kinds of fracture a benefit's own name prints: "Simple Fracture or Compound Fracture due to Accident", "Simple and Compound
+ * Fractures" -> simple, compound. */
+const namedKinds = (benefit: string): Set<string> => {
+  const out = new Set<string>();
+  for (const m of benefit.matchAll(new RegExp(String.raw`\b((?:(?:${KIND_WORDS})\s*(?:,|\/|\band\b|\bor\b)\s*)*(?:${KIND_WORDS}))\s+Fractures?\b`, "gi")))
+    for (const k of m[1].toLowerCase().split(/\s*(?:,|\/|\band\b|\bor\b)\s*/)) if (k) out.add(k);
+  return out;
+};
 const caseOf = (label: string, benefit = ""): { tag: string; row: string } | null => {
   const b = CASE_BRACKET.exec(label);
   const tag = b ? CASE_TERM.exec(b[1])?.[1] : null;
   if (b && tag) return { tag, row: label.slice(0, b.index).trim() };
   // (TE journeys on main 9bca70a, W1) A bracket that names a kind without the word -- "(Compound)", "(Other)" -- under a benefit whose
   // own name prints kinds of fracture is that kind's label: one of the kinds the name prints, or "Other", the kind it leaves over.
-  const word = b ? /^\s*([A-Za-z]+)\s*$/.exec(b[1])?.[1] : null;
-  if (b && word && /\bFractures?\b/i.test(benefit)) {
-    const kinds = namedKinds(benefit);
-    if (kinds.size && (kinds.has(word.toLowerCase()) || /^other$/i.test(word))) return { tag: `${word} Fracture`, row: label.slice(0, b.index).trim() };
-  }
+  // Only under a name that prints two kinds or more, and only a word that names a kind (Critic on #516, M2): "(Other)" under
+  // "Accidental Fracture" or "Dislocation or Fracture" is no case.
+  const word = b ? /^\s*([A-Za-z-]+)\s*$/.exec(b[1])?.[1] : null;
+  if (b && word && namedKinds(benefit).size >= 2 && new RegExp(String.raw`^(?:${KIND_WORDS})$`, "i").test(word)) return { tag: `${word} Fracture`, row: label.slice(0, b.index).trim() };
   // (Test engineer on #512, F2c: the same label written another way -- "[Other Fracture]", "Arm … – Other Fracture", "Other Fracture:
   // Arm …". Only a labelling form: a row that merely names a bone's fracture, "Fracture of the skull", is not a case label.)
   const sq = /\s*\[([^\]]*)\]\s*$/.exec(label);
@@ -287,7 +294,7 @@ export function renderCalculation(resultId: string, d: Deps, alt?: { label: stri
     // (W1: any benefit whose name prints two kinds or more -- "Simple Fracture or Compound Fracture" -- not only Simple and Other)
     const kindsNamed = [...namedKinds(c.benefit)];
     const bothKinds = !tagged && !defined && kindsNamed.length >= 2 && ![...(d.ctx.benefitRecords?.values() ?? [])].some((r) => r.policy.id === c.policyId && r.definitions.length);
-    const undefinedNote = bothKinds ? ` (the benefit names ${kindsNamed.map((k) => `${k[0].toUpperCase()}${k.slice(1)} Fracture`).join(" and ")} alike, and this row is labelled as neither; these documents do not define either kind, so the insurer decides how it applies)` : tagged ? ` (the row the document labels “${tagged}”; these documents do not define which fractures count as ${tagged}${kind ? `, or whether a${kind === "open" ? "n" : ""} ${kind} fracture is one` : ""}, so the insurer decides whether it applies)` : "";
+    const undefinedNote = bothKinds ? ` (the benefit names ${kindsNamed.map((k) => `${k[0].toUpperCase()}${k.slice(1)} Fracture`).join(" and ")} alike, and this row is labelled as neither; these documents do not define ${kindsNamed.length > 2 ? "any of these kinds" : "either kind"}, so the insurer decides how it applies)` : tagged ? ` (the row the document labels “${tagged}”; these documents do not define which fractures count as ${tagged}${kind ? `, or whether a${kind === "open" ? "n" : ""} ${kind} fracture is one` : ""}, so the insurer decides whether it applies)` : "";
     // (DC, 16 Nov 2026: "not a payment or an insurer's decision" is no longer said after every amount; the answer says once that the
     // insurer decides what is paid -- lib/rag2/loop/hook.ts INSURER_DECIDES)
     return `If the ${named} applies${pct ? ` to ${who}'s case “${label}”${undefinedNote}` : ""}${said}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseText}` : ""}${alt ? `, in the ${alt.label} (page ${alt.page})` : `, under the ${product}`}${rowNote(c.record?.rowNotes)}.`;

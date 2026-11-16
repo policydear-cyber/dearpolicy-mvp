@@ -268,6 +268,12 @@ async function main() {
       const line = o.v.split("\n").find((l) => l.includes(`under ${kind}`)) ?? "";
       check(`B26 (W1) a row labelled ${name} is the undefined ${kind} case: no S$120,000 anywhere, the row named with 'Ask the insurer', no 'labelled as neither'`, hidden(o) && /Ask the insurer/.test(line) && !/labelled as neither/.test(o.v), o.v);
     }
+    // Critic on #516 M2: "(Other)" under a benefit that names fewer than two kinds is no case label.
+    for (const title of ["Accidental Fracture", "Dislocation or Fracture"]) {
+      const fx2 = { ...FX, DOCS: FX.DOCS.map((d) => ({ ...d, pages: Object.fromEntries(Object.entries(d.pages).map(([n, t]) => [n, String(t).replace(/Simple Fracture or Other Fracture due to Accident/g, title).replace(/\(Other Fracture\)/g, "(Other)")])) })) } as any;
+      const o = await once(fx2, fracScript(G2), "grace fell down and broke her arm");
+      check(`B26c (Critic #516 M2) '(Other)' under '${title}' is not named as an undefined Other Fracture case`, !/under Other Fracture/.test(o.v) && !/Or Fracture/.test(o.v), o.v);
+    }
     // ... a bracket that names no kind the benefit prints ("(Left)") is not a case label: the row keeps its amount, with the note.
     {
       const fx2 = { ...FX, DOCS: FX.DOCS.map((d) => ({ ...d, pages: Object.fromEntries(Object.entries(d.pages).map(([n, t]) => [n, String(t).replace(/\(Other Fracture\)/g, "(Left)")])) })) } as any;
