@@ -1884,7 +1884,7 @@ export function documentOwnWords(doc: { insurer: string | null; productName: str
   // with a capital inside ("HealthShield", "IncomeShield"). A plain first word ("Infant" in "Infant Shield") never is.
   const rawProduct = ((doc.productName ?? "").match(/[\p{L}\d]+/gu) ?? []).filter((w) => !COMPANY_WORDS.has(w.toLowerCase()));
   // The insurer's first printed word, company or place word or not ("Singapore" in "Singapore Life Ltd" for "Singlife").
-  const insurerFirst = ((doc.insurer ?? "").toLowerCase().match(/[\p{L}\d]+/u) ?? [""])[0], insurerInitials = insurer.length >= 2 ? insurer.map((w) => w[0]).join("") : "";
+  const insurerFirst = ((doc.insurer ?? "").toLowerCase().match(/[\p{L}\d]+/u) ?? [""])[0], insurerInitials = insurer.length >= 3 ? insurer.map((w) => w[0]).join("") : "";
   for (const raw of rawProduct) {
     const w = raw.toLowerCase();
     let common = 0;
@@ -1895,9 +1895,9 @@ export function documentOwnWords(doc: { insurer: string | null; productName: str
   }
   return [...runs].filter((r) => !r.split(" ").some((w) => NAME_QUALIFIER.test(w) || NAME_QUALIFIER_WORDS.has(w)));
 }
-/** A name word that is a document's one-word run, or the start of one glued in print to a neutral word ("PRU" for
- * "PRUShield", "Health" for "HealthShield"); never a start glued to anything else ("Baby" in "BabyCare"). */
-const ownWordFits = (w: string, run: string) => w === run || (w.length >= 2 && run.startsWith(w) && NEUTRAL_NAME_WORDS.has(run.slice(w.length)));
+/** A name word that is a document's one-word run. A start of a glued word counts only as its own run, when it also starts
+ * the insurer's name ("PRU" for "PRUShield" by Prudential); never otherwise ("Infant" in "InfantShield", Critic #515 round 4). */
+const ownWordFits = (w: string, run: string) => w === run;
 /** Company words a brand may carry in a row's name ("HSBC Life Shield"): skipped only straight after the brand. */
 const BRAND_COMPANY_WORDS = new Set("life insurance assurance general takaful".split(" "));
 /** A name's words with every run of the document's own words taken out, longest run first. */
