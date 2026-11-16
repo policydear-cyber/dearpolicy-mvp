@@ -76,6 +76,18 @@ async function main() {
     assert.deepEqual(some.nextSteps, [CONFIRM_OTHER_AMOUNT_STEP]);
   });
 
+  await t("DECL-20261116-B/C: a sentence about what the app shows is taken out; one that says what the documents print stays", () => {
+    assert.equal(withoutNarration("Wei Ling has a hospital cash benefit after an accident. No amount card is shown for it, as the stay would need to follow an accident."), "Wei Ling has a hospital cash benefit after an accident.");
+    assert.equal(withoutNarration("The PA plan has a hospital cash benefit. The pages shown do not give an amount for it that can be shown here."), "The PA plan has a hospital cash benefit.");
+    // Kept: what the documents print, a condition, or a card mentioned without saying an amount is missing.
+    for (const keep of ["The schedule prints no amount for outpatient care.", "Keep the card the hospital gives you for the claim.", "The benefit is not payable unless the stay follows an accident."])
+      assert.equal(withoutNarration(keep), keep);
+  });
+  await t("DECL-20261116 b1: 'you can claim from <insurer>' is left as written (no 'may respond with from'), so the live and reopened answer match; an amount promise is still rewritten", async () => {
+    const { scrubMonetaryText } = await import("@/lib/chat/monetary-boundary");
+    assert.equal(scrubMonetaryText("so you can claim from Merlion General."), "so you can claim from Merlion General.");
+    assert.match(scrubMonetaryText("You will get the benefit."), /^the policy may respond with the benefit\.$/);
+  });
   // ------------------------------------------------------------------ part 2: contacts from the page
   const on = (text: string, insurer = "Harbourline Assurance plc") => contactsOnPage(text, 2, "Family PA Schedule", insurer).map((c) => `${c.kind}|${c.label}|${c.value}`);
   await t("a claims line printed in a sentence, with its label after it (TE fixture wording)", () => {

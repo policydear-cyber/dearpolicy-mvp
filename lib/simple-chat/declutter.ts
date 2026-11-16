@@ -36,7 +36,10 @@ const NARRATION: RegExp[] = [
   /^they are not added up$/,
   /^these are separate covers\. the pages i used (?:don't|do not) say whether one affects the other,? so the insurer decides\. they are not added up$/,
 ];
-const isNarration = (sentence: string) => { const f = flat(sentence); return !!f && (SERVER_NOTES.has(f) || NARRATION.some((r) => r.test(f))); };
+/** A sentence about what the app shows ("No amount card is shown for it…", "The pages shown do not give an amount for it
+ * that can be shown here"): it says no amount is shown, and names a card or what is shown here (DECL-20261116-B/C). */
+const aboutTheDisplay = (f: string) => /\b(?:amount|figure)s?\b/.test(f) && /\b(?:no|not|n't|never)\b/.test(f) && /\b(?:cards?|shown here|can be shown|could be shown|be shown here)\b/.test(f);
+const isNarration = (sentence: string) => { const f = flat(sentence); return !!f && (SERVER_NOTES.has(f) || NARRATION.some((r) => r.test(f)) || aboutTheDisplay(f)); };
 
 /** Sentences split at a full stop, ! or ? followed by a capital or an opening quote (as the answer cards split them). */
 const sentencesOf = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z“"(])/).map((s) => s.trim()).filter(Boolean);
