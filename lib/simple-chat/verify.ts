@@ -1879,18 +1879,34 @@ export function documentOwnWords(doc: { insurer: string | null; productName: str
   let lead = 0;
   while (lead < product.length && lead < insurer.length && product[lead] === insurer[lead]) lead++;
   if (lead > 0 && lead < product.length) runs.add(product.slice(lead).join(" "));
+  // A product word that is plainly a brand (TE #515 round 2): it starts with the insurer's own first letters ("Singlife"
+  // by Singapore Life, "ManuCare" by Manulife, "PRUExtra" by Prudential, then "PRU" too) or its initials, or it is one word
+  // with a capital inside ("HealthShield", "IncomeShield"). A plain first word ("Infant" in "Infant Shield") never is.
+  const rawProduct = ((doc.productName ?? "").match(/[\p{L}\d]+/gu) ?? []).filter((w) => !COMPANY_WORDS.has(w.toLowerCase()));
+  // The insurer's first printed word, company or place word or not ("Singapore" in "Singapore Life Ltd" for "Singlife").
+  const insurerFirst = ((doc.insurer ?? "").toLowerCase().match(/[\p{L}\d]+/u) ?? [""])[0], insurerInitials = insurer.length >= 2 ? insurer.map((w) => w[0]).join("") : "";
+  for (const raw of rawProduct) {
+    const w = raw.toLowerCase();
+    let common = 0;
+    while (common < w.length && common < insurerFirst.length && w[common] === insurerFirst[common]) common++;
+    const camel = /\p{Ll}\p{Lu}/u.test(raw) || /^\p{Lu}{2,}\p{Ll}/u.test(raw);
+    if (common >= 3 || (insurerInitials && w.startsWith(insurerInitials)) || camel) runs.add(w);
+    if (common >= 3 && common < w.length) runs.add(w.slice(0, common));
+  }
   return [...runs].filter((r) => !r.split(" ").some((w) => NAME_QUALIFIER.test(w) || NAME_QUALIFIER_WORDS.has(w)));
 }
-/** A name word that is a document's one-word run, or the start of one glued in print ("PRU" for "PRUShield", "Health" for
- * "HealthShield"). */
-const ownWordFits = (w: string, run: string) => w === run || (w.length >= 2 && run.length >= w.length + 3 && run.startsWith(w));
+/** A name word that is a document's one-word run, or the start of one glued in print to a neutral word ("PRU" for
+ * "PRUShield", "Health" for "HealthShield"); never a start glued to anything else ("Baby" in "BabyCare"). */
+const ownWordFits = (w: string, run: string) => w === run || (w.length >= 2 && run.startsWith(w) && NEUTRAL_NAME_WORDS.has(run.slice(w.length)));
+/** Company words a brand may carry in a row's name ("HSBC Life Shield"): skipped only straight after the brand. */
+const BRAND_COMPANY_WORDS = new Set("life insurance assurance general takaful".split(" "));
 /** A name's words with every run of the document's own words taken out, longest run first. */
 function withoutOwnPhrases(words: string[], runs: string[]): string[] {
   const rs = runs.map((r) => r.split(" ")).sort((a, b) => b.length - a.length);
   const out: string[] = [];
   for (let i = 0; i < words.length;) {
     const r = rs.find((r) => i + r.length <= words.length && r.every((o, k) => r.length === 1 ? ownWordFits(words[i], o) : words[i + k] === o));
-    if (r) i += r.length; else out.push(words[i++]);
+    if (r) { i += r.length; while (i < words.length && BRAND_COMPANY_WORDS.has(words[i])) i++; } else out.push(words[i++]);
   }
   return out;
 }

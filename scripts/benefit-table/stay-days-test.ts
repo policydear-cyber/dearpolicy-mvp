@@ -736,7 +736,8 @@ for (const name of ["Hospital Cash 65", "US Hospital Cash", "Hospital Cash - US"
     ["American Hospital Cash", "American International Assurance Company", "Kestrel Shield"], ["Infant Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Infant Travel Shield"],
     ["Travel Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Infant Travel Shield"], ["Falcon Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Term Guard"],
     ["Infant Hospital Cash", "Falcon Insurance Ltd", "Infant Shield"], ["Mum Hospital Cash", "Falcon Insurance Ltd", "Mum and Baby Care"],
-    ["Student Hospital Cash", "Falcon Insurance Ltd", "Student Care"],
+    ["Student Hospital Cash", "Falcon Insurance Ltd", "Student Care"], ["Baby Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel BabyCare"],
+    ["Life Hospital Cash", "HSBC Life (Singapore) Pte Ltd", "HSBC Life Shield"], ["Infant Hospital Cash", "Falcon Insurance Ltd", "Falcon Infant Plan"],
   ];
   for (const [name, ins, prod] of none) test(`stay-wrap P4 '${name}' in '${prod}' by '${ins}': none`, () => assert.equal(rule(name, ins, prod), null));
   const kept: [string, string | null, string | null][] = [
@@ -744,6 +745,11 @@ for (const name of ["Hospital Cash 65", "US Hospital Cash", "Hospital Cash - US"
     ["Health Shield Hospital Cash", "AIA Singapore", "AIA HealthShield"], ["Kestrel Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Mum & Baby Care"],
     ["Term Guard Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Term Guard"], ["Tokio Marine Hospital Cash", "Tokio Marine Life Insurance Singapore", "TM Shield"],
     ["Kestrel Hospital Cash (KHC)", "Kestrel Life Singapore Ltd", "Kestrel Term Guard"],
+    // TE #515 round 2: a brand at the start of the product name, by the insurer's own letters or a capital inside one word.
+    ["Singlife Hospital Cash", "Singapore Life Ltd", "Singlife Shield"], ["Singlife Shield Hospital Cash", "Singapore Life Ltd", "Singlife Shield Plan 1"],
+    ["ManuCare Hospital Cash", "Manulife (Singapore) Pte Ltd", "ManuCare Hospital Income"], ["PRUExtra Hospital Cash", "Prudential Assurance Company Singapore", "PRUExtra Premier CoPay"],
+    ["PRU Hospital Cash", "Prudential Assurance Company Singapore", "PRUExtra Premier CoPay"], ["IncomeShield Hospital Cash", "Income Insurance Ltd", "Enhanced IncomeShield"],
+    ["HSBC Life Shield Hospital Cash", "HSBC Life (Singapore) Pte Ltd", "HSBC Life Shield"], ["AIA HealthShield Hospital Cash", "AIA Singapore", "AIA HealthShield Gold Max"],
   ];
   for (const [name, ins, prod] of kept) test(`stay-wrap P4b control '${name}' in '${prod}' by '${ins}' keeps its figure`, () => assert.notEqual(rule(name, ins, prod), null));
 }
