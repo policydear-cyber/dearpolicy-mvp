@@ -4,6 +4,7 @@
  * a premium is charged, never claimed (real-model check on a made-up household, 28 Oct: "how is my monthly premium split?"
  * ended with it). Whether a row is a premium is the row's own provenance (the cover line's premium, its parts, the first
  * year's premium: ChatRow.premium), never its name: a benefit named for premiums ("Waiver of Premium") keeps the note.
+ * Since 16 Nov 2026 the note is not shown (DC: declutter); the same decision is checked in the turn's report.
  * Made-up household, the app's own chat turn (runSimpleChat) with a scripted model reply. No model, network or database.
  *   npm run benefit-table:claim-note-test */
 import assert from "node:assert/strict";
@@ -57,7 +58,11 @@ async function turn(benefits: RegExp[]) {
   await runSimpleChat(context, {}, { model, household: async () => HOUSE, history: async () => [], save: (async (x: unknown) => { saved.push(x as never); }) as never, ledger: false,
     table: async () => TABLE, today: () => new Date("2026-10-28T04:00:00Z") });
   const st = saved[0].answer.statements ?? [];
-  return { amounts: st.filter((s) => s.amount).length, notes: st.filter((s) => s.text === NARROWED_PAGES_NOTE).length };
+  // DC, 16 Nov 2026 (declutter): the note is never shown to the household any more; the server still decides it, and it
+  // is kept in the turn's report, which is what is counted here.
+  assert.equal(st.filter((s) => s.text === NARROWED_PAGES_NOTE).length, 0, "the note is not shown");
+  const report = (saved[0] as unknown as { state: { simpleChat: { turns: { report: { sentencesLeftOut: string[] } }[] } } }).state.simpleChat.turns[0].report;
+  return { amounts: st.filter((s) => s.amount).length, notes: report.sentencesLeftOut.filter((x) => x === NARROWED_PAGES_NOTE).length };
 }
 
 const PREMIUM = /^Annual Premium, Annual$|^Premium, Annual$/;

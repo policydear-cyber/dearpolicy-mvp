@@ -25,6 +25,7 @@ import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf, type StatedFigure } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
+import { GENERIC_DISCLAIMER } from "@/lib/chat/generic-disclaimer";
 import { keepsCapIn, noteMultiple, timesWords } from "@/lib/benefit-table/multiplier";
 import { childCase, childLimitIn, childLimitNotes, childShareAllowed, personStatus, provenAdult, printedLife, withoutChildLimit } from "@/lib/benefit-table/child-limit";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
@@ -40,7 +41,7 @@ export const LEFT_OUT_FACT = "I left out a point I couldn’t find in your docum
 export const NOTHING_SHOWN = "I couldn’t match the points behind this answer to words in your documents, so none are shown. Please ask again, or open the documents on the Documents page.";
 export const NO_ANSWER = "I couldn’t put together an answer from your documents. Please ask again, or ask about one benefit at a time.";
 export const ALTERNATIVES_NOTE = "These are alternatives under one benefit in the same document, not a total.";
-export const DISCLAIMER = "Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.";
+export const DISCLAIMER = GENERIC_DISCLAIMER;
 
 // ------------------------------------------------------------------ finding a quote in the stored pages
 /** Text for matching: case, spacing, quote marks and dashes do not count. `at[i]` is where character i came from. */
@@ -3351,7 +3352,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     const forWhom = first?.personName ? ` for ${first.personName}` : "";
     const said = first && !first.text.includes("prints: “") ? ` ${first.text.replace(/\s+$/, "")}` : "";
     bottomLine = first
-      ? `Your documents list ${shownAmounts > 1 ? "these benefits" : "this benefit"}${forWhom}.${said ? said.replace(/([^.!?])$/, "$1.") : ""} ${shownAmounts > 1 ? "The amounts are shown below; they are separate and not added together." : "The amount is shown below."}`
+      ? `Your documents list ${shownAmounts > 1 ? "these benefits" : "this benefit"}${forWhom}.${said ? said.replace(/([^.!?])$/, "$1.") : ""} ${shownAmounts > 1 ? "The amounts are shown below." : "The amount is shown below."}`
       : statements.length ? "Here is what your documents say." : NO_ANSWER;
   }
   const questions: ChatQuestion[] = question ? [{ id: "simple_question", text: question, type: "text", why: "This helps me answer from the right part of your documents." }] : [];
@@ -3461,7 +3462,7 @@ export function noteCoverNotCounted(answer: StructuredAnswer, household: Househo
 
 /** The text a later turn shows the model for this answer. */
 export function answerAsText(answer: Pick<ChatAnswer, "summary" | "nextSteps" | "questions"> & { statements?: AnswerStatement[]; bottomLine?: string | null }): string {
-  const lines = [answer.bottomLine || answer.summary, ...(answer.statements ?? []).map((s) => `- ${s.personName ? s.personName + ": " : ""}${s.amount ? s.amount.text + " — " : ""}${s.text}${s.source ? ` (${s.source.policyName}, page ${s.source.page})` : ""}`), ...answer.nextSteps.map((n) => `Next: ${n}`), ...answer.questions.map((q) => q.text)];
+  const lines = [answer.bottomLine || answer.summary, ...(answer.statements ?? []).map((s) => `- ${s.personName ? s.personName + ": " : ""}${s.amount ? s.amount.text + " — " : ""}${s.table ? `${s.text} ${[...(s.table.headers ? [s.table.headers.join(" | ")] : []), ...s.table.rows.map((r) => r.join(" | "))].join("; ")}` : s.text}${s.source ? ` (${s.source.policyName}, page ${s.source.page})` : ""}`), ...answer.nextSteps.map((n) => `Next: ${n}`), ...answer.questions.map((q) => q.text)];
   return lines.filter(Boolean).join("\n");
 }
 export { documentId };
