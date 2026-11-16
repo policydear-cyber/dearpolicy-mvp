@@ -1854,7 +1854,9 @@ function pageRowNames(pageText: string, rowStart: number): string[] {
 const HARMLESS_BRACKET = /^\s*(?:\d{1,3}|[A-Z]{0,3}\$|SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|per\s+day|a\s+day|days?|consecutive|inclusive|per\s+(?:life(?:\s+(?:assured|insured))?|insured(?:\s+person)?|person))\s*$/i;
 /** A bracket that holds only the row's own most days ("(max 30 days)", "(up to 30 days per stay)", "(30 days max)"): the cap,
  * read as printed, never a condition (gate #508 round 5 regression: main reads it). */
-const CAP_BRACKET = /^\s*(?:(?:max(?:imum)?\.?|up\s+to)\s*(?:of\s+)?\d{1,3}\s*days?|\d{1,3}\s*days?\s+max(?:imum)?\.?)(?:\s+(?:per|each|in\s+any\s+one|for\s+any\s+one)\s+(?:hospital\s+stay|stay|confinement|admission|accident|(?:policy\s+)?year))?\s*$/i;
+const CAP_PERIOD = String.raw`(?:per|each|in\s+any\s+one|for\s+any\s+one|in\s+any|for\s+each)\s+(?:any\s+one\s+|one\s+)?(?:(?:hospital\s+)?(?:stay|confinement|admission)|hospitali[sz]ation|(?:illness|sickness|accident|injury)(?:\s+or\s+(?:illness|sickness|accident|injury))?|disability|event|(?:policy\s+|calendar\s+)?year|period\s+of\s+(?:hospitali[sz]ation|confinement)|insured(?:\s+person)?|life(?:\s+(?:assured|insured))?|person)`;
+/** (gate #508 round 6: the full period list, "per life", and a trailing footnote mark: "(max 30 days*)".) */
+const CAP_BRACKET = new RegExp(String.raw`^\s*(?:(?:(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?|up\s+to)\s*(?:of\s+)?\d{1,3}\s*(?:consecutive\s+)?days?|\d{1,3}\s*days?\s+max(?:imum)?\.?)(?:\s+(?:of\s+(?:hospitali[sz]ation|(?:hospital\s+)?(?:stay|confinement))|in\s+hospital))?(?:\s*,?\s*${CAP_PERIOD}){0,2}\s*[*†‡^]?\s*$`, "i");
 /** A row's leading number ("(a) ", "1. ", "i) ", "2a)"): a label, never a condition (gate #508 round 3 NEW-HIGH 2). */
 const ROW_ENUMERATOR = /^\s*(?:\((?:\d{1,2}[a-z]?|[a-z]|[ivx]{1,4})\)|(?:\d{1,2}[a-z]?|[a-z]|[ivx]{1,4})[.)])\s+/i;
 /** Whether a bracket of capitals after a row's name is that name's abbreviation ("Hospital cash (HC)"): its letters are
