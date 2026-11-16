@@ -11,7 +11,8 @@
  *   - (DC 16 Nov) an unconfirmed line whose own quote and person are printed on its page: Covered on both, no amount; with
  *     NEGATIVE CONTROLS for a page without the person's name and a quote not on its page; and a confirmed sum beside an
  *     unconfirmed line of the same cover shows no amount, never the part sum; on a two-life page only a line under the
- *     person's own name is held (Critic #506 H1).
+ *     person's own name is held (Critic #506 H1); and never for a policyholder, a nominee, a document that is not the
+ *     person's own proof of cover, or a surname alone (Test engineer #506 F2).
  * No real household, insurer or scheme; no model call; no paid call. Needs DEARPOLICY_DISPOSABLE_DB=1 and a local DATABASE_URL.
  *   npm run -s coverage:home-coverage-verdict-test */
 import assert from "node:assert/strict";
@@ -222,6 +223,31 @@ async function main() {
       const t = await tile(kim, "Personal Accident"), p = await page(kim, "Personal Accident");
       assert.equal(t.status, "on_file", JSON.stringify(t)); assert.equal(p.verdict, "on_file", JSON.stringify(p)); noAmount(t, p);
     });
+
+    // Test engineer #506 F2: the name printed is not enough. The person must be the insured on their own proof of cover,
+    // named in full. Each line below was filed under the wrong person or sits on a document that is not their cover.
+    const notHeld = async (name: string, linked: string, text: string, quote: string, role = "personal_schedule", own = true) => {
+      const m = await person(name, "other");
+      const d = await doc({ member: m, product: "Plover Life", role, own, text });
+      await query("INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id) VALUES($1,$2,$3,$4)", [ACCOUNT, d, linked, m]);
+      await query(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,confirmed,evidence_verified)
+        VALUES($1,$2,$3,'Death',1,'SGD','Plover Life',1,$4,false,false)`, [ACCOUNT, d, m, quote]);
+      return m;
+    };
+    const PQ = "Plover Life\tSum Assured 300,000";
+    const cases: [string, Promise<string>][] = [
+      ["V16 policyholder only (the life assured is not printed as a detected person)", notHeld("Sara Koh", "SARA KOH", `SCHEDULE\nPolicyholder\tSARA KOH\nLife Assured\tBABY KOH\n${PQ}`, PQ)],
+      ["V17 nominee only", notHeld("Hui Min Lee", "LEE HUI MIN", `SCHEDULE\n${PQ}\nNominee\tLEE HUI MIN`, PQ)],
+      ["V18 a product summary that prints the name and the quote", notHeld("Farid Osman", "FARID OSMAN", `PRODUCT SUMMARY\nPrepared for\tFARID OSMAN\nLife Assured\tFARID OSMAN\n${PQ}`, PQ, "product_summary", false)],
+      ["V19 a surname alone", notHeld("Tan Kah Wee", "TAN", `SCHEDULE\nLife Assured\tTAN KAH WEE\n${PQ}`, PQ)],
+    ];
+    for (const [label, made] of cases) {
+      const m = await made;
+      await test(`${label}: NEGATIVE CONTROL, not Covered on either page`, async () => {
+        const t = await tile(m, "Death"), p = await page(m, "Death");
+        assert.notEqual(t.status, "covered", JSON.stringify(t)); assert.notEqual(p.verdict, "covered", JSON.stringify(p)); noAmount(t, p);
+      });
+    }
   } finally {
     for (const t of ["benefit_links", "benefit_readings", "policy_detected_people", "policy_reference_coverages", "policy_coverages", "policy_members", "policy_pages", "policies", "family_members", "household_members"])
       await query(`DELETE FROM ${t} WHERE ${t === "household_members" ? "household_id" : "account_id"}=$1`, [ACCOUNT]).catch(() => undefined);

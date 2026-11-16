@@ -1291,7 +1291,7 @@ div.answer-point { display: grid; gap: 4px; }
 .home-cards > * { min-width: 0; }
 .home-cards-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .home-cards-head h1 { font-size: var(--fs-2xl); margin: 0; }
-.home-cards .member-strip { grid-template-columns: 1fr; padding: 10px; }
+.home-cards .member-strip { grid-template-columns: minmax(0, 1fr); padding: 10px; min-width: 0; }
 .home-cards .coverage-card { min-height: 136px; }
 .home-cards .coverage-name { margin-bottom: auto; }
 .home-cards .coverage-card.covered .coverage-amount { font-size: 26px; line-height: 1.15; }
