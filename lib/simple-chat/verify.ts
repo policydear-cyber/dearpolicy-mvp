@@ -2106,7 +2106,8 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
     // A period word wrapped onto a line of its own ("maximum 30 days per" / "confinement") was read as the name's: it ends
     // the row's terms.
     const wrappedPeriod = block.labelMore.length > 0 && /^\s*(?:(?:hospital\s+)?(?:stay|admission|confinement)|accident|disability)\s*$/i.test(block.labelMore.join(" "));
-    if (!strict) own = (wrappedPeriod ? own.replace(/;\s*$/, ` ${block.labelMore.join(" ")} ;`) : own).replace(ROW_ENUMERATOR, " ").replace(/\(([A-Z]{2,5})\)/g, " ")
+    if (!strict) own = (wrappedPeriod ? own.replace(/;\s*$/, ` ${block.labelMore.join(" ")} ;`) : own).replace(ROW_ENUMERATOR, " ").replace(/\(\s*([A-Z]{1,5})\s*\)/g, (m, c: string) => QUALIFIER_CAPS.has(c) ? m : " ")
+      .replace(/\(([^()]*)\)/g, (m, b: string) => DESCRIPTIVE_BRACKET.test(b) ? " " : m)
       // A bracketed currency after the name ("Hospital cash (S$)"), cut where the name ends at its sign.
       .replace(/\(?\s*(?:\b[A-Z]{1,3}\$|\$|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\b)\s*\)/g, " ").replace(STAY_PERIOD_WORDS, " ");
     if (!(own.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => ROW_GRAMMAR_WORDS.has(w) || (!strict && ROW_TERMS_VERBS.has(w)))) return null;
