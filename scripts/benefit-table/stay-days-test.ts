@@ -769,6 +769,11 @@ for (const below of ["Surgical Benefits", "OUTPATIENT BENEFITS", "Exclusions", "
   "Outpatient", "Ambulance", "Kestrel Life Singapore Ltd", "Kestrel Term Guard", "Notes", "Remarks", "Confidential", "Continued overleaf", "Effective date",
   "See notes", "Terms apply", "Covered", "Yes", "N/A", "Not applicable", "Guaranteed", "For the Life Assured", "For the insured", "(see note 2)"])
   ROUND2.push([`W2b control line below '${below}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, below === "(see note 2)" ? null : "S$3,000"]);
+// Critic #515 round 6: a bare capitals line (heading, cell or section letter) is not a code unless it is a qualifier code.
+for (const below of ["NOTES", "NOTE", "YES", "NIL", "NA", "PAGE", "END", "ALL", "B", "C", "XY"])
+  ROUND2.push([`W2d control bare capitals '${below}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, "S$3,000"]);
+for (const below of ["ICU", "MAID", "INFANT", "SPOUSE"])
+  ROUND2.push([`W2d bare qualifier '${below}' below: none`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, null]);
 ROUND2.push(["W2c a qualifier after a blank line is not the row's own fragment", Q1(", from the 3rd day, up to 30 days per stay"), ["", "Infant"], R3O, 40, "S$3,000"]);
 test("stay-wrap W2 a household member's name on the line under Tan's row: none", () => {
   const h = household([{ person: TAN, row: Q1(", from the 3rd day, up to 30 days per stay"), below: ["Lee Mei Ling"], value: 100, maxDays: 30, fromDay: 3 },

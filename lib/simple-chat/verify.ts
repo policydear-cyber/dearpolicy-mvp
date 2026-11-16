@@ -2042,10 +2042,10 @@ function qualifierFragment(line: string, codeName: string, ownWords: string[], p
   const code = /^[A-Z]{1,5}$/.test(inner);
   if (code && !QUALIFIER_CAPS.has(inner) && nameAbbreviation(codeName, inner, ownWords)) return false;
   // A bracket or "- x" clause is the row's own words: anything but neutral words may qualify it. A bare short line may also be
-  // a heading, a footer or a cell ("Surgical Benefits", "Notes", "Covered"): only a qualifier word, a code or a household
+  // a heading, a footer or a cell ("Surgical Benefits", "NOTES", "B"): only a qualifier word, a qualifier code (ICU) or a household
   // member's name in it qualifies the row.
   if (bracket || dash) return true;
-  if (code) return true;
+  if (code && QUALIFIER_CAPS.has(inner)) return true;
   // "For the Life Assured", "For the insured": the policy's own life, said of every row.
   if (/^for\s+the\s+(?:life\s+(?:assured|insured)|insured(?:\s+person)?)$/i.test(inner)) return false;
   const words: string[] = inner.toLowerCase().match(/[\p{L}']+/gu) ?? [];
