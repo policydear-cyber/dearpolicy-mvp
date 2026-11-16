@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 export const metadata = { title: "Page not found · DearPolicy" };
 
 /** A page missing from the file, stamped (wallet of cover): decoration only, hidden from screen readers. */
-const Missing = () => <PolicySheet card="other" icon="documents" title="Page 404"><span className="missing-stamp">Not on file</span></PolicySheet>;
+const Missing = () => <PolicySheet card="other" icon="documents" title="Missing page"><span className="missing-stamp">Not on file</span></PolicySheet>;
 
 /** A missing page in DearPolicy's own words, with a way back: to the Portfolio when signed in, otherwise to the
  * landing page and the Learn library (middleware.ts's session hint; it only picks the links). */

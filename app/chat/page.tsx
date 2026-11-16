@@ -7,7 +7,8 @@ import { useSearchParams } from "next/navigation";
 import type { ChatAnswer,ClaimItem } from "@/types";
 import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESSMENT_NOTICE } from "@/lib/chat/monetary-boundary";
 import { formatMoney } from "@/lib/format/currency";
-import { documentCardTitle } from "@/lib/policies/document-name";
+import { documentCardTitle,isMachineFilename } from "@/lib/policies/document-name";
+import { maskIdentityText } from "@/lib/chat/identity-numbers";
 import { customerAnswerText,customerError,customerMessage } from "@/components/customer-text";
 import { answerText,codeWords } from "@/components/answer-text";
 import { uniqueSteps } from "@/components/next-steps";
@@ -77,13 +78,19 @@ class StoppedWaiting extends Error{}
 
 /** What the household's library is like right now, so an empty chat says what a first question will be answered from:
  * nothing uploaded yet, documents still being read, or documents that could not be read. */
-type Library={total:number;reading:number;failed:{id:string;name:string}[]};
+type Library={total:number;reading:number;failed:{id:string;name:string;file:string|null}[]};
 const READING_STATUSES=new Set(["queued","uploaded","extracting","indexing"]);
 type LibraryPolicy={id:string;original_filename?:string|null;product_name?:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null;processing_status?:string;quarantine_status?:string};
 function libraryOf(policies:LibraryPolicy[]):Library{
   return {total:policies.length,
     reading:policies.filter(p=>READING_STATUSES.has(p.processing_status??"")&&(p.quarantine_status??"clean")!=="rejected").length,
-    failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:documentCardTitle({product_name:p.product_name??null,original_filename:p.original_filename??null,insurer:p.insurer,document_role:p.document_role,policy_number:p.policy_number})}))};
+    failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:documentCardTitle({product_name:p.product_name??null,original_filename:p.original_filename??null,insurer:p.insurer,document_role:p.document_role,policy_number:p.policy_number}),file:uploadedName(p)}))};
+}
+/** A document that could not be read and that nothing names (no product, no insurer, a file name a phone made up) is
+ * called by the file name the household uploaded ("IMG_0042.jpg"), as Home does, never a bare "Document". */
+function uploadedName(p:LibraryPolicy):string|null{
+  const file=p.original_filename?.trim();
+  return file&&!p.product_name?.trim()&&!p.insurer?.trim()&&isMachineFilename(file)?maskIdentityText(file):null;
 }
 
 /** The empty chat: an open invitation to ask anything in your own words (no fixed list of questions), plus what the
@@ -96,7 +103,7 @@ function ChatWelcome({library}:{library:Library|null}){
     </>:<>
       <p><strong>Ask anything about your policies, in your own words.</strong> If something happened, say who and what.</p>
       {library&&library.reading>0?<p className="chat-library-note" role="status">{library.reading===1?"One document is":`${library.reading} documents are`} still being read. You can ask now; answers use {library.reading===1?"it":"them"} once {library.reading===1?"it is":"they are"} ready.</p>:null}
-      {library&&library.failed.length?<p className="chat-library-note">{library.failed.length===1?<>&ldquo;{library.failed[0].name}&rdquo; couldn&rsquo;t be read, so answers can&rsquo;t use it.</>:<>{library.failed.length} documents couldn&rsquo;t be read, so answers can&rsquo;t use them.</>} <Link className="text-link" href={library.failed.length===1?`/policies#doc-${library.failed[0].id}`:"/policies"}>See Documents →</Link></p>:null}
+      {library&&library.failed.length?<p className="chat-library-note">{library.failed.length===1?<>&ldquo;{library.failed[0].file??library.failed[0].name}&rdquo; couldn&rsquo;t be read, so answers can&rsquo;t use it.</>:<>{library.failed.length} documents couldn&rsquo;t be read, so answers can&rsquo;t use them.</>} <Link className="text-link" href={library.failed.length===1?`/policies#doc-${library.failed[0].id}`:"/policies"}>See Documents →</Link></p>:null}
     </>}
   </div>;
 }
@@ -360,14 +367,15 @@ function ChatContent(){
   return <div className="page chat-page">
     <header className="chat-header">
       <div><h1><span className="title-icon"><Icon name="ask"/></span>Ask DearPolicy</h1></div>
-      <div className="chat-head-actions"><div className="auto-context"><strong><Icon name="person"/> Who it’s about</strong><span>{active?"Asking about "+active.display_name+". Mention someone else to switch.":"Mention a name or “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}><Icon name="plus"/>New chat</button></div>
+      {/* Who the chat is about shows once someone is chosen; until then the welcome says to name who. */}
+      <div className="chat-head-actions">{active?<div className="auto-context"><strong><Icon name="person"/> Asking about {active.display_name}</strong><span>Mention someone else to switch.</span></div>:null}<button className="button secondary compact" onClick={reset}><Icon name="plus"/>New chat</button></div>
     </header>
     {/* A first-time user has no previous chats: the empty panel is left out rather than shown as "Previous chats · 0". */}
-    {history.length||historyCursor?<details className="chat-history" open={!messages.length&&!busy&&history.length>0?true:undefined}><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
-      <div className="history-actions"><button className="mini-button danger" disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm clear all":"Clear all chat history"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>
+    {history.length||historyCursor?<details className="chat-history"><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
+      <div className="history-actions"><button className={`mini-button${confirmClearHistory?" danger armed":""}`} disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm delete all":"Delete all chats"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>
       {!history.length?<p>No previous chats yet.</p>:<ul>{history.map(chat=><li key={chat.id}>
         <button className="history-open" disabled={busy} onClick={()=>void restore(chat.id)} aria-current={conversationId===chat.id?"true":undefined}>{chat.title}<small>{family.find(p=>p.id===chat.family_member_id)?.display_name??"Whole family"} · {sgDate(chat.updated_at)}</small></button>
-        <button className="mini-button danger" onClick={()=>void removeChat(chat.id)} aria-label={"Delete chat: "+chat.title}>{confirmDeleteChatId===chat.id?"Confirm delete":"Delete"}</button>
+        <button className={`mini-button${confirmDeleteChatId===chat.id?" danger armed":""}`} onClick={()=>void removeChat(chat.id)} aria-label={"Delete chat: "+chat.title}>{confirmDeleteChatId===chat.id?"Confirm delete":"Delete"}</button>
         {confirmDeleteChatId===chat.id&&<button className="mini-button" onClick={()=>setConfirmDeleteChatId(null)}>Cancel</button>}
       </li>)}</ul>}
       {historyCursor?<button className="mini-button" onClick={()=>void refreshHistory(historyCursor).catch(()=>setHistoryError("Could not load more chats."))}>Load more chats</button>:null}

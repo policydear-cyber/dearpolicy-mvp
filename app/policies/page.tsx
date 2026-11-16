@@ -483,6 +483,9 @@ export default function PoliciesPage() {
               {!processing && !quarantineHeld && !scanRejected && (() => {
                 // A document with a page not read, or its cover reading unfinished, is never labelled plain "Ready".
                 const read = documentReadLabel(policy);
+                // Its pages were read but its benefits could not be yet: never a green "Ready" beside that note.
+                const benefits = benefitReading[policy.id];
+                if (read.tone === "ready" && benefits && (benefits.state === "failed" || benefits.state === "backed_off")) return <em className={`status ${policy.processing_status} partial`} data-testid="document-status"><Icon name="alert"/> Benefits not read yet</em>;
                 return <em className={`status ${policy.processing_status}${read.tone === "partial" ? " partial" : ""}`} data-testid="document-status">{read.tone === "ready" ? <><Icon name="check"/> Ready</> : read.tone === "partial" ? <><Icon name="alert"/> {read.label}</> : read.tone === "failed" ? <><Icon name="fileOff"/> {read.label}</> : read.label}</em>;
               })()}</div>
           </div>
@@ -541,7 +544,9 @@ export default function PoliciesPage() {
           {!processing && policy.processing_status === "ready" && (() => {
             const state = benefitReading[policy.id];
             const labels = found[policy.id] ?? [];
-            if (state && (state.state === "failed" || state.state === "backed_off")) return <p className="document-found warn" data-testid="document-found">Its benefits couldn&rsquo;t be read for Coverage yet{state.reason ? `: ${state.reason.charAt(0).toLowerCase()}${state.reason.slice(1).replace(/\.?\s*$/, ".")}` : "."}{state.state === "backed_off" && state.retryAfter ? " DearPolicy tries again later on its own." : ""} You can still ask about it.</p>;
+            // Said once, in plain words: what the household can do, never which internal service failed. Only a reason the
+            // household can act on (use Read again) is passed on.
+            if (state && (state.state === "failed" || state.state === "backed_off")) return <p className="document-found warn" data-testid="document-found">DearPolicy couldn&rsquo;t finish reading its benefits yet.{state.reason && /Read again/.test(state.reason) ? ` ${state.reason}` : state.state === "backed_off" && state.retryAfter ? " It tries again on its own." : ""} You can still ask about it.</p>;
             if (state) return <p className="document-found" data-testid="document-found">Reading its benefits for Coverage…</p>;
             // Only cover whose kind nothing names: said in words, never "Found Other".
             if (labels.length === 1 && labels[0] === OTHER_LABEL) return <p className="document-found" data-testid="document-found"><b>Found</b> its cover, but not yet what kind of cover it is. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
