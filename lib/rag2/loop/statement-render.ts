@@ -35,10 +35,39 @@ export const isUndefinedCase = (calc: object | null | undefined) => !!calc && UN
 // (Test engineer on #512, F2b: the case name anywhere inside the label's closing brackets -- "(Other Fracture/s)", "(Fracture(s))",
 // "(Other Fracture, see note 3)" -- not only straight before the ")")
 const CASE_BRACKET = /\s*\(((?:[^()]|\([^()]*\))*)\)\s*$/;
+const CASE_TERM = /\b((?:[A-Za-z]+\s+)?Fracture)(?:s|\/s|\(s\))?(?![A-Za-z])/i;
+/** A case name outside brackets needs its qualifier ("Other Fracture", "Compound Fracture"): a plain "Fractures" heading or "Bone
+ * Fracture" title names no case. */
+const QUALIFIED = String.raw`(?!(?:bone|bones|the|all|any|for|of)\s)[A-Za-z]+\s+Fractures?`;
 const caseOf = (label: string): { tag: string; row: string } | null => {
   const b = CASE_BRACKET.exec(label);
-  const tag = b ? /\b((?:[A-Za-z]+\s+)?Fracture)(?:s|\/s|\(s\))?(?![A-Za-z])/i.exec(b[1])?.[1] : null;
-  return b && tag ? { tag, row: label.slice(0, b.index) } : null;
+  const tag = b ? CASE_TERM.exec(b[1])?.[1] : null;
+  if (b && tag) return { tag, row: label.slice(0, b.index).trim() };
+  // (Test engineer on #512, F2c: the same label written another way -- "[Other Fracture]", "Arm … – Other Fracture", "Other Fracture:
+  // Arm …". Only a labelling form: a row that merely names a bone's fracture, "Fracture of the skull", is not a case label.)
+  const sq = /\s*\[([^\]]*)\]\s*$/.exec(label);
+  const sqTag = sq ? CASE_TERM.exec(sq[1])?.[1] : null;
+  if (sq && sqTag) return { tag: sqTag, row: label.slice(0, sq.index).trim() };
+  const tail = new RegExp(String.raw`\s+[-–—]\s*(${QUALIFIED})\s*$`, "i").exec(label);
+  if (tail) return { tag: CASE_TERM.exec(tail[1])![1], row: label.slice(0, tail.index).trim() };
+  const head = new RegExp(String.raw`^\s*(${QUALIFIED})\s*[:–—-]\s*(\S[\s\S]*)$`, "i").exec(label);
+  if (head) return { tag: CASE_TERM.exec(head[1])![1], row: head[2].trim() };
+  return null;
+};
+/** (Test engineer on #512, F10) A case printed as a sub-heading of the table -- "Other Fracture:" on its own line, then "Hip 75%" --
+ * labels the rows below it as surely as a bracket does. The nearest such heading above the row's line, within its table. */
+const headingAbove = (pageText: string, row: string): string | null => {
+  const lines = pageText.split("\n");
+  const key = row.trim().toLowerCase();
+  const at = lines.findIndex((l) => l.trim().toLowerCase().startsWith(key));
+  if (at < 0) return null;
+  for (let i = at - 1; i >= Math.max(0, at - 20); i--) {
+    const l = lines[i].trim();
+    if (!l) break;
+    const h = new RegExp(String.raw`^\(?(${QUALIFIED})\)?\s*:?$`, "i").exec(l);
+    if (h) return CASE_TERM.exec(h[1])![1];
+  }
+  return null;
 };
 /** A definition that settles which cases a term covers: "means / shall mean / is defined as" with a body of its own. A pointer
  * ("refers to the table in Part 2 above", "means the injuries listed in the Schedule") defines nothing (Test engineer on #512, F5). */
@@ -259,7 +288,13 @@ async function undefinedCaseOf(resultId: string, d: Deps): Promise<{ c: NonNulla
   const c = calcOutcomes(d.ctx).get(resultId);
   if (!c || c.kind !== "conditional_illustration" || c.calculator !== "lump_sum" || c.amount == null) return null;
   const pct = (c.record?.operands ?? []).find((o) => o.source === "document" && o.unit === "percent");
-  const cs = pct ? caseOf(pct.label) : null;
+  let cs = pct ? caseOf(pct.label) : null;
+  if (pct && !cs) {
+    const ev = c.evidence.find((e) => e.policyId === c.policyId && (e.passage?.text ?? "").includes(pct.label)) ?? c.evidence.find((e) => e.policyId === c.policyId);
+    const text = ev ? (await pageMap(d.ctx.accountId, c.policyId).catch(() => new Map<number, string>())).get(ev.passage?.onPage ?? ev.page.start) : null;
+    const h = text ? headingAbove(text, pct.label) : null;
+    if (h) cs = { tag: h, row: pct.label };
+  }
   const tag = cs?.tag ?? null;
   if (!pct || !tag) return null;
   const row = cs!.row;

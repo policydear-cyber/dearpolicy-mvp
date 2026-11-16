@@ -52,7 +52,10 @@ no promised payment, returned = saved = reopened.
      that withdraws them also replaces that follow-up.
    - **F2b:** the case name is found anywhere inside the label's closing brackets ("(Other Fracture/s)", "(Fracture(s))",
      "(Other Fracture, see note 3)", lower case). B24.
-   - Not changed: an UNLABELLED row of a benefit named "Simple Fracture or Other Fracture" (a "Hip" row) still shows its amount with
+   - **F2c / F10:** the same case written another way ("[Other Fracture]", "… - Other Fracture", "Other Fracture: …"), or printed
+     as a sub-heading line above the rows ("Other Fracture:" then "Hip 75%"), is the same undefined case. Outside brackets the case
+     needs its qualifier word, so a plain "Fractures" heading or "Fracture of the skull" row is not a case label. B25.
+   - Not changed: an UNLABELLED row (no bracket, no sub-heading) of a benefit named "Simple Fracture or Other Fracture" (a "Hip" row) still shows its amount with
      the existing note that the row is labelled as neither kind. Its row applies to that bone whichever kind it is, unlike a row the
      document assigns to one undefined kind. Hiding it too would remove the main fracture amount in every such schedule; that is
      DC's call, not part of this PR.
