@@ -7,7 +7,7 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 import { ensureBenefitSchema } from "@/lib/policies/benefit-catalog";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { readingModelLabel } from "@/lib/ai/reading-model";
-import { BENEFIT_READ_FAILURE_KEY,READ_FAILURE_REASON,noteReadFailure,readFailureNotes } from "@/lib/policies/read-failures";
+import { BENEFIT_READ_FAILURE_KEY,READ_FAILURE_REASON,latestReadFailureNotes,noteReadFailure,readFailureState } from "@/lib/policies/read-failures";
 import { maskIdentityText,maskShownText } from "@/lib/chat/identity-numbers";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 
@@ -62,14 +62,17 @@ async function conditionlessDocuments(accountId:string){
       ORDER BY p.created_at`,[accountId]);
   return result.rows;
 }
-/** Where each unread document stands: waiting (not read yet) or failed (its
- * last read failed; reasonCode/reason say why, in words safe to show). */
+/** Where each unread document stands: waiting (not read yet), failed (its last read failed; reasonCode/reason say
+ * why, in words safe to show) or backed_off (resting until retryAfter). The latest failure of either read counts
+ * (lib/policies/read-failures.ts), so Coverage says the same about the same document. */
 async function readingStates(accountId:string,unread:Unread[]){
-  const notes=await readFailureNotes(accountId,unread.map(d=>d.id),BENEFIT_READ_FAILURE_KEY);
+  const notes=await latestReadFailureNotes(accountId,unread.map(d=>d.id));
+  const now=Date.now();
   return unread.map(d=>{
     const note=notes.get(d.id);
-    return {policyId:d.id,name:d.name,state:note?"failed" as const:"waiting" as const,reasonCode:note?.reasonCode??null,
-      reason:note?READ_FAILURE_REASON[note.reasonCode]:null,attempts:note?.attempts??0,lastFailedAt:note?.lastFailedAt??null};
+    return {policyId:d.id,name:d.name,state:note?readFailureState(note,now):"waiting" as const,reasonCode:note?.reasonCode??null,
+      reason:note?READ_FAILURE_REASON[note.reasonCode]:null,attempts:note?.attempts??0,lastFailedAt:note?.lastFailedAt??null,
+      retryAfter:note?.retryAfter??null};
   });
 }
 export async function GET(request:NextRequest){

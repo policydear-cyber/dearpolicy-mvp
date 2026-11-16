@@ -77,3 +77,28 @@ export async function readFailureNotes(accountId: string, policyIds: string[], k
   }
   return out;
 }
+
+/** The Coverage read's note (lib/ledger/extract.ts writes it, with a retryAfter while it rests). */
+export const LEDGER_READ_FAILURE_KEY = "ledger_read_failure";
+/** Every read that keeps a failure note on a document. Benefits and Coverage read the same document separately, so
+ * both pages look at every note and take the latest one: the same document then has the same state, reason and retry
+ * time on both, instead of "still being read" on one page and "couldn't be read" on the other. */
+export const READ_FAILURE_KEYS = [BENEFIT_READ_FAILURE_KEY, LEDGER_READ_FAILURE_KEY] as const;
+
+/** Failed outright, or resting until retryAfter. */
+export function readFailureState(note: ReadFailureNote, now = Date.now()): "failed" | "backed_off" {
+  return note.retryAfter && Date.parse(note.retryAfter) > now ? "backed_off" : "failed";
+}
+
+/** The latest failure note across every read, per document (an equal or missing time keeps the earlier key's note). */
+export async function latestReadFailureNotes(accountId: string, policyIds: string[]): Promise<Map<string, ReadFailureNote>> {
+  const out = new Map<string, ReadFailureNote>();
+  const at = (n: ReadFailureNote) => (n.lastFailedAt ? Date.parse(n.lastFailedAt) : NaN);
+  for (const key of READ_FAILURE_KEYS) {
+    for (const [id, note] of await readFailureNotes(accountId, policyIds, key)) {
+      const held = out.get(id);
+      if (!held || (at(note) > at(held)) || (Number.isNaN(at(held)) && !Number.isNaN(at(note)))) out.set(id, note);
+    }
+  }
+  return out;
+}

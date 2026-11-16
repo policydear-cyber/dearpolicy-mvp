@@ -1548,7 +1548,8 @@ async function main(){
       await noteReadFailure(account,failed,BENEFIT_READ_FAILURE_KEY,raw);
       await noteReadFailure(account,failed,BENEFIT_READ_FAILURE_KEY,raw);
       // Ledger notes as lib/ledger/extract.ts writes them: one due again, one resting.
-      const note=(minutes:number)=>JSON.stringify({ledger_read_failure:{attempts:1,reasonCode:"reader_unavailable",lastFailedAt:new Date().toISOString(),retryAfter:new Date(Date.now()+minutes*60_000).toISOString()}});
+      // The one that failed outright failed on Coverage an hour before its Benefits read timed out: the latest wins on both pages.
+      const note=(minutes:number)=>JSON.stringify({ledger_read_failure:{attempts:1,reasonCode:"reader_unavailable",lastFailedAt:new Date(Date.now()-(minutes<0?3_600_000:0)).toISOString(),retryAfter:new Date(Date.now()+minutes*60_000).toISOString()}});
       await db.query("UPDATE policies SET reading_cache=coalesce(reading_cache,'{}'::jsonb)||$2::jsonb WHERE id=$1",[failed,note(-1)]);
       await db.query("UPDATE policies SET reading_cache=coalesce(reading_cache,'{}'::jsonb)||$2::jsonb WHERE id=$1",[resting,note(60)]);
 
@@ -1569,7 +1570,12 @@ async function main(){
       assert.equal(reading.get(failed)?.state,"failed","A failed read that is due again says failed, not still reading");
       assert.equal(reading.get(resting)?.state,"backed_off");
       assert.ok(reading.get(resting)?.retryAfter,"and says when it is tried again");
-      assert.match(String(reading.get(failed)?.reason),/unavailable/);
+      // One answer per document on both pages (site review B1: Benefits said "still being read" while Coverage said
+      // "couldn't be read, tries again after…" about the same documents).
+      for(const id of [waiting,failed,resting])for(const k of ["state","reasonCode","reason","retryAfter"])
+        assert.deepEqual(benefits.get(id)?.[k]??null,reading.get(id)?.[k]??null,`${k} of ${id} is the same on Benefits and Coverage`);
+      assert.equal(benefits.get(resting)?.state,"backed_off","Benefits no longer calls a resting document still being read");
+      assert.match(String(reading.get(failed)?.reason),/took too long/,"the latest failure is the one both pages give");
 
       // Reading the document successfully clears its failure.
       const read=await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({policyId:failed})}));
