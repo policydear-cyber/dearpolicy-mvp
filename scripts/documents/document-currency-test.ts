@@ -15,7 +15,7 @@ async function test(name: string, fn: () => void | Promise<void>) {
 }
 
 async function main() {
-  const { documentStatedCurrency, statedCurrencies, mentionedCurrencies, currencyStatements } = await import("@/lib/documents/document-currency");
+  const { documentStatedCurrency, statedCurrencies, currencyTokens, currencyStatements } = await import("@/lib/documents/document-currency");
   const FC = await import("@/lib/documents/fact-check");
   const { verifiedExtraction } = await import("@/lib/rag/ingest");
   const { PolicyExtractionSchema } = await import("@/lib/ai/extract-policy");
@@ -146,9 +146,10 @@ async function main() {
     ["Exchange rate: 1 USD = 1.35 SGD", []], ["Name\tMei Tan\t\tCurrency\tSGD", ["SGD"]],
   ];
   for (const [text, want] of shapes) await test(`U statedCurrencies(${JSON.stringify(text)})`, () => assert.deepEqual(statedCurrencies(text), want));
-  await test("U an illness abbreviation (CAD) is no currency; 'CAD 5,000' is", () => {
-    assert.deepEqual(mentionedCurrencies("Coronary Artery Disease (CAD)").filter((c) => c !== "$"), []);
-    assert.ok(mentionedCurrencies("Limit CAD 5,000").some((c) => c.startsWith("?")));
+  await test("U a currency code in brackets counts, even as an illness abbreviation (fail closed); a label abbreviation by a figure does not", () => {
+    assert.ok(currencyTokens("Coronary Artery Disease (CAD)").some((c) => c.code === "other"));
+    assert.ok(currencyTokens("Limit CAD 5,000").some((c) => c.code === "other"));
+    assert.deepEqual(currencyTokens("TPD\t200,000.00\nICU 30 days"), []);
   });
   await test("U documentStatedCurrency is null for a bare $ document with $ figures", () => assert.equal(documentStatedCurrency([{ text: "Currency: $\nDeath\t$200,000.00" }]), null));
 
@@ -183,11 +184,67 @@ async function main() {
       [cover("Currency : SGD"), { pageNumber: 2, text }]), [true, true]);
   });
   await test("G statement and blocking pieces", () => {
-    assert.deepEqual(currencyStatements("Currency of the Policy: US Dollars"), { stated: ["USD"], block: false });
-    assert.deepEqual(currencyStatements("Policy Currency : USS"), { stated: [], block: true });
-    assert.deepEqual(currencyStatements("Currency risk applies to investment-linked funds."), { stated: [], block: false });
-    assert.deepEqual(currencyStatements("Claims are payable in Singapore Dollars or the equivalent."), { stated: [], block: false });
+    assert.deepEqual(currencyStatements("Currency of the Policy: US Dollars"), ["USD"]);
+    assert.deepEqual(currencyStatements("Policy Currency : USS"), ["other"]);
+    assert.deepEqual(currencyStatements("Currency risk applies to investment-linked funds."), []);
+    assert.deepEqual(currencyStatements("Claims are payable in Singapore Dollars or the equivalent."), []);
+    // ... while the word "currency" outside a field, and "payable in" anything, are tokens the scan refuses.
+    assert.ok(currencyTokens("Currency risk applies to investment-linked funds.").some((c) => c.code === "other"));
   });
+
+  // ---- R2: round 2 gate repros (PR #507): an allow-list of currency-like tokens on every page
+  const D3 = (extra: string, page = 3): Cov => ({ category: "Death", amount: 300000, currency: "SGD", page, evidence: extra });
+  const withP3 = (p3: string, head = "Currency : SGD") => verified([...COVS(), D3("Death\t300,000.00")], [cover(head), { pageNumber: 2, text: SCHED }, P3(`Plan 2\nLife Assured\tMei Tan\n${p3}`)]);
+  for (const code of ["CNY", "JPY", "KRW", "THB", "IDR", "INR", "CHF", "TWD", "NZD", "CAD", "MOP", "KWD"])
+    await test(`R2-H1 a code in a column header with no figure beside it blocks ('Sum Assured (${code})')`, () => all(withP3(`Benefit\tSum Assured (${code})\nDeath\t300,000.00`), false));
+  for (const words of ["Korean Won", "Macau Patacas", "Turkish Lira", "Kuwaiti Dinars", "Russian Roubles", "Bangladeshi Taka"])
+    await test(`R2-H1 a currency word in a mid-line sentence blocks ('Plan 2 benefits are payable in ${words}.')`, () => all(withP3(`Plan 2 benefits are payable in ${words}.\nDeath\t300,000.00`), false));
+  for (const field of ["Policy Denomination : US", "Currency Unit : US", "Currencv : U5D"])
+    await test(`R2-H1 a currency-like field with a value off the list blocks ('${field}')`, () => all(withP3(`${field}\nDeath\t300,000.00`), false));
+  await test("R2-H2 a page image that prints two currencies blocks (real page check)", async () => {
+    const { crossCheckPages } = await import("@/lib/documents/layout-check");
+    const text = "Plan 2\nLife Assured\tMei Tan\nDeath\t300,000.00\nAnnual Premium\t1,200.00";
+    const run = async (image: string) => {
+      const [p3] = await crossCheckPages([{ pageNumber: 3, text, extractionMethod: "native" } as { pageNumber: number; text: string; extractionMethod: string; unchecked?: boolean }], [3], async () => [{ pageNumber: 3, text: image, extractionMethod: "ocr" }]);
+      assert.ok(!p3.unchecked, "the page agrees");
+      const pages = [cover("Currency : SGD"), { pageNumber: 2, text: SCHED }, p3];
+      return verifiedExtraction(extraction([D3("Death\t300,000.00")]), pages, { allPages: pages }).insuredPeople[0].coverages[0].evidenceVerified;
+    };
+    assert.equal(await run("Plan 2\nLife Assured\tMei Tan\nDeath\tUS$300,000.00\nAnnual Premium\tS$1,200.00"), false);
+    // Control: an image that prints only the stated currency keeps the fill.
+    assert.equal(await run("Plan 2\nLife Assured\tMei Tan\nDeath\tS$300,000.00\nAnnual Premium\tS$1,200.00"), true);
+  });
+  await test("R2-H1 control: the stated currency's own code in a column header keeps the fill", () => all(withP3("Benefit\tSum Assured (SGD)\nDeath\t300,000.00"), true));
+  await test("R2-H3 an OCR'd 'USS' on the evidence line is not a bare line", () => {
+    assert.deepEqual(verified([D3("Death\tUSS 300,000.00", 2)], [cover("Currency : SGD"), { pageNumber: 2, text: "Benefit Schedule\nLife Assured\tMei Tan\nDeath\tUSS 300,000.00" }]), [false]);
+  });
+  await test("R2-H4 an unchecked page's own figure lines (stripped by the page check) still block (real page check)", async () => {
+    const { crossCheckPages } = await import("@/lib/documents/layout-check");
+    const text = "Plan 2\nLife Assured\tMei Tan\nDeath\tUS$300,000.00\nCurrency: USD (see Note 3)";
+    const [p3] = await crossCheckPages([{ pageNumber: 3, text, extractionMethod: "native" } as { pageNumber: number; text: string; extractionMethod: string; unchecked?: boolean }], [3], async () => null);
+    assert.ok(p3.unchecked && !/300,000/.test(p3.text), "the page is unchecked and its figure lines stripped");
+    const all3 = [cover("Currency : SGD"), { pageNumber: 2, text: SCHED }, p3];
+    const e = verifiedExtraction(extraction(COVS().slice(0, 1)), all3.filter((p) => !(p as { unchecked?: boolean }).unchecked), { allPages: all3 });
+    assert.equal(e.insuredPeople[0].coverages[0].evidenceVerified, false);
+  });
+  for (const [label, pages] of [
+    ["an exception two lines down", [cover("All amounts are in SGD.\nThis schedule forms part of your policy.\nExcept for the Overseas Rider, shown on page 3."), { pageNumber: 2, text: SCHED }]],
+    ["an exception after blank lines (a footnote)", [cover("All amounts are in SGD.*\n\n\n* The Overseas Rider is not in SGD."), { pageNumber: 2, text: SCHED }]],
+    ["'not in SGD' on another page", [cover("All amounts are in SGD."), { pageNumber: 2, text: SCHED + "\nThe rider amounts above are not in SGD." }]],
+  ] as [string, P[]][]) await test(`R2-Ma ${label} blocks`, () => all(verified(COVS(), pages), false));
+  for (const head of ["Premium Information\nCurrency : SGD", "Premium Schedule (Amounts in S$)", "Premium: all amounts are in SGD", "All figures shown in this table are in SGD", "Cash Value Table\nAmounts in SGD"])
+    await test(`R2-Mb a scoped statement is not the document's ('${head.replace(/\n/g, " / ")}')`, () => all(verified(COVS(), [cover(head), { pageNumber: 2, text: SCHED }]), false));
+  for (const [label, p3] of [["an empty page", { pageNumber: 3, text: "" }], ["a page no reader read", { pageNumber: 3, text: "", notRead: true }], ["an unreadable page", { pageNumber: 3, text: "x", unreadable: true }]] as const)
+    await test(`R2-Mc ${label} blocks`, () => {
+      const pages = [cover("Currency : SGD"), { pageNumber: 2, text: SCHED }];
+      const e = verifiedExtraction(extraction(COVS().slice(0, 1)), pages, { allPages: [...pages, p3] });
+      assert.equal(e.insuredPeople[0].coverages[0].evidenceVerified, false);
+    });
+  for (const [label, amount] of [["Fund units\t100,000.00", 100000], ["Start\t12.50", 12.5], ["Annual Premium\t1,200.00", 1200], ["Deductible\t1,000.00", 1000],
+    ["Cash value at age 65\t50,000.00", 50000], ["Excess\t500.00", 500], ["Policy Term\t20.00", 20]] as const)
+    await test(`R2-L a line that is not a cover benefit is never confirmed this way ('${label.replace("\t", "<TAB>")}')`, () => {
+      assert.deepEqual(verified([{ category: "Death", amount, currency: "SGD", page: 2, evidence: label }], [cover("Currency : SGD"), { pageNumber: 2, text: `Benefit Schedule\nLife Assured\tMei Tan\n${label}` }]), [false]);
+    });
 
   if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
   console.log(`document-currency: ${passed} passed, 0 failed`);

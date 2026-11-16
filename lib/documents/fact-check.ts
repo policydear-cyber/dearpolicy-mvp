@@ -10,7 +10,7 @@
  * the verbatim page they cite. Pure functions; no I/O.
  */
 import { moneyShapedFigure } from "@/lib/documents/image-currency";
-import { documentStatedCurrency, figureStandsAlone, lineNamesCurrency } from "@/lib/documents/document-currency";
+import { coverBenefitLabel, documentStatedCurrency, figureStandsAlone, lineNamesCurrency, type CurrencyPage } from "@/lib/documents/document-currency";
 import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, namePrinted as nameWordsOnLine, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
@@ -19,7 +19,7 @@ import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
 import { NOT_CHECKED } from "@/lib/documents/layout-check";
 import { amountAppears, documentDateFrom, locatePassage, looksLikeInjectedInstruction, nameAppears, parsePrintedDate, printedDateMatches, printedDates } from "@/lib/documents/evidence";
 
-type Page = { pageNumber: number; text: string; imageCurrency?: string };
+type Page = { pageNumber: number; text: string; imageCurrency?: string; imageText?: string; rawText?: string };
 const norm = (value: string) => String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 const nameKey = (value: string) => norm(value).replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -316,15 +316,13 @@ export type FactCheckResult = { extraction: PolicyExtraction; dropped: string[] 
  * `roleFromReader`: the role was the reader's choice (no wording rule decided it), so it must be plausible. */
 export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: { roleFromReader?: boolean; documentTitle?: string | null;
   /** Every page of the document, checked or not: another currency on any of them blocks the document-level currency. */
-  allPages?: { pageNumber: number; text: string }[];
-  /** false: the document-level currency rule is off (the stored-cover recheck compares with and without it). */
-  documentCurrency?: boolean } = {}): FactCheckResult {
+  allPages?: ({ pageNumber: number; text: string } & CurrencyPage)[] } = {}): FactCheckResult {
   const fullText = pages.map((p) => p.text).join("\n");
   const pageText = new Map(pages.map((p) => [p.pageNumber, p.text]));
   const pageCurrency = new Map(pages.flatMap((p) => p.imageCurrency ? [[p.pageNumber, p.imageCurrency] as const] : []));
   // The one currency this document states for all its amounts ("Currency : Singapore Dollar"), only within this document
   // and only when it names no other currency on any of its pages (lib/documents/document-currency).
-  const statedCurrency = opts.documentCurrency === false ? null : documentStatedCurrency(pages, opts.allPages ?? pages);
+  const statedCurrency = documentStatedCurrency(pages, opts.allPages ?? pages);
   const dropped: string[] = [];
   const drop = (what: string) => { dropped.push(what); return null; };
   const printedOr = (value: string | null, what: string) => (value && !namePrinted(fullText, value) ? drop(what + " that is not printed in this document") : value);
@@ -630,7 +628,7 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
       // SGD"), on any of its pages: a money-shaped figure on an evidence line that prints no explicit currency of its own is
       // confirmed only in exactly that currency (lib/documents/document-currency). A line's own currency always decides.
       if (!ok && statedCurrency && (coverage.currency ?? "").toUpperCase() === statedCurrency && (!code || code === statedCurrency))
-        ok = onEvidence((line) => !lineNamesCurrency(line) && moneyShapedFigure(line, Number(coverage.amount)) && figureStandsAlone(line, Number(coverage.amount)));
+        ok = onEvidence((line) => !lineNamesCurrency(line) && moneyShapedFigure(line, Number(coverage.amount)) && figureStandsAlone(line, Number(coverage.amount)) && coverBenefitLabel(line, Number(coverage.amount)));
     }
   }
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;

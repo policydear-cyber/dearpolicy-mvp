@@ -977,6 +977,10 @@ export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ?
 type CheckedPage = { pageNumber: number; text: string; extractionMethod?: string; unreadable?: boolean; unchecked?: boolean; uncheckedWhy?: string; partChecked?: boolean; checkLog?: string;
   /** The one currency the page image prints when its text layer prints none (lib/documents/image-currency). */
   imageCurrency?: string;
+  /** The page's own text before this check replaced it (an unchecked or part-checked page loses its figure lines), and
+   * the image reading's text: read in memory at intake only, so the document-level currency sees every currency the
+   * page prints (lib/documents/document-currency). */
+  rawText?: string; imageText?: string;
   /** The page's lines as its geometry gave them: where each cell starts (lib/documents/layout.ts). */
   lines?: { text: string; cells: string[]; xs?: number[]; y?: number }[] };
 /** Where each cell of each text line starts on the page, when the stored text is still exactly the geometry's lines. */
@@ -1006,13 +1010,16 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
     // A page the image confirmed (in whole or in part) whose text layer prints no currency takes the one currency the image
     // prints, for its confirmed figures only (DC 11 Nov, option b; lib/documents/image-currency).
     const currency = check.text != null || check.agree ? singleImageCurrency(p.text, image!.text) : null;
-    const withCurrency = <T extends P>(x: T): T => (currency ? { ...x, imageCurrency: currency } : x);
+    // An image reading word for word the same as the text adds nothing to scan; a page left as it was stays the same object.
+    const imageText = image && !image.unreadable && image.extractionMethod === "ocr" && image.text !== p.text ? image.text : undefined;
+    const withCurrency = <T extends P>(x: T): T => (!currency && imageText == null && x.text === p.text ? x
+      : { ...x, ...(currency ? { imageCurrency: currency } : {}), ...(imageText != null ? { imageText } : {}), ...(x.text !== p.text ? { rawText: p.rawText ?? p.text } : {}) });
     if (check.agree) return withCurrency(check.text && check.text !== p.text ? { ...p, text: check.text, checkLog: check.log } : p);
     // Every figure line confirmed, and the image prints a line the text does not: nothing on the page is unconfirmed.
     if (check.text === p.text) return withCurrency({ ...p, checkLog: check.log });
     // Some lines confirmed: those are kept word for word, the rest keep their words and lose their figures (Critic plan step 2).
     if (check.text) return withCurrency({ ...p, text: check.text, partChecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log });
-    return { ...p, text: uncheckedText(p.text), unchecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log };
+    return { ...p, text: uncheckedText(p.text), rawText: p.rawText ?? p.text, ...(imageText != null ? { imageText } : {}), unchecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log };
   });
 }
 

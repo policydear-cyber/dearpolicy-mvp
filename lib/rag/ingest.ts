@@ -20,7 +20,7 @@ import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/li
 import { buildCodeOnlyExtraction, extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
 import { REFERENCE_ROLES, deterministicDocumentRole, documentAuthority, looksLikeActualPersonName, printedDocumentRole, roleOnReread, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
 import { factCheckExtraction, personPrinted } from "@/lib/documents/fact-check";
-import { PAGE_IMAGE_CURRENCY_KEY } from "@/lib/documents/document-currency";
+import type { CurrencyPage } from "@/lib/documents/document-currency";
 import { PolicyExtractionSchema } from "@/lib/ai/extract-policy";
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { familyMembersForAccount, findFamilyMatchWithKind, householdNameMatches, linkRelatedReferenceDocuments, preferHouseholdMatch, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
@@ -249,13 +249,13 @@ async function previousReading(args: ProcessPolicyArgs): Promise<PolicyExtractio
 /** Round 9: a reading as it may be stored -- roles by the document's own
  * wording, people and cover re-found on their pages, and every name, figure,
  * unit, date, number and role checked against the printed text. */
-export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string; imageCurrency?: string }[], opts: { documentTitle?: string | null; allPages?: { pageNumber: number; text: string }[]; documentCurrency?: boolean } = {}): PolicyExtraction {
+export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string; imageCurrency?: string }[], opts: { documentTitle?: string | null; allPages?: ({ pageNumber: number; text: string } & CurrencyPage)[] } = {}): PolicyExtraction {
   // A page left out because it could not be checked gives no fact, but it is still part of the document: the kind of
   // document is decided on every page, as it is when every page could be checked. Another currency on such a page still
   // blocks the document-level currency (lib/documents/document-currency).
   const rolePages = opts.allPages ?? pages;
   const roleFromReader = deterministicDocumentRole(rolePages, null) == null;
-  const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages, rolePages), pages), pages, { roleFromReader, documentTitle: opts.documentTitle, allPages: rolePages, documentCurrency: opts.documentCurrency }).extraction;
+  const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages, rolePages), pages), pages, { roleFromReader, documentTitle: opts.documentTitle, allPages: rolePages }).extraction;
   return crossCheckPrintedFacts(checked, pages);
 }
 
@@ -565,7 +565,6 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // (Baidu gave no text and the AI reader is switched off, OCR_AI_READER=off) leaves the pages as they were: nothing
     // gained, nothing lost, and the processing history says so. A check of a page whose table text looks scrambled never
     // keeps it: unread, that page is unchecked as before.
-    const pageImageCurrency: Record<string, string | null> = {};
     const crossCheck = async (numbers: number[], keepUnread = false) => {
       if (!numbers.length || !ocrSourceBytes) return;
       await progress(args, "ocr", 26, `Checking ${numbers.length} table page${numbers.length === 1 ? "" : "s"} against the page image…`, "extracting").catch(() => undefined);
@@ -584,9 +583,6 @@ export async function processPolicy(args: ProcessPolicyArgs) {
         if (kept.unread.length) await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_NOT_READ",
           error: `pages ${kept.unread.join(", ")}: no image reader read them (Baidu gave no text; the AI reader is switched off); kept as they were` }).catch(() => undefined);
       } else pages = await crossCheckPages(pages, numbers, read);
-      // Which pages were looked at against their image, and the one currency each image printed (or none), kept with the
-      // reading, so a later re-check from stored text knows what the image said (lib/documents/recheck-stored-cover).
-      for (const n of numbers) pageImageCurrency[String(n)] = pages.find((p) => p.pageNumber === n)?.imageCurrency ?? null;
       // Why each page failed goes to the server-only processing history, never into the page text (Critic plan step 3).
       // With it, what kind of difference it was, in counts and fixed words only, so one run shows the cause (Critic plan
       // step 1); a page whose every figure line was confirmed is recorded too when the image printed a line the text did not.
@@ -760,7 +756,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       [
         extraction.insurer, extraction.productName, extraction.policyNumber, extraction.groupPolicyNumber, extraction.policyType, extraction.documentRole,
         extraction.personalCoverageConfirmed, authority.level, authority.label, extraction.startDate || null, extraction.renewalOrExpiryDate || null,
-        pages.length, JSON.stringify({ ...extraction, [PAGE_IMAGE_CURRENCY_KEY]: pageImageCurrency }), args.policyId, args.accountId,
+        pages.length, JSON.stringify(extraction), args.policyId, args.accountId,
       ],
     );
     if (evidenceColumnsReady("policies")) {
