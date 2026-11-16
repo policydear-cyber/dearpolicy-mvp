@@ -155,6 +155,9 @@ jobs:
       - name: Scanned pages mark a thousands comma read as a dot (S$935.542 for S$935,542; the document's own style; negative controls)
         run: npm run documents:dot-grouped-figure-test
 
+      - name: A document stating its one currency confirms its bare schedule figures in it (bare $, other documents, conflicts, exchange clauses; negative controls)
+        run: npm run documents:document-currency-test
+
       - name: Upload and reading failures say what happened and what to do, and name every unread page (mocked OCR, offline)
         run: npm run documents:upload-failure-paths-test
 

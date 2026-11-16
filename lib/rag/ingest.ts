@@ -20,6 +20,7 @@ import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/li
 import { buildCodeOnlyExtraction, extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
 import { REFERENCE_ROLES, deterministicDocumentRole, documentAuthority, looksLikeActualPersonName, printedDocumentRole, roleOnReread, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
 import { factCheckExtraction, personPrinted } from "@/lib/documents/fact-check";
+import type { CurrencyPage } from "@/lib/documents/document-currency";
 import { PolicyExtractionSchema } from "@/lib/ai/extract-policy";
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { familyMembersForAccount, findFamilyMatchWithKind, householdNameMatches, linkRelatedReferenceDocuments, preferHouseholdMatch, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
@@ -248,12 +249,13 @@ async function previousReading(args: ProcessPolicyArgs): Promise<PolicyExtractio
 /** Round 9: a reading as it may be stored -- roles by the document's own
  * wording, people and cover re-found on their pages, and every name, figure,
  * unit, date, number and role checked against the printed text. */
-export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string; imageCurrency?: string }[], opts: { documentTitle?: string | null; allPages?: { pageNumber: number; text: string }[] } = {}): PolicyExtraction {
+export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string; imageCurrency?: string }[], opts: { documentTitle?: string | null; allPages?: ({ pageNumber: number; text: string } & CurrencyPage)[] } = {}): PolicyExtraction {
   // A page left out because it could not be checked gives no fact, but it is still part of the document: the kind of
-  // document is decided on every page, as it is when every page could be checked.
+  // document is decided on every page, as it is when every page could be checked. Another currency on such a page still
+  // blocks the document-level currency (lib/documents/document-currency).
   const rolePages = opts.allPages ?? pages;
   const roleFromReader = deterministicDocumentRole(rolePages, null) == null;
-  const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages, rolePages), pages), pages, { roleFromReader, documentTitle: opts.documentTitle }).extraction;
+  const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages, rolePages), pages), pages, { roleFromReader, documentTitle: opts.documentTitle, allPages: rolePages }).extraction;
   return crossCheckPrintedFacts(checked, pages);
 }
 

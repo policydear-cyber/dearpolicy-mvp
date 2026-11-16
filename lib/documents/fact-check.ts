@@ -10,6 +10,7 @@
  * the verbatim page they cite. Pure functions; no I/O.
  */
 import { moneyShapedFigure } from "@/lib/documents/image-currency";
+import { coverBenefitLabel, documentStatedCurrency, figureStandsAlone, lineNamesCurrency, lineNamesOtherCurrency, type CurrencyPage } from "@/lib/documents/document-currency";
 import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, namePrinted as nameWordsOnLine, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
@@ -18,7 +19,7 @@ import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
 import { NOT_CHECKED } from "@/lib/documents/layout-check";
 import { amountAppears, documentDateFrom, locatePassage, looksLikeInjectedInstruction, nameAppears, parsePrintedDate, printedDateMatches, printedDates } from "@/lib/documents/evidence";
 
-type Page = { pageNumber: number; text: string; imageCurrency?: string };
+type Page = { pageNumber: number; text: string; imageCurrency?: string; imageText?: string; rawText?: string };
 const norm = (value: string) => String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 const nameKey = (value: string) => norm(value).replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -313,10 +314,15 @@ export type FactCheckResult = { extraction: PolicyExtraction; dropped: string[] 
 
 /** Re-finds every fact of a policy extraction in the document's pages.
  * `roleFromReader`: the role was the reader's choice (no wording rule decided it), so it must be plausible. */
-export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: { roleFromReader?: boolean; documentTitle?: string | null } = {}): FactCheckResult {
+export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: { roleFromReader?: boolean; documentTitle?: string | null;
+  /** Every page of the document, checked or not: another currency on any of them blocks the document-level currency. */
+  allPages?: ({ pageNumber: number; text: string } & CurrencyPage)[] } = {}): FactCheckResult {
   const fullText = pages.map((p) => p.text).join("\n");
   const pageText = new Map(pages.map((p) => [p.pageNumber, p.text]));
   const pageCurrency = new Map(pages.flatMap((p) => p.imageCurrency ? [[p.pageNumber, p.imageCurrency] as const] : []));
+  // The one currency this document states for all its amounts ("Currency : Singapore Dollar"), only within this document
+  // and only when it names no other currency on any of its pages (lib/documents/document-currency).
+  const statedCurrency = documentStatedCurrency(pages, opts.allPages ?? pages);
   const dropped: string[] = [];
   const drop = (what: string) => { dropped.push(what); return null; };
   const printedOr = (value: string | null, what: string) => (value && !namePrinted(fullText, value) ? drop(what + " that is not printed in this document") : value);
@@ -380,7 +386,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
     const hint = person.relationshipHint && hintNearName(pages, person.name, person.relationshipHint) ? person.relationshipHint : null;
     const coverages = person.coverages.map((c) => checkCoverage({ ...c,
       productName: c.productName && namePrinted(fullText, c.productName) ? c.productName : null,
-      policyNumber: c.policyNumber && printedNumber(c.policyNumber) ? c.policyNumber : null }, person.name, pageText, pageCurrency));
+      policyNumber: c.policyNumber && printedNumber(c.policyNumber) ? c.policyNumber : null }, person.name, pageText, pageCurrency, statedCurrency));
     if (same) { same.coverages.push(...coverages); same.relationshipHint ??= hint; }
     else people.push({ ...person, relationshipHint: hint, coverages });
   }
@@ -599,7 +605,7 @@ function hintNearName(pages: Page[], name: string, hint: string) {
  * page, and the amount is printed as money in the evidence (or on the line
  * that carries it). Anything less is kept as unverified, which the chat never
  * states as a figure. */
-function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["coverages"][number]>(coverage: C, person: string, pageText: Map<number, string>, imageCurrency: Map<number, string> = new Map()): C {
+function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["coverages"][number]>(coverage: C, person: string, pageText: Map<number, string>, imageCurrency: Map<number, string> = new Map(), statedCurrency: string | null = null): C {
   const text = coverage.sourcePage != null ? pageText.get(coverage.sourcePage) ?? "" : "";
   const evidence = String(coverage.evidenceText ?? "");
   let ok = !!text && evidence.trim().length >= 3 && !looksLikeInjectedInstruction(evidence) && personPrinted(text, person);
@@ -618,6 +624,11 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
       // a money-shaped figure on the evidence line is confirmed only in exactly that currency (Critic #417 C1, C2).
       const code = coverage.sourcePage != null ? imageCurrency.get(coverage.sourcePage) : undefined;
       if (!ok && code && (coverage.currency ?? "").toUpperCase() === code) ok = onEvidence((line) => moneyShapedFigure(line, Number(coverage.amount)));
+      // A document that states its one currency for all its amounts ("Currency : Singapore Dollar", "All amounts are in
+      // SGD"), on any of its pages: a money-shaped figure on an evidence line that prints no explicit currency of its own is
+      // confirmed only in exactly that currency (lib/documents/document-currency). A line's own currency always decides.
+      if (!ok && statedCurrency && (coverage.currency ?? "").toUpperCase() === statedCurrency && (!code || code === statedCurrency))
+        ok = onEvidence((line) => !lineNamesCurrency(line) && moneyShapedFigure(line, Number(coverage.amount)) && figureStandsAlone(line, Number(coverage.amount)) && coverBenefitLabel(line, Number(coverage.amount)));
     }
   }
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;
@@ -704,8 +715,10 @@ function closestLines(lines: string[], evidence: string): { lines: string[]; all
 }
 function currencyOk(line: string, currency: string) {
   const code = currency.toUpperCase();
-  if (code === "SGD") return /S\$|(?<![A-Za-z])SGD(?![A-Za-z])|SG\$/i.test(line) || new RegExp(GLUED_CODE("SGD")).test(line)
-    || !(/US\$|(?<![A-Za-z])(?:USD|RM|MYR)(?![A-Za-z])|€|£|HK\$/i.test(line) || new RegExp(GLUED_CODE("USD|RM|MYR")).test(line));
+  // "US$" is not "S$" (a US-dollar line never confirms a Singapore-dollar reading).
+  // A line printing no currency is taken as SGD only when it prints no other currency's code, sign or word at all.
+  if (code === "SGD") return /(?<!U)S\$|(?<![A-Za-z])SGD(?![A-Za-z])|SG\$/i.test(line) || new RegExp(GLUED_CODE("SGD")).test(line)
+    || !(/US\$|(?<![A-Za-z])(?:USD|RM|MYR)(?![A-Za-z])|€|£|HK\$/i.test(line) || new RegExp(GLUED_CODE("USD|RM|MYR")).test(line) || lineNamesOtherCurrency(line, "SGD"));
   if (code === "USD") return /US\$|(?<![A-Za-z])USD(?![A-Za-z])/i.test(line) || new RegExp(GLUED_CODE("USD")).test(line);
   return true;
 }

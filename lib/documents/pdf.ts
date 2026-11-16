@@ -41,6 +41,9 @@ export type PdfPage = {
   partChecked?: boolean;
   /** The one currency the page image prints when its text layer prints none: read in memory at intake only (lib/documents/image-currency). */
   imageCurrency?: string;
+  /** The page's own text before the image check replaced it, and the image reading's text: in memory at intake only
+   * (lib/documents/layout-check crossCheckPages), for the document-level currency's scan (lib/documents/document-currency). */
+  rawText?: string; imageText?: string;
   /** What kind of difference the two readings had (counts, shapes and positions of the figures, never a figure or a
    * word): kept for the processing history only. */
   checkLog?: string;
