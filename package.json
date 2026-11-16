@@ -458,6 +458,8 @@
     "benefit-table:policy-version-test": "node --import tsx scripts/benefit-table/policy-version-test.ts",
     "documents:image-currency-test": "node --import tsx scripts/documents/image-currency-test.ts",
     "documents:document-currency-test": "node --import tsx scripts/documents/document-currency-test.ts",
+    "documents:recheck-stored-cover": "node --import tsx scripts/documents/recheck-stored-cover.ts",
+    "documents:recheck-stored-cover-test": "node --import tsx scripts/documents/recheck-stored-cover-test.ts",
     "documents:code-in-word-test": "node --import tsx scripts/documents/code-in-word-test.ts",
     "policies:catalog-whole-read-test": "node --import tsx scripts/policies/catalog-whole-read-test.ts",
     "public-site:auth-boundary-test": "node --import tsx --test scripts/public-site/auth-boundary-test.ts"
