@@ -21,7 +21,7 @@ import { ensureLedgerSchema } from "@/lib/ledger/store";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
-import { READ_FAILURE_REASON,readFailureCode,readFailureNotes,type ReadFailureCode } from "@/lib/policies/read-failures";
+import { LEDGER_READ_FAILURE_KEY,READ_FAILURE_REASON,latestReadFailureNotes,readFailureCode,readFailureState,type ReadFailureCode } from "@/lib/policies/read-failures";
 import { UNTRUSTED_DOCUMENT_NOTICE,cachedReading,ensureEvidenceSchema,readingModelIdentity } from "@/lib/documents/evidence";
 import { annotateLedgerEvidence,markConflicts } from "@/lib/documents/evidence-store";
 import { unparsedBenefitLines } from "@/lib/policies/catalog-builder";
@@ -323,7 +323,7 @@ export async function readDocumentIntoLedger(args:{accountId:string;policyId:str
 // that doubles with each failure (10 minutes, 20, 40 ... at most a day); a
 // person asking for the read on the Coverage Ledger page reads it at once.
 // The note lives in the document's own reading cache, so no schema change.
-export const LEDGER_RETRY_KEY="ledger_read_failure";
+export const LEDGER_RETRY_KEY=LEDGER_READ_FAILURE_KEY;
 const LEDGER_RETRY_BASE_MS=10*60_000,LEDGER_RETRY_MAX_MS=24*3600_000;
 let readingCacheColumn:Promise<boolean>|null=null;
 async function hasReadingCache(){
@@ -425,11 +425,12 @@ export async function ledgerReadDocuments(accountId:string):Promise<LedgerReadDo
     `SELECT p.id::text AS id,coalesce(p.product_name,p.original_filename) AS name FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")}
        AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
        AND EXISTS(SELECT 1 FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id) ORDER BY p.created_at`,[accountId])).rows;
-  const notes=await readFailureNotes(accountId,docs.map(d=>d.id),LEDGER_RETRY_KEY);
+  // The latest failure of either read (lib/policies/read-failures.ts), so Benefits says the same about this document.
+  const notes=await latestReadFailureNotes(accountId,docs.map(d=>d.id));
   const now=Date.now(),current=(globalThis as ExtractGlobals).__dearpolicyLedgerReadingDoc?.get(accountId);
   return docs.map(d=>{
     const note=notes.get(d.id),retryAfter=note?.retryAfter??null;
-    const state:LedgerReadState=current===d.id?"reading":!note?"waiting":retryAfter&&Date.parse(retryAfter)>now?"backed_off":"failed";
+    const state:LedgerReadState=current===d.id?"reading":!note?"waiting":readFailureState(note,now);
     return {policyId:d.id,name:d.name,state,reasonCode:note?.reasonCode??null,reason:note?READ_FAILURE_REASON[note.reasonCode]:null,
       attempts:note?.attempts??0,lastFailedAt:note?.lastFailedAt??null,retryAfter};
   });

@@ -6,6 +6,7 @@ import { describePineconeState,pineconeEnabled } from "@/lib/rag/pinecone";
 import { simpleChatModel } from "@/lib/simple-chat/flag";
 import { truthy } from "@/lib/launch/guards";
 import { limitOpenEndpoint } from "@/lib/http/open-endpoint-limit";
+import { requireActiveClaimReviewer } from "@/lib/claims/reviewers/boundary";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "public" as const;
@@ -37,8 +38,13 @@ export async function GET(request:Request){
   const pineconeState=await describePineconeState();
   const search:ServiceState={...pineconeState,label:"Semantic search"};
   const services=[database,reading,chat,judgement,search];
+  const ok=services.every(s=>s.ok);
+  // Open to anyone, so the public answer is only whether DearPolicy is up: no model supplier, search service,
+  // region or fix hints. The per-service table is for DearPolicy staff (/operator), the same gate as that area.
+  const staff=await requireActiveClaimReviewer().then(()=>true,()=>false);
+  if(!staff)return NextResponse.json({ok,status:ok?"ok":"degraded",hosted:true});
   // Where this function ran (vercel.json "regions"): it should sit next to the database (Supabase, Singapore).
-  return NextResponse.json({ok:services.every(s=>s.ok),services,hosted:true,region:process.env.VERCEL_REGION??null,
+  return NextResponse.json({ok,status:ok?"ok":"degraded",services,hosted:true,region:process.env.VERCEL_REGION??null,
     // Kept for anything that read the old shape.
     app:"ok",database:database.ok?"ok":database.detail,llm:reading.ok?"ok":reading.detail,
     embeddings:pineconeEnabled()?(search.ok?"ok":search.detail):"not configured"});

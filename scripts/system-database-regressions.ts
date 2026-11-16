@@ -1548,7 +1548,8 @@ async function main(){
       await noteReadFailure(account,failed,BENEFIT_READ_FAILURE_KEY,raw);
       await noteReadFailure(account,failed,BENEFIT_READ_FAILURE_KEY,raw);
       // Ledger notes as lib/ledger/extract.ts writes them: one due again, one resting.
-      const note=(minutes:number)=>JSON.stringify({ledger_read_failure:{attempts:1,reasonCode:"reader_unavailable",lastFailedAt:new Date().toISOString(),retryAfter:new Date(Date.now()+minutes*60_000).toISOString()}});
+      // The one that failed outright failed on Coverage an hour before its Benefits read timed out: the latest wins on both pages.
+      const note=(minutes:number)=>JSON.stringify({ledger_read_failure:{attempts:1,reasonCode:"reader_unavailable",lastFailedAt:new Date(Date.now()-(minutes<0?3_600_000:0)).toISOString(),retryAfter:new Date(Date.now()+minutes*60_000).toISOString()}});
       await db.query("UPDATE policies SET reading_cache=coalesce(reading_cache,'{}'::jsonb)||$2::jsonb WHERE id=$1",[failed,note(-1)]);
       await db.query("UPDATE policies SET reading_cache=coalesce(reading_cache,'{}'::jsonb)||$2::jsonb WHERE id=$1",[resting,note(60)]);
 
@@ -1569,7 +1570,33 @@ async function main(){
       assert.equal(reading.get(failed)?.state,"failed","A failed read that is due again says failed, not still reading");
       assert.equal(reading.get(resting)?.state,"backed_off");
       assert.ok(reading.get(resting)?.retryAfter,"and says when it is tried again");
-      assert.match(String(reading.get(failed)?.reason),/unavailable/);
+      // One answer per document on both pages (site review B1: Benefits said "still being read" while Coverage said
+      // "couldn't be read, tries again after…" about the same documents).
+      for(const id of [waiting,failed,resting])for(const k of ["state","reasonCode","reason","retryAfter"])
+        assert.deepEqual(benefits.get(id)?.[k]??null,reading.get(id)?.[k]??null,`${k} of ${id} is the same on Benefits and Coverage`);
+      assert.equal(benefits.get(resting)?.state,"backed_off","Benefits no longer calls a resting document still being read");
+      assert.match(String(reading.get(failed)?.reason),/took too long/,"the latest failure is the one both pages give");
+
+      // TE F4 on #514: a later Benefits failure on a document Coverage is resting gives the newer reason, but keeps the
+      // resting time on both pages (Coverage really is waiting until then). TE F2/F3: a superseded copy is on neither
+      // page, and an ID-like number in a name is masked on both.
+      const superseded=uuid(701703);
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_type,document_role,document_authority,processing_status,original_filename,storage_key,quarantine_status,superseded_at) VALUES($1,$2,$3,'Example Insurer','Old Plan','Hospital','policy_wording',60,'ready',$4,$4,'scan_clean',now())",[superseded,account,people[0].id,superseded+".pdf"]);
+      await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,'Daily hospital cash SGD 100.')",[account,superseded]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')",[superseded,people[0].id,account]);
+      await noteReadFailure(account,superseded,BENEFIT_READ_FAILURE_KEY,raw);
+      await db.query("UPDATE policies SET product_name='Resting Plan S1234567D' WHERE id=$1",[resting]);
+      await noteReadFailure(account,resting,BENEFIT_READ_FAILURE_KEY,raw);
+      const benefits2=byId((await (await getIndexStatus(new NextRequest("http://localhost/api/benefits/index"))).json()).documents);
+      const reading2=byId((await (await getLedger(new NextRequest("http://localhost/api/ledger"))).json()).reading.documents);
+      for(const page of [benefits2,reading2]){
+        assert.equal(page.has(superseded),false,"a superseded copy is not listed as unread");
+        assert.equal(page.get(resting)?.state,"backed_off");
+        assert.equal(page.get(resting)?.retryAfter,reading.get(resting)?.retryAfter,"the resting time is kept");
+        assert.equal(page.get(resting)?.reasonCode,"timeout","the newer reason is given");
+        assert.doesNotMatch(String(page.get(resting)?.name),/1234567/,"the ID number is masked");
+      }
+      await db.query("DELETE FROM policies WHERE id=$1",[superseded]);
 
       // Reading the document successfully clears its failure.
       const read=await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({policyId:failed})}));

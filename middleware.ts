@@ -5,6 +5,7 @@ import { checkRequestOrigin } from "@/lib/http/csrf";
 import { CORRELATION_ID_HEADER, resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { isWarmPing } from "@/lib/http/warm-ping";
 import { inviteReturnPath } from "@/lib/auth/invite-return";
+import { isAppSection } from "@/lib/public-site/app-sections";
 
 /** Routes reachable before a visitor has a session: the sign-in/sign-up
  * pages and their APIs, the invitation-acceptance and password-reset/
@@ -165,6 +166,9 @@ export async function middleware(request: NextRequest) {
   if (signedIn) return pass();
 
   if (isApi) return withCorrelationId(NextResponse.json({ error: "Not authenticated" }, { status: 401 }));
+  // An address that names no page (a typo, an old link) gets the ordinary "page not found", not a sign-in page for
+  // something that doesn't exist. Every real page sits under a known section and still goes to sign-in below.
+  if (!isAppSection(pathname)) return pass();
   const url = request.nextUrl.clone();
   url.pathname = "/login";
   // The sign-in page gets only where to return to. An invitation link keeps its token in that return address (and

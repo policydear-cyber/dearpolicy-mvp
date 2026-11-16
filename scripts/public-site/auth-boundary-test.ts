@@ -1,7 +1,7 @@
 /**
  * The public site's auth boundary (middleware.ts). Signed out, a visitor may open the landing page ("/", served from
  * /welcome), the Learn library and the crawler files, plus the sign-in pages that were already open. Every other page
- * still goes to sign-in, and every API still answers 401 (or 403 for a cross-site call), whatever the visitor sends.
+ * still goes to sign-in (an address that names no page gets "page not found"), and every API still answers 401 (or 403 for a cross-site call), whatever the visitor sends.
  * The public pages are static text: nothing they import reads a session, household, document or chat, or calls a
  * service. No network, no database, no model.
  *   npm run public-site:auth-boundary-test
@@ -113,11 +113,36 @@ test("signed out, every other page still goes to sign-in", async () => {
 
 test("only one level below /learn is public, and nothing that only looks like Learn", async () => {
   const middleware = await load();
-  for (const p of ["/learn/x/y", "/learn/making-a-claim/edit", "/learning", "/learn-more", "/learn/UPPER", "/learn/a.b", "/learnx/terms",
-    "/learn/%2e%2e/policies", "/learn/..%2fpolicies", "/welcome/x", "/policies/learn", "/chat/learn/terms", "/sitemap.xml/x", "/robots.txt.bak"]) {
+  for (const p of ["/learn/x/y", "/learn/making-a-claim/edit", "/learn/UPPER", "/learn/a.b",
+    "/learn/%2e%2e/policies", "/learn/..%2fpolicies", "/welcome/x", "/policies/learn", "/chat/learn/terms"]) {
     const res = await middleware(at(p));
     assert.ok(isLoginRedirect(res) || res.status === 404, `${p} must stay closed, got ${res.status}`);
     assert.notEqual(forwarded(res, "x-dearpolicy-signed-in"), "0", `${p} is not treated as a public page`);
+  }
+});
+
+test("signed out, an address that names no page gets 'page not found', not sign-in", async () => {
+  const middleware = await load();
+  // These reach Next.js, which has no page for them and answers with app/not-found.tsx (404) in the public frame.
+  for (const p of ["/polices", "/no-such-page", "/learning", "/learn-more", "/learnx/terms", "/sitemap.xml/x", "/robots.txt.bak"]) {
+    const res = await middleware(at(p));
+    assert.ok(!isLoginRedirect(res), `${p} must not ask a visitor to sign in`);
+    assert.equal(res.status, 200, `${p} is handed to Next.js, got ${res.status}`);
+    assert.equal(rewriteOf(res), null, `${p} is not rewritten to a real page`);
+    assert.equal(forwarded(res, "x-dearpolicy-signed-in"), "0", `${p} draws the signed-out frame`);
+  }
+  // An odd case or encoding of a real section, or an address that can't be decoded, still goes to sign-in.
+  for (const p of ["/Policies", "/%70olicies", "/CHAT/x", "/%E0%A4%A"]) assert.ok(isLoginRedirect(await middleware(at(p))), `${p} goes to sign-in`);
+  // Signed out, the page-not-found page is drawn in the public frame, not the household menu (TE F1 on #514).
+  const shell = readFileSync("components/AppShell.tsx", "utf8");
+  assert.match(shell.slice(shell.indexOf("function isPublicView"), shell.indexOf("export default function AppShell")), /!isAppSection\(pathname\)/);
+  // Every real page is still under a section that goes to sign-in.
+  const { APP_SECTIONS } = await import("../../lib/public-site/app-sections");
+  const onDisk = new Set(pageRoutes().map((p) => p.split("/")[1]).filter((s) => s));
+  assert.deepEqual([...APP_SECTIONS].sort(), [...onDisk].sort(), "APP_SECTIONS lists exactly the first segment of every page in app/");
+  for (const s of readdirSync("app", { withFileTypes: true })) {
+    if (s.isDirectory() && s.name !== "api") assert.ok(APP_SECTIONS.has(s.name), `app/${s.name} is a known section`);
+    assert.ok(!/^[[(]/.test(s.name), `app/${s.name}: a dynamic or grouped top-level folder needs this list reworked`);
   }
 });
 
