@@ -315,7 +315,7 @@ const plainAmountsIn = (text: string) => [...(text ?? "").matchAll(PLAIN_AMOUNT)
 const formatMoney = (sign: string, value: number) => sign + value.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(value) ? 0 : 2, maximumFractionDigits: 2 });
 
 type Base = { found: Found; cover: string; asOf: string | null };
-type Stay = { value: number; text: string; currencyResolved: boolean; stay: number; payable: number; rule: string };
+type Stay = { value: number; text: string; currencyResolved: boolean; stay: number; payable: number; rule: string; working: string; yearly: boolean };
 type Bill = { text: string; currencyResolved: boolean; bill: string; within: boolean };
 type Count = { value: number; text: string; currencyResolved: boolean; count: number; payable: number; most: number | null; unit: string; rule: string };
 type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; count?: Count | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null;
@@ -1550,10 +1550,11 @@ export function capIntroduces(excerpt: string, at: number, benefit: string | nul
 }
 
 /** What a stay of the given length could pay under a daily benefit (release-set B3, H4), from the quoted words alone. It
- * is worked out only when the row and its own lines print exactly one daily figure ("$30 per day"), one day payment starts
- * ("after the 10th day", "from the 11th day"), one most-days figure ("up to a maximum of thirty (30) days", "Max: 30
- * days"), no other number of days, and no other day rule ("less than", "minimum", "at least", "per admission", "per
- * policy year", intensive care), R59-2. The stay must be one the household described as a stay ("in hospital 12 days",
+ * is worked out only when the row and its own lines print exactly one daily figure ("$30 per day"), one waiting period in
+ * a read form ("after the 10th day", "from the 11th day", "does not pay for the first 2 days": readStayRule), one most-days
+ * figure ("up to a maximum of thirty (30) days", "Max: 30 days"; a year of cover may be its period, "up to 365 days per
+ * policy year", R4 H2-C), at most one yearly cap amount in the daily figure's currency, no other number of days, and no
+ * other day rule ("less than", "minimum", "at least", "per admission", intensive care), R59-2. The stay must be one the household described as a stay ("in hospital 12 days",
  * "a 12-day stay"), R59-3. Anything less shows the daily benefit as printed. */
 const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fourteen: 14, fifteen: 15, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60 };
 const STAY_WORDS = String.raw`(?:in\s+(?:the\s+)?hospital|hospitali[sz]ed|admitted|warded|stayed|stay(?:ing)?\s+in\s+(?:the\s+)?hospital)`;
@@ -1605,42 +1606,201 @@ export const ORDINAL_DAY: Record<string, number> = { first: 1, second: 2, third:
   fourteenth: 14, fifteenth: 15, twentieth: 20, "twenty-first": 21, thirtieth: 30, "thirty-first": 31 };
 /** "the third" -> "the 3rd", so a day printed in words is read as one printed in figures. */
 const ordinalDays = (t: string) => t.replace(new RegExp(String.raw`\b(${Object.keys(ORDINAL_DAY).join("|")})(?=\s+(?:consecutive\s+|full\s+)?days?\b)`, "gi"), (w) => `${ORDINAL_DAY[w.toLowerCase()]}th`);
+/** A waiting period printed in one of a closed set of forms, with the number of unpaid days it gives (R4 H2-C):
+ * - "after the 10th day", "after day 10" (10 unpaid); "from the 11th day", "from day 11", "payable from the third day";
+ * - "does not pay for the first 2 days of any hospital stay", "not payable for the first 2 days of each admission",
+ *   "excluding the first 2 days of each stay", "the first two (2) days of each stay are not payable".
+ * The second kind is read only with its per-stay words ("of any/each hospital stay", admission, confinement): "No benefit
+ * is payable for the first 30 days" may be a waiting period from the start of cover, never a stay's (gate SD-H1). Below
+ * the row, a form is read only with those words, the first kind too ("The rider pays from the 31st day" is not read).
+ * Any other wording ("the first few days", "a waiting period applies", "an excess of 2 days") is not read, so it stays in
+ * the words and stops the figure. */
+const STAY_NOUN = String.raw`(?:(?:any|each|every|a|an|one)\s+)?(?:(?:hospital|in-?patient)\s+)?(?:stay|admission|confinement|hospitali[sz]ation|period\s+of\s+hospitali[sz]ation)`;
+const OF_STAY = String.raw`\s+(?:of|in)\s+${STAY_NOUN}\b`;
+const WAIT_FORMS: { re: RegExp; unpaid: (n: number, m: RegExpMatchArray) => number }[] = [
+  { re: new RegExp(String.raw`\b(?:(?:paid|payable|pays|starting|commencing|benefit\s+starts)\s+)?(after|from)\s+(?:the\s+)?(\d{1,3})\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+|continuous\s+)?day(${OF_STAY})?(?:\s+onwards?)?\b`, "gi"), unpaid: (n, m) => (m[1].toLowerCase() === "after" ? n : n - 1) },
+  { re: new RegExp(String.raw`\b(?:(?:paid|payable|pays|starting|commencing|benefit\s+starts)\s+)?(after|from)\s+day\s+(\d{1,3})\b(${OF_STAY})?(?:\s+onwards?)?`, "gi"), unpaid: (n, m) => (m[1].toLowerCase() === "after" ? n : n - 1) },
+  { re: new RegExp(String.raw`\b(?:(?:does|do|will|shall)\s+not\s+pay|(?:is\s+|are\s+)?not\s+(?:payable|paid)|no\s+benefit\s+is\s+(?:payable|paid))\s+(?:for|during)\s+the\s+first\s+()(\d{1,3})\s+(?:consecutive\s+|continuous\s+)?days(${OF_STAY})`, "gi"), unpaid: (n) => n },
+  { re: new RegExp(String.raw`\bexcluding\s+the\s+first\s+()(\d{1,3})\s+(?:consecutive\s+|continuous\s+)?days(${OF_STAY})`, "gi"), unpaid: (n) => n },
+  { re: new RegExp(String.raw`\b(?:the\s+)?first\s+()(\d{1,3})\s+(?:consecutive\s+|continuous\s+)?days(${OF_STAY})\s+(?:(?:are|is)\s+)?not\s+(?:payable|paid)\b`, "gi"), unpaid: (n) => n },
+];
+/** Words that, once every read waiting form is taken out, show a waiting rule is still there unread. */
+const WAIT_LEFT = /\b(?:first|after|from|excluding|exclud\w*|waiting|excess|deductible|elimination|deferred|deferment|not\s+(?:paid|payable|covered)|does\s+not\s+pay|onwards?)\b/i;
+/** "Two (2)" -> "2" when both say the same number; "two (3)" -> a word no form reads. "First two days" -> "first 2 days". */
+function dayNumbersAsFigures(t: string): string {
+  const words = Object.keys(NUMBER_WORDS).join("|");
+  return t.replace(new RegExp(String.raw`\b(${words})\s*\(\s*(\d{1,3})\s*\)`, "gi"), (_, w: string, d: string) => (NUMBER_WORDS[w.toLowerCase()] === Number(d) ? d : "unclear-number"))
+    .replace(new RegExp(String.raw`\b(${words})(?=\s+(?:consecutive\s+|continuous\s+)?days?\b)`, "gi"), (w) => String(NUMBER_WORDS[w.toLowerCase()]));
+}
+/** Every read waiting form in `t`: the unpaid days each gives, and `t` with them taken out. */
+function takeWaiting(t: string, perStayOnly = false): { unpaid: number[]; rest: string; newForm: boolean } {
+  const unpaid: number[] = [];
+  let rest = t, newForm = false;
+  WAIT_FORMS.forEach((f, k) => { rest = rest.replace(f.re, (...args) => {
+    const m = args.slice(0, -2) as unknown as RegExpMatchArray;
+    // m[3]: the form's per-stay words. Below the row a form without them is left in the words, where it stops the figure.
+    if (perStayOnly && !m[3]) return m[0];
+    unpaid.push(f.unpaid(Number(m[2]), m));
+    // The negative forms ("does not pay for the first 2 days of any stay") are read since R4 H2-C; "after the 10th day (of
+    // hospital stay)" in the row was read before it, as it still is.
+    if (k >= 2) newForm = true;
+    return " ; ";
+  }); });
+  return { unpaid, rest, newForm };
+}
+/** The only words a row may keep, past its label, once its daily figure, waiting period, most days and yearly cap are
+ * taken out, when a rule read since R4 H2-C is used (a yearly period, a yearly cap amount, a negative waiting form, or a
+ * waiting sentence below the row): grammar words that change nothing. Any other word ("for all insured persons", "per policy", "for illness", "for
+ * you and your spouse") may change whose cap it is or which stays wait, so no figure is worked out (gate SD-H2b, SD-H4).
+ * An allow-list: no list of sharing or cause words would ever be complete. */
+const ROW_GRAMMAR_WORDS = new Set("a an the of and".split(" "));
+/** Words above a daily row that say its limits are not this person's alone (gate SD-H2d, SD-L2). "Per policy year" and
+ * "per-policy year" are a cap's period, not sharing words. */
+const SHARED_ABOVE = /\b(?:shared?|sharing|all\s+(?:the\s+)?(?:insured|lives|persons|members)|per[\s-]+policy\b(?!\s+year\b)|not\s+per\s+person|famil(?:y|ies)|combined|aggregate|together|collectively|for\s+everyone|per\s+certificate|households?|pooled|jointly|split\s+between|each\s+policy|whole\s+policy|per\s+plan|dependants?|dependents?)\b/i;
+/** Every line of the page above a row, joined, so a phrase split over two lines ("LIMITS FOR ALL" / "INSURED PERSONS")
+ * is read whole. No heading ends it: a sharing note may stand above any heading on the page (gate SD-M1). */
+const linesAbove = (pageText: string, rowStart: number): string => pageText.slice(0, rowStart).replace(/\s+/g, " ");
+/** The words a daily row's own name may hold when such a rule is used: a closed list of benefit-name words. A name that
+ * says anything else ("Hospital income (all insured persons)", "Hospital income for you and your spouse", "... for
+ * illness or accident") may say whose cap it is or which stays it pays, so no figure is worked out (gate SD-H2c). */
+const BENEFIT_NAME_WORDS = new Set(("hospital hospitalisation hospitalization income cash daily allowance benefit rider in patient inpatient "
+  + "confinement icu intensive care room board").split(" "));
+/** The few words a sentence below the row may keep around a waiting form it states and still be about this row: the row's
+ * own name words and a handful of grammar words ("The hospital income rider does not pay for the first 2 days ..."). A
+ * sentence naming anything else ("The surgical benefit does not pay ...") is not read as this row's. */
+const OWN_SENTENCE_WORDS = new Set("the this a an its it benefit benefits rider cover under".split(" "));
+/** A cap period printed right after a day cap or a cap amount: a year of cover. */
+const YEAR_PERIOD = String.raw`(?:per|each|every|in\s+(?:any\s+one|any|one|a|each))\s+(?:(policy)\s+year|calendar\s+year|year|annum)\b`;
+/** What the row's own words say a stay pays: the unpaid first days, the most days paid (and whether a year of cover is
+ * their period), and a yearly cap amount in the daily figure's own currency, or null when any of these cannot be read. */
+export type StayRule = { unpaid: number; most: number; period: string | null; cap: { value: number; raw: string; period: string } | null };
+export function readStayRule(pageText: string, offset: number, excerpt: string, daily: number): StayRule | null {
+  // The row with every line under it up to the next heading (stayBlock), or the quote with those lines when it reaches
+  // further; each rule is read once. A limit, aggregate, day rule or condition anywhere below the row gives no total,
+  // except a waiting form the row's own sentence states.
+  const block = stayBlock(pageText, offset);
+  const row = block.text.replace(/\s+/g, " ");
+  const quoted = excerpt.replace(/…$/, "").replace(/\s+/g, " ");
+  const prep = (t: string) => dayNumbersAsFigures(ordinalDays(t));
+  const ownRow = squash(row).text.includes(squash(quoted).text);
+  // The row's own words: its line, and the lines of the quote that wrap past it ("up to 365 days per" / "policy year").
+  // Everything else below the row is its tail.
+  const line = rowLine(pageText, offset).text.replace(/\s+/g, " ").trim();
+  let tailWords = block.tail.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  let rowText = quoted;
+  if (ownRow) {
+    const q = quoted.trim().split(" ").filter(Boolean), same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+    let wrap = 0;
+    for (let j = Math.min(q.length - 1, tailWords.length); j > 0 && !wrap; j--) if (q.slice(-j).every((w, k) => same(w, tailWords[k]))) wrap = j;
+    rowText = [line, ...tailWords.slice(0, wrap)].join(" ");
+    tailWords = tailWords.slice(wrap);
+  }
+  rowText = prep(rowText);
+  const label = /^[^\t:$]*?(?=\s*(?:\t|:|[A-Z]{0,3}\$|£|€|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\b|$))/.exec(rowLine(pageText, offset).text.trim())?.[0] ?? "";
+  const labelWords = new Set(label.toLowerCase().match(/[a-z]+/g) ?? []);
+  const unpaid: number[] = [];
+  // Below the row: each sentence that states a read waiting form about this row (nothing but its name and grammar words
+  // left) is taken out; every other word stays and is checked as before.
+  const tailParts = prep(tailWords.join(" ")).split(/(?<=[.;])\s+/).map((s) => {
+    const w = takeWaiting(s, true);
+    if (!w.unpaid.length) return s;
+    const left = (w.rest.toLowerCase().match(/[a-z]+/g) ?? []);
+    if (!left.every((x) => labelWords.has(x) || OWN_SENTENCE_WORDS.has(x))) return s;
+    unpaid.push(...w.unpaid);
+    return " ";
+  });
+  const tailRest = tailParts.join(" ");
+  const fromRow = takeWaiting(rowText);
+  unpaid.push(...fromRow.unpaid);
+  const newWaiting = fromRow.newForm || unpaid.length > fromRow.unpaid.length;
+  // One waiting period, however many times it is said ("from the 3rd day" and "first 2 days not payable" agree).
+  if (!unpaid.length || new Set(unpaid).size !== 1 || unpaid[0] < 0) return null;
+  // The row's words end where the lines below begin: a clause never runs on into them.
+  // "¶" marks where they begin.
+  let rule = `${fromRow.rest} ;¶ ${tailRest}`.replace(/\s+/g, " ");
+  if (WAIT_LEFT.test(rule)) return null;
+  const tail = tailRest.replace(MAX_DAY_FIELD, " ");
+  // A wrapped period ("up to 365 days per" / "policy year") is the row's own words, read with the row.
+  if (STAY_BLOCK_WORDS.test(tail)) return null;
+  // "Maximum 30 days", or "up to 30 days" (per stay, accident or year: the most days it pays). Only when it ends the
+  // clause or names what it limits ("per accident", "of hospitalisation", "in any one year"): "a stay that begins up to 30
+  // days after/post the accident" or "starting up to 30 days later" limits when, not how many days (Critic #449 F5).
+  const maxes = [...rule.matchAll(/\b(?:max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*days?\b|up\s+to\s+\(?(\d+)\)?\s*days?\b(?=\s*(?:$|[,.;:)\n]|(?:per|each|a|an|in\s+(?:any|one|a|each|total|all)|for\s+(?:any|one|each|all)|of\s+(?:(?:continuous|consecutive)\s+)?(?:hospital\w*|confinement|stay|admission|in-?patient\w*)|in\s+hospital|during)\b)))/gi)];
+  if (maxes.length !== 1) return null;
+  const most = Number(maxes[0][1] ?? maxes[0][2]);
+  // "Up to 365 days per policy year": a year of cover is the day cap's period, not another day rule (R4 H2-C). Paid days
+  // are then min(stay - waiting days, most days), for a stay the household described.
+  const capEnd = maxes[0].index! + maxes[0][0].length;
+  const yearAfterDays = new RegExp(String.raw`^\s*${YEAR_PERIOD}`, "i").exec(rule.slice(capEnd));
+  let period: string | null = null;
+  if (yearAfterDays) {
+    period = yearAfterDays[1] ? "policy year" : "year";
+    // "Up to 30 days per family per policy year" never reaches here: "per family" stands between, and stops it below.
+    rule = rule.slice(0, capEnd) + " " + rule.slice(capEnd + yearAfterDays[0].length);
+  }
+  // A yearly cap amount on the row's own line ("maximum S$1,000 per policy year") caps the worked figure, in the daily
+  // figure's own currency only. Any other money figure, or a cap in any other words, gives no figure.
+  const dailies = moneyFiguresIn(rule).filter((f) => /^\s*(?:per|a|each)\s+day\b/i.test(rule.slice(rule.indexOf(f.raw ?? "") + (f.raw ?? "").length)));
+  if (dailies.length !== 1 || !sameValue(dailies[0].value, daily)) return null;
+  let cap: StayRule["cap"] = null;
+  const capRe = new RegExp(String.raw`(?:[,;]\s*|\band\s+)?(?:up\s+to\s+(?:a\s+)?)?(?:max(?:imum)?\.?(?:\s+of)?|limited\s+to|not\s+exceeding|subject\s+to\s+a\s+maximum\s+of)\s+(\S+\s?\d[\d,]*(?:\.\d+)?)\s+${YEAR_PERIOD}(?=\s*(?:$|[.,;]))`, "gi");
+  const caps = [...rule.matchAll(capRe)];
+  if (caps.length > 1) return null;
+  if (caps.length === 1) {
+    const f = moneyFiguresIn(caps[0][1]);
+    if (f.length !== 1 || f[0].currency !== dailies[0].currency || f[0].value <= 0) return null;
+    cap = { value: f[0].value, raw: caps[0][1].trim(), period: caps[0][2] ? "policy year" : "year" };
+    rule = rule.replace(caps[0][0], " ");
+  }
+  // A yearly period on the day cap or a yearly cap amount is the row's own only when nothing else is printed below the row
+  // once its own waiting sentences are taken out: a line below may say whose year it is ("It is for the policy as a
+  // whole", gate SD-H2), and a cap shared with anyone else is never this person's alone.
+  if ((period || cap) && /[\p{L}\d]/u.test(tailRest)) return null;
+  // Nor when any line of the page above it says limits are shared ("HOSPITAL BENEFITS - LIMITS SHARED BY ALL INSURED
+  // PERSONS", "Yearly limits below apply per policy, not per person", gate SD-H2d, SD-M1).
+  if ((period || cap) && SHARED_ABOVE.test(linesAbove(pageText, rowLine(pageText, offset).start))) return null;
+  if (OTHER_DAY_RULE.test(rule)) return null;
+  // Any other money figure or overall limit in the row's words may cap what the stay pays ("Overall annual limit:
+  // S$3,000", TE #392 E): no total is worked out past it.
+  if (moneyFiguresIn(rule).some((f) => !sameValue(f.value, daily))) return null;
+  if (/\b(?:limits?|aggregate|overall|in\s+total|in\s+all|ceiling|capped|not\s+more\s+than|no\s+more\s+than|reduced|thereafter|half|family|household|shared|combined|whichever|lifetime|annual\w*|yearly)\b/i.test(rule)) return null;
+  // Past the most days, no other cap word is left ("up to", "maximum", "not exceeding", "limited to", "subject to").
+  const withoutMost = rule.replace(maxes[0][0], " @most ").replace(/\bup\s+to\s+(?:a\s+)?@most\b/i, " ");
+  if (/\bup\s+to\b|\bmax(?:imum)?\b|\bwhichever\b|\bnot\s+(?:to\s+)?exceed|\blimited\s+to\b|\bcapped\b|\bsubject\s+to\b/i.test(withoutMost)) return null;
+  // Every number of days left printed is the most days: "(30) days" only.
+  const dayNumbers = [...rule.matchAll(/(\d+)\)?\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?days?\b/gi)].map((m) => Number(m[1]));
+  if (dayNumbers.some((d) => d !== most)) return null;
+  if (period || cap || newWaiting) {
+    // The row's name: benefit-name words only. Past it, grammar words only (its own name words are no exemption).
+    if (!(label.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => BENEFIT_NAME_WORDS.has(w) || ROW_GRAMMAR_WORDS.has(w))) return null;
+    const rowPart = withoutMost.split("¶")[0];
+    const at = label ? rowPart.toLowerCase().indexOf(label.toLowerCase()) : -1;
+    const own = (at >= 0 ? rowPart.slice(0, at) + " " + rowPart.slice(at + label.length) : rowPart).replace(dailies[0].raw ?? "", " ")
+      .replace(/\b(?:per|a|each)\s+day\b(?:\s+in\s+(?:the\s+)?hospital\b|\s+of\s+(?:continuous\s+)?hospitali[sz]ation\b)?/i, " ").replace("@most", " ");
+    if (!(own.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => ROW_GRAMMAR_WORDS.has(w))) return null;
+  }
+  return { unpaid: unpaid[0], most, period, cap };
+}
 function stayPays(st: ModelStatement, found: Found, household: Household, amount: NonNullable<Checked["amount"]>, asked: string[]): Stay | null {
   // With none given, only the stay the latest message describes: never one from an earlier turn ("what's the daily amount
   // again" after "hospitalised for 15 days").
   const stay = st.perDay?.stayDays ?? stayDaysSaid(asked.slice(0, 1));
   if (!stay || !Number.isInteger(stay) || stay < 1 || stay > 366 || !stayDaysWritten(asked, stay)) return null;
   const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page)!;
-  // The row with every line under it up to the next heading (stayBlock), or the quote with those lines when it reaches
-  // further; each rule is read once. A limit, aggregate, day rule or condition anywhere below the row gives no total.
-  const block = stayBlock(page.text, found.offset);
-  const row = block.text.replace(/\s+/g, " ");
-  const quoted = found.excerpt.replace(/…$/, "").replace(/\s+/g, " ");
-  const tail = block.tail.replace(/\s+/g, " ").replace(MAX_DAY_FIELD, " ");
-  if (STAY_BLOCK_WORDS.test(tail)) return null;
-  const rule = ordinalDays(squash(row).text.includes(squash(quoted).text) ? row : `${quoted} ${block.tail.replace(/\s+/g, " ")}`);
-  if (OTHER_DAY_RULE.test(rule)) return null;
-  const dailies = moneyFiguresIn(rule).filter((f) => /^\s*(?:per|a|each)\s+day\b/i.test(rule.slice(rule.indexOf(f.raw ?? "") + (f.raw ?? "").length)));
-  if (dailies.length !== 1 || !sameValue(dailies[0].value, amount.value)) return null;
-  // Any other money figure or overall limit in the row's words may cap what the stay pays ("Overall annual limit:
-  // S$3,000", TE #392 E): no total is worked out past it, as the benefit table already refuses (dailyRateAlone).
-  if (moneyFiguresIn(rule).some((f) => !sameValue(f.value, amount.value))) return null;
-  if (/\b(?:limits?|aggregate|overall|in\s+total|in\s+all|ceiling|capped|not\s+more\s+than|no\s+more\s+than|reduced|thereafter|half)\b/i.test(rule)) return null;
-  const starts = [...rule.matchAll(/\b(after|from)\s+(?:the\s+)?(\d+)\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?day\b/gi)];
-  // "Maximum 30 days", or "up to 30 days" (per stay, accident or year: the most days it pays). Only when it ends the
-  // clause or names what it limits ("per accident", "of hospitalisation", "in any one year"): "a stay that begins up to 30
-  // days after/post the accident" or "starting up to 30 days later" limits when, not how many days (Critic #449 F5).
-  const maxes = [...rule.matchAll(/\b(?:max(?:imum)?\.?\s*(?:of\s*)?:?\s*(?:[a-z-]+\s*)?\(?(\d+)\)?\s*days?\b|up\s+to\s+\(?(\d+)\)?\s*days?\b(?=\s*(?:$|[,.;:)\n]|(?:per|each|a|an|in\s+(?:any|one|a|each|total|all)|for\s+(?:any|one|each|all)|of\s+(?:(?:continuous|consecutive)\s+)?(?:hospital\w*|confinement|stay|admission|in-?patient\w*)|in\s+hospital|during)\b)))/gi)];
-  if (starts.length !== 1 || maxes.length !== 1) return null;
-  const startDay = Number(starts[0][2]), most = Number(maxes[0][1] ?? maxes[0][2]);
-  // Every number of days printed is one of these two: "(30) days" and "10th day" only.
-  const dayNumbers = [...rule.matchAll(/(\d+)\)?\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?days?\b/gi)].map((m) => Number(m[1]));
-  if (dayNumbers.some((d) => d !== startDay && d !== most)) return null;
-  const unpaid = starts[0][1].toLowerCase() === "after" ? startDay : startDay - 1;
+  const r = readStayRule(page.text, found.offset, found.excerpt, amount.value);
+  if (!r) return null;
+  const { unpaid, most, period, cap } = r;
   const payable = Math.max(0, Math.min(stay - unpaid, most));
-  const value = Math.round(amount.value * payable * 100) / 100;
+  const days = Math.round(amount.value * payable * 100) / 100;
+  const value = cap && days > cap.value ? cap.value : days;
   const sign = amount.text.replace(/^up to\s+/i, "").replace(/[\d,.\s]+$/, "");
-  return { value, text: formatMoney(sign, value), currencyResolved: amount.currencyResolved, stay, payable, rule: `${amount.text} a day, paid from day ${unpaid + 1}, for at most ${most} days` };
+  const per = period ? ` per ${period}` : "";
+  const capWords = cap ? `, and at most ${formatMoney(sign, cap.value)} a ${cap.period}` : "";
+  // The working, said in full: the paid days, the multiplication and any yearly cap. A yearly cap counts what was already
+  // paid in that year, which the household has not said, so the figure is for this stay alone.
+  const working = `${payable} × ${amount.text}${cap && days > cap.value ? ` = ${formatMoney(sign, days)}, capped at the ${formatMoney(sign, cap.value)} a ${cap.period}` : ""}`;
+  return { value, text: formatMoney(sign, value), currencyResolved: amount.currencyResolved, stay, payable, working, yearly: !!period || !!cap,
+    rule: `${amount.text} a day, paid from day ${unpaid + 1}, for at most ${most} days${per}${capWords}` };
 }
 
 /** What a figure printed per child could pay for the number of children the household's latest message gives
@@ -2749,7 +2909,9 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     // said with the day it starts (stress run 23 Oct, S088).
     if (c.stay && c.stay.payable === 0 && c.amount) {
       const said = `${text.replace(/[.\s]+$/, "")}. ${aDay(c.stay.stay)}-day stay ends before this daily benefit starts, so it pays nothing for that stay.`;
-      statements.push({ id: `s${i + 1}`, kind: "fact", text: said, fullText: said, personName: c.person, amount: null, basis: null, conditions, asOf: null, source, group: null });
+      // Its working is the same rule a paid stay states, the year of a yearly cap with it ("for at most 365 days per policy
+      // year"), so the two never word the row differently (gate SD-L1).
+      statements.push({ id: `s${i + 1}`, kind: "fact", text: said, fullText: said, personName: c.person, amount: null, basis: `${c.stay.rule}, for the stay you described`, conditions, asOf: null, source, group: null });
       return;
     }
     const kind: AnswerStatement["kind"] = c.amount ? (c.amount.illustration ? "calculation" : "benefit_terms") : c.s.kind === "fact" || c.s.kind === "amount" ? "fact" : c.s.kind;
@@ -2767,7 +2929,9 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       statements.push({
         id: `s${i + 1}-stay`, kind: "calculation", text: said, fullText: said, personName: c.person,
         amount: st.payable > 0 ? { text: st.text, currencyResolved: st.currencyResolved, illustration: true } : null,
-        basis: `${st.rule} (${st.payable} × ${c.amount!.text}), for the stay you described`,
+        // The working in full; a yearly cap counts days or amounts already paid that year, which the household has not
+        // given, so the figure is for this stay with none paid before it.
+        basis: `${st.rule} (${st.working}), for the stay you described${st.yearly ? ", if nothing was already paid under this benefit in the same year, by you or anyone else it covers" : ""}`,
         conditions, asOf: null, source, group: null,
       });
     }
