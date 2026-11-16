@@ -156,6 +156,17 @@ async function main() {
     const got = insurerContactsFor(HOUSE, { citations: [{ policyId: "A1" } as never] }, label);
     assert.deepEqual(got, [{ insurer: "Harbourline Assurance plc", items: [{ kind: "phone", label: "Claims", value: "0800 000 0000", source: { policyName: "Doc A2", page: 4 } }] }]);
   });
+  await t("DECL-20261116 c1: a question naming one insurer shows only that insurer's contacts, never another cited one's", () => {
+    const both = { citations: [{ policyId: "A1" } as never, { policyId: "B1" } as never] };
+    // Names Merlion: only Merlion, even though Harbourline is cited first.
+    assert.deepEqual(insurerContactsFor(HOUSE, both, label, "How do I claim from merlion?").map((c) => c.insurer), ["Merlion General Insurance"]);
+    // Names Merlion, which the answer does not cite: its contact still comes from its own pages.
+    assert.deepEqual(insurerContactsFor(HOUSE, { citations: [{ policyId: "A1" } as never] }, label, "How do I claim with Merlion General?").map((c) => c.insurer), ["Merlion General Insurance"]);
+    // Names Orchid Life (no readable page with a contact): nothing, not the cited Harbourline or Merlion numbers.
+    assert.deepEqual(insurerContactsFor(HOUSE, both, label, "How do I make a claim with Orchid Life for Daniel's hospital stay?"), []);
+    // Names no insurer: every cited insurer, as before.
+    assert.deepEqual(insurerContactsFor(HOUSE, both, label, "How do I claim for Grace?").map((c) => c.insurer), ["Harbourline Assurance plc", "Merlion General Insurance"]);
+  });
   await t("a document not read, or replaced by a newer one, gives no contact; no contact found shows nothing", () => {
     assert.deepEqual(insurerContactsFor(HOUSE, { citations: [{ policyId: "C1" } as never, { policyId: "D1" } as never] }, label), []);
     assert.deepEqual(insurerContactsFor(HOUSE, { citations: [] }, label), []);

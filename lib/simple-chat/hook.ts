@@ -466,7 +466,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   // How to reach the insurer, as the household's own documents print it, when the answer gives next steps or is about
   // claiming. Read by the server from the stored pages; never the model's words.
   if (reply.model !== "no-documents" && reply.model !== "unknown-person" && contactsHelp(answer, message)) {
-    const contacts = insurerContactsFor(household, answer, (d) => docLabel(household, d));
+    const contacts = insurerContactsFor(household, answer, (d) => docLabel(household, d), message);
     if (contacts.length) answer.insurerContacts = contacts;
   }
   answer.conversationId = conversation.id;

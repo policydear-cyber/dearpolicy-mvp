@@ -161,6 +161,18 @@ export function contactsOnPage(text: string, page: number, policyName: string, i
 /** The insurer a document is from, as one key: "Harbourline Assurance plc" and "HARBOURLINE ASSURANCE" are one insurer. */
 const insurerKey = (insurer: string) => nameWords(insurer).join(" ");
 
+/** The household's insurers the question names: its first name word, or all of them, as words of the question, in any
+ * case ("orchid life" names Orchid Life Assurance Ltd). Insurers of every document count, read or not. */
+function namedInsurers(household: Household, question: string): Set<string> {
+  const q = ` ${question.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
+  const out = new Set<string>();
+  for (const d of household.documents) {
+    const words = d.insurer?.trim() ? nameWords(d.insurer) : [];
+    if (words.length && (q.includes(` ${words[0]} `) || words.every((w) => q.includes(` ${w} `)))) out.add(insurerKey(d.insurer!));
+  }
+  return out;
+}
+
 /** How many of each kind are shown for one insurer: a claims line, one other phone, an email and a website at most. */
 function pick(found: Found[]): ContactItem[] {
   const seen = new Set<string>();
@@ -181,15 +193,20 @@ export const contactsHelp = (answer: Pick<ChatAnswer, "nextSteps">, question: st
  * documents first, then the household's other documents from the same insurer). Documents not read, and copies replaced
  * by a newer one, are not read for contacts. At most three insurers.
  */
-export function insurerContactsFor(household: Household, answer: Pick<ChatAnswer, "citations">, docLabel: (d: HouseholdDocument) => string): InsurerContact[] {
+export function insurerContactsFor(household: Household, answer: Pick<ChatAnswer, "citations">, docLabel: (d: HouseholdDocument) => string, question = ""): InsurerContact[] {
   const cited = [...new Set((answer.citations ?? []).map((c) => (c as { policyId?: string }).policyId).filter((id): id is string => !!id))];
   const usable = household.documents.filter((d) => !unreadable(d) && !d.supersededAt && !!d.insurer?.trim());
+  // When the question names an insurer of the household ("How do I claim with Orchid Life?"), only that insurer's
+  // contacts are shown, even when the answer also cites another insurer's page (DECL-20261116 c1: the answer cited
+  // Merlion only to say not to use it, and Merlion's number was offered). A named insurer with no printed contact shows none.
+  const named = namedInsurers(household, question);
   const order: { key: string; name: string; docs: HouseholdDocument[] }[] = [];
-  for (const id of cited) {
+  const ids = named.size ? [...cited, ...usable.map((d) => d.policyId)] : cited;
+  for (const id of ids) {
     const d = usable.find((x) => x.policyId === id);
     if (!d) continue;
     const key = insurerKey(d.insurer!);
-    if (!key || order.some((o) => o.key === key)) continue;
+    if (!key || order.some((o) => o.key === key) || (named.size && !named.has(key))) continue;
     // The cited documents of this insurer first, then its other documents.
     const same = usable.filter((x) => insurerKey(x.insurer!) === key);
     const docs = [...same.filter((x) => cited.includes(x.policyId)), ...same.filter((x) => !cited.includes(x.policyId))];
