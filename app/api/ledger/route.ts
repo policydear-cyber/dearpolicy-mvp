@@ -61,7 +61,7 @@ export async function GET(request:NextRequest){
       .map(({events:_events,...l})=>maskShownText({...l,ownerName:people.find(p=>p.id===l.familyMemberId)?.display_name??"Unknown"}));
     return NextResponse.json({rows:shown,scheduleLines:lines,summary,family:people,events:Object.entries(EVENTS).map(([value,e])=>({value,label:e.label})),
       // documents: which document is waiting, being read, or failed and why.
-      reading:{pending,inProgress:ledgerReadingInProgress(accountId),documents:await ledgerReadDocuments(accountId)}});
+      reading:{pending,inProgress:ledgerReadingInProgress(accountId),documents:maskShownText(await ledgerReadDocuments(accountId))}});
   }catch(error){
     const authResponse=routeErrorResponse(error);
     if(authResponse.status===500)return NextResponse.json({error:"Could not load the coverage ledger"},{status:500});

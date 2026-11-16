@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { clearHouseholdDeviceMemory } from "@/components/device-memory";
 import { Icon, type IconName } from "@/components/icons";
 import PublicShell from "@/components/public/PublicShell";
+import { isAppSection } from "@/lib/public-site/app-sections";
 
 
 function NavIcon({ name }: { name: IconName }) {
@@ -82,7 +83,8 @@ function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }
 /** Pages a signed-out visitor may open (middleware.ts isPublicPage): the landing page ("/", served from /welcome)
  * and the Learn library. Signed out, they get PublicShell's sign-in header instead of the household menu. */
 function isPublicView(pathname: string): boolean {
-  return pathname === "/" || pathname === "/welcome" || pathname === "/learn" || pathname.startsWith("/learn/");
+  // An address under no page section is the "page not found" page (middleware.ts lets it through signed out).
+  return pathname === "/" || pathname === "/welcome" || pathname === "/learn" || pathname.startsWith("/learn/") || !isAppSection(pathname);
 }
 
 /** `signedIn` comes from app/layout.tsx, which reads middleware.ts's per-request session hint. It only picks which

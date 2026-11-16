@@ -97,7 +97,15 @@ export async function latestReadFailureNotes(accountId: string, policyIds: strin
   for (const key of READ_FAILURE_KEYS) {
     for (const [id, note] of await readFailureNotes(accountId, policyIds, key)) {
       const held = out.get(id);
-      if (!held || (at(note) > at(held)) || (Number.isNaN(at(held)) && !Number.isNaN(at(note)))) out.set(id, note);
+      if (!held) { out.set(id, note); continue; }
+      // The latest failure gives the reason; a read still resting keeps its retry time, so neither page says
+      // "failed" with no time while Coverage is in fact waiting until then.
+      const later = at(note) > at(held) || (Number.isNaN(at(held)) && !Number.isNaN(at(note)));
+      const retryAfter = [held.retryAfter, note.retryAfter].filter((t): t is string => !!t && !Number.isNaN(Date.parse(t)))
+        .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+      const merged = { ...(later ? note : held) };
+      if (retryAfter) merged.retryAfter = retryAfter;
+      out.set(id, merged);
     }
   }
   return out;

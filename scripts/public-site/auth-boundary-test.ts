@@ -133,6 +133,9 @@ test("signed out, an address that names no page gets 'page not found', not sign-
   }
   // An odd case or encoding of a real section, or an address that can't be decoded, still goes to sign-in.
   for (const p of ["/Policies", "/%70olicies", "/CHAT/x", "/%E0%A4%A"]) assert.ok(isLoginRedirect(await middleware(at(p))), `${p} goes to sign-in`);
+  // Signed out, the page-not-found page is drawn in the public frame, not the household menu (TE F1 on #514).
+  const shell = readFileSync("components/AppShell.tsx", "utf8");
+  assert.match(shell.slice(shell.indexOf("function isPublicView"), shell.indexOf("export default function AppShell")), /!isAppSection\(pathname\)/);
   // Every real page is still under a section that goes to sign-in.
   const { APP_SECTIONS } = await import("../../lib/public-site/app-sections");
   const onDisk = new Set(pageRoutes().map((p) => p.split("/")[1]).filter((s) => s));

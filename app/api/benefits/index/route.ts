@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { ensureBenefitSchema } from "@/lib/policies/benefit-catalog";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
@@ -31,7 +32,7 @@ async function unreadDocuments(accountId:string){
     `SELECT p.id,coalesce(p.product_name,p.original_filename) AS name,p.product_name,
             (SELECT count(*)::int FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id) AS pages
        FROM policies p
-      WHERE p.account_id=$1 AND p.processing_status='ready' AND p.benefits_indexed_at IS NULL AND ${activePredicate("p")}
+      WHERE p.account_id=$1 AND p.processing_status='ready' AND p.benefits_indexed_at IS NULL AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")}
         AND NOT (coalesce(p.document_role,'')=ANY($2::text[]))
         AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
       ORDER BY p.created_at`,[accountId,[...NO_COVER_READING_ROLES]]);
