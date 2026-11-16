@@ -2055,7 +2055,8 @@ function qualifierFragment(line: string, codeName: string, ownWords: string[], p
   // A bare line ending "Benefit(s)" or "Cover", or naming another benefit anywhere ("Early Critical Illness", "B. Personal
   // Accident", "Dread Disease"), is the next section's heading (gate #515 TE round 7), unless it names a person or role
   // ("Child Benefits"): then it may say whose stays. A household member's name still counts.
-  const heading = short && (/\b(?:benefits?|cover)$/i.test(inner) || OTHER_BENEFIT_NAME.test(inner)) && !ROLE_WORD.test(inner);
+  const heading = short && (/\b(?:benefits?|cover)$/i.test(inner) || OTHER_BENEFIT_NAME.test(inner)) && !ROLE_WORD.test(inner)
+    && !words.some((w) => NAME_QUALIFIER_WORDS.has(w));
   if (heading) return people.some((p) => (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []).some((w) => words.includes(w)));
   if (NAME_QUALIFIER.test(inner) || words.some((w) => NAME_QUALIFIER_WORDS.has(w) || FRAGMENT_QUALIFIER_WORDS.has(w))) return true;
   return people.some((p) => (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []).some((w) => words.includes(w)));
