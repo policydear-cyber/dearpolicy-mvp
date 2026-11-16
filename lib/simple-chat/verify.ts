@@ -2038,6 +2038,8 @@ function qualifierFragment(line: string, codeName: string, ownWords: string[], p
   const short = !bracket && !dash && t.split(/\s+/).length <= 4 && !/\d|[.:;!?]\s*$/.test(t);
   if (!bracket && !dash && !short) return false;
   const inner = (bracket?.[1] ?? dash?.[1] ?? t).trim();
+  // Another plan, tier or life ("(Plan II)", "Life 2") qualifies the row even when its words are neutral (gate #515 round 8).
+  if (/\b(?:plan|tier|option|class|level|type|life|lives)\s+(?:[a-z]|\d{1,2}|[ivx]{1,4})\b/i.test(inner)) return true;
   if (HARMLESS_BRACKET.test(inner) || CAP_BRACKET.test(inner) || DESCRIPTIVE_BRACKET.test(inner) || neutralBracket(inner)) return false;
   const code = /^[A-Z]{1,5}$/.test(inner);
   if (code && !QUALIFIER_CAPS.has(inner) && nameAbbreviation(codeName, inner, ownWords)) return false;
@@ -2050,13 +2052,18 @@ function qualifierFragment(line: string, codeName: string, ownWords: string[], p
   // "For the Life Assured", "For the insured": the policy's own life, said of every row.
   if (/^for\s+the\s+(?:life\s+(?:assured|insured)|insured(?:\s+person)?)$/i.test(inner)) return false;
   const words: string[] = inner.toLowerCase().match(/[\p{L}']+/gu) ?? [];
-  // A bare line ending "Benefits" is the next section's heading ("Critical Illness Benefits", "Accident Benefits"), as is
-  // a bare line naming another benefit ("Accidental Death", "Personal Accident"); a household member's name still counts.
-  const heading = short && (/\bbenefits$/i.test(inner) || /^(?:critical\s+illness(?:es)?|accidental\s+death(?:\s+(?:and|&)\s+dismemberment)?|personal\s+accident|cancer(?:\s+cover)?|death|total\s+(?:and|&)\s+permanent\s+disability)$/i.test(inner));
+  // A bare line ending "Benefit(s)" or "Cover", or naming another benefit anywhere ("Early Critical Illness", "B. Personal
+  // Accident", "Dread Disease"), is the next section's heading (gate #515 TE round 7), unless it names a person or role
+  // ("Child Benefits"): then it may say whose stays. A household member's name still counts.
+  const heading = short && (/\b(?:benefits?|cover)$/i.test(inner) || OTHER_BENEFIT_NAME.test(inner)) && !ROLE_WORD.test(inner);
   if (heading) return people.some((p) => (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []).some((w) => words.includes(w)));
   if (NAME_QUALIFIER.test(inner) || words.some((w) => NAME_QUALIFIER_WORDS.has(w) || FRAGMENT_QUALIFIER_WORDS.has(w))) return true;
   return people.some((p) => (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []).some((w) => words.includes(w)));
 }
+/** Another benefit's name, which a line under a daily row names when it heads the next section. */
+const OTHER_BENEFIT_NAME = /\b(?:critical\s+illness(?:es)?|dread\s+diseases?|major\s+illness(?:es)?|terminal\s+illness|personal\s+accident|accidental\s+(?:death|dismemberment|medical)|accident\s+medical|cancer|death|(?:total\s+(?:and|&)\s+)?permanent\s+disability)\b/i;
+/** People and roles: a heading that names one may say whose stays the row above pays. */
+const ROLE_WORD = /\b(?:child|children|kids?|juvenile|junior|spouse|wife|husband|partner|parents?|father|mother|son|daughter|dependants?|dependents?|family|infants?|baby|babies|newborns?|maids?|helpers?|domestic|staff|employees?|group|corporate|payor|grandparents?|joint|second|students?|women|men|female|male|senior|elderly|retirees?|worker|workers)\b/i;
 /** Words that, alone on the line under a daily row, say whose or which stays it pays: people, roles, causes, places. */
 const FRAGMENT_QUALIFIER_WORDS = new Set(("infant infants baby babies newborn toddler student students youth retiree retirees pensioner staff "
   + "helper helpers maid maids domestic payor policyholder proposer grandparent grandparents grandchild mum mom dad joint second co-insured "

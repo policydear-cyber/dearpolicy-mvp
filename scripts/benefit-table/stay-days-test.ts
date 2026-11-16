@@ -777,9 +777,9 @@ for (const below of ["ICU", "MAID", "INFANT", "SPOUSE"])
 // TE #515 round 6: a bracketed note, cell or enumerator, or the next section's heading, under the row is not a qualifier.
 for (const below of ["(continued)", "(cont'd)", "(Page 1 of 2)", "(Covered)", "(Yes)", "(No)", "(Nil)", "(N/A)", "(Paid)", "(Waived)", "(Guaranteed)",
   "(as charged)", "(Cashless)", "(Reimbursement)", "(see below)", "(*)", "(A)", "(a)", "(i)", "(SA)", "(100%)", "(TPD)", "(C)",
-  "Critical Illness Benefits", "Accident Benefits", "Personal Accident Benefits", "Accidental Death", "Cancer Benefits", "Travel Benefits", "Personal Accident"])
+  "Critical Illness Benefits", "Accident Benefits", "Personal Accident Benefits", "Accidental Death", "Cancer Benefits", "Travel Benefits", "Personal Accident", "Critical Illness Benefit", "Early Critical Illness Benefit", "Cancer Benefit", "Accidental Death Benefit", "Dread Disease Benefit", "Terminal Illness Benefit", "Early Stage Critical Illness", "Major Illness", "Critical Illness Cover", "Accident Medical Expenses", "Accidental Medical Reimbursement", "Accidental Dismemberment", "B. Personal Accident", "Cancer", "CRITICAL ILLNESS"])
   ROUND2.push([`W2e control line below '${below}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, "S$3,000"]);
-for (const below of ["(Note 1)", "(see overleaf)", "(Spouse only)", "(Infant)", "(ICU)", "(for each life)", "(Plan 2)", "- child", "(Overseas)", "(Wife)"])
+for (const below of ["Child Benefits", "Spouse Benefit", "Group Benefits", "(Plan II)", "(Plan III)", "- Plan II", "(Note 1)", "(see overleaf)", "(Spouse only)", "(Infant)", "(ICU)", "(for each life)", "(Plan 2)", "- child", "(Overseas)", "(Wife)"])
   ROUND2.push([`W2e bracket qualifier '${below}' below: none`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, null]);
 ROUND2.push(["W2c a qualifier after a blank line is not the row's own fragment", Q1(", from the 3rd day, up to 30 days per stay"), ["", "Infant"], R3O, 40, "S$3,000"]);
 test("stay-wrap W2 a household member's name on the line under Tan's row: none", () => {
