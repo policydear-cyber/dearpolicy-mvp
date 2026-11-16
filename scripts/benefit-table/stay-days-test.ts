@@ -576,6 +576,21 @@ ROUND2.push(
   ["R3-3f wrapped '[accident only]', 40 days", R3W, ["[accident only]"], R3O, 40, null],
   ["R3-3g wrapped ', overseas only' clause, 6 days", "Hospital cash\tS$100 per day in hospital, from the 3rd day, up to 30 days per stay,", ["overseas only"], R3O, 6, null],
 );
+// ============ Gate #508 round 5: a bracket that holds only the row's own cap is the cap (main reads it) ============
+const R5 = "Hospital cash\tS$100 per day, from the 3rd day";
+ROUND2.push(
+  ["R5-1 '(max 30 days)', 40 days", `${R5} (max 30 days)`, [], R3O, 40, "S$3,000"],
+  ["R5-1b '(up to 30 days)', 40 days", `${R5} (up to 30 days)`, [], R3O, 40, "S$3,000"],
+  ["R5-1c '(maximum 30 days)', 6 days", `${R5} (maximum 30 days)`, [], R3O, 6, "S$400"],
+  ["R5-1d '(30 days max)', 40 days", `${R5} (30 days max)`, [], R3O, 40, "S$3,000"],
+  ["R5-1e '(max 30 days per stay)', 40 days", `${R5} (max 30 days per stay)`, [], R3O, 40, "S$3,000"],
+  ["R5-1f '(up to 30 days per policy year)', 40 days", `${R5} (up to 30 days per policy year)`, [], R3O, 40, "S$3,000"],
+  ["R5-1g 'S$100 per day (max 30 days)' with no waiting words, from the first day, 40 days", "Hospital cash\tS$100 per day, from the first day (max 30 days)", [], { value: 100, maxDays: 30, fromDay: 1 }, 40, "S$3,000"],
+  ["R5-1h 'Hospital cash (per life assured)' is each person's own cap (main reads it), 40 days", R3W.replace("Hospital cash", "Hospital cash (per life assured)"), [], { ...R3O, benefit: "Hospital cash (per life assured)" }, 40, "S$3,000"],
+  ["R5-2c 'Hospital cash (Child)' stays a condition: none", R3W.replace("Hospital cash", "Hospital cash (Child)"), [], { ...R3O, benefit: "Hospital cash (Child)" }, 40, null],
+  ["R5-2 '(max 30 days, accident only)' stays a condition: none", `${R5} (max 30 days, accident only)`, [], R3O, 40, null],
+  ["R5-2b '(up to 30 days for all lives)' stays a condition: none", `${R5} (up to 30 days for all lives)`, [], R3O, 40, null],
+);
 for (const [name, row, below, o, days, want] of ROUND2) test(`stay-wrap ${name}`, () => {
   const h = household([{ person: TAN, row, below, value: o.value, maxDays: o.maxDays, fromDay: o.fromDay ?? null, currencyLine: o.currencyLine, above: o.above, benefit: o.benefit }]);
   const a = ask(h, TAN, [`I was in hospital for ${days} days. How much will I get?`], { perDay: { stayDays: days } });

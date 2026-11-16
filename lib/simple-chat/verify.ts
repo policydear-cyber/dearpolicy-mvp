@@ -1851,7 +1851,10 @@ function pageRowNames(pageText: string, rowStart: number): string[] {
 }
 /** What a bracket in a daily row's own words may hold and change nothing: a number ("(30) days"), a currency, or the unit
  * the row is already read by. */
-const HARMLESS_BRACKET = /^\s*(?:\d{1,3}|[A-Z]{0,3}\$|SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|per\s+day|a\s+day|days?|consecutive|inclusive)\s*$/i;
+const HARMLESS_BRACKET = /^\s*(?:\d{1,3}|[A-Z]{0,3}\$|SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|per\s+day|a\s+day|days?|consecutive|inclusive|per\s+(?:life(?:\s+(?:assured|insured))?|insured(?:\s+person)?|person))\s*$/i;
+/** A bracket that holds only the row's own most days ("(max 30 days)", "(up to 30 days per stay)", "(30 days max)"): the cap,
+ * read as printed, never a condition (gate #508 round 5 regression: main reads it). */
+const CAP_BRACKET = /^\s*(?:(?:max(?:imum)?\.?|up\s+to)\s*(?:of\s+)?\d{1,3}\s*days?|\d{1,3}\s*days?\s+max(?:imum)?\.?)(?:\s+(?:per|each|in\s+any\s+one|for\s+any\s+one)\s+(?:hospital\s+stay|stay|confinement|admission|accident|(?:policy\s+)?year))?\s*$/i;
 /** A row's leading number ("(a) ", "1. ", "i) ", "2a)"): a label, never a condition (gate #508 round 3 NEW-HIGH 2). */
 const ROW_ENUMERATOR = /^\s*(?:\((?:\d{1,2}[a-z]?|[a-z]|[ivx]{1,4})\)|(?:\d{1,2}[a-z]?|[a-z]|[ivx]{1,4})[.)])\s+/i;
 /** Whether a bracket of capitals after a row's name is that name's abbreviation ("Hospital cash (HC)"): its letters are
@@ -1903,8 +1906,10 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   // (accident only)", "(for all lives)", "(overseas only)", "(child)"): the stay may not be paid as the household's own,
   // so no figure, unless the bracket holds only a harmless note (gate #508 round 2 HIGH 2).
   // A bracket that is wholly a waiting form the row reads ("(first 2 days of any admission not payable)") is the row's own.
+  // "(30 days max)" is read as "(maximum 30 days)", so the most days are found where a day cap is looked for.
+  rowText = rowText.replace(/\(\s*(\d{1,3})\s*days?\s+max(?:imum)?\.?(\s+[^()]*)?\)/gi, (m, d: string, rest: string | undefined) => CAP_BRACKET.test(m.slice(1, -1)) ? `(maximum ${d} days${rest ?? ""})` : m);
   for (const m of rowText.matchAll(/\(([^()]*)\)/g)) {
-    if (HARMLESS_BRACKET.test(m[1])) continue;
+    if (HARMLESS_BRACKET.test(m[1]) || CAP_BRACKET.test(m[1])) continue;
     if (block.own.includes("\t") && nameCell.endsWith(m[0]) && nameAbbreviation(nameCell.slice(0, -m[0].length), m[1].trim())) continue;
     const w = takeWaiting(m[1]);
     if (w.unpaid.length && !/[\p{L}\d]/u.test(w.rest.replace(/\b(?:of|the|a|an|any|each|every|is|are)\b/gi, " "))) continue;
