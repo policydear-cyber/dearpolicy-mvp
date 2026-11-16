@@ -1308,7 +1308,7 @@ div.answer-point { display: grid; gap: 4px; }
 .home-ask-fab { display: none; }
 @media (max-width: 1000px) { .home-top { grid-template-columns: minmax(0, 1fr); } .home-ask-panel { position: static; } }
 @media (max-width: 900px) {
-  .home-ask-fab { display: inline-flex; position: fixed; right: 16px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 16px); z-index: 30; min-height: 52px; padding-inline: 20px; border-radius: 999px; box-shadow: 0 6px 20px rgb(0 0 0 / .18); }
+  .home-ask-fab { display: inline-flex; position: fixed; right: 16px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 16px); z-index: 30; min-height: 52px; padding-inline: 20px; border-radius: 999px; box-shadow: var(--shadow-float); }
   .dashboard-page { padding-bottom: 120px; }
 }
 @media (max-width: 620px) {
