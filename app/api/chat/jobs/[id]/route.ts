@@ -5,7 +5,9 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 import { scheduleChatDrain,scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { cancelChatJob,getChatJob } from "@/lib/chat/jobs";
 import { sanitizeStoredAnswer } from "@/lib/chat/monetary-boundary";
-import { invalidateAnswersWithDeletedPolicies } from "@/lib/chat/stale-answers";
+import { invalidateAnswersWithDeletedPolicies, replacedEarlierAnswers } from "@/lib/chat/stale-answers";
+import { query } from "@/lib/db/client";
+import { answerKey } from "@/lib/chat/replaced-live";
 import { getConversation } from "@/lib/chat/store";
 import type { ChatAnswer } from "@/types";
 
@@ -25,6 +27,7 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{id:strin
     const job=await getChatJob(ctx.householdId,id);
     if(!job)return NextResponse.json({error:"Analysis not found or its chat was deleted."},{status:404});
     let result:unknown=job.status==="complete"?sanitizeStoredAnswer(job.result_json):null;
+    let replaced:ReturnType<typeof replacedEarlierAnswers>=[];
     // An answer that relied on a since-deleted policy is never re-served as current cover; nor is one a later turn of its
     // chat corrected (who it was about: lib/simple-chat/subjects.ts), read from the chat's saved state.
     if(result&&typeof result==="object"){
@@ -32,8 +35,24 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{id:strin
       const wrapper=result as {answer?:Partial<ChatAnswer>};
       if(wrapper.answer&&typeof wrapper.answer==="object"){const [current]=await invalidateAnswersWithDeletedPolicies(ctx.householdId,[wrapper.answer],{conversationState});result={...wrapper,answer:current};}
       else{const [current]=await invalidateAnswersWithDeletedPolicies(ctx.householdId,[result as Partial<ChatAnswer>],{conversationState});result=current;}
+      // The earlier answers of this chat its saved state now marks replaced ("Actually it was Daniel, not Grace"), with the
+      // same rule and the same replacement the reopened chat serves (lib/chat/replaced-live.ts): the live page marks them
+      // as this answer arrives, so the live and the reopened chat never disagree (TE-ACC-20261116 journey 4).
+      if(job.conversation_id&&conversationState){
+        const earlier=await query<{answer_json:unknown}>("SELECT answer_json FROM chat_messages WHERE account_id=$1 AND conversation_id=$2 AND role<>'user' AND answer_json IS NOT NULL ORDER BY created_at DESC,message_order DESC LIMIT 200",[ctx.householdId,job.conversation_id]);
+        const finished=wrapper.answer&&typeof wrapper.answer==="object"?wrapper.answer:wrapper as Partial<ChatAnswer>;
+        const stored=earlier.rows.map(r=>sanitizeStoredAnswer(r.answer_json) as Partial<ChatAnswer>|null);
+        const marked=replacedEarlierAnswers(stored,conversationState,finished);
+        // Each one as the history route serves it, with the same checks in the same order (a deleted policy's notice comes
+        // first), so the live and the reopened notice are the same (gate #510 LOW 3).
+        if(marked.length){
+          const originals=marked.map(r=>stored.find(a=>answerKey(a)===r.key)??null);
+          const served=await invalidateAnswersWithDeletedPolicies(ctx.householdId,originals,{conversationState});
+          replaced=marked.map((r,i)=>({key:r.key,answer:(served[i]??r.answer) as ChatAnswer}));
+        }
+      }
     }
-    return NextResponse.json({job:{id:job.id,status:job.status,progress:job.progress,error:job.error},result});
+    return NextResponse.json({job:{id:job.id,status:job.status,progress:job.progress,error:job.error},result,...(replaced.length?{replaced}:{})});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Analysis lookup failed"},{status:400});
     const authResponse=routeErrorResponse(error);
