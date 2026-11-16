@@ -211,6 +211,17 @@ async function main() {
       const t = await tile(john, "Critical Illness"), p = await page(john, "Critical Illness");
       assert.equal(t.status, "on_file", JSON.stringify(t)); assert.equal(p.verdict, "on_file", JSON.stringify(p)); noAmount(t, p);
     });
+
+    // Critic #506 (LOW): one column per person, both names on one header line. No row is anyone's by position.
+    const lee = await person("Lee Ann", "self"), kim = await person("Kim Ann", "child");
+    const cols = await doc({ member: lee, product: "Osprey Family Plan", role: "personal_schedule", own: true, text: "FAMILY SCHEDULE\nBenefit\tLEE ANN\tKIM ANN\nOsprey Accident Cover\t80,000\t40,000" });
+    await query("INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id) VALUES($1,$2,'LEE ANN',$3),($1,$2,'KIM ANN',$4)", [ACCOUNT, cols, lee, kim]);
+    await query(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,confirmed,evidence_verified)
+      VALUES($1,$2,$3,'Personal Accident',40000,'SGD','Osprey',1,'Osprey Accident Cover\t80,000\t40,000',false,false)`, [ACCOUNT, cols, kim]);
+    await test("V15 NEGATIVE CONTROL: a page with one column per person proves no row's owner: not Covered", async () => {
+      const t = await tile(kim, "Personal Accident"), p = await page(kim, "Personal Accident");
+      assert.equal(t.status, "on_file", JSON.stringify(t)); assert.equal(p.verdict, "on_file", JSON.stringify(p)); noAmount(t, p);
+    });
   } finally {
     for (const t of ["benefit_links", "benefit_readings", "policy_detected_people", "policy_reference_coverages", "policy_coverages", "policy_members", "policy_pages", "policies", "family_members", "household_members"])
       await query(`DELETE FROM ${t} WHERE ${t === "household_members" ? "household_id" : "account_id"}=$1`, [ACCOUNT]).catch(() => undefined);

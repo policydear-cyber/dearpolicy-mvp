@@ -33,6 +33,9 @@ export function heldOnPage(pageText: string | null | undefined, quote: string | 
   const lineStart = text.lastIndexOf("\n", span.start) + 1, nextBreak = text.indexOf("\n", span.end);
   const line = text.slice(lineStart, nextBreak < 0 ? text.length : nextBreak);
   if (other.some((n) => personPrinted(line, n))) return false;
+  // A layout with one column per person ("John | Mary" on one line, rows below) says nothing about whose a row is (Critic
+  // #506): any line printing this person beside someone else leaves the line unproven.
+  if (text.split("\n").some((l) => own.some((n) => personPrinted(l, n)) && other.some((n) => personPrinted(l, n)))) return false;
   const before = flat(text.slice(0, span.start));
   const last = (list: string[]) => Math.max(-1, ...list.flatMap((n) => starts(before, n)));
   return last(own) > last(other);
