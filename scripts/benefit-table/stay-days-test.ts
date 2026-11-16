@@ -705,6 +705,15 @@ for (const name of ["Hospital Cash Cover", "Hospital Cash Coverage", "Hospital C
   "Hospital Cash Relief", "Hospital Income Protection", "Hospital Cash Protect", "Hospital Income Replacement", "Hospital Cash II", "Hospital Cash III",
   "Hospital Cash Shield", "Hospital Cash Saver", "Secure Hospital Cash", "Hospital Cash Support", "Hospital Cash Assist"])
   ROUND2.push([`P1 control name '${name}' keeps main's figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
+// Gate #515 round 2: Guard, Supplementary, Additional, Optional and Add-on are neutral; "Inpatient" reads as two initials;
+// a code may start past a brand of several words.
+for (const name of ["Hospital Cash Guard", "Guard Hospital Cash", "Supplementary Hospital Cash", "Hospital Cash Supplement", "Additional Hospital Cash",
+  "Optional Hospital Cash", "Hospital Cash Add-on", "Inpatient Cash (IPC)", "Inpatient Cash Benefit (IPCB)", "Term Guard Hospital Cash (HC)",
+  "Kestrel Term Guard Hospital Cash (HC)", "The Hospital Cash Benefit (HCB)"])
+  ROUND2.push([`P5 control name '${name}' keeps main's figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
+// A letter or Roman tier is never neutral past the first word.
+for (const name of ["Hospital Cash A", "Ward A Hospital Cash", "Hospital Cash Cover A", "Hospital Cash S", "Hospital Cash Rider IV"])
+  ROUND2.push([`P5b name '${name}': none`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, null]);
 // Gate #515 round 1 NEW-HIGH 2: a code may start past "Daily" or the document's own brand.
 for (const name of ["Daily Hospital Cash (HC)", "Daily Hospital Income (HI)", "Daily Hospital Cash Benefit (HCB)", "Kestrel Hospital Cash (HC)"])
   ROUND2.push([`P2 control code '${name}' keeps main's figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
@@ -726,6 +735,8 @@ for (const name of ["Hospital Cash 65", "US Hospital Cash", "Hospital Cash - US"
     ["Hospice Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Care with Hospice"], ["China Hospital Cash", "China Life Insurance (Singapore) Pte Ltd", "Kestrel Shield"],
     ["American Hospital Cash", "American International Assurance Company", "Kestrel Shield"], ["Infant Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Infant Travel Shield"],
     ["Travel Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Infant Travel Shield"], ["Falcon Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Term Guard"],
+    ["Infant Hospital Cash", "Falcon Insurance Ltd", "Infant Shield"], ["Mum Hospital Cash", "Falcon Insurance Ltd", "Mum and Baby Care"],
+    ["Student Hospital Cash", "Falcon Insurance Ltd", "Student Care"],
   ];
   for (const [name, ins, prod] of none) test(`stay-wrap P4 '${name}' in '${prod}' by '${ins}': none`, () => assert.equal(rule(name, ins, prod), null));
   const kept: [string, string | null, string | null][] = [

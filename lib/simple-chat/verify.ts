@@ -1839,7 +1839,10 @@ function qualifiedName(name: string, words: string[], people: string[], ownWords
   // stays the row pays, so no figure: no deny-list of such words would ever be complete.
   // The document's own words count only as a run printed in its product name or insurer, from its start or to its end
   // ("Kestrel", "Term Guard", "PRU" for "PRUShield"): a word from inside it alone ("Baby" in "Mum & Baby Care") does not.
-  if (!withoutOwnPhrases(words, ownWords).every((w) => NEUTRAL_NAME_WORDS.has(w) || /^\d$/.test(w))) return true;
+  // "S" of a printed "S$", and "A" as the name's first word ("A Benefit of"), are not tier letters ("Hospital Cash A").
+  const sign = /S\$/.test(name);
+  const plain = words.filter((w, i) => !(w === "s" && sign) && !(w === "a" && i === 0));
+  if (!withoutOwnPhrases(plain, ownWords).every((w) => NEUTRAL_NAME_WORDS.has(w) || /^\d$/.test(w))) return true;
   if (STAY_NAME_CORE.test(clean)) return false;
   return !words.every((w) => DAILY_NAME_WORDS.has(w) || ROW_GRAMMAR_WORDS.has(w) || /^\d{1,2}$/.test(w) || /^(?:s|sgd|per|day)$/.test(w));
 }
@@ -1850,26 +1853,27 @@ const DAILY_NAME_WORDS = new Set("hospital hospitalisation hospitalization incom
 /** The only words a daily row's name may hold besides a number or the document's own product and insurer words: kinds of
  * daily hospital benefit, the unit and currency it is paid in, and a few neutral product words ("Plus", "Enhanced",
  * "Payout", "Protector"). An allow-list (gate #513 round 3/4 HIGH). */
-const NEUTRAL_NAME_WORDS = new Set([...DAILY_NAME_WORDS, ...("stay room board and a an the of per day payable payout payment amount plus enhanced "
-  + "cover coverage insurance plan protector protection protect replacement indemnity compensation grant relief shield saver secure support assist "
-  + "ii iii iv s sgd usd myr rm gbp eur aud hkd").split(" ")]);
+const NEUTRAL_NAME_WORDS = new Set([...DAILY_NAME_WORDS, ...("stay room board and an the of per day payable payout payment amount plus enhanced "
+  + "cover coverage insurance plan protector protection protect replacement indemnity compensation grant relief shield guard saver secure support assist "
+  + "supplementary supplement additional optional addon ii iii sgd usd myr rm gbp eur aud hkd").split(" ")]);
 /** Words of a document's insurer or product name that say nothing about whose or which stays ("Life", "Singapore",
  * "Insurance", "Ltd"): never taken as the document's own words. */
 const COMPANY_WORDS = new Set(("life insurance assurance general takaful company co ltd limited pte plc inc berhad bhd group holdings financial "
   + "corporation international the of and singapore malaysia hong kong asia pacific asian china chinese america american british india indian "
   + "japan japanese korea korean thailand thai indonesia philippines vietnam australia australian europe european us usa uk").split(" "));
 /** The runs of a document's own product name and insurer that a daily row's name may repeat ("Kestrel Hospital Cash" in a
- * Kestrel policy, "Term Guard Hospital Cash" in "Kestrel Term Guard"): each name's words from its start, the product's
- * whole name past the insurer's brand, and its initials ("TM" for Tokio Marine), with generic company and place words left out. A run holding a qualifier word is
+ * Kestrel policy, "Term Guard Hospital Cash" in "Kestrel Term Guard"): the insurer's words from its start, the product's
+ * whole name, alone or past the insurer's brand, and the initials of each ("TM" for Tokio Marine), with generic company and place words left out. A run holding a qualifier word is
  * never one. A brand, never a qualifier: a word from the middle alone ("Baby" in "Kestrel Mum & Baby Care") is not a run. */
 export function documentOwnWords(doc: { insurer: string | null; productName: string | null }): string[] {
   const runs = new Set<string>();
   const words = (t: string | null) => ((t ?? "").toLowerCase().match(/[\p{L}\d]+/gu) ?? []).filter((w) => !COMPANY_WORDS.has(w));
   const insurer = words(doc.insurer), product = words(doc.productName);
-  for (const ws of [insurer, product]) {
-    for (let i = 1; i <= ws.length; i++) runs.add(ws.slice(0, i).join(" "));
-    if (ws.length >= 2) runs.add(ws.map((w) => w[0]).join(""));
-  }
+  // The insurer's words from its start; the product's whole name only, so a first word of it alone ("Infant" in "Infant
+  // Shield") is never the brand (TE #515 round 1 HIGH).
+  for (let i = 1; i <= insurer.length; i++) runs.add(insurer.slice(0, i).join(" "));
+  if (product.length) runs.add(product.join(" "));
+  for (const ws of [insurer, product]) if (ws.length >= 2) runs.add(ws.map((w) => w[0]).join(""));
   // The product's name past the insurer's own leading words, whole ("Term Guard" in "Kestrel Term Guard"), never a part of
   // it ("Hospice" in "Kestrel Care with Hospice").
   let lead = 0;
@@ -1970,14 +1974,20 @@ const ROW_ENUMERATOR = /^\s*(?:\((?:\d{1,2}[a-z]?|[a-z]|[ivx]{1,4})\)|(?:\d{1,2}
 const CODE_LEAD_WORDS = new Set("daily the a enhanced".split(" "));
 function nameAbbreviation(name: string, abbr: string, ownWords: string[] = []): boolean {
   if (!/^[A-Z]{1,5}$/.test(abbr)) return false;
-  const words = name.replace(/\([^()]*\)/g, " ").match(/[\p{L}]+/gu) ?? [];
+  // "Inpatient" is read as "In Patient" for its initials ("Inpatient Cash (IPC)"; Critic #515 round 2).
+  const words = name.replace(/\([^()]*\)/g, " ").replace(/\bin-?patient\b/gi, "In Patient").match(/[\p{L}]+/gu) ?? [];
   // The code may start past leading words that are neutral or the document's own ("Daily Hospital Cash (HC)",
   // "Kestrel Hospital Cash (HC)"; gate #515 round 1 NEW-HIGH 2).
   const starts = [0];
-  for (let s = 0; s < words.length - 1; s++) {
-    const w = words[s].toLowerCase();
-    if (!(CODE_LEAD_WORDS.has(w) || ownWords.some((r) => !r.includes(" ") && ownWordFits(w, r)))) break;
-    starts.push(s + 1);
+  const lower = words.map((w) => w.toLowerCase());
+  for (let s = 0; s < words.length - 1;) {
+    if (CODE_LEAD_WORDS.has(lower[s])) { s++; starts.push(s); continue; }
+    // The longest run of the document's own words at this point ("Kestrel Term Guard", "K Care", "PRU").
+    const run = ownWords.map((r) => r.split(" ")).filter((r) => s + r.length < words.length
+      && r.every((o, k) => r.length === 1 ? ownWordFits(lower[s], o) : lower[s + k] === o)).sort((a, b) => b.length - a.length)[0];
+    if (!run) break;
+    s += run.length;
+    starts.push(s);
   }
   const fits = (code: string, initials: string) => {
     if (!code || !initials || initials[0] !== code[0]) return false;
@@ -2162,7 +2172,7 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   const strict = period || cap || newWaiting || mostUnsure;
   // The row's name says whose stays or which stays it pays ("(a) Hospital cash for all lives"): no figure (gate #508
   // round 4 HIGH). With a rule read since R4 H2-C, benefit-name words only.
-  const nameWordList = ownName.replace(ROW_ENUMERATOR, " ").replace(/\bpay-out\b/gi, "payout").replace(/\bfor\s+the\s+(?:insured(?:\s+person)?|life\s+assured)\s*$/i, " ").replace(/\(\s*per\s+(?:life(?:\s+(?:assured|insured))?|insured(?:\s+person)?|person)\s*\)/gi, " ").replace(/\(\s*([A-Z]{1,5})\s*\)/g, (m, a: string) => nameAbbreviation(ownName.replace(ROW_ENUMERATOR, ""), a, ownWords) ? " " : m)
+  const nameWordList = ownName.replace(ROW_ENUMERATOR, " ").replace(/\bpay-out\b/gi, "payout").replace(/\badd-on\b/gi, "addon").replace(/\bfor\s+the\s+(?:insured(?:\s+person)?|life\s+assured)\s*$/i, " ").replace(/\(\s*per\s+(?:life(?:\s+(?:assured|insured))?|insured(?:\s+person)?|person)\s*\)/gi, " ").replace(/\(\s*([A-Z]{1,5})\s*\)/g, (m, a: string) => nameAbbreviation(ownName.replace(ROW_ENUMERATOR, ""), a, ownWords) ? " " : m)
     .toLowerCase().match(/[\p{L}\d]+/gu) ?? [];
   if (strict ? !nameWordList.every((w) => BENEFIT_NAME_WORDS.has(w) || ROW_GRAMMAR_WORDS.has(w)) : qualifiedName(ownName, nameWordList, people, ownWords)) return null;
   // Past the name, the row's own terms are an allow-list (gate #508 round 4 HIGH: "…up to 30 days per stay accident
