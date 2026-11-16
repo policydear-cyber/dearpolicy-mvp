@@ -9,11 +9,33 @@
 import { locatePassage } from "@/lib/documents/evidence";
 import { personPrinted } from "@/lib/documents/fact-check";
 
-export function heldOnPage(pageText: string | null | undefined, quote: string | null | undefined, names: readonly string[]): boolean {
+const flat = (v: string) => v.toLowerCase().replace(/\s+/g, " ");
+/** Every start of `name` in `text` (both flattened), so the name nearest the quote can be found. */
+function starts(text: string, name: string): number[] {
+  const n = flat(name).trim(); const out: number[] = [];
+  if (n.length < 3) return out;
+  for (let i = text.indexOf(n); i >= 0; i = text.indexOf(n, i + 1)) out.push(i);
+  return out;
+}
+/** `names`: the printed names linked to this person on the document. `others`: every other person's printed name on it (a
+ * second life on a joint schedule). On a page that also names someone else, the line must be the person's own: no other
+ * person is named on the quote's own line, and the last name printed before the quote is theirs (Critic #506 H1: on a
+ * two-life page a rider the reader put under the wrong life must not make that life Covered). */
+export function heldOnPage(pageText: string | null | undefined, quote: string | null | undefined, names: readonly string[], others: readonly string[] = []): boolean {
   const text = String(pageText ?? "");
   if (!text.trim() || String(quote ?? "").trim().length < 8) return false;
-  if (!locatePassage(text, quote)) return false;
-  return names.some((n) => n.trim().length > 0 && personPrinted(text, n));
+  const span = locatePassage(text, quote);
+  if (!span) return false;
+  const own = names.filter((n) => n.trim().length > 0 && personPrinted(text, n));
+  if (!own.length) return false;
+  const other = others.filter((n) => n.trim().length > 0 && !own.some((o) => flat(o).trim() === flat(n).trim()) && personPrinted(text, n));
+  if (!other.length) return true;
+  const lineStart = text.lastIndexOf("\n", span.start) + 1, nextBreak = text.indexOf("\n", span.end);
+  const line = text.slice(lineStart, nextBreak < 0 ? text.length : nextBreak);
+  if (other.some((n) => personPrinted(line, n))) return false;
+  const before = flat(text.slice(0, span.start));
+  const last = (list: string[]) => Math.max(-1, ...list.flatMap((n) => starts(before, n)));
+  return last(own) > last(other);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,10 +53,14 @@ export async function heldLines(query: Query, accountId: string, memberId: strin
   const pages = await query<{ policy_id: string; page_number: number; text: string | null }>(
     `SELECT pp.policy_id::text AS policy_id,pp.page_number,pp.text FROM policy_pages pp WHERE pp.account_id=$1 AND pp.policy_id=ANY($2::uuid[]) AND ${OWN_WORDS}`,
     [accountId, policies]);
-  const names = await query<{ policy_id: string; detected_name: string }>(
-    `SELECT pd.policy_id::text AS policy_id,pd.detected_name FROM policy_detected_people pd WHERE pd.account_id=$1 AND pd.policy_id=ANY($2::uuid[]) AND pd.matched_family_member_id=$3`,
+  // Every printed name on these documents, the person's own and everyone else's (another life on a joint schedule).
+  const names = await query<{ policy_id: string; detected_name: string; mine: boolean }>(
+    `SELECT pd.policy_id::text AS policy_id,pd.detected_name,(pd.matched_family_member_id IS NOT DISTINCT FROM $3::uuid) AS mine FROM policy_detected_people pd WHERE pd.account_id=$1 AND pd.policy_id=ANY($2::uuid[])`,
     [accountId, policies, memberId]);
   const page = new Map(pages.rows.map((p) => [`${p.policy_id}|${p.page_number}`, p.text]));
-  return lines.map((l) => l.source_page != null && heldOnPage(page.get(`${l.policy_id}|${l.source_page}`),
-    l.evidence_text, names.rows.filter((n) => n.policy_id === String(l.policy_id)).map((n) => n.detected_name)));
+  return lines.map((l) => {
+    if (l.source_page == null) return false;
+    const on = names.rows.filter((n) => n.policy_id === String(l.policy_id));
+    return heldOnPage(page.get(`${l.policy_id}|${l.source_page}`), l.evidence_text, on.filter((n) => n.mine).map((n) => n.detected_name), on.filter((n) => !n.mine).map((n) => n.detected_name));
+  });
 }

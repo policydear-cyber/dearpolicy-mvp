@@ -10,7 +10,8 @@
  *   - nothing on file: Not found on both;
  *   - (DC 16 Nov) an unconfirmed line whose own quote and person are printed on its page: Covered on both, no amount; with
  *     NEGATIVE CONTROLS for a page without the person's name and a quote not on its page; and a confirmed sum beside an
- *     unconfirmed line of the same cover shows no amount, never the part sum.
+ *     unconfirmed line of the same cover shows no amount, never the part sum; on a two-life page only a line under the
+ *     person's own name is held (Critic #506 H1).
  * No real household, insurer or scheme; no model call; no paid call. Needs DEARPOLICY_DISPOSABLE_DB=1 and a local DATABASE_URL.
  *   npm run -s coverage:home-coverage-verdict-test */
 import assert from "node:assert/strict";
@@ -189,6 +190,26 @@ async function main() {
     await test("V12 a confirmed sum beside an unconfirmed line of the same cover: Covered with no amount, never the part sum", async () => {
       const t = await tile(kai.m, "Death"); assert.equal(t.status, "covered", JSON.stringify(t));
       assert.equal(t.amount, null, JSON.stringify(t)); assert.equal(t.displayAmount, null, JSON.stringify(t));
+    });
+
+    // Critic #506 H1: a joint schedule naming two lives. Each life's rider sits under its own name; the reader put Mary's rider
+    // under John. John's own line is held; the rider under the wrong life must not make John Covered.
+    const john = await person("John Tan", "self"), mary = await person("Mary Tan", "spouse");
+    const JOINT = "JOINT POLICY SCHEDULE\nLife Assured 1\tJOHN TAN\nHeron Term Life\tSum Assured 300,000\nLife Assured 2\tMARY TAN\nHeron Critical Illness Rider\tSum Assured 50,000";
+    const joint = await doc({ member: john, product: "Heron Joint Life", role: "personal_schedule", own: true, text: JOINT });
+    await query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')", [joint, mary, ACCOUNT]);
+    await query("INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id) VALUES($1,$2,'JOHN TAN',$3),($1,$2,'MARY TAN',$4)", [ACCOUNT, joint, john, mary]);
+    const unconfirmed = (m: string, category: string, quote: string) => query(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,confirmed,evidence_verified)
+      VALUES($1,$2,$3,$4,1,'SGD','Heron',1,$5,false,false)`, [ACCOUNT, joint, m, category, quote]);
+    await unconfirmed(john, "Death", "Heron Term Life\tSum Assured 300,000");
+    await unconfirmed(john, "Critical Illness", "Heron Critical Illness Rider\tSum Assured 50,000");
+    await test("V13 a two-life page: the person's own line under their own name is held, Covered on both, no amount", async () => {
+      const t = await tile(john, "Death"), p = await page(john, "Death");
+      assert.equal(t.status, "covered", JSON.stringify(t)); assert.equal(p.verdict, "covered", JSON.stringify(p)); noAmount(t, p);
+    });
+    await test("V14 NEGATIVE CONTROL: another life's rider assigned to this person is not Covered on either page", async () => {
+      const t = await tile(john, "Critical Illness"), p = await page(john, "Critical Illness");
+      assert.equal(t.status, "on_file", JSON.stringify(t)); assert.equal(p.verdict, "on_file", JSON.stringify(p)); noAmount(t, p);
     });
   } finally {
     for (const t of ["benefit_links", "benefit_readings", "policy_detected_people", "policy_reference_coverages", "policy_coverages", "policy_members", "policy_pages", "policies", "family_members", "household_members"])
