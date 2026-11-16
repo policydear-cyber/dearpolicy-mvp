@@ -26,8 +26,12 @@ const SRC = {
   nomination: { label: "CPF Board: Making a CPF nomination", url: "https://www.cpf.gov.sg/member/account-services/providing-for-your-loved-ones/making-a-cpf-nomination" },
   hps: { label: "CPF Board: Protect your home: insurance for your HDB flat", url: "https://www.cpf.gov.sg/member/infohub/educational-resources/protect-your-home-insurance-for-your-hdb-flat" },
   hpsBenefits: { label: "CPF Board: 3 benefits of the Home Protection Scheme", url: "https://www.cpf.gov.sg/member/infohub/educational-resources/3-benefits-of-the-home-protection-scheme" },
+  eldershield: { label: "CPF Board: ElderShield", url: "https://www.cpf.gov.sg/member/healthcare-financing/eldershield" },
+  medifund: { label: "Ministry of Health: MediFund", url: "https://www.moh.gov.sg/managing-expenses/schemes-and-subsidies/medifund" },
+  chas: { label: "Ministry of Health: Community Health Assist Scheme (CHAS)", url: "https://www.moh.gov.sg/managing-expenses/schemes-and-subsidies/chas" },
 } satisfies Record<string, LearnSource>;
 const CHECKED_13NOV = "2026-11-13";
+const CHECKED_15NOV = "2026-11-15";
 
 export const SINGAPORE_GUIDES: LearnGuide[] = [
   {
@@ -227,6 +231,11 @@ export const SINGAPORE_GUIDES: LearnGuide[] = [
         { kind: "fact", source: 1, text: "Cover lasts one year at a time and is renewed automatically each year before your 65th birthday." },
       ] },
       { heading: "Keeping it, or stopping it", blocks: [
+        { kind: "flow", caption: "How DPS cover runs, as CPF Board describes it.", items: [
+          { icon: "approve", title: "Starts automatically", text: "With a valid CPF working contribution." },
+          { icon: "renewal", title: "Renews each year", text: "Automatically, before your 65th birthday." },
+          { icon: "decide", title: "Can be stopped", text: "At any time, by contacting Great Eastern Life." },
+        ] },
         { kind: "fact", source: 0, text: "DPS is not compulsory. You can end it at any time by contacting Great Eastern Life. To rejoin later you must declare your health, and cover depends on good health." },
         { kind: "fact", source: 0, text: "Premiums rise with age. CPF Board's examples of people who may not need DPS: those whose dependants are grown up and independent, those with enough savings to leave their dependants, and those with enough private life or term insurance." },
         { kind: "fact", source: 0, text: "From early 2025, the CPF Special Account closes at age 55, which may affect how your DPS premium is paid. CPF Board suggests arranging another way to pay if you want to keep the cover." },
@@ -360,6 +369,11 @@ export const SINGAPORE_GUIDES: LearnGuide[] = [
         { kind: "fact", source: 0, text: "The premium is deducted automatically each year from your Ordinary Account. You pay premiums for 90% of the cover period: for a 30-year cover period, premiums are paid for 27 years." },
       ] },
       { heading: "How a claim is paid", blocks: [
+        { kind: "flow", caption: "Where an HPS claim payment goes, as CPF Board describes it.", items: [
+          { icon: "illness", title: "A covered event", text: "Death, terminal illness or total permanent disability." },
+          { icon: "insurer", title: "The claim is settled", text: "Up to the sum insured, for that owner's share of cover." },
+          { icon: "home", title: "The loan is paid down", text: "Paid to HDB or the mortgagee, not to the family." },
+        ] },
         { kind: "fact", source: 0, text: "HPS settles the outstanding housing loan, up to the sum insured, with HDB or the mortgagee directly." },
         { kind: "fact", source: 1, text: "Joint owners each choose a share of cover, which should at least match the share of the monthly instalment each pays." },
         { kind: "fact", source: 0, text: "The total share of cover per household must add up to at least 100%." },
@@ -373,6 +387,154 @@ export const SINGAPORE_GUIDES: LearnGuide[] = [
         { kind: "quiz", question: "A co-owner's HPS share of cover is 50%. What does a claim for them settle?",
           options: ["The whole loan", "50% of the outstanding loan, up to the sum insured", "Nothing, unless both owners claim"],
           answer: 1, explain: "CPF Board's example: with a 50% share of cover, HPS pays 50% of the outstanding housing loan, up to the insured sum, to the mortgagee." },
+      ] },
+    ],
+  },
+  {
+    slug: "sg-eldershield",
+    group: "singapore",
+    icon: "walk",
+    region: SG,
+    checkedOn: CHECKED_15NOV,
+    sources: [SRC.eldershield],
+    keywords: ["eldershield", "elder shield", "eldershild", "eldershield 300", "eldershield 400", "severe disability", "long-term care", "ltc", "activities of daily living", "adl", "eldershield supplement", "eldershield to careshield"],
+    title: "What is ElderShield?",
+    summary: "The older long-term care insurance for severe disability: what it pays, how a claim works, and how it relates to CareShield Life.",
+    sections: [
+      { heading: "In one line", blocks: [
+        { kind: "fact", source: 0, text: "ElderShield is a long-term care insurance targeted at severe disability. It provides cash payouts of S$300 or S$400 per month, for up to five or six years, depending on the plan type." },
+        { kind: "fact", source: 0, text: "The ElderShield scheme is no longer open for new applications. Before 2020, Singapore Citizens and Permanent Residents with MediSave Accounts were generally enrolled at age 40 unless they opted out." },
+      ] },
+      { heading: "The two plans", blocks: [
+        { kind: "table", source: 0, caption: "ElderShield monthly payouts, by plan", head: ["Plan", "Monthly payout", "For up to"], rows: [["ElderShield 300", "S$300", "60 months"], ["ElderShield 400", "S$400", "72 months"]] },
+        { kind: "p", text: "Which plan someone holds depends on when they joined. Their own policy documents name it." },
+      ] },
+      { heading: "When it pays", blocks: [
+        { kind: "fact", source: 0, text: "A claimant must be unable to carry out three of the six activities of daily living, as determined by an MOH-accredited assessor." },
+        { kind: "tiles", caption: "The six activities of daily living CPF Board lists.", tiles: [
+          { icon: "wash", title: "Washing", text: "Bathing or showering." },
+          { icon: "dress", title: "Dressing", text: "Putting on and taking off clothes." },
+          { icon: "feed", title: "Feeding", text: "Eating once food is ready." },
+          { icon: "toilet", title: "Toileting", text: "Using the toilet." },
+          { icon: "walk", title: "Walking or moving around", text: "Indoors, from room to room." },
+          { icon: "transfer", title: "Transferring", text: "Between a bed and a chair." },
+        ] },
+      ] },
+      { heading: "How a claim works", blocks: [
+        { kind: "steps", caption: "The steps CPF Board describes. Its page has the current details.", steps: [
+          { icon: "person", title: "Get assessed", text: "By an MOH-accredited severe disability assessor." },
+          { icon: "read", title: "Submit the claim", text: "Online, logging in with Singpass." },
+          { icon: "decide", title: "Payouts start", text: "If the claim is approved." },
+        ] },
+        { kind: "fact", source: 0, text: "Assessment fees are S$100 for a clinic visit and S$250 for a house call. The full fee is reimbursed with your first payout if you are found to be severely disabled." },
+      ] },
+      { heading: "Premiums, supplements and CareShield Life", blocks: [
+        { kind: "fact", source: 0, text: "Premiums are set by the age you join and stay fixed. You pay them until the policy anniversary after your 65th birthday, or until you make a successful claim. MediSave can be used to pay them." },
+        { kind: "fact", source: 0, text: "Supplements complement your ElderShield or CareShield Life coverage, with additional benefits such as higher monthly payouts." },
+        { kind: "fact", source: 0, text: "Your ElderShield policy will be replaced by your CareShield Life policy if your application for CareShield Life is successful. The ElderShield premiums you have paid will be taken into consideration." },
+        { kind: "layers", caption: "How the pieces stack. A supplement is optional, from a private insurer.", layers: [
+          { icon: "rider", title: "Supplement (optional)", text: "Extra benefits, such as higher monthly payouts." },
+          { icon: "shield", title: "ElderShield or CareShield Life", text: "The base long-term care cover." },
+        ] },
+        { kind: "p", text: "Read \"What is CareShield Life?\" in this section for the newer scheme. DearPolicy does not recommend or rank insurers or plans." },
+      ] },
+      { heading: "Check yourself", blocks: [
+        { kind: "cards", prompt: "Tap each card.", cards: [
+          { front: "Can I sign up for ElderShield now?", back: "No. CPF Board says the scheme is no longer open for new applications." },
+          { front: "Does ElderShield pay for life?", back: "Cover lasts for life once premiums are fully paid, but payouts are for a set number of months, depending on the plan." },
+          { front: "Who decides if someone is severely disabled?", back: "An MOH-accredited assessor, using the six activities of daily living." },
+        ] },
+        { kind: "quiz", question: "How many of the six activities of daily living must someone be unable to do for an ElderShield claim?",
+          options: ["One", "Three", "All six"],
+          answer: 1, explain: "CPF Board says a claimant must be unable to carry out three of the six activities of daily living, as determined by an MOH-accredited assessor." },
+      ] },
+    ],
+  },
+  {
+    slug: "sg-medifund",
+    group: "singapore",
+    icon: "helping",
+    region: SG,
+    checkedOn: CHECKED_15NOV,
+    sources: [SRC.medifund],
+    keywords: ["medifund", "medi fund", "medifun", "cannot pay hospital bill", "can't afford hospital bill", "financial help hospital", "medical social worker", "safety net", "help with medical bills"],
+    title: "What is MediFund?",
+    summary: "The safety net for Singaporeans who still cannot pay a public healthcare bill after subsidies, insurance and MediSave.",
+    sections: [
+      { heading: "In one line", blocks: [
+        { kind: "fact", source: 0, text: "MediFund is a safety net for Singaporeans who face financial difficulties with their remaining bills after Government subsidies, insurance and MediSave. It is a Government endowment fund whose interest income supports needy patients." },
+      ] },
+      { heading: "Where it fits", blocks: [
+        { kind: "flow", caption: "The order the Ministry of Health describes for a public healthcare bill.", items: [
+          { icon: "insurer", title: "Subsidies and insurance", text: "Government subsidies, MediShield Life and any other insurance." },
+          { icon: "savings", title: "MediSave", text: "Within its limits." },
+          { icon: "helping", title: "MediFund", text: "For those who still have difficulty paying what is left." },
+        ] },
+      ] },
+      { heading: "Who can apply", blocks: [
+        { kind: "fact", source: 0, text: "Applicants must be Singapore Citizens and subsidised patients who have received or need treatment at a MediFund-approved institution, and have difficulty paying their healthcare bills after Government subsidies, insurance and MediSave." },
+        { kind: "fact", source: 0, text: "MediFund helps with bills at public healthcare institutions, and also includes community hospitals and approved long-term care facilities. Each approved institution's MediFund Committee decides the amount, based on financial, health and social circumstances." },
+      ] },
+      { heading: "How to apply", blocks: [
+        { kind: "steps", caption: "The route the Ministry of Health describes.", steps: [
+          { icon: "tell", title: "Speak to a medical social worker", text: "At the MediFund-approved institution where treatment or care was received." },
+          { icon: "conditions", title: "Your situation is assessed", text: "Financial, health and social circumstances." },
+          { icon: "decide", title: "The committee decides", text: "The institution's MediFund Committee decides the amount." },
+        ] },
+        { kind: "fact", source: 0, text: "Patients or their families can approach the Medical Social Workers at the MediFund-approved institution where treatment or care was received. The social workers can also explore other financing options." },
+        { kind: "cards", prompt: "Tap each card.", cards: [
+          { front: "Is MediFund insurance?", back: "No. It is a Government endowment fund that helps needy patients with what is left after subsidies, insurance and MediSave." },
+          { front: "Who do I talk to?", back: "The Medical Social Workers at the MediFund-approved institution where treatment or care was received." },
+          { front: "Is the amount fixed?", back: "No. Each institution's MediFund Committee decides, based on the patient's circumstances." },
+        ] },
+        { kind: "quiz", question: "When does MediFund come in for a public hospital bill?",
+          options: ["Before insurance pays", "After subsidies, insurance and MediSave, if the patient still has difficulty paying", "Only for private hospitals"],
+          answer: 1, explain: "The Ministry of Health describes MediFund as a safety net for remaining bills after Government subsidies, insurance and MediSave." },
+      ] },
+    ],
+  },
+  {
+    slug: "sg-chas",
+    group: "singapore",
+    icon: "clinic",
+    region: SG,
+    checkedOn: CHECKED_15NOV,
+    sources: [SRC.chas],
+    keywords: ["chas", "community health assist scheme", "chas card", "chas blue", "chas orange", "chas green", "gp subsidy", "dental subsidy", "clinic subsidy", "outpatient subsidy", "polyclinic"],
+    title: "What is CHAS?",
+    summary: "The Community Health Assist Scheme: subsidies at participating GP and dental clinics, and how the card tiers work.",
+    sections: [
+      { heading: "In one line", blocks: [
+        { kind: "fact", source: 0, text: "The Community Health Assist Scheme (CHAS) gives subsidies for preventive, medical and dental care at participating GP and dental clinics. All Singapore Citizens, regardless of income, are eligible." },
+      ] },
+      { heading: "What it helps with", blocks: [
+        { kind: "tiles", caption: "The kinds of care the Ministry of Health lists.", tiles: [
+          { icon: "clinic", title: "Common illnesses", text: "Visits to a participating GP." },
+          { icon: "illness", title: "Selected chronic conditions", text: "Ongoing care at a GP." },
+          { icon: "smile", title: "Dental procedures", text: "At participating dental clinics." },
+          { icon: "approve", title: "Screenings and vaccinations", text: "Preventive care." },
+        ] },
+      ] },
+      { heading: "The card tiers", blocks: [
+        { kind: "fact", source: 0, text: "Cards are CHAS Green, CHAS Orange and CHAS Blue. The tier depends on household monthly income per person, or, for households with no income, the Annual Value of the home. Merdeka Generation and Pioneer Generation cardholders also receive subsidies." },
+        { kind: "table", source: 0, caption: "CHAS tiers by household monthly income per person", head: ["Tier", "Income per person"], rows: [["CHAS Blue", "S$1,500 and below"], ["CHAS Orange", "S$1,501 to S$2,300"], ["CHAS Green", "Above S$2,300"]] },
+        { kind: "table", source: 0, caption: "For households with no income: by Annual Value of the home", head: ["Tier", "Annual Value"], rows: [["CHAS Blue", "S$21,000 and below"], ["CHAS Orange", "S$21,001 to S$31,000"], ["CHAS Green", "Above S$31,000"]] },
+      ] },
+      { heading: "CHAS and insurance", blocks: [
+        { kind: "flow", caption: "How a clinic bill can be lowered, in general.", items: [
+          { icon: "clinic", title: "A participating clinic", text: "A GP or dental clinic that takes CHAS." },
+          { icon: "percent", title: "CHAS subsidy", text: "Lowers the bill, by card tier." },
+          { icon: "shield", title: "Insurance, if any", text: "An outpatient benefit may help with what is left." },
+        ] },
+        { kind: "p", text: "CHAS is a subsidy, not insurance: it lowers the bill at the clinic. Some insurance policies also cover clinic visits. Check each policy's outpatient section for what it covers. DearPolicy does not recommend or rank insurers or plans." },
+        { kind: "cards", prompt: "Tap each card.", cards: [
+          { front: "Do I need a low income to get CHAS?", back: "No. The Ministry of Health says all Singapore Citizens, regardless of income, are eligible. Income sets the tier." },
+          { front: "Can I use CHAS at any clinic?", back: "At participating GP and dental clinics." },
+          { front: "Is CHAS insurance?", back: "No. It is a subsidy that lowers the bill at participating clinics." },
+        ] },
+        { kind: "quiz", question: "A household's monthly income per person is S$1,500 and below. Which CHAS tier is that?",
+          options: ["CHAS Blue", "CHAS Orange", "CHAS Green"],
+          answer: 0, explain: "The Ministry of Health's table puts S$1,500 and below per person in CHAS Blue, S$1,501 to S$2,300 in CHAS Orange, and above S$2,300 in CHAS Green." },
       ] },
     ],
   },

@@ -50,6 +50,11 @@ const drawings: Record<LearnIcon, ReactNode> = {
   walk: <><circle className="lp-accent" cx="26" cy="8" r="4" /><path d="M24 14l-5 12 6 5 3 11M20 26l-6 16M24 16l7 7 6-1M22 18l-8 5-2 6" /></>,
   transfer: <><path className="lp-fill" d="M4 28h18v8H4z" /><path d="M4 22v20M22 36v6M4 28c0-3 2-5 5-5h5" /><path className="lp-accent" d="M30 30h12v6H30z" /><path d="M30 18v24M42 36v6M30 30h12" /><path d="M14 14c5-5 12-5 16 0" /><path d="M27 10l3 4-4 2" /></>,
   family: <><circle className="lp-fill" cx="16" cy="13" r="6" /><circle className="lp-accent" cx="33" cy="17" r="4.5" /><path className="lp-fill" d="M4 40a12 12 0 0 1 24 0z" /><path className="lp-accent" d="M24 40a9 9 0 0 1 18 0z" /></>,
+  clock: <><circle className="lp-fill" cx="24" cy="25" r="17" /><path d="M24 14v11l7 5" /><path d="M19 5h10M24 5v3" /><circle className="lp-accent" cx="24" cy="25" r="2.5" /></>,
+  lapse: <><rect className="lp-fill" x="7" y="10" width="34" height="31" rx="3" /><path d="M7 18h34M15 6v8M33 6v8" /><path className="lp-accent" d="M17 25l14 11M31 25 17 36" /></>,
+  clinic: <><path className="lp-fill" d="M8 20 24 9l16 11v21H8z" /><path d="M5 22 24 8l19 14" /><rect className="lp-good" x="18" y="22" width="12" height="12" rx="2" /><path d="M24 25v6M21 28h6" /><path d="M8 41h32" /></>,
+  helping: <><path className="lp-accent" d="M24 26s-8-4.6-8-10a4.5 4.5 0 0 1 8-2.8 4.5 4.5 0 0 1 8 2.8c0 5.4-8 10-8 10z" /><path className="lp-fill" d="M4 34h8l8 3h9a3 3 0 0 0 0-6h-6l11-4a3 3 0 0 1 3 5l-12 8H12l-8-1z" /></>,
+  smile: <><path className="lp-fill" d="M14 8c4 0 6 2 10 2s6-2 10-2c5 0 7 4 7 9 0 8-3 12-4 20-.5 3-4 4-5 0l-2-8c-.6-2.5-3.4-2.5-4 0l-2 8c-1 4-4.5 3-5 0-1-8-4-12-4-20 0-5 2-9 7-9z" /><path className="lp-accent" d="M30 14c2 0 4 1.5 4 4" /></>,
 };
 
 /** A decorative picture: the words beside it carry the meaning, so it is hidden from screen readers. */

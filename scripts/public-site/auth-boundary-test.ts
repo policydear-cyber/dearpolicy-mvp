@@ -163,7 +163,7 @@ test("signed in (development sign-in), / is the household's Portfolio and the la
 });
 
 // ---- The public pages are static: nothing they reach reads private data or calls a service. ----
-const ENTRY_FILES = ["app/welcome/page.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", "app/robots.ts", "app/sitemap.ts", "components/public/PublicShell.tsx"];
+const ENTRY_FILES = ["app/welcome/page.tsx", "app/learn/layout.tsx", "app/learn/page.tsx", "app/learn/[slug]/page.tsx", "app/robots.ts", "app/sitemap.ts", "components/public/PublicShell.tsx"];
 const FORBIDDEN_MODULE = /^(?:lib\/(?:db|supabase|household|auth|ai|chat|claims|coverage|benefit|documents|policies|storage|jobs|telemetry|rag|ingest)|app\/api)/;
 function resolveImport(from: string, spec: string): string | null {
   const base = spec.startsWith("@/") ? spec.slice(2) : spec.startsWith(".") ? path.join(path.dirname(from), spec) : null;
