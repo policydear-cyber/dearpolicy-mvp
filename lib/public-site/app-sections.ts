@@ -9,7 +9,7 @@ export const APP_SECTIONS: ReadonlySet<string> = new Set([
 
 export function isAppSection(pathname: string): boolean {
   const first = pathname.split("/")[1] ?? "";
-  // Case and encoding are not normalised: "/Policies" or "/%70olicies" is not a page either, and Next.js answers
-  // those with "page not found" too, so letting them through opens nothing.
-  return APP_SECTIONS.has(first);
+  // Compared decoded and in lower case, so "/Policies" or "/%70olicies" still goes to sign-in whatever Next.js does
+  // with it; an address that can't be decoded goes to sign-in too.
+  try { return APP_SECTIONS.has(decodeURIComponent(first).toLowerCase()); } catch { return true; }
 }

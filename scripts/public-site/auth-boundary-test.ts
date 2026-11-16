@@ -124,13 +124,15 @@ test("only one level below /learn is public, and nothing that only looks like Le
 test("signed out, an address that names no page gets 'page not found', not sign-in", async () => {
   const middleware = await load();
   // These reach Next.js, which has no page for them and answers with app/not-found.tsx (404) in the public frame.
-  for (const p of ["/polices", "/no-such-page", "/learning", "/learn-more", "/learnx/terms", "/sitemap.xml/x", "/robots.txt.bak", "/Policies", "/%70olicies"]) {
+  for (const p of ["/polices", "/no-such-page", "/learning", "/learn-more", "/learnx/terms", "/sitemap.xml/x", "/robots.txt.bak"]) {
     const res = await middleware(at(p));
     assert.ok(!isLoginRedirect(res), `${p} must not ask a visitor to sign in`);
     assert.equal(res.status, 200, `${p} is handed to Next.js, got ${res.status}`);
     assert.equal(rewriteOf(res), null, `${p} is not rewritten to a real page`);
     assert.equal(forwarded(res, "x-dearpolicy-signed-in"), "0", `${p} draws the signed-out frame`);
   }
+  // An odd case or encoding of a real section, or an address that can't be decoded, still goes to sign-in.
+  for (const p of ["/Policies", "/%70olicies", "/CHAT/x", "/%E0%A4%A"]) assert.ok(isLoginRedirect(await middleware(at(p))), `${p} goes to sign-in`);
   // Every real page is still under a section that goes to sign-in.
   const { APP_SECTIONS } = await import("../../lib/public-site/app-sections");
   const onDisk = new Set(pageRoutes().map((p) => p.split("/")[1]).filter((s) => s));
