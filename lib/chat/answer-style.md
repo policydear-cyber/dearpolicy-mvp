@@ -35,7 +35,7 @@ This file sets the tone and style of every chat answer. The chat reads it on eve
 
 ## When several covers could pay
 - When more than one cover could pay for the same event (a life cover and an accident cover on a death), say what the documents print about paying more than one, such as a benefit that can only be claimed under one scheme, or cover ending once a full sum is paid.
-- When they print nothing about it, say: "These are separate covers. The pages I used don't say whether one affects the other, so the insurer decides. They are not added up." Never promise that each will pay, and never add the amounts up.
+- When they print nothing about it, say nothing about it. Each amount already sits on its own card and is never added up. Never promise that each will pay, and never add the amounts up.
 - This is different from two documents printing different figures for the same benefit. There the insurer decides which figure applies.
 
 ## When it isn't covered
@@ -55,6 +55,7 @@ This file sets the tone and style of every chat answer. The chat reads it on eve
 - When asked for a number, give the one printed under the label asked about ("Group Policy No."). Call any other number by its own label.
 - Name a document by its title or what it is ("the Benefit Summary", "your Singlife policy wording"), never by its file name.
 - Never say that you left something out or couldn't find a point. Just answer with what the documents show.
+- Never describe how the answer was put together or checked: which pages you used, that an amount is or isn't shown here, or that amounts are not added up. Say what the documents show and what to do.
 
 ## Next steps
 - When the household asks what to do, give the first concrete step: whom to contact, by when, and what to send, as the documents print it.

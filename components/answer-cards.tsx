@@ -22,7 +22,23 @@ export type AnswerStatement = {
   source?: { policyName: string; page: number | null; rowLabel?: string | null; footnote?: { marker: string; text: string } | null; note?: string | null; citationIds: string[] } | null;
   /** Amounts that are alternatives, never a total: the same id on each, kind "either_or", and the plain note saying so. */
   group?: { id: string; kind: "either_or"; note: string } | null;
+  /** Rows of a printed figures table, cell by cell as printed (lib/simple-chat/printed-table.ts). `headers`: the page's own
+   * column headings, only when they match the columns one to one; otherwise null, with `printedAbove` the heading lines
+   * the page prints above the rows, as printed. */
+  table?: PrintedTable | null;
 };
+export type PrintedTable = { headers: string[] | null; rows: string[][]; printedAbove: string[] };
+
+/** A printed table, cells exactly as printed; headings only where the page prints one per column. */
+function TableOf({ table }: { table: PrintedTable }) {
+  return <div className="answer-table-wrap" data-testid="answer-table">
+    {table.printedAbove.length ? <p className="answer-table-above">{table.headers ? "Printed above the headings: " : "Printed above these rows: "}{table.printedAbove.map((l, i) => <span key={i}>{i ? " · " : ""}“{l}”</span>)}</p> : null}
+    <div className="policy-table-scroll"><table className="answer-table">
+      {table.headers ? <thead><tr>{table.headers.map((h, i) => <th key={i} scope="col">{h}</th>)}</tr></thead> : null}
+      <tbody>{table.rows.map((r, i) => <tr key={i}>{r.map((c, j) => j === 0 ? <th key={j} scope="row">{c}</th> : <td key={j}>{c}</td>)}</tr>)}</tbody>
+    </table></div>
+  </div>;
+}
 export type StructuredAnswer = ChatAnswer & { bottomLine?: string | null; statements?: AnswerStatement[] };
 
 export const hasStatements = (answer: ChatAnswer | undefined): answer is StructuredAnswer =>
@@ -163,7 +179,7 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
   const showSummary = !bottomLine && summary && !isCovered(summary);
   const alreadyShown = new Set([...(showSummary ? sentences(summary) : []), ...(bottomLine ? sentences(render(bottomLine)) : [])].map(norm));
   // A sentence that only says the bottom line again in other words, says that drawn either/or amounts are alternatives,
-  // or is one of the next steps shown under the answer, is not repeated; the full answer still has every word.
+  // or is one of the next steps shown under the answer, is not repeated.
   const eitherDrawn = statements.filter((s) => s.group?.kind === "either_or").length > 1;
   const steps = (answer.nextSteps ?? []).map((t) => norm(render(t)));
   // Against the bottom line a sentence is hidden only when it adds no word at all (Critic R48-1): "…if admitted",
@@ -173,10 +189,6 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
     // A sentence that adds anything to a step (a condition, a deadline, a warning) is kept.
     || steps.some((t) => t === norm(s) || restates(s, t, 0.8));
   const remaining = [...new Set(prose.map(render).flatMap(sentences).filter((s) => !isCovered(s) && !alreadyShown.has(norm(s)) && !repeats(s)))];
-  // An answer with no amount whose points are still to confirm: the bottom line is marked so, not drawn like a finding.
-  const illustrations = statements.some((s) => s.amount?.illustration);
-  const amounts = statements.some((s) => s.amount);
-  const fullProse = prose.map(render).filter((t) => t.trim());
   // A point's sentence that the bottom line already says in bold is not said again underneath it.
   const pointText = (s: AnswerStatement) => {
     const full = render(s.amount ? s.fullText ?? s.text : s.text);
@@ -188,7 +200,8 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
     const text = pointText(s);
     if (!text && !s.basis && !s.conditions?.length) return null;
     return <div key={s.id} className={`answer-point${s.kind === "uncertainty" ? " caution" : ""}`}>
-      {text ? <p>{text}</p> : null}
+      {s.table ? <p>{render(s.text)}</p> : text ? <p>{text}</p> : null}
+      {s.table ? <TableOf table={s.table} /> : null}
       <Qualifiers point s={{ ...s, basis: s.basis ? render(s.basis) : s.basis }} />
     </div>;
   };
@@ -227,8 +240,6 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
     {after}
     <div className="answer-more">
       <WhereFrom statements={statements} citations={answer.citations} sources={sources} idFor={idFor} detailsRef={where} />
-      {fullProse.length ? <details className="answer-full" data-testid="answer-full"><summary>Full answer</summary>{fullProse.map((t, i) => <p key={i}>{t}</p>)}</details> : null}
     </div>
-    {amounts ? <p className="answer-cards-foot">{illustrations ? "Illustrations" : "Amounts"} from your documents, not a payment or an insurer&rsquo;s decision.</p> : null}
   </div>;
 }

@@ -1,0 +1,82 @@
+/**
+ * What the household sees of an answer is the answer, not the checks behind it (DC, 16 Nov 2026: "non-value adding
+ * answers that clutter the answers and do not give a clear answer to the user").
+ *
+ * The checks themselves are untouched: an amount the server could not tie to a printed row is still left out, and amounts
+ * from separate covers are still never added up. Only the sentences that narrate those internal decisions to the
+ * household go: "I left out an amount I couldn't find printed in your documents", "These are separate covers. The pages
+ * I used don't say whether one affects the other, so the insurer decides. They are not added up.", and the generic
+ * "waiting periods ... can be printed on pages not used for this answer" line under every amount. What was left out is
+ * still recorded with the turn (the turn report keeps every dropped amount and sentence).
+ *
+ * An amount card is never touched here: its own text, basis and conditions always stay with its figure. Run once, before
+ * the answer is saved, so the answer shown, saved and reopened is the same.
+ */
+import type { AnswerStatement } from "@/components/answer-cards";
+import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT } from "./verify";
+import { NARROWED_PAGES_NOTE } from "@/lib/benefit-table/chat";
+
+/** Server notes that only narrate a check: the ids the server gives them. */
+export const NARRATION_IDS: ReadonlySet<string> = new Set(["left-out-amount", "left-out-fact", "narrowed-pages"]);
+
+const flat = (s: string) => s.replace(/[’‘]/g, "'").replace(/\s+/g, " ").trim().replace(/[.!]+$/, "").toLowerCase();
+const SERVER_NOTES = new Set([LEFT_OUT_AMOUNT, LEFT_OUT_FACT, NARROWED_PAGES_NOTE].map(flat));
+
+/** One sentence that only narrates a check or says amounts from separate covers are not added up. Matched as a whole
+ * sentence, so a sentence that also says something of its own (a deadline, a condition, a rule the documents print)
+ * always stays. */
+const NARRATION: RegExp[] = [
+  // "I left out an amount / a point / a statement ..." in any of the server's or the model's own wordings.
+  /^(?:i(?:'ve| have)? )?left out (?:an? |one |some )?(?:amount|figure|point|statement)s?\b[^.]*$/,
+  // The separate-covers line, whole or any of its three sentences.
+  /^these are separate covers$/,
+  /^the pages i used (?:don't|do not) say whether one affects the other,? so the insurer decides$/,
+  /^they are not added up$/,
+  /^these are separate covers\. the pages i used (?:don't|do not) say whether one affects the other,? so the insurer decides\. they are not added up$/,
+];
+const isNarration = (sentence: string) => { const f = flat(sentence); return !!f && (SERVER_NOTES.has(f) || NARRATION.some((r) => r.test(f))); };
+
+/** Sentences split at a full stop, ! or ? followed by a capital or an opening quote (as the answer cards split them). */
+const sentencesOf = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z“"(])/).map((s) => s.trim()).filter(Boolean);
+/** The text with every narrating sentence taken out; the rest exactly as written. */
+export function withoutNarration(text: string): string {
+  const all = sentencesOf(text);
+  const kept = all.filter((s) => !isNarration(s));
+  return kept.length === all.length ? text : kept.join(" ");
+}
+
+/** Said as a step when an amount was left out and none is shown. */
+export const CONFIRM_AMOUNT_STEP = "Ask the insurer to confirm the amount.";
+
+type Declutterable = { summary?: string; bottomLine?: string | null; details?: string[]; nextSteps?: string[]; statements?: AnswerStatement[] };
+
+/** Takes the narration out of an answer in place. Returns the sentences taken out (for the turn's report). */
+export function declutterAnswer(answer: Declutterable): string[] {
+  const removed: string[] = [];
+  const clean = (text: string) => { const out = withoutNarration(text); if (out !== text) removed.push(...sentencesOf(text).filter(isNarration)); return out; };
+  if (answer.statements) {
+    answer.statements = answer.statements.filter((s) => {
+      if (NARRATION_IDS.has(s.id)) { removed.push(s.text); return false; }
+      // An amount card keeps every word: nothing that qualifies a figure is ever taken off it.
+      if (s.amount) return true;
+      const text = clean(s.text);
+      const fullText = s.fullText ? withoutNarration(s.fullText) : s.fullText;
+      if (!text.trim() && !(s.conditions ?? []).length) return false;
+      s.text = text.trim() ? text : (fullText ?? "");
+      s.fullText = fullText;
+      return !!s.text.trim() || !!(s.conditions ?? []).length;
+    });
+  }
+  if (typeof answer.bottomLine === "string") answer.bottomLine = clean(answer.bottomLine);
+  if (typeof answer.summary === "string") answer.summary = clean(answer.summary);
+  if (answer.details) answer.details = answer.details.map(clean).filter((d) => d.trim());
+  if (answer.nextSteps) answer.nextSteps = answer.nextSteps.map(clean).filter((d) => d.trim());
+  // When an amount was left out and no amount is shown at all, the one thing the household can do about it is said as a
+  // step, not as a note about the check.
+  const leftOutAmount = removed.some((r) => flat(r) === flat(LEFT_OUT_AMOUNT));
+  if (leftOutAmount && answer.statements && !answer.statements.some((s) => s.amount)) {
+    answer.nextSteps = [...(answer.nextSteps ?? [])];
+    if (!answer.nextSteps.some((n) => /confirm[^.]*amount/i.test(n))) answer.nextSteps.push(CONFIRM_AMOUNT_STEP);
+  }
+  return removed;
+}

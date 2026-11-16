@@ -111,6 +111,7 @@
     "simple:still-reading-test": "node --import tsx scripts/simple-answer/still-reading-test.ts",
     "simple:cover-not-counted-test": "node --import tsx scripts/simple-answer/cover-not-counted-test.ts",
     "simple:style-test": "node --import tsx scripts/simple-answer/style-test.ts",
+    "simple:declutter-contacts-test": "node --import tsx scripts/simple-answer/declutter-contacts-test.ts",
     "chat:no-expiry-wording-test": "node --import tsx scripts/chat/no-expiry-wording-test.ts",
     "db:start": "docker compose up -d db",
     "db:status": "docker compose ps",

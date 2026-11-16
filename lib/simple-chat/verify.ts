@@ -3123,7 +3123,7 @@ export function noteCoverNotCounted(answer: StructuredAnswer, household: Househo
 
 /** The text a later turn shows the model for this answer. */
 export function answerAsText(answer: Pick<ChatAnswer, "summary" | "nextSteps" | "questions"> & { statements?: AnswerStatement[]; bottomLine?: string | null }): string {
-  const lines = [answer.bottomLine || answer.summary, ...(answer.statements ?? []).map((s) => `- ${s.personName ? s.personName + ": " : ""}${s.amount ? s.amount.text + " — " : ""}${s.text}${s.source ? ` (${s.source.policyName}, page ${s.source.page})` : ""}`), ...answer.nextSteps.map((n) => `Next: ${n}`), ...answer.questions.map((q) => q.text)];
+  const lines = [answer.bottomLine || answer.summary, ...(answer.statements ?? []).map((s) => `- ${s.personName ? s.personName + ": " : ""}${s.amount ? s.amount.text + " — " : ""}${s.table ? `${s.text} ${[...(s.table.headers ? [s.table.headers.join(" | ")] : []), ...s.table.rows.map((r) => r.join(" | "))].join("; ")}` : s.text}${s.source ? ` (${s.source.policyName}, page ${s.source.page})` : ""}`), ...answer.nextSteps.map((n) => `Next: ${n}`), ...answer.questions.map((q) => q.text)];
   return lines.filter(Boolean).join("\n");
 }
 export { documentId };

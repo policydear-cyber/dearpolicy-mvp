@@ -1632,3 +1632,21 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
   .coverage-grid { grid-template-columns: minmax(0, 1fr); }
   .member-strip { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Insurer contact details under an answer's next steps (components/insurer-contacts.tsx). */
+.insurer-contacts { display: grid; gap: 10px; margin: 0; }
+.insurer-contact { padding: 12px 14px; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--surface); }
+.insurer-contact strong { font-size: var(--fs-xs); }
+.insurer-contact ul { list-style: none; margin: 6px 0 0; padding: 0; }
+.insurer-contact li { font-size: var(--fs-sm); line-height: 1.5; margin: 3px 0; overflow-wrap: anywhere; }
+.insurer-contact-label { color: var(--muted); }
+.insurer-contact a { font-weight: 600; }
+.insurer-contact small { color: var(--muted); font-size: var(--fs-xs); }
+
+/* A printed figures table in an answer (components/answer-cards.tsx TableOf): cells as printed, figures right-aligned. */
+.answer-table-wrap { margin: 6px 0 0; }
+.answer-table-above { font-size: var(--fs-xs); color: var(--muted); margin: 0 0 6px; }
+.answer-table { border-collapse: collapse; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.answer-table th, .answer-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.answer-table thead th { font-size: var(--fs-xs); color: var(--muted); font-weight: 600; vertical-align: bottom; white-space: normal; max-width: 9rem; }
+.answer-table tbody th { text-align: left; font-weight: 600; }

@@ -27,7 +27,10 @@ import type { BenefitTable } from "@/lib/benefit-table/assemble";
 import { randomUUID } from "node:crypto";
 import { SUPERSEDED_NOTICE, supersededAnswerIds } from "@/lib/chat/stale-answers";
 import { resolveSubjects, subjectsNote, supersededBy, unknownPersonAnswer, type Subjects } from "./subjects";
-import { matchMember, membersNamedIn } from "./verify";
+import { docLabel, matchMember, membersNamedIn } from "./verify";
+import { declutterAnswer } from "./declutter";
+import { tablesFromPrintedRows } from "./printed-table";
+import { contactsHelp, insurerContactsFor } from "./insurer-contacts";
 import { amountsFromRows, withheldRows, asksForNobody, namesSomeone, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, dropQuotePointers, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
 /** Each turn's `answerId` is its saved answer's (ChatAnswer.answerId), `people` the members its amounts were shown for, and
@@ -455,6 +458,17 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     }
   }
   const { fromRows, answer, report } = checked;
+  // The answer, not the checks behind it: notes that only narrate a check are taken out (the checks still ran, and what
+  // they left out stays in the turn's report).
+  // Rows of a printed figures table are shown as a table, not as quoted strings.
+  if (answer.statements) answer.statements = tablesFromPrintedRows(answer.statements, household, (d) => docLabel(household, d));
+  report.sentencesLeftOut.push(...declutterAnswer(answer));
+  // How to reach the insurer, as the household's own documents print it, when the answer gives next steps or is about
+  // claiming. Read by the server from the stored pages; never the model's words.
+  if (reply.model !== "no-documents" && reply.model !== "unknown-person" && contactsHelp(answer, message)) {
+    const contacts = insurerContactsFor(household, answer, (d) => docLabel(household, d));
+    if (contacts.length) answer.insurerContacts = contacts;
+  }
   answer.conversationId = conversation.id;
   answer.conversationRevision = conversation.revision + 1;
   enforceLiveChatMonetaryBoundary(answer, { claimContext: false });

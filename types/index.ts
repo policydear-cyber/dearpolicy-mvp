@@ -328,6 +328,10 @@ export type CalculationRecord = {
   unitTerms?:UnitTerms;
 };
 
+/** One way to reach an insurer, as a household document prints it (lib/simple-chat/insurer-contacts.ts). */
+export type InsurerContactItem = { kind:"phone"|"email"|"website"; label:string; value:string; source:{ policyName:string; page:number } };
+/** An insurer's contact details read from the household's own documents; never written by the model. */
+export type InsurerContact = { insurer:string; items:InsurerContactItem[] };
 export type ChatAnswer = {
   mode:"answer"|"fact_finding"|"claim_assessment";
   summary:string;
@@ -361,6 +365,8 @@ export type ChatAnswer = {
   /** The simple chat's own id for this saved answer, so a later correction in the same chat can mark it out of date
    * (lib/simple-chat/subjects.ts supersededBy; lib/chat/stale-answers.ts). */
   answerId?:string;
+  /** The insurers' contact details printed in the household's own documents, for answers with next steps or about claiming. */
+  insurerContacts?:InsurerContact[];
   /** "preliminary": no reviewed claim evidence, so no event amount at all.
    * "indicative": an amount produced by the evidence-gated deterministic
    * composition path. Absent for ordinary policy questions. */
