@@ -240,6 +240,7 @@ async function main() {
       ["V17 nominee only", notHeld("Hui Min Lee", "LEE HUI MIN", `SCHEDULE\n${PQ}\nNominee\tLEE HUI MIN`, PQ)],
       ["V18 a product summary that prints the name and the quote", notHeld("Farid Osman", "FARID OSMAN", `PRODUCT SUMMARY\nPrepared for\tFARID OSMAN\nLife Assured\tFARID OSMAN\n${PQ}`, PQ, "product_summary", false)],
       ["V19 a surname alone", notHeld("Tan Kah Wee", "TAN", `SCHEDULE\nLife Assured\tTAN KAH WEE\n${PQ}`, PQ)],
+      ["V20 a name under a label line that holds someone else", notHeld("Wong Mei", "WONG MEI", `SCHEDULE\nLife Assured\tLIM BOON\nContact person\tWONG MEI\n${PQ}`, PQ)],
     ];
     for (const [label, made] of cases) {
       const m = await made;

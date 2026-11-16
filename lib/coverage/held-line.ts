@@ -23,9 +23,15 @@ export function namedAsInsured(documentText: string, name: string): boolean {
   return lines.some((line, i) => {
     if (!personPrinted(line, name) || OTHER_ROLE.test(line)) return false;
     if (INSURED_ROLE.test(line)) return true;
+    // The label above counts only for a bare name under a bare label ("Life Assured" then "JOHN TAN"); a line with its own
+    // label ("Contact person<TAB>NAME") or a label line holding its own value ("Life Assured<TAB>SOMEONE ELSE") decides
+    // nothing for the line below (Test engineer #506 N3).
+    const rest = line.toLowerCase().replace(flat(name).trim(), " ").replace(/[^a-z]+/g, " ").trim();
+    if (rest.split(" ").some((w) => w.length >= 3)) return false;
     let j = i - 1; while (j >= 0 && !lines[j].trim()) j--;
     const label = j >= 0 ? lines[j] : "";
-    return INSURED_ROLE.test(label) && !OTHER_ROLE.test(label);
+    const bare = label.replace(INSURED_ROLE, " ").replace(/[^a-z]+/gi, " ").trim().split(" ").every((w) => !w || /^(?:name|the|of|details|full)$/i.test(w));
+    return bare && INSURED_ROLE.test(label) && !OTHER_ROLE.test(label);
   });
 }
 /** A printed name that can identify one person: two words or more (a surname alone, "TAN", names many people). */
