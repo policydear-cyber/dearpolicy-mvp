@@ -209,6 +209,28 @@ async function main() {
     check("B11b (wrong-person control) Grace's conversation in the same library keeps her own S$600,000 -> S$120,000 and never Daniel's S$160,000 / S$800,000", /S\$120,000/.test(g.v) && /S\$600,000/.test(g.v) && !/S\$160,000|S\$800,000/.test(g.v) && g.shown === g.saved, g.v);
     check("B11c (wrong-person control) the fixed-limit alternative (25% x S$5,000 = S$1,250) is the same for both people and is not scaled by either person's sum", /S\$1,250/.test(d.v) && /S\$1,250/.test(g.v) && !/S\$200,000|S\$150,000/.test(d.v + g.v), d.v + "\n" + g.v);
   }
+  // B15 (Critic on #512, M1): a follow-up that repeats the earlier amount AND adds a new one leads with "The amounts above still apply.",
+  // so the new amount never reads as the whole answer; the repeated sentence is not said again. (Unit check of the hook's own rule: in
+  // these libraries the server already adds the second schedule on turn 1, so no scripted turn 2 produces a genuinely new amount.)
+  {
+    const { followUp } = await import("@/lib/rag2/loop/hook");
+    const A = { text: "If X applies, the conditional illustration is S$1,250 ...", kind: "conditional_illustration" }, B = { text: "If Y applies, the conditional illustration is S$9,000 ...", kind: "conditional_illustration" }, F = { text: "Some printed term.", kind: "printed" };
+    const both = followUp([A, B], [A.text]), same = followUp([A], [A.text]), none = followUp([A, B], []), factsOnly = followUp([F, B], [F.text]);
+    check("B15 (M1) new amount beside a repeated one: 'The amounts above still apply.' then only the new amount; all repeated: 'That doesn't change the amounts above.'; nothing repeated: no lead; repeated fact beside a new amount: 'My answer above still stands.'",
+      both.lead === "The amounts above still apply." && both.fresh.length === 1 && both.fresh[0] === B && same.lead === "That doesn't change the amounts above." && !same.fresh.length && none.lead === null && none.fresh.length === 2 && factsOnly.lead === "My answer above still stands.", JSON.stringify({ both, same, none, factsOnly }));
+  }
+  // B16 (Critic on #512, M2): "Other Fracture means ..." printed by ANOTHER policy of Grace's (a different policy number) does not define the
+  // certificate's term: the S$120,000 stays hidden and the no-amount line with "Ask the insurer" is said, with no S$ figure in it.
+  {
+    const otherPolicy = { ...FX.DOCS.find((d) => d.key === "BENEFIT_SUMMARY")!, key: "OTHER_POLICY", id: "7d000000-0000-4000-8000-000000000109", hash: "sha256:fx-other-policy", policyNumber: "TRV-555", product: "Wanderlust Travel Cover", filename: "Travel wording.pdf", pages: { 4: "DEFINITIONS\nOther Fracture means a fracture in which the broken bone pierces the skin." } };
+    const h10 = await startHarness({ ...FX, DOCS: [...FX.DOCS, otherPolicy] } as any);
+    installLoopModel(new ScriptedLoopModel([T1]));
+    try {
+      const a = await h10.send(MSG1, {}); const sv = await h10.savedAnswer(a.conversationId!); const v = visible(sv.answer);
+      const line = v.split("\n").find((l) => /under Other Fracture/.test(l)) ?? "";
+      check("B16 (M2) another policy's definition does not unlock this policy's row: no S$120,000; the Other Fracture line has no S$ figure and says 'Ask the insurer'", !/S\$120,000|S\$600,000/.test(v + JSON.stringify(sv.answer.calculations ?? [])) && !!line && !/S\$/.test(line) && /Ask the insurer/.test(line), v);
+    } finally { installLoopModel(null); }
+  }
   // B12: wrong version. A later certificate for the household (S$750,000 for Grace) and the earlier one superseded: only the current one is used; the superseded figure is not cited.
   {
     const oldCert = FX.CERT_P1;

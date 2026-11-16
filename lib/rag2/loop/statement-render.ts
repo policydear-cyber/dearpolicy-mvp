@@ -238,9 +238,15 @@ async function undefinedCaseOf(resultId: string, d: Deps): Promise<{ c: NonNulla
   const pct = (c.record?.operands ?? []).find((o) => o.source === "document" && o.unit === "percent");
   const tag = pct ? /\(([^)]*\bFracture)\)\s*$/i.exec(pct.label)?.[1] : null;
   if (!pct || !tag) return null;
-  // (a definition of the case printed in any of this person's documents read for the answer -- "Other Fracture means ..." -- settles
-  // which fractures it covers, and the amount is then shown as before)
-  const ids = new Set([c.policyId, ...[...(d.ctx.benefitRecords?.values() ?? [])].filter((r) => r.memberId === c.subjectId).map((r) => r.policy.id)]);
+  // (a definition of the case printed by THIS policy -- the row's own document, or another of the person's documents with the same
+  // policy number, such as its wording -- settles which fractures it covers, and the amount is then shown as before. Another policy's
+  // definition of the same words does not define this policy's term: Critic on #512, M2.)
+  const num = (v: string | null | undefined) => (v ?? "").replace(/\s+/g, "").toUpperCase();
+  const docs = await loadDocs(d.ctx.accountId).catch(() => [] as DocRow[]);
+  const own = docs.find((x) => x.id === c.policyId);
+  const keys = new Set([num(own?.policyNumber), num(own?.groupPolicyNumber)].filter(Boolean));
+  const mine = new Set([...(d.ctx.benefitRecords?.values() ?? [])].filter((r) => r.memberId === c.subjectId).map((r) => r.policy.id));
+  const ids = new Set([c.policyId, ...docs.filter((x) => mine.has(x.id) && keys.size && [num(x.policyNumber), num(x.groupPolicyNumber)].some((k) => k && keys.has(k))).map((x) => x.id)]);
   for (const id of ids) {
     const pages = await pageMap(d.ctx.accountId, id).catch(() => new Map<number, string>());
     const defs = definitionsIn([...pages.entries()].sort((x, y) => x[0] - y[0]).map(([page, text]) => ({ page, text })), { id, hash: null });

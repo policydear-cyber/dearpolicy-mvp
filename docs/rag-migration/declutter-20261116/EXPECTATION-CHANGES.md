@@ -29,6 +29,10 @@ no promised payment, returned = saved = reopened.
    sentences. It leads with "That doesn't change the amounts above." and gives what is new, such as the contact step. This applies only
    when the turn corrected and withdrew nothing.
 
+5. (Critic on #512) Only a definition printed by the SAME policy (its own document, or a document of the person with the same policy
+   number) unlocks the amount; another policy's "Other Fracture means …" does not (B16, shown able to fail by a mutation on a disposable
+   copy). A follow-up that adds a new amount beside a repeated one leads with "The amounts above still apply." (B15).
+
 ## Test changes
 
 | test | check | was | now | reason |
