@@ -6,6 +6,7 @@ import { recordModelExecution, assertVerifiedForMonetaryUse } from "@/lib/ai/pro
 import type { PdfPage } from "@/lib/documents/pdf";
 import { createHash } from "node:crypto";
 import { cachedReading, readingModelIdentity } from "@/lib/documents/evidence";
+import { ocrTextIsPlaceholderOnly } from "@/lib/documents/placeholder-text";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
@@ -427,6 +428,10 @@ export async function completePdfPagesWithHostedOcr(args: {
         // still turned away after trying it upright -- is marked unreadable, not
         // stored as an empty page that looks read. A blank page stays blank.
         if (!text && (reading.legibility === "unreadable" || turnedAway(reading))) return { ...page, unreadable: true };
+        // A page that came back as only placeholders or noise ("[illegible] [illegible] …", "....") was not read
+        // either, whatever legibility the reader gave it: it is marked unreadable and named (TE-ACC-20261116 HIGH 2;
+        // the rule, lib/documents/placeholder-text.ts). Real text with an inline "[illegible]" is read as before.
+        if (ocrTextIsPlaceholderOnly(text)) return { ...page, unreadable: true };
         return { ...page, text, extractionMethod: "ocr" as const, ...(reading.legibility === "poor" ? { legibility: "poor" as const } : {}), ...(turned.has(page.pageNumber) ? { turnedBy: turned.get(page.pageNumber) } : {}) };
       }
       return missing.includes(page.pageNumber) ? { ...page, unreadable: true } : page;

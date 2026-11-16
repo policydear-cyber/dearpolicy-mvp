@@ -5,6 +5,7 @@ import { overSpendCap, recordUsage } from "@/lib/ai/ledger";
 import { assertVerifiedForMonetaryUse, recordModelExecution } from "@/lib/ai/provenance";
 import { functionDeadline } from "@/lib/jobs/function-time";
 import { OCR_TEXT_BAR, usableCharacters } from "@/lib/documents/ocr";
+import { ocrTextIsPlaceholderOnly } from "@/lib/documents/placeholder-text";
 import { cachedReading } from "@/lib/documents/evidence";
 import { subsetPdf } from "@/lib/documents/ocr-hosted";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
@@ -805,6 +806,11 @@ export async function abandonBaiduWait(state: BaiduWaitState): Promise<void> {
   for (const job of state.jobs) if (job.stagedKey) await removeStaged(job.stagedKey);
 }
 
+/** A page Baidu read too little of: under the 24-character bar, or only placeholders or noise ("[illegible] [illegible]
+ * [illegible]" clears the bar on its letters alone; lib/documents/placeholder-text.ts). Handed to the AI reader exactly
+ * like a page Baidu returned empty. */
+const weakPage = (text: string) => usableCharacters(text) < OCR_TEXT_BAR || ocrTextIsPlaceholderOnly(text);
+
 /** A chunk with a page Baidu read too little of: used for this reading, never cached, so a later re-read asks again. */
 class WeakChunk extends Error {
   pages: { pageNumber: number; text: string }[];
@@ -856,7 +862,7 @@ async function completeWithBaidu(args: {
   const bytesHash = createHash("sha256").update(args.bytes).digest("hex");
   const choice = { provider: "baidu" as const, model: s.model };
   const accept = (got: { pageNumber: number; text: string }[]) => {
-    for (const p of got) if (typeof p?.text === "string" && usableCharacters(p.text) >= OCR_TEXT_BAR) texts.set(p.pageNumber, p.text.trim());
+    for (const p of got) if (typeof p?.text === "string" && !weakPage(p.text)) texts.set(p.pageNumber, p.text.trim());
   };
   // Background reading: the state carried between runs (a copy: the caller's is never changed).
   const state: BaiduWaitState | null = args.wait === undefined || !s.background ? null
@@ -971,7 +977,7 @@ async function completeWithBaidu(args: {
           if (record && !record.verified) throw new BaiduOcrError("unverified");
           if (record) assertVerifiedForMonetaryUse(record);
           const out = chunk.map((n, k) => ({ pageNumber: n, text: job.pages[k] }));
-          if (out.some((p) => usableCharacters(p.text) < OCR_TEXT_BAR)) throw new WeakChunk(out);
+          if (out.some((p) => weakPage(p.text))) throw new WeakChunk(out);
           return out;
         });
       accept(got);
