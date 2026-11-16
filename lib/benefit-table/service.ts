@@ -16,8 +16,8 @@ import { findFamilyMatchWithKind } from "@/lib/policies/linking";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { GUARDS_VERSION, applyGuards, claimsOf, unfinishedCount, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
 import { runGuards, type GuardReader } from "./guard-run";
-import { figureChecksOn } from "./guard-flag";
-import { IMAGE_CHECK_VERSION, runImageCheck, type ImageCheckSetup } from "./image-check";
+import { figureCheckMode, figureChecksOn } from "./guard-flag";
+import { IMAGE_CHECK_VERSION, awaitingImageCheck, isImageCheckRecord, runImageCheck, type ImageCheckSetup } from "./image-check";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type CoverType, type SectionLink, type SectionRef } from "./reading";
 
 export const PROMPT_VERSION = "2026-11-14.1";
@@ -680,9 +680,13 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
   const stored = await storedOnce;
   const checked = docs.flatMap((d) => (stored.has(d.id) && d.readable ? [remembered.get(d.id) ?? checkedOnce(d, stored.get(d.id)!)] : []));
   // The figure guards (switch on only): a figure is used only when five readers agreed on it or the household confirmed it.
-  const guarded = figureChecksOn(process.env, accountId);
+  // The page-image check: a reading with no image check of this version (read before the switch was turned on, or checked
+  // by an earlier version) uses none of its figures until its check has run (queueStoredImageChecks queues it).
+  const mode = figureCheckMode(process.env, accountId);
+  const guarded = mode != null;
+  const recordOf = (id: string) => { const g = stored.get(id)?.guards; return mode === "image" && !isImageCheckRecord(g) ? awaitingImageCheck() : g; };
   const figureConfirmations = guarded ? await figureConfirmationsOf(db, accountId) : [];
-  const readings = guarded ? checked.map((r) => applyGuards(r, stored.get(r.documentId)?.guards, figureConfirmations)) : checked;
+  const readings = guarded ? checked.map((r) => applyGuards(r, recordOf(r.documentId), figureConfirmations)) : checked;
   const links = (await db("SELECT section_key, cover_key, why, chosen_by FROM benefit_links WHERE account_id=$1", [accountId]))
     .map((r) => ({ section: String(r.section_key), cover: r.cover_key == null ? null : String(r.cover_key), why: String(r.why ?? ""), chosenBy: r.chosen_by === "household" ? "household" as const : "model" as const }));
   const ids = new Set(people.map((p) => p.id));
@@ -737,7 +741,10 @@ export async function setFigureConfirmation(db: Db, accountId: string, userId: s
  * nothing) when the document's reading has since been replaced or its check has nothing left "checking". */
 /** final: this is the last run the continuation may make (MAX_FIGURE_CHECK_RUNS): whatever it leaves unchecked goes to the
  * household instead of staying "checking" for ever, never shown and never asked (Critic 2, R485 N2). */
-export async function guardStoredReading(db: Db, accountId: string, policyId: string, guards: GuardSetup, time: ReadTime = {}, continuing?: string, final = false): Promise<{ checked: boolean; why?: string; record?: GuardRecord }> {
+/** start: the read time (benefit_readings.read_at) of the stored reading a first image check is queued for
+ * (queueStoredImageChecks). The run does nothing, and pays nothing, when the document was read again since or that reading
+ * already has an image check of this version. */
+export async function guardStoredReading(db: Db, accountId: string, policyId: string, guards: GuardSetup, time: ReadTime = {}, continuing?: string, final = false, start?: string): Promise<{ checked: boolean; why?: string; record?: GuardRecord }> {
   const now = time.now ?? Date.now;
   const callTime = () => time.deadline == null ? null : Math.max(0, time.deadline - SAVE_MARGIN_MS - now());
   const [doc] = await documents(db, accountId, policyId);
@@ -745,6 +752,10 @@ export async function guardStoredReading(db: Db, accountId: string, policyId: st
   const rows = await db("SELECT reading, read_at::text AS read_at FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [policyId, accountId]);
   if (!rows.length) return { checked: false, why: "the document has no table reading" };
   const stored = (typeof rows[0].reading === "string" ? JSON.parse(rows[0].reading) : rows[0].reading) as StoredReading;
+  if (start != null) {
+    if (String(rows[0].read_at) !== start) return { checked: false, why: "the document was read again since; its own check runs instead" };
+    if (guards.kind === "image" && isImageCheckRecord(stored.guards)) return { checked: false, why: "the reading already has its image check" };
+  }
   if (continuing != null) {
     if (stored.guards?.at !== continuing) return { checked: false, why: "the document was read again since; its own check runs instead" };
     if (!unfinishedCount(checkStored(doc, stored), stored.guards)) return { checked: false, why: "nothing is left to check" };

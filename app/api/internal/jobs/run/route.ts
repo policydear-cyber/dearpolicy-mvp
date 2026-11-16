@@ -3,7 +3,7 @@ import { authorizeJobRunner, runJobBatch } from "@/lib/jobs/cron-runner";
 import { PRODUCTION_JOB_TYPES } from "@/lib/jobs/processors";
 import { scrubDeletedDocuments } from "@/lib/lifecycle/content-scrub";
 import { purgeSoon } from "@/lib/storage/purge";
-import { requeueStuckTableWorkEverywhere } from "@/lib/benefit-table/app";
+import { queueStoredImageChecksEverywhere, requeueStuckTableWorkEverywhere } from "@/lib/benefit-table/app";
 import { kickChain, kickHop, kickIfPending, KICK_CHAIN_HEADER, KICK_HOP_HEADER, runKickedLink } from "@/lib/jobs/self-kick";
 import { withFunctionDeadline } from "@/lib/jobs/function-time";
 
@@ -35,6 +35,8 @@ export async function GET(request: NextRequest) {
   // A long policy's table reading (or its link run) whose run died is queued again before the batch runs, so the daily run
   // goes on with it when the app is idle (lib/benefit-table/app.ts; bounded, never throws).
   await requeueStuckTableWorkEverywhere();
+  // With the page-image check on, documents read before it was switched on are queued for their check (never throws).
+  await queueStoredImageChecksEverywhere();
   try {
     const summary = await runJobBatch({ jobTypes: PRODUCTION_JOB_TYPES });
     // Work still due soon goes on without waiting for a visit or tomorrow's run (lib/jobs/self-kick.ts).
@@ -63,6 +65,7 @@ export async function POST(request: NextRequest) {
   try {
     after(() => withFunctionDeadline(startedAt, async () => {
       await requeueStuckTableWorkEverywhere();
+      await queueStoredImageChecksEverywhere();
       await runKickedLink({ hop, chain, startedAt, jobTypes: PRODUCTION_JOB_TYPES });
     }));
   } catch { /* Outside a request scope (a suite calling the handler directly): nothing to run after. */ }

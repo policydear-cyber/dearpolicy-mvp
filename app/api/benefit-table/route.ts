@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { appDb, benefitTableLive, requeueStuckTableReadings } from "@/lib/benefit-table/app";
+import { appDb, benefitTableLive, queueStoredImageChecks, requeueStuckTableReadings } from "@/lib/benefit-table/app";
 import { figureText } from "@/lib/benefit-table/assemble";
 import { holdReason, tableFor } from "@/lib/benefit-table/service";
 import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
@@ -21,10 +21,13 @@ export async function GET(request:NextRequest){
     if(!(await benefitTableLive(accountId)))return NextResponse.json({enabled:false});
     // A carried reading or link run whose run died is queued again (bounded, later each time; no part is paid for twice).
     await requeueStuckTableReadings(accountId).catch(()=>0);
+    // Page-image check on (off by default): a document read before it was switched on is queued for its check, without
+    // being read again; until then its figures show as still being checked. Off, this does nothing.
+    const imageChecks=await queueStoredImageChecks(accountId).catch(()=>0);
     const {table,documents,links,figureChecks}=await tableFor(appDb,accountId);
     // A document still being read (a long reading's next run, or the run that links its sections) goes on now, after this
     // response, rather than waiting for another page or the daily run (lib/jobs/request-drain.ts: bounded, throttled).
-    if(documents.some(d=>d.state==="waiting"))
+    if(imageChecks>0||documents.some(d=>d.state==="waiting"))
       scheduleRequestDrain();
     const chosenBy=new Map(links.map(l=>[l.section,l.chosenBy]));
     // Each person's schedule lines, the ones Home's tiles count, so Family lists the same kinds of cover (kindsOfTable). Optional.
