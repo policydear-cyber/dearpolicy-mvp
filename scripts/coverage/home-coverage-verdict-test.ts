@@ -7,7 +7,10 @@
  *     of theirs that it describes: "on file, please confirm", never Covered, never an amount;
  *   - that wording beside a plan of theirs it describes: Covered (the included benefit), as before;
  *   - a proven line on a superseded or unreleased document: Not found on both, and Coverage lists nothing from it;
- *   - nothing on file: Not found on both.
+ *   - nothing on file: Not found on both;
+ *   - (DC 16 Nov) an unconfirmed line whose own quote and person are printed on its page: Covered on both, no amount; with
+ *     NEGATIVE CONTROLS for a page without the person's name and a quote not on its page; and a confirmed sum beside an
+ *     unconfirmed line of the same cover shows no amount, never the part sum.
  * No real household, insurer or scheme; no model call; no paid call. Needs DEARPOLICY_DISPOSABLE_DB=1 and a local DATABASE_URL.
  *   npm run -s coverage:home-coverage-verdict-test */
 import assert from "node:assert/strict";
@@ -154,8 +157,41 @@ async function main() {
         assert.equal(({ covered: "covered", on_file: "on_file", not_covered: "not_found" } as Record<string, string>)[t.status], p.verdict, `${m} ${c}`);
       }
     });
+
+    // 6. DC 16 Nov: a line whose figure is not confirmed, but whose own quote and person are printed on its page (the
+    // live library's case: the page prints no currency on the line). The cover is held: Covered on both, with no amount.
+    const held = async (name: string, rel: string, pageText: string, quote: string, linkedName: string) => {
+      const m = await person(name, rel);
+      const d = await doc({ member: m, product: "Marlin Life Shield", role: "personal_schedule", own: true, text: pageText });
+      await query("INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id) VALUES($1,$2,$3,$4)", [ACCOUNT, d, linkedName, m]);
+      await query(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,confirmed,evidence_verified)
+        VALUES($1,$2,$3,'Death',250000,'SGD','Marlin Life Shield',1,$4,false,false)`, [ACCOUNT, d, m, quote]);
+      return { m, d };
+    };
+    const QUOTE = "Marlin Life Shield\tSum Assured 250,000";
+    const kai = await held("Ong Kai", "sibling", `POLICY SCHEDULE\nLife Assured\tONG KAI\n${QUOTE}`, QUOTE, "ONG KAI");
+    await test("V9 an unconfirmed line whose quote and person are on its page: Covered on both, with no amount anywhere", async () => {
+      const t = await tile(kai.m, "Death"), p = await page(kai.m, "Death");
+      assert.equal(t.status, "covered", JSON.stringify(t)); assert.equal(p.verdict, "covered", JSON.stringify(p)); noAmount(t, p);
+    });
+    const zoe = await held("Zoe Ng", "child", `POLICY SCHEDULE\nLife Assured\tPETER NG\n${QUOTE}`, QUOTE, "ZOE NG");
+    await test("V10 NEGATIVE CONTROL: the page does not print the person's name: not Covered, no amount", async () => {
+      const t = await tile(zoe.m, "Death"), p = await page(zoe.m, "Death");
+      assert.equal(t.status, "on_file", JSON.stringify(t)); assert.equal(p.verdict, "on_file", JSON.stringify(p)); noAmount(t, p);
+    });
+    const ben = await held("Ben Goh", "child", "POLICY SCHEDULE\nLife Assured\tBEN GOH\nMarlin Life Shield\tSum Assured 90,000", QUOTE, "BEN GOH");
+    await test("V11 NEGATIVE CONTROL: the line's quote is not on its page: not Covered, no amount", async () => {
+      const t = await tile(ben.m, "Death"), p = await page(ben.m, "Death");
+      assert.equal(t.status, "on_file", JSON.stringify(t)); assert.equal(p.verdict, "on_file", JSON.stringify(p)); noAmount(t, p);
+    });
+    const proven = await doc({ member: kai.m, product: "Pinnacle Term Guard", role: "personal_schedule", own: true });
+    await line(proven, kai.m, "Death", 100000, "Pinnacle Term Guard", true);
+    await test("V12 a confirmed sum beside an unconfirmed line of the same cover: Covered with no amount, never the part sum", async () => {
+      const t = await tile(kai.m, "Death"); assert.equal(t.status, "covered", JSON.stringify(t));
+      assert.equal(t.amount, null, JSON.stringify(t)); assert.equal(t.displayAmount, null, JSON.stringify(t));
+    });
   } finally {
-    for (const t of ["benefit_links", "benefit_readings", "policy_reference_coverages", "policy_coverages", "policy_members", "policy_pages", "policies", "family_members", "household_members"])
+    for (const t of ["benefit_links", "benefit_readings", "policy_detected_people", "policy_reference_coverages", "policy_coverages", "policy_members", "policy_pages", "policies", "family_members", "household_members"])
       await query(`DELETE FROM ${t} WHERE ${t === "household_members" ? "household_id" : "account_id"}=$1`, [ACCOUNT]).catch(() => undefined);
     await query("DELETE FROM accounts WHERE id=$1", [ACCOUNT]).catch(() => undefined);
   }

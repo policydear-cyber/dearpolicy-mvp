@@ -1284,6 +1284,41 @@ div.answer-point { display: grid; gap: 4px; }
 .home-attention-text small { color: var(--muted); font-size: var(--fs-xs); line-height: 1.4; }
 .home-attention-action { flex: none; font-size: var(--fs-sm); font-weight: 650; color: var(--brand-ink); }
 .home-all-clear { margin: 0; padding: 12px 14px; border-radius: var(--r-md); background: var(--good-tint); color: var(--good-text); font-weight: 600; }
+/* Home (DC 16 Nov): the person's cards first, the Ask DearPolicy box beside them. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.home-top { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+.home-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+.home-cards > * { min-width: 0; }
+.home-cards-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.home-cards-head h1 { font-size: var(--fs-2xl); margin: 0; }
+.home-cards .member-strip { grid-template-columns: 1fr; padding: 10px; }
+.home-cards .coverage-card { min-height: 136px; }
+.home-cards .coverage-name { margin-bottom: auto; }
+.home-cards .coverage-card.covered .coverage-amount { font-size: 26px; line-height: 1.15; }
+.home-ask-panel { position: sticky; top: 24px; display: grid; gap: 12px; padding: 20px; border: 1px solid var(--brand-ink); border-radius: var(--r-lg); background: var(--surface); }
+.home-ask-panel h2 { margin: 0; font-size: var(--fs-xl); display: flex; align-items: center; gap: 10px; }
+.home-ask-panel > p { margin: 0; color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.5; }
+.home-ask { display: grid; gap: 8px; }
+.home-ask textarea { width: 100%; min-height: 88px; resize: vertical; padding: 12px 14px; border: 1px solid var(--input-line); border-radius: var(--r-md); background: var(--surface); color: var(--ink); font: inherit; }
+.home-ask .button { min-height: 48px; justify-content: center; }
+.home-ask-examples { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.home-ask-examples button { width: 100%; text-align: left; min-height: 44px; padding: 8px 12px; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--surface-2); color: var(--ink); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.home-ask-examples button:hover { border-color: var(--brand-ink); }
+.dashboard-page > .unclaimed-panel, .dashboard-page > .home-attention { margin-top: 20px; }
+.home-ask-fab { display: none; }
+@media (max-width: 1000px) { .home-top { grid-template-columns: minmax(0, 1fr); } .home-ask-panel { position: static; } }
+@media (max-width: 900px) {
+  .home-ask-fab { display: inline-flex; position: fixed; right: 16px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 16px); z-index: 30; min-height: 52px; padding-inline: 20px; border-radius: 999px; box-shadow: 0 6px 20px rgb(0 0 0 / .18); }
+  .dashboard-page { padding-bottom: 120px; }
+}
+@media (max-width: 620px) {
+  .home-cards .coverage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 10px; }
+  .home-cards .coverage-card.covered { min-height: 128px; padding: 14px; }
+  .home-cards .coverage-name { font-size: var(--fs-sm); }
+  .home-cards .coverage-card.covered .coverage-amount { font-size: 19px; }
+  .home-cards-head h1 { font-size: var(--fs-xl); }
+  .home-ask-panel { padding: 16px; }
+}
 /* On a phone the three totals sit side by side as small tiles, so what needs attention stays near the top. */
 @media (max-width: 620px) {
   .summary-row { grid-template-columns: 1fr 1fr; gap: 8px; }
