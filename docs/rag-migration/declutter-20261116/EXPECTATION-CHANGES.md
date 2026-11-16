@@ -45,6 +45,7 @@ no promised payment, returned = saved = reopened.
 | same | SBb turn 1 | "Neither document says whether one amends, replaces or adds to the other" | "neither document says which one applies" | folded into the one-line frame |
 | same | grader v8 correction journey | verdict PASS | the only failing check may be K2, and K2 must hold without its "not a payment" clause | the registered grader (`scripts/rag2-live/structured-check.ts`) is **not edited**; its K2 still asks for the removed clause |
 | `scripts/reliable-chat-pr57-acceptance-test.ts` | R4 | `/never a total|not to be added/` | no total in any form (no sum, "in total", "combined", "added", "plus") | phrase replaced by behaviour |
+| `e2e/tests/reliable-chat-fx-repairs.spec.ts` | FR1 footnote | certificate paragraph found by its S$120,000 | found by its "also lists … under Other Fracture" line, and S$120,000 must not appear; the footnote checks are unchanged | the amount is no longer shown |
 | `e2e/tests/reliable-chat-fracture.spec.ts` | FR1 | both amounts with "never a total", dated base, relationship note; reply repeats both | as the replay A-checks above | same |
 
 ## Registered live graders: not edited
