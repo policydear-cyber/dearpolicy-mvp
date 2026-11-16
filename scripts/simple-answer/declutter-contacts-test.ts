@@ -191,6 +191,24 @@ async function main() {
     // Names no insurer: every cited insurer, as before.
     assert.deepEqual(insurerContactsFor(HOUSE, both, label, "How do I claim for Grace?").map((c) => c.insurer), ["Harbourline Assurance plc", "Merlion General Insurance"]);
   });
+  await t("Critic #505 H1 (4817c8f): a common word in the question never names an insurer; the cited insurer's contacts stay", () => {
+    const d2 = (id: string, insurer: string, text: string) => doc(id, insurer, [{ page: 1, text }]);
+    const house = (docs: unknown[]) => ({ accountId: "a", members: [{ name: "Grace", relationship: "self" }], documents: docs } as unknown as Household);
+    const cites = (id: string) => ({ citations: [{ policyId: id } as never] });
+    const names = (h: Household, a: ReturnType<typeof cites>, q: string) => insurerContactsFor(h, a, label, q).map((c) => c.insurer);
+    const h1 = house([d2("P1", "AIA Singapore Private Limited", "Claims hotline 1800 248 8000"), d2("P2", "Income Insurance Limited", "Claims hotline 6788 1122")]);
+    assert.deepEqual(names(h1, cites("P1"), "My income stopped while I was in hospital, how do I claim?"), ["AIA Singapore Private Limited"]);
+    const h2 = house([d2("Q1", "Great Eastern Life Assurance", "Claims hotline 1800 248 2888"), d2("Q2", "Prudential Assurance Company Singapore", "Claims hotline 1800 333 0333")]);
+    assert.deepEqual(names(h2, cites("Q2"), "Great, so how do I claim for the fracture?"), ["Prudential Assurance Company Singapore"]);
+    const h3 = house([d2("R1", "Raffles Health Insurance", "Claims hotline 6311 2000"), d2("R2", "AIA Singapore Private Limited", "Claims hotline 1800 248 8000")]);
+    assert.deepEqual(names(h3, cites("R2"), "I was admitted to Raffles Hospital, who do I call?"), ["AIA Singapore Private Limited"]);
+    // Controls: the full name, typed in lower case, does name the insurer.
+    assert.deepEqual(names(h2, cites("Q2"), "how do i claim with great eastern?"), ["Great Eastern Life Assurance"]);
+    assert.deepEqual(names(h3, cites("R2"), "how do I claim from raffles health?"), ["Raffles Health Insurance"]);
+    assert.deepEqual(names(h1, cites("P2"), "who do I call at aia?"), ["AIA Singapore Private Limited"]);
+    const h4 = house([d2("O1", "Orchid Life Assurance", "Customer hotline 6222 3333"), d2("M1", "Merlion General Insurance Pte Ltd", "Claims hotline 6000 0000")]);
+    assert.deepEqual(names(h4, cites("M1"), "How do I claim with Orchid Life?"), ["Orchid Life Assurance"]);
+  });
   await t("a document not read, or replaced by a newer one, gives no contact; no contact found shows nothing", () => {
     assert.deepEqual(insurerContactsFor(HOUSE, { citations: [{ policyId: "C1" } as never, { policyId: "D1" } as never] }, label), []);
     assert.deepEqual(insurerContactsFor(HOUSE, { citations: [] }, label), []);

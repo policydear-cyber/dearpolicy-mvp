@@ -163,14 +163,15 @@ export function contactsOnPage(text: string, page: number, policyName: string, i
 /** The insurer a document is from, as one key: "Harbourline Assurance plc" and "HARBOURLINE ASSURANCE" are one insurer. */
 const insurerKey = (insurer: string) => nameWords(insurer).join(" ");
 
-/** The household's insurers the question names: its first name word, or all of them, as words of the question, in any
- * case ("orchid life" names Orchid Life Assurance Ltd). Insurers of every document count, read or not. */
+/** The household's insurers the question names, by the same full-name rule as a page (all its name words in order; one
+ * word only when it is an acronym, a coined name of 7+ letters, or followed by an insurer word), in any case since people
+ * type lower case: "orchid life", "great eastern", "aia". Never a common word alone ("my income stopped", "Great, so…",
+ * "Raffles Hospital"; Critic #505 H1 on 4817c8f). Insurers of every document count, read or not. */
 function namedInsurers(household: Household, question: string): Set<string> {
-  const q = ` ${question.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
   const out = new Set<string>();
   for (const d of household.documents) {
-    const words = d.insurer?.trim() ? nameWords(d.insurer) : [];
-    if (words.length && (q.includes(` ${words[0]} `) || words.every((w) => q.includes(` ${w} `)))) out.add(insurerKey(d.insurer!));
+    const re = d.insurer?.trim() ? insurerNamePattern(d.insurer) : null;
+    if (re && new RegExp(re.source, "i").test(question)) out.add(insurerKey(d.insurer!));
   }
   return out;
 }
