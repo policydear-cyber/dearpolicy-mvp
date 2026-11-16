@@ -92,6 +92,10 @@ async function ask(page: Page, question: string) {
   await page.getByRole("button", { name: /^Send/ }).click();
 }
 async function issues(page: Page, minTarget: number, extra: RenderIssue[] = []) {
+  // Colours are read once running transitions have finished (a button re-enabled after a failed answer fades its
+  // background in; read mid-fade it measured 1.36:1 or 4.42:1 instead of its settled colour).
+  // A looping animation (a spinner) never finishes, so only animations with an end are waited for.
+  await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => Number.isFinite(Number(a.effect?.getComputedTiming().endTime))).map((a) => a.finished.catch(() => undefined))));
   const found = await page.evaluate(collectRenderIssues, { root: ".chat-page", minTarget });
   return [...found, ...extra].map((i) => `${i.kind}: ${i.detail}`);
 }
