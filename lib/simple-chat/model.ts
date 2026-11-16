@@ -62,7 +62,9 @@ export function anthropicRequest(choice: ModelChoice, args: SimpleModelCall) {
       { type: "text" as const, text: args.library, cache_control: { type: "ephemeral" as const, ttl: LIBRARY_CACHE_TTL } },
     ],
     messages: [...alternating(args.history).map((t) => ({ role: t.role, content: t.text })), { role: "user" as const, content: args.question }],
-    output_config: { effort: "medium" as const, format: { type: "json_schema" as const, schema: (args.withRows ? TABLE_ANSWER_SCHEMA : SIMPLE_ANSWER_SCHEMA) as unknown as Record<string, unknown> } },
+    // Low effort: about 1.5 s faster for a direct answer and 3 to 4 s for a scenario, with the same figures in the graded
+    // check EFF-20261115-02 (made-up households; "whose is it?" with no figure is asked again: hook.ts asksWhoseOnly).
+    output_config: { effort: "low" as const, format: { type: "json_schema" as const, schema: (args.withRows ? TABLE_ANSWER_SCHEMA : SIMPLE_ANSWER_SCHEMA) as unknown as Record<string, unknown> } },
     // Server-side refusal fallback (routes a declined request to a fallback model within the same call).
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default" as const,
