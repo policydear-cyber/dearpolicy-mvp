@@ -74,7 +74,8 @@ test("FR1: Grace fell and broke her arm -- the matching row's amount first, the 
 
   const a2 = await send(page, u2);
   const s2 = await sameAsSaved(request, a2.shown, "FR1 reply", a2.visibleMs);
-  expect(norm(a2.shown)).toMatch(/^That doesn't change the amounts above\./);
+  expect(String(s2.summary ?? "")).toMatch(/^That doesn't change the amounts above\./);
+  expect(norm(a2.shown)).toMatch(/That doesn't change the amounts above\./);
   expect(a2.shown).not.toMatch(/S\$1,250|S\$120,000|Other Fracture/);
   expect(a2.shown).toMatch(/Aldermoor Life Ltd/);
   expect(s2.questions ?? []).toHaveLength(0);
