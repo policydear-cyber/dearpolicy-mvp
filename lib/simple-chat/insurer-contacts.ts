@@ -23,9 +23,27 @@ const WEBSITE = /(?<![\w@./-])(?:https?:\/\/)?www\.[A-Za-z0-9-]+(?:\.[A-Za-z0-9-
 /** Words that say a number is a way to reach the insurer. */
 const CONTACT_WORDS = /\b(?:claims?|hotline|helpline|help ?desk|customer (?:service|care|services|centre|center)|contact(?: us| centre| center)?|call(?: us)?|tel(?:ephone)?\.?|phone|enquir(?:y|ies)|emergency|assistance|24[- ]?hours?)\b/i;
 /** Words that say a number is someone else's: a regulator or dispute body, an agent or adviser, a hospital or clinic, a fax. */
-const NOT_INSURER = /\b(?:fax|facsimile|fidrec|ombudsman|monetary authority|mas|sdic|deposit insurance|life insurance association|general insurance association|lia|gia|dispute|mediation|agent|adviser|advisor|representative|broker|intermediary|hospital|clinic|doctor|physician|police|embassy)\b/i;
+const NOT_INSURER = /\b(?:fax|facsimile|fidrec|ombudsman|monetary authority|mas|sdic|deposit insurance|life insurance association|general insurance association|lia|gia|dispute|mediation|agent|adviser|advisor|representative|broker|intermediary|hospital|clinic|doctor|physician|police|embassy|bank|board|council|ministry|tpa|administrator|distributor|third[- ]party)\b/i;
 /** Words that say a number is an identifier, not a phone: a policy, certificate, member or reference number. */
 const IDENTIFIER_LABEL = /\b(?:policy|certificate|cert|member(?:ship)?|account|reference|ref|nric|passport|identity|id|plan|claim)\s*(?:no\.?|number|#)/i;
+/** A label word that makes the number after it an identifier, with or without "No." */
+const LABEL_JUST_BEFORE = /\b(?:id|identity|reference|ref|policy|certificate|cert|member(?:ship)?|account|claim|case|nric|passport|plan|serial|code)s?\s*(?:no\.?|number|#|id)?\s*[:.]?\s*$/i;
+/** The insurer speaking in its own document. */
+const FIRST_PERSON = /\b(?:call us|contact us|reach us|email us|write to us|our (?:\w+ ){0,3}(?:hotline|helpline|line|team|centre|center|number|service|services)|we can be reached)\b/i;
+const namesInsurer = (near: string, insurer: string) => { const w = ` ${near.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `; return nameWords(insurer).some((n) => w.includes(` ${n} `)); };
+/** Someone other than the insurer named or described just above a number. */
+const OTHER_PARTY = /\b(?:provided|administered|distributed|operated|managed|serviced|handled|arranged) by\b|\bon behalf of\b|\b(?:bank|board|council|ministry|authority|association|agency|administrator|tpa|third[- ]party|distributor|partner|services (?:ltd|limited|pte)|rescue|assist(?:ance)? (?:company|provider))\b/i;
+/** A number on a line of its own with only its contact label ("Claims Hotline: +65 6788 8833"), and no other organisation
+ * on that line or the two lines above. */
+function ownContactLine(text: string, at: number, length: number): boolean {
+  const start = text.lastIndexOf("\n", at - 1) + 1;
+  const endAt = text.indexOf("\n", at + length);
+  const line = text.slice(start, endAt < 0 ? text.length : endAt);
+  const rest = (line.slice(0, at - start) + " " + line.slice(at - start + length)).replace(/\([^)]*\)/g, " ").replace(/[^A-Za-z ]+/g, " ").trim();
+  if (rest.split(/\s+/).filter(Boolean).length > 5 || !CONTACT_WORDS.test(rest)) return false;
+  const above = text.slice(Math.max(0, text.lastIndexOf("\n", Math.max(0, text.lastIndexOf("\n", start - 2) - 1)) + 1), start);
+  return !OTHER_PARTY.test(line) && !OTHER_PARTY.test(above);
+}
 const CLAIM_WORDS = /\bclaims?\b/i;
 const EMERGENCY_WORDS = /\b(?:emergency|assistance|24[- ]?hours?)\b/i;
 
@@ -38,16 +56,19 @@ function ownDomain(host: string, insurer: string): boolean {
   const h = squash(host.replace(/^www\./i, "").split(".").slice(0, -1).join(".") || host);
   const words = nameWords(insurer);
   if (!words.length || !h) return false;
-  const whole = words.join("");
-  return words.some((w) => h.includes(w)) || (h.length >= 3 && whole.includes(h.split(/[^a-z0-9]/)[0]));
+  // One of the insurer's own name words is in the host (never the host inside the name: "line" is not Harbourline's).
+  return words.some((w) => h.includes(w));
 }
 
 const digits = (s: string) => s.replace(/\D/g, "");
-/** The words around a match on its own line: up to 60 characters before and 25 after, cut at a sentence end. */
+/** The words around a match in its own sentence: up to 160 characters before (from the sentence's start, which may be on
+ * the line above) and 25 after, cut at a sentence end. */
 function around(text: string, at: number, length: number): string {
-  const lineStart = text.lastIndexOf("\n", at) + 1;
   const lineEnd = (() => { const e = text.indexOf("\n", at + length); return e < 0 ? text.length : e; })();
-  let before = text.slice(Math.max(lineStart, at - 60), at);
+  let before = text.slice(Math.max(0, at - 160), at);
+  // A line that starts with a capital, a digit or a sign starts a new item; a wrapped sentence's next line does not.
+  const item = [...before.matchAll(/\n(?=\s*[A-Z0-9+(•\-*])/g)].pop();
+  if (item) before = before.slice((item.index ?? 0) + 1);
   // A sentence end, not an abbreviation's full stop ("Policy No. 1234 5678", "Tel. 6123 4567").
   const ends = [...before.matchAll(/(?<!\b(?:no|nos|tel|ref|st|dr|mr|mrs|ms|co|ltd|pte))[.;]\s+/gi)];
   if (ends.length) { const last = ends[ends.length - 1]; before = before.slice((last.index ?? 0) + last[0].length); }
@@ -70,7 +91,14 @@ export function contactsOnPage(text: string, page: number, policyName: string, i
     if (money.has(Number(n) * 100)) return;
     const near = around(text, at, raw.length);
     if (!CONTACT_WORDS.test(near) || NOT_INSURER.test(near) || IDENTIFIER_LABEL.test(near)) return;
-    const label = CLAIM_WORDS.test(near) ? "Claims" : EMERGENCY_WORDS.test(near) ? "Emergency assistance" : "Phone";
+    // An identifier's label just before it ("Claim ID 1234-5678", "Claims reference 2026 1234 5678") is never a phone.
+    if (LABEL_JUST_BEFORE.test(text.slice(Math.max(0, at - 30), at))) return;
+    // Kept only when the insurer is the one to call: its own sentence names the insurer or speaks for it ("call us", "our
+    // hotline"), or the number stands on a contact line of its own with no other organisation said just above it.
+    if (!namesInsurer(near, insurer) && !FIRST_PERSON.test(near) && !ownContactLine(text, at, raw.length)) return;
+    const lineOf = text.slice(text.lastIndexOf("\n", at - 1) + 1, (() => { const e = text.indexOf("\n", at); return e < 0 ? text.length : e; })());
+    const said = CONTACT_WORDS.test(lineOf.replace(raw, " ")) ? lineOf : near;
+    const label = CLAIM_WORDS.test(said) ? "Claims" : EMERGENCY_WORDS.test(said) ? "Emergency assistance" : "Phone";
     out.push({ kind: "phone", label, value: raw.trim().replace(/\s+/g, " "), source: { policyName, page }, key: `phone:${n}` });
   };
   for (const m of text.matchAll(PHONE)) addPhone(m[0], m.index ?? 0);

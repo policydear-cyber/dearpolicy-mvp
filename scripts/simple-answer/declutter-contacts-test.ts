@@ -11,7 +11,7 @@
  *   node --import tsx scripts/simple-answer/declutter-contacts-test.ts
  */
 import assert from "node:assert/strict";
-import { CONFIRM_AMOUNT_STEP, declutterAnswer, withoutNarration } from "@/lib/simple-chat/declutter";
+import { CONFIRM_AMOUNT_STEP, CONFIRM_OTHER_AMOUNT_STEP, declutterAnswer, withoutNarration } from "@/lib/simple-chat/declutter";
 import { contactsHelp, contactsOnPage, insurerContactsFor } from "@/lib/simple-chat/insurer-contacts";
 import { LEFT_OUT_AMOUNT, LEFT_OUT_FACT } from "@/lib/simple-chat/verify";
 import { NARROWED_PAGES_NOTE } from "@/lib/benefit-table/chat";
@@ -48,7 +48,9 @@ async function main() {
   await t("a sentence that says something of its own is never taken out (negative controls)", () => {
     for (const s of ["These are separate covers under the same policy, so both are counted.", "The Life policy and the PA policy can both pay; the PA benefit is paid only once.",
       "They are not added up because the PA benefit replaces the life benefit.", "The insurer decides whether the accident is covered.", "S$1,250 and S$1,500 come from different parts of your documents. They are not a total; the insurer decides which applies.",
-      "This benefit can only be claimed under one scheme.", "Grace's hospital cash is left out of the Shield plan if she claims under it."])
+      "This benefit can only be claimed under one scheme.", "Grace's hospital cash is left out of the Shield plan if she claims under it.",
+      // Critic #505 M1: the model's own sentences that start like the note.
+      "Left out amounts are those under the rider, which ends at age 65.", "I left out the rider because you asked only about the base plan."])
       assert.equal(withoutNarration(s), s, s);
   });
   await t("an amount card keeps every word, even a sentence that reads like narration", () => {
@@ -70,7 +72,8 @@ async function main() {
     assert.deepEqual(none.nextSteps, [CONFIRM_AMOUNT_STEP]);
     const some = { summary: "x", nextSteps: [] as string[], statements: [card("s1", "Accidental death."), point("left-out-amount", LEFT_OUT_AMOUNT)] };
     declutterAnswer(some);
-    assert.deepEqual(some.nextSteps, []);
+    // Critic #505 M2: with other amounts shown, the household still gets a cue that another may apply.
+    assert.deepEqual(some.nextSteps, [CONFIRM_OTHER_AMOUNT_STEP]);
   });
 
   // ------------------------------------------------------------------ part 2: contacts from the page
@@ -88,6 +91,23 @@ async function main() {
       "Claims are paid up to S$ 20 000 per year.", "Call Raffles Hospital on 6311 1111 for admission.", "Period of insurance 01/01/2026 to 31/12/2026", "Contact the Monetary Authority of Singapore (MAS) at 6225 5577.",
       "Email your adviser at john.tan@gmail.com", "Claims enquiries: claims@thirdpartyadmin.com"].join("\n");
     assert.deepEqual(on(page), []);
+  });
+  await t("Critic #505 H1: another organisation's number, or an identifier, is never the insurer's", () => {
+    for (const line of ["This plan is distributed by DBS Bank. Call DBS at 1800 111 1111 for help.", "MediShield Life is administered by the CPF Board. Call 1800 227 1188.",
+      "If you have concerns, contact the Singapore Medical Council at 6355 0632.", "For claims, write to the Ministry of Health 6325 9220.",
+      "Please call the hotline of HealthPlus TPA at 6100 2000 for claims.", "Emergency assistance is provided by Global Rescue Services. 24-hour hotline 6111 9999.",
+      "Claim ID 1234-5678", "Claims reference 2026 1234 5678", "Please quote Claim No 3456 7890 when you call.",
+      "Emergency assistance is provided by Global Rescue Services.\n24-hour hotline: 6111 9999"])
+      assert.deepEqual(on(line), [], line);
+  });
+  await t("kept: the insurer named or speaking for itself, or a contact line of its own", () => {
+    assert.deepEqual(on("For claims, call Harbourline Assurance on 6123 4567."), ["phone|Claims|6123 4567"]);
+    assert.deepEqual(on("Questions? Please call our Customer Care team at 6234 5678."), ["phone|Phone|6234 5678"]);
+    assert.deepEqual(on("CONTACT\nClaims Hotline: 6345 6789"), ["phone|Claims|6345 6789"]);
+  });
+  await t("Critic #505 L1: a host that is only part of the insurer's name is not its domain", () => {
+    assert.deepEqual(on("Visit www.line.com or email help@line.com"), []);
+    assert.deepEqual(on("Email help@dent.sg", "Prudential Assurance Company Singapore"), []);
   });
   await t("a number with no words saying it reaches anyone is not a contact", () => {
     assert.deepEqual(on("Plan code 3456 7890\nMember 1234 5678"), []);

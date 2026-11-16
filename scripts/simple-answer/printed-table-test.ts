@@ -57,6 +57,15 @@ t("when the nearest heading line does not have one heading per column, none is b
   assert.equal(unbound.headers, null);
   assert.ok(unbound.printedAbove.some((l) => l.includes("Year/Age Paid To-date Surrender Value")), JSON.stringify(unbound.printedAbove));
 });
+t("Critic #505 L: two tables of the same width on one page stay two tables, each under its own headings", () => {
+  const TWO = ["Guaranteed values", "Year\tPremiums\tDeath\tSurrender", "1\t1,000\t50,000\t0", "2\t2,000\t50,000\t500",
+    "Non-guaranteed values at 4.25%", "Year\tBonus\tDeath\tSurrender", "1\t10\t50,010\t5", "2\t25\t50,025\t530"].join("\n");
+  const H3 = { accountId: "a", members: [], documents: [doc("D3", "Saver", TWO)] } as unknown as Household;
+  const out = tablesFromPrintedRows([pt("a", "Saver", "2 2,000 50,000 500"), pt("b", "Saver", "2 25 50,025 530")], H3, label);
+  assert.equal(out.length, 2);
+  assert.deepEqual(out.map((o) => o.table!.headers), [["Year", "Premiums", "Death", "Surrender"], ["Year", "Bonus", "Death", "Surrender"]]);
+  assert.deepEqual(out.map((o) => o.table!.rows), [[["2", "2,000", "50,000", "500"]], [["2", "25", "50,025", "530"]]]);
+});
 t("left alone: an amount card, a point with conditions, a point with its own words, a row not on the cited page, a row of words", () => {
   const st: AnswerStatement[] = [
     pt("x1", "READYBUILDER 10", "10/38 47,909 28,175 1,585 29,760 2,850 31,025", { amount: { text: "S$1", currencyResolved: true, illustration: false } }),

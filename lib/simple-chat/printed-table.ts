@@ -92,8 +92,21 @@ export function tablesFromPrintedRows(statements: AnswerStatement[], household: 
     groups.set(key, [...(groups.get(key) ?? []), r]);
   }
   const replaced = new Map<AnswerStatement, AnswerStatement | null>();
+  // Rows of one table only: two tables of the same width on one page (guaranteed and non-guaranteed) are split wherever a
+  // line of words stands between two rows (Critic #505 L).
+  const blocks: Row[][] = [];
   for (const g of groups.values()) {
-    const sorted = [...g].sort((a, b) => (a.lineAt < 0 || b.lineAt < 0 ? 0 : a.lineAt - b.lineAt));
+    const sorted = [...g].sort((a, b) => a.lineAt - b.lineAt);
+    const lines = sorted[0].doc.pages.find((p) => p.page === sorted[0].page)!.text.split(/\r?\n/);
+    let block: Row[] = [];
+    for (const r of sorted) {
+      const prev = block[block.length - 1];
+      if (prev && lines.slice(prev.lineAt + 1, r.lineAt).some((l) => l.trim() && !isDataRow(cellsOf(l)))) { blocks.push(block); block = []; }
+      block.push(r);
+    }
+    blocks.push(block);
+  }
+  for (const sorted of blocks) {
     const first = sorted[0];
     const lines = first.doc.pages.find((p) => p.page === first.page)!.text.split(/\r?\n/);
     const firstLine = Math.min(...sorted.map((r) => r.lineAt).filter((n) => n >= 0));

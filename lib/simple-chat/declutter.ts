@@ -27,7 +27,9 @@ const SERVER_NOTES = new Set([LEFT_OUT_AMOUNT, LEFT_OUT_FACT, NARROWED_PAGES_NOT
  * always stays. */
 const NARRATION: RegExp[] = [
   // "I left out an amount / a point / a statement ..." in any of the server's or the model's own wordings.
-  /^(?:i(?:'ve| have)? )?left out (?:an? |one |some )?(?:amount|figure|point|statement)s?\b[^.]*$/,
+  // Only in the notes' own wording (Critic #505 M1: "Left out amounts are those under the rider..." is the model's own point).
+  /^i(?:'ve| have)? left out (?:an? |one |some )?(?:amount|figure|point|statement)s? (?:that )?i (?:couldn't|could not|can't|cannot) (?:find|match|confirm)\b[^.]*$/,
+  /^i(?:'ve| have)? left out a statement your documents (?:don't|do not) support$/,
   // The separate-covers line, whole or any of its three sentences.
   /^these are separate covers$/,
   /^the pages i used (?:don't|do not) say whether one affects the other,? so the insurer decides$/,
@@ -47,6 +49,8 @@ export function withoutNarration(text: string): string {
 
 /** Said as a step when an amount was left out and none is shown. */
 export const CONFIRM_AMOUNT_STEP = "Ask the insurer to confirm the amount.";
+/** Said as a step when an amount was left out and others are shown. */
+export const CONFIRM_OTHER_AMOUNT_STEP = "Ask the insurer to confirm whether any other amount applies.";
 
 type Declutterable = { summary?: string; bottomLine?: string | null; details?: string[]; nextSteps?: string[]; statements?: AnswerStatement[] };
 
@@ -71,12 +75,14 @@ export function declutterAnswer(answer: Declutterable): string[] {
   if (typeof answer.summary === "string") answer.summary = clean(answer.summary);
   if (answer.details) answer.details = answer.details.map(clean).filter((d) => d.trim());
   if (answer.nextSteps) answer.nextSteps = answer.nextSteps.map(clean).filter((d) => d.trim());
-  // When an amount was left out and no amount is shown at all, the one thing the household can do about it is said as a
-  // step, not as a note about the check.
+  // When an amount was left out, the one thing the household can do about it is said as a step, not as a note about the
+  // check. With other amounts still shown, the step says another may apply, so the cards never read as all there is
+  // (Critic #505 M2).
   const leftOutAmount = removed.some((r) => flat(r) === flat(LEFT_OUT_AMOUNT));
-  if (leftOutAmount && answer.statements && !answer.statements.some((s) => s.amount)) {
+  if (leftOutAmount && answer.statements) {
+    const step = answer.statements.some((s) => s.amount) ? CONFIRM_OTHER_AMOUNT_STEP : CONFIRM_AMOUNT_STEP;
     answer.nextSteps = [...(answer.nextSteps ?? [])];
-    if (!answer.nextSteps.some((n) => /confirm[^.]*amount/i.test(n))) answer.nextSteps.push(CONFIRM_AMOUNT_STEP);
+    if (!answer.nextSteps.some((n) => /\bconfirm\b[^.]*\bamount\b/i.test(n))) answer.nextSteps.push(step);
   }
   return removed;
 }
