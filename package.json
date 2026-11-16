@@ -217,6 +217,7 @@
     "security:db-rate-limit-test": "node --import tsx scripts/db-rate-limit-regressions.ts",
     "security:csrf-test": "node --import tsx scripts/csrf-regressions.ts",
     "http:open-endpoint-limit-test": "node --import tsx --test scripts/http/open-endpoint-limit-test.ts",
+    "http:health-public-test": "node --import tsx --test scripts/http/health-public-test.ts",
     "security:launch-check-test": "node --import tsx scripts/launch-check-regressions.ts",
     "security:launch-check-verifier-test": "node scripts/launch-check-verifier-regressions.mjs",
     "ai:read-spend-cap-test": "node --import tsx scripts/ai/read-spend-cap-test.ts",
