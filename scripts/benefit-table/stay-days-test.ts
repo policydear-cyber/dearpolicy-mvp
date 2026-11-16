@@ -738,7 +738,9 @@ for (const name of ["Hospital Cash 65", "US Hospital Cash", "Hospital Cash - US"
     ["Infant Hospital Cash", "Falcon Insurance Ltd", "Infant Shield"], ["Mum Hospital Cash", "Falcon Insurance Ltd", "Mum and Baby Care"],
     ["Student Hospital Cash", "Falcon Insurance Ltd", "Student Care"], ["Baby Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel BabyCare"],
     ["Life Hospital Cash", "HSBC Life (Singapore) Pte Ltd", "HSBC Life Shield"], ["Infant Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel InfantShield"],
-    ["Maid Hospital Cash", "Meridian Allied Assurance", "Maid Plan"], ["Travel Hospital Cash", "Kestrel Life Singapore Ltd", "TravelCover"], ["Infant Hospital Cash", "Falcon Insurance Ltd", "Falcon Infant Plan"],
+    ["Maid Hospital Cash", "Meridian Allied Assurance", "Maid Plan"], ["Single Hospital Cash", "Singapore Life Ltd", "Single Room Plan"],
+    ["Travel Hospital Cash", "Travelers Insurance", "Travel Protect"], ["Helper Hospital Cash", "Helvetia Insurance", "Helper Protect"],
+    ["Infant Hospital Cash", "Infinity Life", "Infant Care"], ["Private Hospital Cash", "Privilege Insurance", "Private Care"], ["Travel Hospital Cash", "Kestrel Life Singapore Ltd", "TravelCover"], ["Infant Hospital Cash", "Falcon Insurance Ltd", "Falcon Infant Plan"],
   ];
   for (const [name, ins, prod] of none) test(`stay-wrap P4 '${name}' in '${prod}' by '${ins}': none`, () => assert.equal(rule(name, ins, prod), null));
   const kept: [string, string | null, string | null][] = [

@@ -1890,8 +1890,11 @@ export function documentOwnWords(doc: { insurer: string | null; productName: str
     let common = 0;
     while (common < w.length && common < insurerFirst.length && w[common] === insurerFirst[common]) common++;
     const camel = /\p{Ll}\p{Lu}/u.test(raw) || /^\p{Lu}{2,}\p{Ll}/u.test(raw);
-    if (common >= 3 || (insurerInitials && w.startsWith(insurerInitials)) || camel) runs.add(w);
-    if (common >= 3 && common < w.length) runs.add(w.slice(0, common));
+    // Sharing the insurer's first letters counts only for a glued word ("Sing" + "life", "Manu" + "Care"); a plain word
+    // that merely shares them ("Single", "Helper" by Helvetia, "Travel" by Travelers) never does (TE #515 round 3).
+    const glued = common >= 3 && w.length - common >= 4;
+    if (glued || (insurerInitials && w.startsWith(insurerInitials) && w.length > insurerInitials.length) || camel) runs.add(w);
+    if (glued || (camel && common >= 3 && common < w.length)) runs.add(w.slice(0, common));
   }
   return [...runs].filter((r) => !r.split(" ").some((w) => NAME_QUALIFIER.test(w) || NAME_QUALIFIER_WORDS.has(w)));
 }
