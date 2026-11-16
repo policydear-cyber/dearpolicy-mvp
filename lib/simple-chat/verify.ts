@@ -2041,14 +2041,19 @@ function qualifierFragment(line: string, codeName: string, ownWords: string[], p
   if (HARMLESS_BRACKET.test(inner) || CAP_BRACKET.test(inner) || DESCRIPTIVE_BRACKET.test(inner) || neutralBracket(inner)) return false;
   const code = /^[A-Z]{1,5}$/.test(inner);
   if (code && !QUALIFIER_CAPS.has(inner) && nameAbbreviation(codeName, inner, ownWords)) return false;
-  // A bracket or "- x" clause is the row's own words: anything but neutral words may qualify it. A bare short line may also be
-  // a heading, a footer or a cell ("Surgical Benefits", "NOTES", "B"): only a qualifier word, a qualifier code (ICU) or a household
-  // member's name in it qualifies the row.
-  if (bracket || dash) return true;
+  // A line under the row, bracketed or bare, may also be a heading, a footer, a cell or a note ("Surgical Benefits", "NOTES",
+  // "(continued)", "(Covered)", "(Note 1)", "(a)"): only a qualifier word, a qualifier code (ICU) or a household member's
+  // name in it qualifies the row (gate #515 round 6 NEW-HIGH 1).
   if (code && QUALIFIER_CAPS.has(inner)) return true;
+  // A pointer to a note or another page ("(Note 1)", "(see overleaf)") holds terms this row's answer has not read: none.
+  if ((bracket || dash) && /\b(?:see\s+)?notes?\s*\(?\d|\bsee\s+(?:note|overleaf|next\s+page|page)\b|\boverleaf\b/i.test(inner)) return true;
   // "For the Life Assured", "For the insured": the policy's own life, said of every row.
   if (/^for\s+the\s+(?:life\s+(?:assured|insured)|insured(?:\s+person)?)$/i.test(inner)) return false;
   const words: string[] = inner.toLowerCase().match(/[\p{L}']+/gu) ?? [];
+  // A bare line ending "Benefits" is the next section's heading ("Critical Illness Benefits", "Accident Benefits"), as is
+  // a bare line naming another benefit ("Accidental Death", "Personal Accident"); a household member's name still counts.
+  const heading = short && (/\bbenefits$/i.test(inner) || /^(?:critical\s+illness(?:es)?|accidental\s+death(?:\s+(?:and|&)\s+dismemberment)?|personal\s+accident|cancer(?:\s+cover)?|death|total\s+(?:and|&)\s+permanent\s+disability)$/i.test(inner));
+  if (heading) return people.some((p) => (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []).some((w) => words.includes(w)));
   if (NAME_QUALIFIER.test(inner) || words.some((w) => NAME_QUALIFIER_WORDS.has(w) || FRAGMENT_QUALIFIER_WORDS.has(w))) return true;
   return people.some((p) => (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []).some((w) => words.includes(w)));
 }

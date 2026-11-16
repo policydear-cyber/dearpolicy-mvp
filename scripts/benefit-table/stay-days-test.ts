@@ -762,7 +762,7 @@ for (const name of ["Hospital Cash Benefit (Rider)", "Hospital Cash Benefit (Opt
   "Hosp Cash Benefit"])
   ROUND2.push([`R1 control name '${name}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
 // TE journeys W2: a qualifier on the line below the row, alone or in brackets, says whose or which stays: none.
-for (const below of ["(Spouse)", "(for all lives)", "(Child)", "Infant", "(Plan B)", "Maid", "(C)", "(Accident only)", "- spouse", "Spouse", "Joint life"])
+for (const below of ["(Spouse)", "(for all lives)", "(Child)", "Infant", "(Plan B)", "Maid", "(Accident only)", "- spouse", "Spouse", "Joint life"])
   ROUND2.push([`W2 line below '${below}': none`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, null]);
 // Critic #515 round 5: a heading, footer, note or cell under the row, or any line not straight under it, is not a qualifier.
 for (const below of ["Surgical Benefits", "OUTPATIENT BENEFITS", "Exclusions", "Other Benefits", "Section B", "Policy Schedule", "Riders", "Surgical benefit",
@@ -774,6 +774,13 @@ for (const below of ["NOTES", "NOTE", "YES", "NIL", "NA", "PAGE", "END", "ALL", 
   ROUND2.push([`W2d control bare capitals '${below}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, "S$3,000"]);
 for (const below of ["ICU", "MAID", "INFANT", "SPOUSE"])
   ROUND2.push([`W2d bare qualifier '${below}' below: none`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, null]);
+// TE #515 round 6: a bracketed note, cell or enumerator, or the next section's heading, under the row is not a qualifier.
+for (const below of ["(continued)", "(cont'd)", "(Page 1 of 2)", "(Covered)", "(Yes)", "(No)", "(Nil)", "(N/A)", "(Paid)", "(Waived)", "(Guaranteed)",
+  "(as charged)", "(Cashless)", "(Reimbursement)", "(see below)", "(*)", "(A)", "(a)", "(i)", "(SA)", "(100%)", "(TPD)", "(C)",
+  "Critical Illness Benefits", "Accident Benefits", "Personal Accident Benefits", "Accidental Death", "Cancer Benefits", "Travel Benefits", "Personal Accident"])
+  ROUND2.push([`W2e control line below '${below}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, "S$3,000"]);
+for (const below of ["(Note 1)", "(see overleaf)", "(Spouse only)", "(Infant)", "(ICU)", "(for each life)", "(Plan 2)", "- child", "(Overseas)", "(Wife)"])
+  ROUND2.push([`W2e bracket qualifier '${below}' below: none`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, null]);
 ROUND2.push(["W2c a qualifier after a blank line is not the row's own fragment", Q1(", from the 3rd day, up to 30 days per stay"), ["", "Infant"], R3O, 40, "S$3,000"]);
 test("stay-wrap W2 a household member's name on the line under Tan's row: none", () => {
   const h = household([{ person: TAN, row: Q1(", from the 3rd day, up to 30 days per stay"), below: ["Lee Mei Ling"], value: 100, maxDays: 30, fromDay: 3 },
