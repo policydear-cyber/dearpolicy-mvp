@@ -78,7 +78,13 @@ async function actuallib() {
   const other = (v: string) => v.split("\n").filter((l) => /Other Fracture/.test(l) && /conditional illustration is S\$[\d,]+/.test(l));
   for (const [i, o] of out.entries()) {
     const ls = other(o.v);
-    check("AC", `F1 (closed fracture, C4 item 4; SA2 turn ${i + 1}: ${i ? "corrected to the hip" : "closed tibia"}) every Other Fracture illustration says, in its own sentence, that these documents do not define which fractures that row covers`, ls.length > 0 && ls.every((l) => /print no definition|do(?:es)? not define/i.test(l)), ls.join("\n") || o.v);
+    // DC, 16 Nov 2026 (declutter, PR #512; docs/rag-migration/declutter-20261116/EXPECTATION-CHANGES.md). ORIG: `ls.length > 0 &&
+    // ls.every(note)` -- at least one Other Fracture ILLUSTRATION, each with the "do not define" note. A row labelled "(Other Fracture)"
+    // that no document defines is now said WITHOUT its amount ("… also lists … under Other Fracture, but these documents don't say which
+    // fractures count as Other Fracture"), so turn 1 may have no illustration. Still asserted: the missing definition is said for the
+    // Other Fracture table, and any illustration from it still carries the note in its own sentence.
+    const named = o.v.split("\n").some((l) => /under Other Fracture, but these documents don't say which fractures count as Other Fracture/.test(l));
+    check("AC", `F1 (closed fracture, C4 item 4; SA2 turn ${i + 1}: ${i ? "corrected to the hip" : "closed tibia"}) the Other Fracture table's missing definition is said: each illustration from it says so in its own sentence, or the undefined row is named without an amount`, (ls.length > 0 || named) && ls.every((l) => /print no definition|do(?:es)? not define/i.test(l)), ls.join("\n") || o.v);
     check("GUARD", `F2 (SA2 turn ${i + 1}) returned = saved`, o.v === o.shown);
   }
 }

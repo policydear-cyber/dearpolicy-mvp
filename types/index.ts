@@ -407,4 +407,7 @@ export type ChatAnswer = {
   computations?:ComputationRecord[];
   /** Agent K: verified benefit calculations (illustrations / indicative estimates), one per stated result. */
   calculations?:CalculationRecord[];
+  /** PR #512 (F8): a follow-up that only said "That doesn't change the amounts above." names the calculations it stood on (ids,
+   * never shown), so a later correction that withdraws them replaces this answer too (lib/chat/stale-answers.ts). */
+  restatedCalculationIds?:string[];
 };

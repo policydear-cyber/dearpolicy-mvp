@@ -8,6 +8,7 @@
  * this work; see the expectations document). They are model moves, not product code: the server must make them safe.
  */
 import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
+import { withOtherFractureDefined } from "./fixtures/reliable-chat/other-fracture-defined";
 import * as A from "./fixtures/reliable-chat/actual-lib";
 import type { ScriptTurn, ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
@@ -21,12 +22,15 @@ import { requirementToAsk, type OpenRequirement } from "@/lib/rag2/loop/requirem
 import { planSchedules, namedSchedules } from "@/lib/rag2/loop/schedule-disposition";
 import { D, G, CERT, N_U1, narrowTurn, SBB_U1, SBB_U2, sbbTurns, SBA_U1, SBA_U2, sbaTurns, SAR_U1, SAR_U2, sarTurns, J3B_U1, J3B_U2, j3bTurns, J1_U, J2_U, J3_U1, J3_U2, J4_U, J5_U, J6_U, j1Turn, j2Turn, j3Turns, j4Turn, j5Turn, j5sTurn, j6Turn } from "./fixtures/reliable-chat/actual-lib-conversations";
 process.env.DEARPOLICY_CHAT_CONTRACT = "benefits";
-setEnv(A as any);
+// Declutter (16 Nov 2026): this suite tests conversation mechanics with the certificate's Other Fracture amount as one of its
+  // vehicles; it runs on the SYNTHETIC variant that defines Other Fracture (./fixtures/reliable-chat/other-fracture-defined.ts) so that
+  // amount is still shown. The undefined case (the real libraries) is tested in scripts/reliable-chat-fracture-replay.ts A2-A6b, B14.
+  setEnv(withOtherFractureDefined(A) as any);
 let failed = 0, passed = 0;
 const failures: string[] = [];
 const check = (name: string, ok: boolean, detail = "") => { if (ok) passed++; else { failed++; failures.push(name); } console.log(`${ok ? "PASS" : "FAIL"} ${name}${!ok && detail ? "\n     " + detail.replace(/\n/g, "\n     ") : ""}`); };
 async function main() {
-  const h = await startHarness(A as any);
+  const h = await startHarness(withOtherFractureDefined(A) as any);
   process.env.DEARPOLICY_RAG_LOOP = "1";
   const { installLoopModel } = await import("@/lib/rag2/loop/model");
   const { ScriptedLoopModel } = await import("@/lib/rag2/loop/scripted-model");
@@ -69,7 +73,9 @@ async function main() {
   // ===== J2: correction to hip -> the tibia illustration withdrawn; conditional S$3,750 complete, saved and displayed
   const [, j2] = await converse("J2", [J1_U, J2_U], [j1Turn(), j2Turn()]);
   const hip = lines(j2.v).find((l) => /S\$3,750/.test(l)) ?? "";
-  check("J2: the S$3,750 illustration is one complete conditional sentence: If … Daniel … Hip … 75% of the S$5,000 limit … not a payment", /^If the Simple Fracture/.test(hip) && /Daniel/.test(hip) && /“Hip”/.test(hip) && /75% of the Simple Fracture benefit limit of S\$5,000/i.test(hip) && /not a payment/.test(hip), j2.v);
+  check("J2: the S$3,750 illustration is one complete conditional sentence: If … Daniel … Hip … 75% of the S$5,000 limit (the insurer's part said once for the answer)", /^If the Simple Fracture/.test(hip) && /Daniel/.test(hip) && /“Hip”/.test(hip) && /75% of the Simple Fracture benefit limit of S\$5,000/i.test(hip) && !/not a payment/.test(hip) && /The insurer decides what is paid\./.test(j2.v), j2.v);
+  // ORIG J2 (declutter, 16 Nov 2026; docs/rag-migration/declutter-20261116/EXPECTATION-CHANGES.md): required /not a payment/ IN the
+  // illustration sentence. DC asked for the per-amount clause to go; the answer now says once that the insurer decides what is paid.
   check("J2: it is not withheld or replaced by a refusal, and no unfinished clause is left", !NOT_CONFIRMED.test(j2.v) && complete(j2.v), j2.v);
   check("J2: the household's message is not quoted into the calculation (“Correction: …”)", !/Correction:|as you described/i.test(j2.v), j2.v);
   check("J2: the earlier tibia illustration (S$2,500) is not current in the answer", !/S\$2,500/.test(j2.v) || /withdrawn|no longer|replaced/i.test(lines(j2.v).find((l) => /S\$2,500/.test(l)) ?? ""), j2.v);
@@ -126,7 +132,9 @@ async function main() {
     const bq = (b1.answer.questions ?? []) as any[];
     const sched = (t: Turn) => (t.trace?.schedules ?? []) as any[];
     check("SBb replay turn 1: both schedules' supported terms (the S$5,000 limit and Daniel's S$600,000 sum insured) although the model evaluated one", /S\$5,000/.test(b1.v) && /S\$600,000/.test(b1.v) && !/conditional illustration is S\$/.test(b1.v), b1.v);
-    check("SBb replay turn 1: the unresolved relationship is stated, no definition invented, exactly one question", /Neither document says whether one amends, replaces or adds to the other/.test(b1.v) && bq.length === 1, b1.v + JSON.stringify(bq));
+    // ORIG (declutter, 16 Nov 2026): /Neither document says whether one amends, replaces or adds to the other/. That line was folded into
+    // the one-line frame at DC's request ("... and neither document says which one applies"); the unresolved relationship is still said.
+    check("SBb replay turn 1: the unresolved relationship is stated, no definition invented, exactly one question", /neither document says which one applies/.test(b1.v) && bq.length === 1, b1.v + JSON.stringify(bq));
     check("SBb replay turn 1: both schedules carry a recorded disposition", sched(b1).length >= 2 && sched(b1).every((x) => ["explained", "evaluated", "excluded", "unresolved"].includes(x.disposition) && x.reason), JSON.stringify(sched(b1)));
     check("SBb replay turn 1: returned = saved = reopened; complete", agrees(b1) && complete(b1.v), b1.v);
     check("SBb replay turn 2: both conditional alternatives (S$2,500 and S$300,000) as separate statements, never a total, no repeated question, nothing pending", /S\$2,500/.test(b2.v) && /S\$300,000/.test(b2.v) && !claimsATotal(b2.v) && !(b2.answer.questions ?? []).length && !b2.state?.ragLoop?.pending && complete(b2.v) && agrees(b2), b2.v);
@@ -240,7 +248,11 @@ async function main() {
   {
     const asConv = (ts: Turn[]) => ({ turns: ts.map(() => ({})), loaded: { turns: ts.map((t) => ({ answer: t.answer })), state: {} }, saved: { traces: ts.map((t) => t.trace) } } as any);
     const [, g2] = [0, j2], tw = (t: Turn[]) => asConv(t);
-    check("grader v8: the scripted correction journey passes", gradeSAcorrection("SAa", tw([j1, g2])).verdict === "PASS", JSON.stringify(gradeSAcorrection("SAa", tw([j1, g2])).checks.filter((c) => !c.ok)));
+    // ORIG (declutter, 16 Nov 2026): verdict === "PASS". The registered grader v8 (scripts/rag2-live/structured-check.ts, NOT edited) still
+    // requires "not a payment" inside the S$3,750 sentence (K2), which DC asked to remove. This check now requires that K2 is the ONLY
+    // failing check, and that K2 holds without that clause; the original grade is kept by the grader itself.
+    { const g = gradeSAcorrection("SAa", tw([j1, g2])); const bad = g.checks.filter((c) => !c.ok); const hip = String(g2.v ?? "").split("\n").find((l: string) => /S\$3,750/.test(l)) ?? "";
+      check("grader v8: the scripted correction journey passes (K2 apart from its removed 'not a payment' clause)", bad.every((c) => c.id === "K2") && /^If\b/.test(hip) && /Hip/.test(hip) && /75%/.test(hip) && /S\$5,000/.test(hip) && /\.$/.test(hip.trim()), JSON.stringify(bad)); }
     check("grader v8: the scripted ambiguity journey passes", gradeSAambiguity("SBa", tw([j3a, j3b])).verdict === "PASS", JSON.stringify(gradeSAambiguity("SBa", tw([j3a, j3b])).checks.filter((c) => !c.ok)));
     check("grader v8: the scripted comparison passes", gradeSAcompare("SC", tw([j4])).verdict === "PASS", JSON.stringify(gradeSAcompare("SC", tw([j4])).checks.filter((c) => !c.ok)));
     check("grader v8: the scripted death answer passes", gradeSAdeath("SD", tw([j5])).verdict === "PASS", JSON.stringify(gradeSAdeath("SD", tw([j5])).checks.filter((c) => !c.ok)));
@@ -270,9 +282,11 @@ async function main() {
     const calcTurns: [string, Turn][] = [["J2", j2], ["J3 turn 2", j3b], ["J3b turn 2", j3cb], ["J4", j4], ["J6", j6], ["SBa replay turn 2", sba2]];
     for (const [label, t] of calcTurns) {
       const ks = (t.answer.calculations ?? []) as any[];
-      const whole = ks.length > 0 && ks.every((k) => /^If the .+ benefit applies to .+'s case “[^”]+”.*, the conditional illustration is S\$[\d,]+: [\d.]+% of .+ (?:limit|sum insured)[^;]*; it is an illustration from the document's terms, not a payment or an insurer's decision(?:; the page prints (?:a footnote|footnotes) for that row: “[^”]+” \(marked [^)]+\)(?: and “[^”]+” \(marked [^)]+\))*)?(?:; under the table it prints: “[^”]+”)?\.$/.test(k.sentence) && sentencesOf(k.sentence).length === 1);
+      // ORIG (declutter, 16 Nov 2026): the pattern required "; it is an illustration from the document's terms, not a payment or an
+      // insurer's decision" after the base. That clause is no longer said after each amount (DC); the rest of the pattern is unchanged.
+      const whole = ks.length > 0 && ks.every((k) => /^If the .+ benefit applies to .+'s case “[^”]+”.*, the conditional illustration is S\$[\d,]+: [\d.]+% of .+ (?:limit|sum insured)[^;]*(?:; the page prints (?:a footnote|footnotes) for that row: “[^”]+” \(marked [^)]+\)(?: and “[^”]+” \(marked [^)]+\))*)?(?:; under the table it prints: “[^”]+”)?\.$/.test(k.sentence) && sentencesOf(k.sentence).length === 1);
       const shownWhole = ks.every((k) => lines(t.v).includes(k.sentence) && lines(t.shown).includes(k.sentence) && lines(t.reopened).includes(k.sentence));
-      check(`complete conditions (${label}): every saved calculation is ONE complete conditional sentence (subject, case, percentage, base, document, not-a-payment) the splitter does not divide, and is displayed and reopened whole`, whole && shownWhole, JSON.stringify(ks.map((k) => k.sentence)));
+      check(`complete conditions (${label}): every saved calculation is ONE complete conditional sentence (subject, case, percentage, base, document) the splitter does not divide, and is displayed and reopened whole`, whole && shownWhole, JSON.stringify(ks.map((k) => k.sentence)));
     }
     for (const [label, t] of calcTurns.filter(([l]) => l === "J2" || l === "J4")) {
       const pa = ((t.answer.calculations ?? []) as any[]).map((k) => String(k.sentence)).filter((x) => /Benefit Summary \(page 8\)/.test(x));

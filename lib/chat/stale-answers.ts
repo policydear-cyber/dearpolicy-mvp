@@ -63,7 +63,7 @@ export function invalidatedAnswer(answer: ChatAnswer, reason: InvalidationReason
     policyStatedLimits: [], potentialPayoutTotals: [], payoutQualifiers: [], absenceChecks: [],
     factFinding: undefined, composition: undefined, assessmentKind: undefined,
     // (what its figures were bound to and worked out from goes too: a page that draws figures from them must find none)
-    figureBindings: [], computations: [], calculations: [],
+    figureBindings: [], computations: [], calculations: [], restatedCalculationIds: [],
     // (the simple chat's cards and bottom line go too: a page or client that reads them must find no figure)
     ...("statements" in answer ? { statements: [] } : {}), ...("bottomLine" in answer ? { bottomLine: NOTICE[reason] } : {}),
     invalidated: { reason },
@@ -111,6 +111,7 @@ export function supersededIn(conversationState: unknown): (a: Partial<ChatAnswer
   const withdrawn = withdrawnCalculationIds(conversationState);
   const replaced = supersededAnswerIds(conversationState);
   return (a) => (withdrawn.size > 0 && (Array.isArray(a?.calculations) ? a!.calculations! : []).some((c) => typeof c?.id === "string" && withdrawn.has(c.id)))
+    || (withdrawn.size > 0 && (Array.isArray(a?.restatedCalculationIds) ? a!.restatedCalculationIds! : []).some((id) => typeof id === "string" && withdrawn.has(id)))
     || (replaced.size > 0 && typeof a?.answerId === "string" && replaced.has(a.answerId));
 }
 

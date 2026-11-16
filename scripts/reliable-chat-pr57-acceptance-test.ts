@@ -30,6 +30,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { NextRequest } from "next/server";
 import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
+import { withOtherFractureDefined } from "./fixtures/reliable-chat/other-fracture-defined";
 import * as FX from "./fixtures/reliable-chat/fracture-conversation";
 import { ScriptedLoopModel, type ScriptCall, type ScriptTurn } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
@@ -76,8 +77,11 @@ const UNSETTLED = /\b(?:do(?:es)? not (?:establish|settle|say|show|determine)|ne
 const NOTE_TOE = /toe and foot are not covered/;
 
 async function main() {
-  setEnv(FX as any);
-  const h = await startHarness(FX as any);
+  // Declutter (16 Nov 2026): this suite tests conversation mechanics with the certificate's Other Fracture amount as one of its
+  // vehicles; it runs on the SYNTHETIC variant that defines Other Fracture (./fixtures/reliable-chat/other-fracture-defined.ts) so that
+  // amount is still shown. The undefined case (the real libraries) is tested in scripts/reliable-chat-fracture-replay.ts A2-A6b, B14.
+  setEnv(withOtherFractureDefined(FX) as any);
+  const h = await startHarness(withOtherFractureDefined(FX) as any);
   process.env.DEARPOLICY_RAG_LOOP = "1";
   const { installLoopModel } = await import("@/lib/rag2/loop/model");
   const { GET: history } = await import("@/app/api/chat/history/[id]/route");
@@ -123,7 +127,10 @@ async function main() {
     check("AC", "R2 (K4b correction turn, repetition) the same, at most once", count(k4, UNSETTLED).length <= 1, count(k4, UNSETTLED).join("\n"));
     check("AC", "R3 (K3t1, repetition) that the two documents use different bases is said once (no 'different bases' sentence beside the bases sentence)", count(k3, /different bases|takes its percentage of/i).length <= 1, count(k3, /different bases|takes its percentage of/i).join("\n"));
     for (const [id, o] of [["K3t1", out.K3t1[0]], ["K4b", out.K4b[1]]] as const)
-      check("GUARD", `R4 (${id}) both alternatives stay (S$1,250 and S$120,000), framed as alternatives, never a total, and the open point is still said`, /S\$1,250/.test(o.v) && /S\$120,000/.test(o.v) && /never a total|not to be added/.test(o.v) && !/S\$121,250/.test(o.v) && count(o.v, UNSETTLED).length >= 1, o.v);
+      check("GUARD", `R4 (${id}) both alternatives stay (S$1,250 and S$120,000), no total in any form, and the open point is still said`, /S\$1,250/.test(o.v) && /S\$120,000/.test(o.v) && !/S\$121,250|in total|combined|added (?:up|together)|\bplus\b/i.test(o.v) && count(o.v, UNSETTLED).length >= 1, o.v);
+      // ORIG R4 (declutter, 16 Nov 2026; docs/rag-migration/declutter-20261116/EXPECTATION-CHANGES.md): also required the words
+      // /never a total|not to be added/. DC asked for that narration to go; "no total" is now asserted on behaviour (no sum, no
+      // "in total" / "combined" / "added" / "plus") instead of on the phrase.
     const k2 = out.K2[0].v;
     check("AC", "R5 (K2, v1 K2.3) the sickness answer says the certificate also lists Living Care cover that no stored page describes", /Living Care/.test(k2) && /(?:no (?:stored )?page|not|do(?:es)? not|don.t) (?:describe|say|show|state)|not described/i.test(k2), k2);
     // R6, expectation correction (Policy QC ruling 1, qc/FINDINGS-C1.md): was "no amount (no S$250 / $250) is given ... no question is asked".

@@ -167,7 +167,10 @@ test("FR1 footnote: the '#' footnote is said with the Arm row of the Product Sum
   const t = await send(page, request, u);
   const paragraphs = t.shown.split(/\n+/).map(norm).filter(Boolean);
   const summary = paragraphs.filter((p) => /S\$1,250/.test(p));
-  const certificate = paragraphs.filter((p) => /S\$120,000/.test(p));
+  // ORIG (declutter, 16 Nov 2026; docs/rag-migration/declutter-20261116/EXPECTATION-CHANGES.md): the certificate paragraph was found by
+  // its S$120,000. Its Other Fracture row is now said without an amount (undefined case), so it is found by that line.
+  const certificate = paragraphs.filter((p) => /also lists .* under Other Fracture/.test(p));
+  expect(t.shown).not.toMatch(/S\$120,000/);
   expect(summary.length).toBeGreaterThan(0);
   expect(certificate.length).toBeGreaterThan(0);
   for (const p of summary) { expect(p).toMatch(/thumb, finger and palm are not covered/); expect(p).toMatch(/marked #/); }
