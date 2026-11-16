@@ -15,7 +15,7 @@ async function test(name: string, fn: () => void | Promise<void>) {
 }
 
 async function main() {
-  const { documentStatedCurrency, statedCurrencies, currencyTokens, currencyStatements } = await import("@/lib/documents/document-currency");
+  const { documentStatedCurrency, statedCurrencies, foreignCurrency, currencyStatements } = await import("@/lib/documents/document-currency");
   const FC = await import("@/lib/documents/fact-check");
   const { verifiedExtraction } = await import("@/lib/rag/ingest");
   const { PolicyExtractionSchema } = await import("@/lib/ai/extract-policy");
@@ -147,9 +147,9 @@ async function main() {
   ];
   for (const [text, want] of shapes) await test(`U statedCurrencies(${JSON.stringify(text)})`, () => assert.deepEqual(statedCurrencies(text), want));
   await test("U a currency code in brackets counts, even as an illness abbreviation (fail closed); a label abbreviation by a figure does not", () => {
-    assert.ok(currencyTokens("Coronary Artery Disease (CAD)").some((c) => c.code === "other"));
-    assert.ok(currencyTokens("Limit CAD 5,000").some((c) => c.code === "other"));
-    assert.deepEqual(currencyTokens("TPD\t200,000.00\nICU 30 days"), []);
+    assert.ok(foreignCurrency("Coronary Artery Disease (CAD)", null).length > 0);
+    assert.ok(foreignCurrency("Limit CAD 5,000", null).length > 0);
+    assert.deepEqual(foreignCurrency("TPD\t200,000.00\nICU 30 days", "SGD"), []);
   });
   await test("U documentStatedCurrency is null for a bare $ document with $ figures", () => assert.equal(documentStatedCurrency([{ text: "Currency: $\nDeath\t$200,000.00" }]), null));
 
@@ -189,7 +189,7 @@ async function main() {
     assert.deepEqual(currencyStatements("Currency risk applies to investment-linked funds."), []);
     assert.deepEqual(currencyStatements("Claims are payable in Singapore Dollars or the equivalent."), []);
     // ... while the word "currency" outside a field, and "payable in" anything, are tokens the scan refuses.
-    assert.ok(currencyTokens("Currency risk applies to investment-linked funds.").some((c) => c.code === "other"));
+    assert.ok(foreignCurrency("Currency risk applies to investment-linked funds.", null).length > 0);
   });
 
   // ---- R2: round 2 gate repros (PR #507): an allow-list of currency-like tokens on every page
@@ -245,6 +245,32 @@ async function main() {
     await test(`R2-L a line that is not a cover benefit is never confirmed this way ('${label.replace("\t", "<TAB>")}')`, () => {
       assert.deepEqual(verified([{ category: "Death", amount, currency: "SGD", page: 2, evidence: label }], [cover("Currency : SGD"), { pageNumber: 2, text: `Benefit Schedule\nLife Assured\tMei Tan\n${label}` }]), [false]);
     });
+
+  // ---- R3: round 3 gate repros (PR #507): an allow-list beside every figure, every code, sign and currency word
+  for (const fig of ["USD300,000.00", "AUD300,000.00", "HKD 300,000.00", "MYR300,000.00", "300,000.00USD", "300,000.00 AUD", "USS300,000.00", "US300,000.00", "P300,000.00", "Php 300,000.00", "Bt 300,000.00", "Fr. 300,000.00", "SFr 300,000.00", "Dhs 300,000.00", "Ksh 300,000.00", "S/. 300,000.00", "300,000.00 Bt", "A$300,000.00", "NT$ 300,000.00", "HK$300,000.00"])
+    await test(`R3-1 a glued or one-word-apart code by a figure on another page blocks ('${fig}')`, () => all(withP3(`Death\t${fig}`), false));
+  for (const ev of ["Death\tUS 200,000.00", "Death\tusd 200,000.00", "Death\tAU 200,000.00", "Death\tPhp 200,000.00", "Death\tUSD200,000.00", "Death\t200,000.00USD", "Death\tP200,000.00"])
+    await test(`R3-1 the evidence line's own figure with anything beside it is not a bare line ('${ev.replace("\t", "<TAB>")}')`, () => {
+      assert.deepEqual(verified([{ category: "Death", amount: 200000, currency: "SGD", page: 2, evidence: ev }], [cover("Currency : SGD"), { pageNumber: 2, text: `Benefit Schedule\nLife Assured\tMei Tan\n${ev}` }]), [false]);
+    });
+  for (const tok of ["rmb", "usd", "Usd", "cny", "Payable in rmb on request.", "Amounts may be shown in 円.", "Benefit 元 limits apply.", "Benefits in dollars (Australian).", "Plan 2 is an AUD plan.", "Paid in greenbacks.", "Limit 5,000 yen", "Limit in rupees", "Limit in euro", "Limit €5,000", "Limit £5,000", "Limit ¥5,000"])
+    await test(`R3-2/3/4 a code, sign or currency word anywhere on another page blocks ('${tok}')`, () => all(withP3(`${tok}\nDeath\t300,000.00`), false));
+  await test("R3-2 an English-word code in capitals blocks, in lower case it does not", () => {
+    all(withP3("Limit: ALL claims in TOP currency\nDeath\t300,000.00"), false);
+    all(withP3("Cover applies to all claims at the top limit.\nDeath\t300,000.00"), true);
+  });
+  await test("R3-5 a scoped heading several lines up scopes the statement", () =>
+    all(verified(COVS(), [cover("Premium Details\nFrequency\tAnnual\nDue Date\t1 March\nCurrency : SGD"), { pageNumber: 2, text: SCHED }]), false));
+  for (const head of ["Policy Currency\tSingapore Dollar", "Currency\tS$", "Benefit Currency : SGD", "Sum Assured Currency : SGD", "CURRENCY : SINGAPORE DOLLARS", "Currency : SGD\nBenefit\tSum Assured ($)"])
+    await test(`R3 control: the stated currency's own spellings keep the fill ('${head.replace(/\n/g, " / ").replace(/\t/g, "<TAB>")}')`, () => all(verified(COVS(), [cover(head), { pageNumber: 2, text: SCHED }]), true));
+  await test("R3 control: the stated spellings beside figures, and harmless words after them, keep the fill", () =>
+    all(withP3("Annual Premium\tS$ 1,200.00\nHospital Cash\t200.00 per day\nICU 30 days\nDeath\t300,000.00"), true));
+  await test("R3 pieces: foreignCurrency", () => {
+    assert.deepEqual(foreignCurrency("Death\tS$300,000.00\nCI\tSGD 100,000.00\nWard\t100.00 per day", "SGD"), []);
+    assert.ok(foreignCurrency("Death\tUSD300,000.00", "SGD").length > 0);
+    assert.ok(foreignCurrency("Death 300,000.00", null).length === 0);
+    assert.ok(foreignCurrency("Death $300,000.00", null).length > 0, "a bare $ is never bare on the evidence line");
+  });
 
   if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
   console.log(`document-currency: ${passed} passed, 0 failed`);

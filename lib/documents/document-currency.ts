@@ -32,81 +32,122 @@ function valueCurrency(value: string): StatedCurrency | null {
 }
 
 // ---------------------------------------------------------------------------
-// Currency-like tokens (an allow-list: anything not one of the two currencies' own spellings is "other")
+// The single-currency scan: an allow-list. Anything that may be a currency and is not one of the stated currency's own
+// spellings is "foreign", and any foreign token anywhere in the document gives no fill.
 // ---------------------------------------------------------------------------
-export type CurrencyToken = { raw: string; code: StatedCurrency | "$" | "other" };
-/** Codes of currencies (ISO 4217, the ones a policy may print): counted beside a figure, in brackets, as a cell, or after
- * a colon. Any other three capitals count only right beside a figure ("USS 300,000.00"). */
-const ISO = new Set(("AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BGN BHD BIF BMD BND BOB BRL BSD BTN BWP BYN BZD CAD CDF CHF CLP CNH CNY COP CRC CUP CVE CZK "
-  + "DJF DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP GMD GNF GTQ GYD HKD HNL HTG HUF IDR ILS INR IQD IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW KWD KYD "
-  + "KZT LAK LBP LKR LRD LSL LYD MAD MDL MGA MKD MMK MNT MOP MRU MUR MVR MWK MXN MYR MZN NAD NGN NIO NOK NPR NZD OMR PAB PEN PGK PHP PKR PLN PYG QAR RON RSD RUB "
-  + "RWF SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD SSP STN SYP SZL THB TJS TMT TND TOP TRY TTD TWD TZS UAH UGX USD UYU UZS VES VND VUV WST XAF XCD XOF XPF YER ZAR "
-  + "ZMW ZWL RMB").split(" "));
-/** Three capitals beside a figure that are never money: ages, days, references, months, units. */
-const NOT_MONEY_CAPS = new Set("AGE DAY NOS REF TEL FAX BLK APT BOX PER NOV DEC JAN FEB MAR APR MAY JUN JUL AUG SEP OCT YRS MTH MOS PTE LTD NET KMS TPD ECI ICU HDU MRI CT GST".split(" "));
-const CURRENCY_WORDS = /\b(?:won|yen|yuan|renminbi|rupees?|rupiah|baht|ringgit|francs?|euros?|pounds?|sterling|dinars?|patacas?|lira|liras|roubles?|rubles?|taka|pesos?|dirhams?|riyals?|rials?|kron(?:a|e|or|er)|zloty|forint|rand|shekels?|kip|kyat|riel|dong|rufiyaa|naira|cedis?|shillings?|reais|kwacha|lempira|quetzal|bolivar(?:es)?|guarani|hryvnia|tenge|lari|manat|som|somoni|dram|leu|lei|lev|ngultrum|afghani|ariary|birr|nakfa|dalasi|leone|loti|pula|lilangeni|kina|vatu|tala|pa'anga|ouguiya|denar|marka|kuna|koruna|kunas)\b/gi;
-const DOLLAR_PHRASE = /\b([A-Za-z.]+(?:\s+[A-Za-z.]+)?)\s+dollars?\b/gi;
+/** ISO 4217 codes, active and recent (with RMB, CNH): the full list, not a hand-picked one. */
+const ISO_4217 = new Set(("AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BGN BHD BIF BMD BND BOB BOV BRL BSD BTN BWP BYN BYR BZD CAD CDF CHE CHF CHW "
+  + "CLF CLP CNY COP COU CRC CUC CUP CVE CZK DJF DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP GMD GNF GTQ GYD HKD HNL HRK HTG HUF IDR ILS INR IQD IRR "
+  + "ISK JMD JOD JPY KES KGS KHR KMF KPW KRW KWD KYD KZT LAK LBP LKR LRD LSL LTL LVL LYD MAD MDL MGA MKD MMK MNT MOP MRO MRU MUR MVR MWK MXN MXV MYR MZN NAD "
+  + "NGN NIO NOK NPR NZD OMR PAB PEN PGK PHP PKR PLN PYG QAR RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP SLE SLL SOS SRD SSP STD STN SVC SYP SZL THB TJS TMT "
+  + "TND TOP TRY TTD TVD TWD TZS UAH UGX USD USN UYI UYU UYW UZS VED VEF VES VND VUV WST XAF XAG XAU XBA XBB XBC XBD XCD XDR XOF XPD XPF XPT XSU XTS XUA XXX "
+  + "YER ZAR ZMK ZMW ZWG ZWL RMB CNH").split(" "));
+/** Codes that are also common English words or names: matched only in capitals, and in capitals not inside a line of
+ * capitals ("ALL AMOUNTS ARE IN SGD"). Beside a figure they are caught by the figure check anyway ("ALL 300,000"). */
+const ENGLISH_CODES = new Set("ALL TOP CAD CUP MOP BOB PEN TRY SOS GEL BAM MAD RUB COP RON ANG".split(" "));
+/** The stated currency's own spellings next to a figure (glued or a word apart). */
+const SPELLINGS: Record<StatedCurrency, Set<string>> = { SGD: new Set(["S$", "SG$", "SGD"]), USD: new Set(["US$", "U.S.$", "USD"]) };
+/** The stated currency's full names ("Singapore Dollars"), which may follow or precede a figure. */
+const FULL_NAME: Record<StatedCurrency, RegExp> = { SGD: /^singapore\s+dollars?\b/i, USD: /^(?:united\s+states|u\.?s\.?)\s+dollars?\b/i };
+/** Words that may follow a figure, a space apart (an explicit list): units of time, rates, grammar. */
+const AFTER_OK = new Set(("days day nights night years year yrs yr months month mths weeks week hours per a an each every only and or to in for of on at "
+  + "from with by max maximum min minimum the x times % percent cent sum assured insured is are was will be payable paid upon if plus less p.a. pa units unit").split(" "));
+/** Short words that may precede a figure, a space apart (an explicit list); a longer word is a label ("Death 200,000.00"). */
+const BEFORE_OK = new Set(("to of up at is be and or for max min the a an by from with than are was no upto plus each in on per sum life plan term cash ward "
+  + "care ci eci tpd pa icu hdu age day days year rate amt base net fee total").split(" "));
+const CJK_SIGNS = /[円元圆圓块]/u;
+const CURRENCY_WORDS = /\b(?:won|yen|yuan|renminbi|rupees?|rupiah|baht|ringgit|francs?|euros?|pounds?|sterling|dinars?|patacas?|lira|liras|lire|roubles?|rubles?|taka|pesos?|dirhams?|riyals?|rials?|kron(?:a|e|or|er)|zloty|forint|rand|real|reais|shekels?|kip|kyat|riel|dong|rufiyaa|naira|cedis?|shillings?|kwacha|lempira|quetzal|bolivar(?:es)?|guarani|hryvnia|tenge|lari|manat|somoni|dram|leu|lei|lev|ngultrum|afghani|ariary|birr|nakfa|dalasi|leone|loti|pula|lilangeni|kina|vatu|tala|ouguiya|denar|koruna|kuna|greenbacks?)\b/gi;
 const PAYABLE_IN = /\bpayable\s+in\s+([^.;,\n]{0,40})/gi;
 const PAYABLE_IN_OK = /^(?:advance|arrears|full|(?:a|one)\s+lump\s+sum|lump\s+sum|(?:equal\s+)?instal+ments?|accordance|respect|the\s+event|hospital|addition|total|each|any|one|the\s+(?:same|following)|monthly|yearly|annual|quarterly|half-?yearly)\b/i;
+/** A money-shaped figure: a thousands separator or two decimals. */
+const MONEY_FIGURE = /(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+\.\d{2})(?![\d,]|\.\d)/g;
+const EDGE_PUNCT = /^[(\[:=*#"'“”‘’–-]+|[)\],;.:*"'“”‘’]+$/g;
 
-/** The currency a spelling names, when it is one of the two currencies' own; "other" for anything else. */
-const spelled = (t: string): StatedCurrency | "other" => valueCurrency(t) ?? "other";
-
-/** Every currency-like token in the text (see the module note). */
-export function currencyTokens(text: string): CurrencyToken[] {
-  const t = String(text ?? "").normalize("NFKC"), out: CurrencyToken[] = [];
-  // Letters (or a misread digit and letters) before a "$": only "S$" / "SG$" and "US$" / "U.S.$" are spellings.
-  for (const m of t.matchAll(/(?<![A-Za-z0-9])((?:[A-Za-z]|\d(?=[A-Za-z]))[A-Za-z0-9.]{0,4})?\s?\$/g)) {
-    const p = (m[1] ?? "").replace(/\s/g, "");
-    out.push({ raw: m[0], code: !p ? "$" : /^(?:S|SG)$/i.test(p) ? "SGD" : /^(?:US|U\.S\.)$/i.test(p) ? "USD" : "other" });
+/** Every foreign token in the text, for a document that states `code` (null: nothing is allowed, as for the evidence
+ * line of a bare figure). See the module note. */
+export function foreignCurrency(text: string, code: StatedCurrency | null, { tokensOnly = false } = {}): string[] {
+  const t = String(text ?? "").normalize("NFKC").replace(/ /g, " "), out: string[] = [];
+  const allowed = (tok: string) => !!code && SPELLINGS[code].has(tok);
+  // 1. Every money-shaped figure: what is glued to it, and the one word a single space before and after it.
+  for (const m of tokensOnly ? [] : t.matchAll(MONEY_FIGURE)) {
+    const at = m.index!, before = t.slice(0, at), after = t.slice(at + m[0].length);
+    const glueB = (/(\S*)$/.exec(before)?.[1] ?? "").replace(EDGE_PUNCT, "");
+    const glueA = (/^(\S*)/.exec(after)?.[1] ?? "").replace(EDGE_PUNCT, "");
+    if (glueB && !(glueB === "$" && code) && !allowed(glueB)) out.push(glueB);
+    if (glueA && glueA !== "%" && !allowed(glueA) && !AFTER_OK.has(glueA.toLowerCase())) out.push(glueA);
+    if (!glueB) {
+      // The word a single space before (a longer word is a label: "Death 200,000.00"; a gap of two spaces or a tab is a cell).
+      const prev = /(?:^|\s)(\S+) $/.exec(before);
+      if (prev && !/ {2}$/.test(before)) {
+        const tok = prev[1].replace(EDGE_PUNCT, "");
+        const fullBefore = code ? new RegExp(String.raw`(?:${code === "SGD" ? "singapore" : "united\\s+states|u\\.?s\\.?"})\s+dollars?\s$`, "i").test(before) : false;
+        if (tok && !allowed(tok) && !(tok === "$" && code) && !fullBefore && !/^\d[\d,.]*$/.test(tok) && tok.length <= 4 && !BEFORE_OK.has(tok.toLowerCase())) out.push(tok);
+      }
+    }
+    if (!glueA) {
+      const next = /^ (?! )([^\s]+)/.exec(after);
+      if (next) {
+        const tok = next[1].replace(EDGE_PUNCT, "");
+        const full = code ? FULL_NAME[code].test(after.trimStart()) : false;
+        if (tok && !allowed(tok) && !full && !/^\d[\d,.]*$/.test(tok) && !AFTER_OK.has(tok.toLowerCase())) out.push(tok);
+      }
+    }
   }
-  // Any other currency sign.
-  for (const m of t.matchAll(/\p{Sc}/gu)) if (m[0] !== "$") out.push({ raw: m[0], code: "other" });
-  // Three capitals: a currency code beside a figure, in brackets, as a cell, or after a colon; any other beside a figure.
-  for (const m of t.matchAll(/(?<![A-Za-z0-9])([A-Z][A-Z0-9]{2})(?![A-Za-z0-9])/g)) {
-    const code = m[1], at = m.index!, prev = t.slice(0, at), next = t.slice(at + 3);
-    const byFigure = /^[ \t]?\d/.test(next) || /\d[ \t]?$/.test(prev);
-    const inBrackets = /\(\s*$/.test(prev) && /^\s*\)/.test(next);
-    const asCell = /(?:^|\n|\t)[ ]*$/.test(prev) && /^[ ]*(?:$|\n|\t)/.test(next);
-    const afterColon = /:\s*$/.test(prev.slice(-4));
-    const counted = ISO.has(code) ? byFigure || inBrackets || asCell || afterColon
-      : /\d/.test(code) ? byFigure || afterColon || inBrackets || asCell
-      : byFigure && !NOT_MONEY_CAPS.has(code);
-    if (counted) out.push({ raw: code, code: code === "SGD" ? "SGD" : code === "USD" ? "USD" : "other" });
+  // 2. Currency codes anywhere, as whole words: in capitals always (an English-word code not inside a line of capitals),
+  //    and in any case for every other code. Digits may touch them ("USD300,000.00").
+  for (const m of t.matchAll(/(?<![A-Za-z])([A-Za-z]{3})(?![A-Za-z])/g)) {
+    const w = m[1], up = w.toUpperCase();
+    if (!ISO_4217.has(up) || up === code) continue;
+    if (ENGLISH_CODES.has(up)) {
+      if (w !== up) continue;
+      const line = t.slice(t.lastIndexOf("\n", m.index!) + 1, (t.indexOf("\n", m.index!) + 1 || t.length + 1) - 1);
+      if (!/[a-z]/.test(line) && (line.match(/[A-Z]{2,}/g) ?? []).length >= 3) continue;
+    }
+    out.push(w);
   }
-  // "RM 300", "Rs. 500": a currency's letters right before a figure.
-  for (const m of t.matchAll(/(?<![A-Za-z])(RM|Rs\.?|Rp\.?|zł|kr|Bs\.?)\s?\d/g)) out.push({ raw: m[1], code: "other" });
-  // Currency words, and dollars of any country but the two.
-  for (const m of t.matchAll(CURRENCY_WORDS)) out.push({ raw: m[0], code: "other" });
-  for (const m of t.matchAll(DOLLAR_PHRASE)) {
-    const c = spelled(m[0]);
-    if (c !== "other") { out.push({ raw: m[0], code: c }); continue; }
-    const last = m[1].split(/\s+/).pop() ?? "";
-    out.push({ raw: m[0], code: /^(?:singapore|us|u\.s\.|states)$/i.test(last) ? (spelled(`${last === "states" ? "United States" : last} dollars`) as StatedCurrency) : /^(?:in|of|the|and|or|all|any|to|per|a|its|your|our|their|these|those|are|is|be|by|for)$/i.test(last) ? "$" : "other" });
+  // 3. Currency signs: any but "$", the CJK signs, and a "$" with any letters glued before it but the allowed spellings.
+  for (const m of t.matchAll(/\p{Sc}/gu)) if (m[0] !== "$") out.push(m[0]);
+  for (const m of t.matchAll(new RegExp(CJK_SIGNS.source, "gu"))) out.push(m[0]);
+  for (const m of t.matchAll(/([A-Za-z.]*\d?[A-Za-z.]*)\$/g)) {
+    const p = m[1];
+    if (!p) { if (!code) out.push("$"); continue; }
+    if (!allowed(`${p}$`)) out.push(`${p}$`);
   }
-  // A denomination, "payable in" anything but a currency's own spelling or a closed set of non-currency phrases, and
-  // the word "currency" anywhere but an allowed field: counted as other unless they name the currency themselves.
+  // 4. Currency words; "dollar(s)" only as the stated currency's full name.
+  for (const m of t.matchAll(CURRENCY_WORDS)) out.push(m[0]);
+  for (const m of t.matchAll(/\bdollars?\b/gi)) {
+    const before = t.slice(Math.max(0, m.index! - 20), m.index);
+    const ok = code === "SGD" ? /\bsingapore\s+$/i.test(before) : code === "USD" ? /(?:\bunited\s+states|\bu\.?s\.?)\s+$/i.test(before) : false;
+    if (!ok) out.push(m[0]);
+  }
+  // 5. A denomination, "payable in" anything but the currency or a closed set of non-currency phrases, and the word
+  //    "currency" anywhere but a field whose value is the currency's own spelling.
+  if (tokensOnly) return out;
+  const own = (v: string) => !!code && valueCurrency(v) === code;
   for (const m of t.matchAll(/\bdenominat\w*\b[^\n]{0,30}/gi)) {
     const v = /\b(?:in|:|-)\s*([^.;,\n]{1,30})/.exec(m[0]);
-    out.push({ raw: m[0], code: v ? spelled(v[1]) : "other" });
+    if (!v || !own(v[1])) out.push(m[0]);
   }
   for (const m of t.matchAll(PAYABLE_IN)) {
     const v = m[1].trim();
     if (PAYABLE_IN_OK.test(v)) continue;
-    out.push({ raw: m[0], code: spelled(v.split(/\s+(?:only|per|for|each|a|an|on|at|by|from|to|with|under)\b/i)[0]) });
+    if (!own(v.split(/\s+(?:only|per|for|each|a|an|on|at|by|from|to|with|under)\b/i)[0])) out.push(m[0]);
   }
-  // "Currencv" (a misread "y") is the word too.
   for (const m of t.matchAll(/\bcurrenc(?:y|ies|v)\b/gi)) {
     const f = FIELD_AT.exec(t.slice(m.index!).split("\n")[0]);
-    out.push({ raw: m[0], code: f ? spelled(f[2]) : "other" });
+    if (!f || !own(f[2])) out.push(m[0]);
   }
   return out;
 }
 /** A currency field from the word "currency" on: "Currency : SGD", "Currency of the Policy - S$", "Currency\tSGD". */
 const FIELD_AT = /^currenc(?:y|ies|v)(\s+of\s+[A-Za-z ]{1,30}?(?=\s*(?::|=|–|-\s|\t|\s{2,})))?\s*(?::|=|–|-\s|\t|\s{2,}|\s(?=(?:S\$|SG\$|SGD|US\$|U\.S\.|USD|Singapore|United)))\s*([^\t|]*?)\s*(?=\t|\s{2,}|\||$)/i;
 
-/** Whether the line prints any currency-like token of its own (it is then never a bare line). */
-export const lineNamesCurrency = (line: string) => currencyTokens(line).length > 0;
+/** Whether the line prints anything that may be a currency (it is then never a bare line): the same scan, with nothing
+ * allowed. */
+export const lineNamesCurrency = (line: string) => foreignCurrency(line, null).length > 0;
+/** Whether a line that prints a figure read in `code` also prints another currency's code, sign or word (glued to the
+ * figure or not): "Death  AUD300,000.00" or "Death  A$300,000.00" is never an SGD line. */
+export const lineNamesOtherCurrency = (line: string, code: StatedCurrency) => foreignCurrency(line, code, { tokensOnly: true }).length > 0;
 
 // ---------------------------------------------------------------------------
 // Statements
@@ -127,7 +168,10 @@ const EXCEPTION = /\b(?:except(?:ion)?|save\s+(?:for|as|that)|other\s+than|unles
  * gives "other". */
 export function currencyStatements(text: string): (StatedCurrency | "other")[] {
   const lines = String(text ?? "").normalize("NFKC").split("\n"), out: (StatedCurrency | "other")[] = [];
-  const heading = (i: number) => { for (let j = i - 1; j >= 0 && j >= i - 3; j--) if (lines[j].trim()) return lines[j]; return ""; };
+  // The heading of the statement's section: the nearest heading line above it (a short line with no figure, field or
+  // sentence end), however far up; fields and rows between do not end the section.
+  const isHeading = (l: string) => { const x = l.trim(); return !!x && !/[\t\d:]/.test(x) && x.length <= 60 && !/[.;]$/.test(x) && x.split(/\s+/).length <= 8; };
+  const heading = (i: number) => { for (let j = i - 1; j >= 0; j--) if (isHeading(lines[j])) return lines[j]; return ""; };
   for (const [i, raw] of lines.entries()) {
     const line = raw.trim();
     let value: string | null = null;
@@ -161,7 +205,7 @@ export function documentStatedCurrency(pages: CurrencyPage[], allPages: Currency
   const texts = [...pages, ...allPages].flatMap((p) => [p.rawText ?? p.text, p.text, p.imageText ?? ""]);
   for (const t of texts) {
     if (EXCEPTION.test(t.replace(/\s+/g, " "))) return null;
-    if (currencyTokens(t).some((x) => x.code !== code && x.code !== "$")) return null;
+    if (foreignCurrency(t, code).length) return null;
   }
   for (const p of [...pages, ...allPages]) if (p.imageCurrency && p.imageCurrency.toUpperCase() !== code) return null;
   return code;

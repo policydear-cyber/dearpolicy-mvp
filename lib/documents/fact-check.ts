@@ -10,7 +10,7 @@
  * the verbatim page they cite. Pure functions; no I/O.
  */
 import { moneyShapedFigure } from "@/lib/documents/image-currency";
-import { coverBenefitLabel, documentStatedCurrency, figureStandsAlone, lineNamesCurrency, type CurrencyPage } from "@/lib/documents/document-currency";
+import { coverBenefitLabel, documentStatedCurrency, figureStandsAlone, lineNamesCurrency, lineNamesOtherCurrency, type CurrencyPage } from "@/lib/documents/document-currency";
 import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, namePrinted as nameWordsOnLine, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
@@ -716,8 +716,9 @@ function closestLines(lines: string[], evidence: string): { lines: string[]; all
 function currencyOk(line: string, currency: string) {
   const code = currency.toUpperCase();
   // "US$" is not "S$" (a US-dollar line never confirms a Singapore-dollar reading).
+  // A line printing no currency is taken as SGD only when it prints no other currency's code, sign or word at all.
   if (code === "SGD") return /(?<!U)S\$|(?<![A-Za-z])SGD(?![A-Za-z])|SG\$/i.test(line) || new RegExp(GLUED_CODE("SGD")).test(line)
-    || !(/US\$|(?<![A-Za-z])(?:USD|RM|MYR)(?![A-Za-z])|€|£|HK\$/i.test(line) || new RegExp(GLUED_CODE("USD|RM|MYR")).test(line));
+    || !(/US\$|(?<![A-Za-z])(?:USD|RM|MYR)(?![A-Za-z])|€|£|HK\$/i.test(line) || new RegExp(GLUED_CODE("USD|RM|MYR")).test(line) || lineNamesOtherCurrency(line, "SGD"));
   if (code === "USD") return /US\$|(?<![A-Za-z])USD(?![A-Za-z])/i.test(line) || new RegExp(GLUED_CODE("USD")).test(line);
   return true;
 }
