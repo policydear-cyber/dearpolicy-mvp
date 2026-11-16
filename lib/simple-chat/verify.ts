@@ -1857,6 +1857,18 @@ const HARMLESS_BRACKET = /^\s*(?:\d{1,3}|[A-Z]{0,3}\$|SGD|USD|MYR|RM|GBP|EUR|AUD
 const CAP_PERIOD = String.raw`(?:per|each|in\s+any\s+one|for\s+any\s+one|in\s+any|for\s+each)\s+(?:any\s+one\s+|one\s+)?(?:(?:hospital\s+)?(?:stay|confinement|admission)|hospitali[sz]ation|(?:illness|sickness|accident|injury)(?:\s+or\s+(?:illness|sickness|accident|injury))?|disability|event|(?:policy\s+|calendar\s+)?year|period\s+of\s+(?:hospitali[sz]ation|confinement)|insured(?:\s+person)?|life(?:\s+(?:assured|insured))?|person)`;
 /** (gate #508 round 6: the full period list, "per life", and a trailing footnote mark: "(max 30 days*)".) */
 const CAP_BRACKET = new RegExp(String.raw`^\s*(?:(?:(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?|up\s+to)\s*(?:of\s+)?\d{1,3}\s*(?:consecutive\s+)?days?|\d{1,3}\s*days?\s+max(?:imum)?\.?)(?:\s+(?:of\s+(?:hospitali[sz]ation|(?:hospital\s+)?(?:stay|confinement))|in\s+hospital))?(?:\s*,?\s*${CAP_PERIOD}){0,2}\s*[*†‡^]?\s*$`, "i");
+/** Brackets that describe the benefit and never limit it: "(Inpatient)", "(Daily)", "(Per Day)", "(Hospitalisation)". */
+const DESCRIPTIVE_BRACKET = /^\s*(?:in-?\s?patient|daily|per\s+day|hospitali[sz]ation)\s*$/i;
+/** Capitals in a bracket that say which stays or whose: a level of care, accident, overseas, critical illness, child. */
+const QUALIFIER_CAPS = new Set("ICU HDU CCU NICU PICU OS ACC AO CI CH SP".split(" "));
+/** Whether a currency named in a bracket is the row's own: the row prints its daily figure in it. */
+function ownCurrency(c: string, rowText: string): boolean {
+  const signs: Record<string, RegExp> = { "S$": /S\$|\bSGD\b/, SGD: /S\$|\bSGD\b/, "US$": /US\$|\bUSD\b/, USD: /US\$|\bUSD\b/, RM: /\bRM\b|\bMYR\b/, MYR: /\bRM\b|\bMYR\b/,
+    GBP: /£|\bGBP\b/, EUR: /€|\bEUR\b/, "A$": /A\$|\bAUD\b/, AUD: /A\$|\bAUD\b/, "HK$": /HK\$|\bHKD\b/, HKD: /HK\$|\bHKD\b/ };
+  const re = signs[c];
+  if (c === "$") return true;
+  return !!re && re.test(rowText.replace(/\([^()]*\)/g, " "));
+}
 /** A row's leading number ("(a) ", "1. ", "i) ", "2a)"): a label, never a condition (gate #508 round 3 NEW-HIGH 2). */
 const ROW_ENUMERATOR = /^\s*(?:\((?:\d{1,2}[a-z]?|[a-z]|[ivx]{1,4})\)|(?:\d{1,2}[a-z]?|[a-z]|[ivx]{1,4})[.)])\s+/i;
 /** Whether a bracket of capitals after a row's name is that name's abbreviation ("Hospital cash (HC)"): its letters are
@@ -1911,7 +1923,13 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   // "(30 days max)" is read as "(maximum 30 days)", so the most days are found where a day cap is looked for.
   rowText = rowText.replace(/\(\s*(\d{1,3})\s*days?\s+max(?:imum)?\.?(\s+[^()]*)?\)/gi, (m, d: string, rest: string | undefined) => CAP_BRACKET.test(m.slice(1, -1)) ? `(maximum ${d} days${rest ?? ""})` : m);
   for (const m of rowText.matchAll(/\(([^()]*)\)/g)) {
-    if (HARMLESS_BRACKET.test(m[1]) || CAP_BRACKET.test(m[1])) continue;
+    // A currency bracket is harmless only when it is the row's own currency ("(S$)" on an S$ row; "(USD)" on one is not).
+    const code = /^\s*(?:([A-Z]{0,3})\$|(SGD|USD|MYR|RM|GBP|EUR|AUD|HKD))\s*$/.exec(m[1]);
+    if (code) { if (ownCurrency(code[1] !== undefined ? `${code[1]}$` : code[2], rowText)) continue; return null; }
+    if (HARMLESS_BRACKET.test(m[1]) || CAP_BRACKET.test(m[1]) || DESCRIPTIVE_BRACKET.test(m[1])) continue;
+    // A bracket of 1-4 capitals anywhere in the row ("(HC)", "(HCB)", "(H)") is a label, unless it names a level of care,
+    // a cause or a place (gate #508 round 7).
+    if (/^\s*[A-Z]{1,4}\s*$/.test(m[1]) && !QUALIFIER_CAPS.has(m[1].trim())) continue;
     if (block.own.includes("\t") && nameCell.endsWith(m[0]) && nameAbbreviation(nameCell.slice(0, -m[0].length), m[1].trim())) continue;
     const w = takeWaiting(m[1]);
     if (w.unpaid.length && !/[\p{L}\d]/u.test(w.rest.replace(/\b(?:of|the|a|an|any|each|every|is|are)\b/gi, " "))) continue;
