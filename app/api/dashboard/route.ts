@@ -21,6 +21,7 @@ import { asBenefitLine } from "@/lib/coverage/benefit-sum-line";
 import { OWNED_BY_MEMBER, notFullyRead, notFullyReadNote, unownedNotFullyRead } from "@/lib/policies/not-fully-read";
 import { readingCacheReady } from "@/lib/policies/read-failures";
 import { coverVerdict } from "@/lib/coverage/cover-verdict";
+import { heldLines } from "@/lib/coverage/held-line";
 import { documentName } from "@/lib/policies/document-name";
 import { onFileDocumentName } from "@/lib/coverage/on-file-note";
 /** The document's own naming fields, read beside an on-file line or wording (documentName). */
@@ -185,11 +186,18 @@ export async function GET(request:NextRequest){
     const policyName=owner.productName??ref.product_name??"Owned policy"; coverageMap.set(category,{total:null,currency:owner.currency,count:1,policyNames:[policyName],displayAmount:null,derived:true});
   }
 
-  const unmatchedRows=await query<{category:string;amount:string|null;evidence_text:string|null}&OnFileDoc>(`SELECT pc.category,pc.amount::text,pc.evidence_text,${ON_FILE_DOC_COLUMNS} FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND NOT (pc.confirmed=true AND pc.evidence_verified=true)`,[accountId,active.id]);
+  const unmatchedRows=await query<{category:string;amount:string|null;evidence_text:string|null;policy_id:string;source_page:number|null}&OnFileDoc>(`SELECT pc.category,pc.amount::text,pc.evidence_text,p.id::text AS policy_id,pc.source_page,${ON_FILE_DOC_COLUMNS} FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND NOT (pc.confirmed=true AND pc.evidence_verified=true)`,[accountId,active.id]);
   const unmatchedLines=new Map<string,number>();
-  for(const r of unmatchedRows.rows){if(!asBenefitLine(r,r.evidence_text))continue;const c=normalizeCoverageCategory(r.category);unmatchedLines.set(c,(unmatchedLines.get(c)??0)+1);noteDoc(c,r);}
-  const statusOf=(category:string)=>({covered:"covered",on_file:"on_file",not_found:"not_covered"} as const)[coverVerdict({proven:coverageMap.has(category)?1:0,unmatchedLines:unmatchedLines.get(category)??0,referenceOnly:referenceOnly.get(category)??0})];
-  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:statusOf(category),reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,onFileDocuments:statusOf(category)==="on_file"?[...(onFileDocs.get(category)??[])].sort():[]};});
+  // An unconfirmed line whose own quote and person are printed on its page shows the cover is held, with no amount
+  // (lib/coverage/held-line.ts). Any unconfirmed line of a category means its confirmed figures may be only part of the
+  // cover, so that category shows no amount at all: a part sum is never shown as the whole (DC 27 Oct, 16 Nov).
+  const benefitUnmatched=unmatchedRows.rows.filter(r=>asBenefitLine(r,r.evidence_text));
+  const held=await heldLines(query,accountId,active.id,benefitUnmatched);
+  const heldCategories=new Map<string,number>();
+  benefitUnmatched.forEach((r,i)=>{const c=normalizeCoverageCategory(r.category);unmatchedLines.set(c,(unmatchedLines.get(c)??0)+1);noteDoc(c,r);if(held[i])heldCategories.set(c,(heldCategories.get(c)??0)+1);});
+  const statusOf=(category:string)=>({covered:"covered",on_file:"on_file",not_found:"not_covered"} as const)[coverVerdict({proven:coverageMap.has(category)?1:0,unmatchedLines:unmatchedLines.get(category)??0,referenceOnly:referenceOnly.get(category)??0,held:heldCategories.get(category)??0})];
+  const partial=(category:string)=>(unmatchedLines.get(category)??0)>0;
+  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:statusOf(category),reviewRequired:conflictCategories.has(category),amount:partial(category)?null:row?.total??null,displayAmount:partial(category)?null:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,onFileDocuments:statusOf(category)==="on_file"?[...(onFileDocs.get(category)??[])].sort():[]};});
 
   // The premiums Home counts, from the same computation Payments shows (lib/policies/counted-premiums.ts).
   const premiums=await countedPremiums(accountId,{id:active.id,display_name:active.display_name,preferred_name:null,relationship:active.relationship},tableCovers);

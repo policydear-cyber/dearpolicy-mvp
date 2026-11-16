@@ -59,10 +59,10 @@ async function main() {
       assert.match(home.premiums.note ?? "", /leaves out Bushfire Trauma Plan/);
     });
     await test("Home's note is Payments' note, word for word", () => assert.equal(home.premiums.note, payNote));
-    await test("Home's cost card shows that note under the total", () => {
+    // DC 16 Nov: Home no longer shows a cost (its cards come first); a total is shown only on Payments, with this note.
+    await test("Home's page shows no premium total, so never a total without its note", () => {
       const page = readFileSync("app/page.tsx", "utf8");
-      const card = page.slice(page.indexOf("Current insurance cost"), page.indexOf("Payments & receipts"));
-      assert.match(card, /data\.premiums\.note&&<div className="summary-sub" data-testid="home-premium-note">\{data\.premiums\.note\}/);
+      assert.doesNotMatch(page, /premiums\.(?:totals|items)/);
     });
     await test("no request left this machine", () => assert.deepEqual(outbound, []));
   } finally {

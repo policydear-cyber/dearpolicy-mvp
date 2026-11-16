@@ -46,10 +46,10 @@ test("an unknown or missing source kind gives the neutral caption, never a wrong
   assert.equal(premiumSourceCaption(["payment_record", undefined]), "from your documents");
   assert.equal(premiumSourceCaption([]), "from your documents");
 });
-test("Home shows the caption from the counted items' sources, not a fixed phrase", () => {
+test("Home's counted items keep their sources (Home itself shows no premium since DC 16 Nov; Payments does)", () => {
   const page = readFileSync("app/page.tsx", "utf8"), route = readFileSync("app/api/dashboard/route.ts", "utf8");
   assert.doesNotMatch(page, /latest payment evidence/);
-  assert.match(page, /per year \{premiumSourceCaption\(data\.premiums\.items\.map\(i=>i\.source\)\)\}\./);
+  assert.doesNotMatch(page, /premiums\.(?:totals|items)/);
   // #228 moved the counting into lib/policies/counted-premiums.ts, which Home calls: each counted item still carries its source.
   const counted = readFileSync("lib/policies/counted-premiums.ts", "utf8");
   assert.match(route, /\bcountedPremiums\(/);

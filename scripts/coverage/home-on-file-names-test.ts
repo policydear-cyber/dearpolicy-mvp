@@ -67,11 +67,11 @@ async function pure() {
       assert.equal(documentKindNote(doc, "Hospitalisation"), null, doc.product);
     assert.equal(onFileNote([onFileDocumentName(travel, "Hospitalisation")], "Raj"), "Harbour Travel Guard (travel cover, for trips) mentions this cover, but does not show yet that it is Raj’s. Open it to check.");
   });
-  await test("P5 Home draws the note from the tile's own documents", () => {
+  await test("P5 Home shows no on-file tile (DC 16 Nov); the note's words are for any page that names on-file documents", () => {
     const page = readFileSync("app/page.tsx", "utf8");
-    assert.match(page, /<small data-testid="on-file-note">\{onFileNote\(c\.onFileDocuments\?\?\[\],active\?\.display_name\?\?"this person"\)\}<\/small>/);
-    assert.doesNotMatch(page, /none of them shows yet that it is \{active/);
+    assert.doesNotMatch(page, /on-file-note|onFileNote|On file, please confirm/);
   });
+
 }
 
 async function route() {
