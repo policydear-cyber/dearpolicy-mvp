@@ -1628,7 +1628,7 @@ function dailyRateRule(row: ChatRow, household: Household): StayRule | null {
   // left out (stayBlock); one waiting period in a read form, one most days (a year of cover may be its period) and at
   // most one yearly cap in the row's own currency. A limit, aggregate, day rule or condition anywhere else below the row
   // gives no total (Critic P392, TE #392, R4 H2-C).
-  return readStayRule(page.text, found.offset, found.excerpt, row.figure.amount);
+  return readStayRule(page.text, found.offset, found.excerpt, row.figure.amount, household.members.map((m) => m.name));
 }
 
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is

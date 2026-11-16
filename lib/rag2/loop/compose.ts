@@ -12,7 +12,7 @@
 import { isHeadingLine, paragraphs, productSection } from "../headings";
 import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { calcOutcomes } from "../calc/tool";
-import { ABSENCE_OF, QUOTED, RENDERED, RENDERED_STEPS } from "./statement-render";
+import { ABSENCE_OF, isUndefinedCase, QUOTED, ROW_FOR_PERSON, RENDERED, RENDERED_STEPS } from "./statement-render";
 import type { AbsenceCheck } from "./absence-scope";
 import { dayRuleFromWording } from "@/lib/claims/day-count";
 import type { CalcOutcome } from "../calc/engine";
@@ -1186,6 +1186,8 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     const resultIds = Array.isArray(s.result_ids) ? [...new Set((s.result_ids as unknown[]).filter((x): x is string => typeof x === "string" && !!x))] : [];
     if (resultIds.length >= 2) {
       const calcs = resultIds.map((id) => calcOutcomes(ctx.tools).get(id) ?? null);
+      // (Test engineer on #512, F1: a row whose case the documents never define is said without its amount, in any form)
+      if (calcs.some((x) => isUndefinedCase(x))) { drop(text, "states an amount for a row whose case these documents do not define (the server names that row without its amount)"); continue; }
       if (calcs.some((c) => !c || (c.kind !== "conditional_illustration" && c.kind !== "indicative_estimate"))) { drop(text, "a comparison cites a calculation that is not a resolved illustration or estimate made in this conversation"); continue; }
       const tmp: Composed = { ...out, sentences: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], notes: [], evidenceIds: [] };
       ONCE.set(tmp, onceFor(out));
@@ -1201,6 +1203,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       continue;
     }
     const calc = resultId ? calcOutcomes(ctx.tools).get(resultId) ?? null : null;
+    if (calc && isUndefinedCase(calc)) { drop(text, "states an amount for a row whose case these documents do not define (the server names that row without its amount)"); continue; }
     if (calc) { composeCalcSentence(text, calc, evIds, values.map((v) => v!.operand), subjectId, ctx, out, drop); continue; }
     const result = resultId ? ctx.tools.results.get(resultId) ?? null : null;
     if (resultId && !result) { drop(text, "cites a computation that was not made in this turn"); continue; }
@@ -1227,7 +1230,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Agent F (D7): a cited sentence without a figure must say what its evidence says (polarity, policy, person,
     // benefit); "medically confirmed" / "approved" were refused above.
     if (!figures.length && !result && evIds.length && COVERISH.test(text)) {
-      const citedEv = evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", evidenceTextOf(ctx.state.evidence[id])].filter(Boolean).join("\n") }));
+      // (Test engineer on #512, F3: the server's line naming an undefined-case row is written from THIS person's calculation; its
+      // row was read for them even when the page was first read in an earlier person's turn)
+      const forPerson = ROW_FOR_PERSON.get(s);
+      const citedEv = evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: forPerson ?? ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", evidenceTextOf(ctx.state.evidence[id])].filter(Boolean).join("\n") }));
       const stmtCtx = { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), docFacts: ctx.docFacts, subjectId, negativeVerified: tripVerified };
       // V1.5 (PR #51 review, the live death turn 2): a sentence joining independently stated claims ("describes the
       // benefit, requiring proof ..., and says it can be claimed under either scheme; the documents do not establish

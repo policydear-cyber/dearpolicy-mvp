@@ -95,7 +95,7 @@ export function scrubMonetaryText(text: string): string {
   out = out.replace(/verified an amount that is only shown after claim evidence has been reviewed/gi, "the verified policy limit");
   out = out.replace(/potential payouts?|expected payouts?|claimable amounts?|estimated claim amounts?|estimated settlements?|approved amounts?|amounts? you will receive/gi, "possible benefit");
   out = out.replace(/potential reimbursements?/gi, "possible reimbursement");
-  out = out.replace(/you (can|could|will|would|should) (claim|receive|get) (up to |about |around )?/gi, "the policy may respond with ");
+  out = out.replace(/you (can|could|will|would|should) (claim|receive|get) (?!(?:from|with|under|through|on|for|against|it|this|that|them|in)\b)(up to |about |around )?/gi, "the policy may respond with ");
   return out;
 }
 
@@ -199,7 +199,7 @@ const PREMIUM_BEFORE = /\bpremiums?(?: of| is| was| due| payable)?:?\s*$/i, PREM
 const PHRASES: [RegExp, string][] = [
   [/potential payouts?|expected payouts?|claimable amounts?|estimated claim amounts?|estimated settlements?|approved amounts?|amounts? you will receive/gi, "possible benefit"],
   [/potential reimbursements?/gi, "possible reimbursement"],
-  [/you (can|could|will|would|should) (claim|receive|get) (up to |about |around )?/gi, "the policy may respond with "],
+  [/you (can|could|will|would|should) (claim|receive|get) (?!(?:from|with|under|through|on|for|against|it|this|that|them|in)\b)(up to |about |around )?/gi, "the policy may respond with "],
 ];
 /** The text with every sentence that states an amount it may not show removed WHOLE (a common phrasing is first
  * rewritten without its figure: "S$1,000 lump sum" -> "a lump sum"); a premium figure and a figure `keep` accepts

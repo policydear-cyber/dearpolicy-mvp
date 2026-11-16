@@ -2,12 +2,9 @@
 import Link from "next/link";
 import { useEffect,useMemo,useRef,useState } from "react";
 import { formatMoney } from "@/lib/format/currency";
-import { premiumRowDetail, premiumSourceCaption } from "@/lib/format/premium-source";
 import { customerError } from "@/components/customer-text";
-import { HomeAttention } from "@/components/home-attention";
-import { HomeNotFound } from "@/components/home-not-found";
+import { HomeAsk, HomeAttention } from "@/components/home-attention";
 import { homeView } from "@/lib/format/home-view";
-import { onFileNote } from "@/lib/coverage/on-file-note";
 import { Icon, coverCard, coverIcon, type IconName } from "@/components/icons";
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
@@ -18,16 +15,10 @@ type PremiumItem={id:string;insurer:string|null;product_name:string|null;amount:
 type Reminder={kind:string;title:string;detail:string;href:string};
 type Unclaimed={id:string;original_filename:string;product_name:string|null;insurer:string|null;document_role:string|null};
 type Dashboard={family:Member[];activeMember:Member|null;coverages:Coverage[];reading?:number;premiums:{monthly:number|null;annual:number|null;currency?:string|null;note?:string|null;totals?:{currency:string;monthly:number;annual:number}[];items:PremiumItem[]};reminders:Reminder[];unclaimed:Unclaimed[];quality:{needsReview:number;referenceDocs:number;personalDocs:number};notFullyRead?:string|null;error?:string};
+// A card shows a figure only in the currency its document states, never a default (RM180 is not S$180).
+const money=(v:number,c:string|null|undefined)=>formatMoney(v,c);
 // A heading with its icon in front, in place of the uppercase label that used to sit above it.
 const Titled=({icon,children}:{icon:IconName;children:React.ReactNode})=><div className="icon-heading"><span className="title-icon"><Icon name={icon}/></span>{children}</div>;
-// The currency the document states, or none: never a default (RM180 is not S$180).
-function money(v:number,c:string|null|undefined){return formatMoney(v,c);}
-// A premium is shown in its record's currency only when the record states one.
-const premiumMoney=(i:PremiumItem,v:number)=>money(v,i.currencyStated===false?null:i.currency);
-// One figure per currency: premiums in two currencies are never added into one.
-const perCurrency=(totals:{currency:string;monthly:number;annual:number}[],k:"monthly"|"annual")=>totals.map(t=>money(t[k],t.currency)).join(" + ");
-// Each policy's sum on a lump-sum tile, so the person sees what every policy gives; one with no sum read says where to look.
-function partsText(parts:TilePart[]){const name=(n:string)=>n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi,"").trim();return (parts.some(p=>p.period)?"Each policy: ":"Sum insured: ")+parts.map(p=>(p.amount!=null?`${name(p.name)} ${money(p.amount,p.currency)}${p.period?` a ${p.period}`:""}`:p.noFigure?`${name(p.name)}: see the document for how much it pays`:`${name(p.name)}: amount on Coverage`)+(p.conditional?" (conditions apply)":"")+(p.accelerates?" (paid instead of the death benefit)":"")).join(" · ");}
 
 export default function DashboardPage(){
  const [activeId,setActiveId]=useState(""),[data,setData]=useState<Dashboard|null>(null),[loading,setLoading]=useState(true);
@@ -77,32 +68,40 @@ export default function DashboardPage(){
  const emptyPortfolio=!loading&&!data?.error&&!!data&&view.empty;
  const returning=!!data&&!data.error&&!view.empty;
  const personEmpty=returning&&view.personEmpty;
+ const name=active?.display_name??null;
+ const covered=(data?.coverages??[]).filter(c=>c.status==="covered");
+ const people=<section className="member-strip"><div className="member-pills" role="group" aria-label="Whose cover">{data?.family?.map((m,i)=><button key={m.id} data-person={i%4} aria-pressed={m.id===(active?.id??activeId)} className={`member-pill ${m.id===(active?.id??activeId)?"active":""}`} onClick={()=>choose(m.id)}><span className="member-dot">{m.display_name.slice(0,1).toUpperCase()}</span><span><b>{m.display_name}</b><small>{m.relationship}</small></span></button>)}<Link className="member-pill add" href="/family"><Icon name="plus"/> Add person</Link></div></section>;
  return <div className="page dashboard-page">
-  {/* A returning household lands on what changed, what needs them and a box to ask; the welcome is for a first visit. */}
-  {returning?<header className="page-header portfolio-hero compact"><div><h1>Your family&rsquo;s cover at a glance</h1></div><div className="hero-actions"><Link href="/policies" className="button secondary"><Icon name="upload"/>Upload documents</Link></div></header>
-  :<header className="page-header portfolio-hero"><div><h1>Know what your family has. Know what to do next.</h1><p className="lead">Upload your family&rsquo;s insurance documents. DearPolicy shows who is covered for what, and answers your questions with the page each answer comes from.</p></div><div className="hero-actions"><Link href="/policies" className="button secondary"><Icon name="upload"/>Upload documents</Link><Link href="/chat" className="button primary"><Icon name="ask"/>Ask DearPolicy</Link></div></header>}
-  {returning&&<HomeAttention memberId={active?.id} todo={data?.reminders?.length??0}/>}
   {data?.error&&<div className="alert error" role="alert"><strong>DearPolicy couldn&rsquo;t load your family&rsquo;s cover just now.</strong><small>Your documents are safe. Please refresh the page in a moment.</small></div>}
-  <section className="member-strip"><div className="member-strip-title">{data?.family?.length?<><strong><Icon name="family"/> Viewing</strong></>:<><strong>Your family</strong><span>Add the people your policies cover</span></>}</div><div className="member-pills">{data?.family?.map((m,i)=><button key={m.id} data-person={i%4} className={`member-pill ${m.id===(active?.id??activeId)?"active":""}`} onClick={()=>choose(m.id)}><span className="member-dot">{m.display_name.slice(0,1).toUpperCase()}</span><span><b>{m.display_name}</b><small>{m.relationship}</small></span></button>)}<Link className="member-pill add" href="/family"><Icon name="plus"/> Add person</Link></div></section>
-  {!emptyPortfolio&&<>
-  {!!data?.premiums?.items?.length&&<section className="summary-row"><div className="summary-card premium-feature"><div className="summary-label"><Icon name="payments"/>Current insurance cost</div>{data?.premiums?.totals?.length?<><strong>{perCurrency(data.premiums.totals,"monthly")}<small>/month</small></strong><div className="summary-sub">≈ {perCurrency(data.premiums.totals,"annual")} per year {premiumSourceCaption(data.premiums.items.map(i=>i.source))}.</div>{data.premiums.note&&<div className="summary-sub" data-testid="home-premium-note">{data.premiums.note}</div>}</>:data?.premiums?.items?.length?<><strong className="summary-unknown">Total not shown</strong><div className="summary-sub">The premiums on file don’t say which currency they are in. Payments lists each one.</div></>:<><strong className="summary-unknown">Not known yet</strong><div className="summary-sub">Add a premium notice or receipt to see what your cover costs.</div></>}<Link href="/records" className="text-link"><Icon name="receipt"/>Payments & receipts</Link></div></section>}
-  </>}
+  {emptyPortfolio?<>
+   <header className="page-header portfolio-hero"><div><h1>Know what your family has. Know what to do next.</h1><p className="lead">Upload your family&rsquo;s insurance documents. DearPolicy shows who is covered for what, and answers your questions with the page each answer comes from.</p></div><div className="hero-actions"><Link href="/policies" className="button secondary"><Icon name="upload"/>Upload documents</Link><Link href="/chat" className="button primary"><Icon name="ask"/>Ask DearPolicy</Link></div></header>
+   {!!data?.family?.length&&people}
+   <EmptyPortfolio hasFamily={!!data?.family?.length}/>
+  </>:<>
+  {/* The person's protection cards come first, with the ask box beside them (DC 16 Nov): what each person has, and the
+      main feature, before anything else. Each card is covered, with its amount only when the amount is confirmed; the
+      evidence and every figure are one tap away on Coverage. A cover no document gives this person has no card. */}
+  <div className="home-top">
+   <section className="home-cards" aria-labelledby="home-cards-title">
+    <div className="home-cards-head"><h1 id="home-cards-title">{name?`${name}\u2019s protection`:"Your family\u2019s protection"}</h1><Link href="/policies" className="text-link"><Icon name="upload"/>Upload</Link></div>
+    {people}
+    {!loading&&!!data?.reading&&<p className="summary-sub">{data.reading===1?"A document is":`${data.reading} documents are`} still being read. This page updates on its own when reading is done.</p>}
+    {loading&&!data?<div className="empty-card">Loading…</div>:personEmpty?<PersonNothingYet name={name??"This person"} paidFor={view.paidFor}/>:covered.length?<div className="coverage-grid" data-testid="home-cards">{covered.map(c=>{const amount=c.amount!=null?money(c.amount,c.currency):c.displayAmount;return <Link href={`/coverage?member=${encodeURIComponent(active?.id??"")}&category=${encodeURIComponent(c.category)}`} className="coverage-card covered" data-card={coverCard(c.category)} key={c.category}><div className="coverage-top"><span className="coverage-icon"><Icon name={coverIcon(c.category)}/></span></div><div className="coverage-name">{c.category}</div><strong className="coverage-status"><Icon name="checkCircle"/>Covered</strong>{amount&&<span className="coverage-amount">{amount}</span>}</Link>;})}</div>
+     :<div className="empty-card" data-testid="home-no-cards">{(active?.policy_count??0)>0?<>No cover card for {name??"this person"} yet. {active!.policy_count===1?"Their document is":`Their ${active!.policy_count} documents are`} on file: <Link href={`/chat?member=${encodeURIComponent(active!.id)}`} className="text-link">ask DearPolicy what {active!.policy_count===1?"it covers":"they cover"}</Link> or <Link href="/policies" className="text-link">open Documents</Link>.</>:<>No document for {name??"this person"} is on file yet. <Link href="/policies" className="text-link">Upload a policy</Link></>}</div>}
+   </section>
+   <HomeAsk memberId={active?.id} name={name}/>
+  </div>
   {!!data?.unclaimed?.length&&<section className="section unclaimed-panel"><div className="section-heading"><div><Titled icon="person"><h2>Whose {data.unclaimed.length===1?"document is this":"documents are these"}?</h2></Titled></div></div>
-   <p className="unclaimed-lead">Choose who {data.unclaimed.length===1?"this document belongs":"these documents belong"} to. Until you do, DearPolicy doesn&rsquo;t use {data.unclaimed.length===1?"it":"them"} to answer questions. Amounts printed in {data.unclaimed.length===1?"it":"them"} are not treated as your own cover until your schedule or statement confirms them.</p>
+   <p className="unclaimed-lead">Choose who {data.unclaimed.length===1?"this document belongs":"these documents belong"} to. Until you do, DearPolicy doesn&rsquo;t use {data.unclaimed.length===1?"it":"them"}.</p>
    <p className="muted">Covers more than one person, like a group booklet? <Link href="/policies" className="text-link">Choose everyone it covers on the Documents page →</Link></p>
    {claimError&&<div className="alert error" role="alert">{claimError}</div>}
    <div className="unclaimed-list">{data.unclaimed.map(doc=><div className="unclaimed-row" key={doc.id}>
     <div><strong>{doc.product_name??doc.original_filename}</strong><span>{[doc.insurer,(doc.document_role??"").replaceAll("_"," ")].filter(Boolean).join(" · ")||doc.original_filename}</span></div>
     <div className="declare-owner">{data.family.map(m=><button key={m.id} type="button" className="button secondary" disabled={claiming===doc.id} onClick={()=>void claim(doc.id,m.id)}>{m.display_name}</button>)}</div>
    </div>)}</div></section>}
-  {emptyPortfolio?<EmptyPortfolio hasFamily={!!data?.family?.length}/>:<>
-  <section className="section"><div className="section-heading"><div><Titled icon="shield"><h2>{active?.display_name?`${active.display_name}\u2019s protection`:"Your family\u2019s protection"}</h2></Titled></div><div className="section-links"><Link href={active?.id?`/ledger?member=${encodeURIComponent(active.id)}`:"/ledger"} className="text-link" aria-label="Coverage, by person"><Icon name="ledger"/>Coverage</Link><Link href="/schedule" className="text-link" aria-label="Benefits, by policy"><Icon name="benefits"/>Benefits</Link></div></div>
-   {!loading&&!!data?.reading&&<p className="summary-sub">{data.reading===1?"A document is":`${data.reading} documents are`} still being read. This page updates on its own when reading is done.</p>}
-   {loading?<div className="empty-card">Updating…</div>:personEmpty?<PersonNothingYet name={active?.display_name??"This person"} paidFor={view.paidFor}/>:<>{data?.coverages?.some(c=>c.status!=="not_covered")&&<div className="coverage-grid">{data.coverages.filter(c=>c.status!=="not_covered").map(c=><Link href={`/coverage?member=${encodeURIComponent(active?.id??"")}&category=${encodeURIComponent(c.category)}`} className={`coverage-card ${c.status}`} data-card={coverCard(c.category)} key={c.category}><div className="coverage-top"><span className="coverage-icon"><Icon name={coverIcon(c.category)}/></span><span className={`evidence-dot ${c.status}`}></span></div><div className="coverage-name">{c.category}</div>{c.status==="covered"?<><strong className="coverage-status"><Icon name="checkCircle"/>Covered</strong>{c.amount!=null&&<span className="coverage-amount">{money(c.amount,c.currency)}</span>}{c.amount!=null&&((c.parts?.length??0)>1||c.parts?.some(p=>p.conditional))&&<small>{(c.parts?.length??0)>1?"Each policy’s sum insured, added up. ":"Sum insured. "}What is paid depends on each policy’s own terms.</small>}{c.displayAmount&&<span className="coverage-amount">{c.displayAmount}</span>}{c.amount==null&&c.known&&<><span className="coverage-amount">{money(c.known.amount,c.known.currency)}</span><small>{"Only policies with a fixed sum. Not included: "}{[c.known.without.length?`${c.known.without.join(", ")} (no fixed sum, see Coverage)`:null,c.known.otherTile?.length?`${c.known.otherTile.join(", ")} (pays only in some cases, see its own tile)`:null].filter(Boolean).join("; ")}.</small></>}{c.planNote&&<small>{c.planNote}</small>}<small>{c.parts?.length?partsText(c.parts):c.policyNames.length?c.policyNames.slice(0,2).join(" · "):"From your uploaded documents"}{c.derived?" · benefit shown in the plan’s policy wording":""}</small></>:c.status==="on_file"?<><strong className="coverage-status muted-status">On file, please confirm</strong><small data-testid="on-file-note">{onFileNote(c.onFileDocuments??[],active?.display_name??"this person")}</small></>:<>{<><strong className="coverage-status muted-status">Not found</strong><small>{data?.notFullyRead?`Not found in what DearPolicy could read. ${data.notFullyRead}`:"Not found in the personal policies you uploaded. A policy you have not uploaded may still include it."}</small></>}</>}</Link>)}</div>}<HomeNotFound categories={(data?.coverages??[]).filter(c=>c.status==="not_covered").map(c=>c.category)} memberId={active?.id??""} note={data?.notFullyRead}/></>}
-  </section>
-  {!!data?.premiums?.items.length&&<section className="section premium-breakdown-panel"><div className="section-heading"><div><Titled icon="payments"><h2>What you pay</h2></Titled></div><Link href="/records" className="text-link"><Icon name="upload"/>Add a receipt</Link></div><div className="premium-breakdown-list">{data?.premiums?.items.length?data.premiums.items.map(i=><div className="premium-breakdown-row" key={i.id}><div className="payment-brand">{(i.insurer??"IN").slice(0,2).toUpperCase()}</div><div><strong>{i.product_name??i.insurer??"Insurance policy"}</strong><span>{premiumRowDetail(i)}</span></div><div className="premium-breakdown-value"><strong>{premiumMoney(i,i.monthly)}<small>/mo</small></strong><span>{premiumMoney(i,i.annual)} / year</span></div></div>):null}</div></section>}
-  <section><div className="section dashboard-panel" id="home-todo"><div className="section-heading"><Titled icon="bell"><h2>To-do</h2></Titled></div><div className="reminder-list">{data?.reminders?.length?data.reminders.map((r,i)=><Link href={r.href} className="reminder-card" key={`${r.title}-${i}`}><span className={`reminder-icon ${r.kind}`}><Icon name={r.kind==="payment"?"receipt":r.kind==="family"?"family":"alert"}/></span><span><strong>{r.title}</strong><small>{r.detail}</small></span><b><Icon name="chevronRight"/></b></Link>):<div className="empty-row">Nothing to do right now, based on the documents you uploaded.</div>}</div></div></section>
+  {returning&&<HomeAttention/>}
   </>}
+  <Link href={`/chat${active?.id?`?member=${encodeURIComponent(active.id)}`:""}`} className="home-ask-fab button primary" aria-label="Ask DearPolicy"><Icon name="ask"/>Ask DearPolicy</Link>
  </div>;
 }
 

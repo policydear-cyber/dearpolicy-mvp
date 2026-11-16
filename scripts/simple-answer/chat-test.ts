@@ -198,7 +198,9 @@ async function main() {
     // Card text is the model's own words without money, or the quoted printed words the server copies.
     assert.ok(answer.statements!.filter((s) => !s.id.startsWith("not-total")).every((s) => !statesMoney(s.text) || /prints: “/.test(s.text)));
     assert.ok(answer.statements!.some((s) => /not a total/.test(s.text) && /S\$1,250, up to S\$500 and S\$250/.test(s.text)));
-    assert.match(answer.bottomLine!, /separate and not added together/);
+    // The rebuilt bottom line states no total and does not narrate the check (DC, 16 Nov: no "not added up" lines).
+    assert.match(answer.bottomLine!, /The amounts are shown below\.$/);
+    assert.doesNotMatch(answer.bottomLine!, /added|total/i);
     assert.equal(answer.verifiedPolicyFactsOnly, true);
   });
 

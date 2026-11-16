@@ -147,8 +147,10 @@ t("the style guide covers corrections, several covers on one event, and 'not cov
   assert.match(style, /corrected answer is short/);
   assert.match(SIMPLE_SYSTEM_PROMPT, /never tell them how or by when to claim on that cover/);
   assert.match(SIMPLE_SYSTEM_PROMPT, /the earlier answer stands except for what the correction changes/);
-  assert.match(SIMPLE_SYSTEM_PROMPT, /These are separate covers\. The pages I used don't say whether one affects the other, so the insurer decides\. They are not added up\./);
-  assert.match(style, /These are separate covers\. The pages I used don't say whether one affects the other, so the insurer decides\. They are not added up\./);
+  // DC, 16 Nov 2026: the separate-covers narration is no longer said; the rule that amounts are never added up stays.
+  assert.doesNotMatch(SIMPLE_SYSTEM_PROMPT + style, /These are separate covers\. The pages I used/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /When the pages shown print no such rule, say nothing about it: each amount is shown on its own card and the app never adds them up\. Never say they each pay, and never add them up\./);
+  assert.match(style, /When they print nothing about it, say nothing about it\./);
   // Never a promise that each pays (Critic R124-2); a "not shown to be covered" answer keeps a printed deadline as a condition (R124-3).
   assert.doesNotMatch(SIMPLE_SYSTEM_PROMPT + style, /each paid on its own terms|each pay on their own terms/);
   assert.match(SIMPLE_SYSTEM_PROMPT, /If FWD confirms cover, claim within 30 days/);

@@ -24,7 +24,27 @@ import { emptyLoopState, type RagLoopState, type TraceTurn } from "./types";
 export type LoopConversationState = ConversationState & { ragLoop?: RagLoopState };
 type Save = (args: { conversation: ChatContext["conversation"]; token: ChatContext["token"]; state: ConversationState; message: string; answer: ChatAnswer; jobId?: string }) => Promise<void>;
 
+/** Said once at the end of an answer that shows a conditional illustration (never after each amount). */
+export const INSURER_DECIDES = "The insurer decides what is paid.";
+/** A follow-up whose amounts are exactly those of the answer just before it (A3). */
+export const UNCHANGED_AMOUNTS = "That doesn't change the amounts above.";
+export const UNCHANGED_ANSWER = "That doesn't change my answer above.";
 export const ESTIMATE_NOTICE = "Indicative estimates are worked out from your documents and what you have told me; they are not a payout, and the insurer decides what it pays.";
+
+const isAmountSentence = (x: { kind?: string }) => x.kind === "conditional_illustration" || x.kind === "indicative_estimate";
+/** A3 (#512): what a follow-up says of its composed sentences, given what the answer just before it said (exact text). Only a reply
+ * that would be a PURE repeat -- every sentence said word for word just before -- is shortened, to "That doesn't change the amounts
+ * above." (or "my answer above") plus its next steps. A reply that adds anything of its own (a new fact, a new amount, the household's
+ * new detail said back) keeps the earlier sentences it restates beside it: they frame the new part, and dropping them made answers lose
+ * a bound amount and its condition (rag2:conv4 R1-R5, r7 trap items, binding, death journey on #512). Critic M1 is moot as a result. */
+/** The household asked for the amount again ("Sorry, how much was that again?"): the answer then says it, not "unchanged" (Test
+ * engineer on #512, F7). */
+export const ASKS_AMOUNT_AGAIN = /\bhow much\b|\bwhat(?:['’]s| is| was) (?:the |that )?(?:amount|figure|sum|payout)\b|\b(?:again|remind me|repeat|say that)\b/i;
+export function followUp<T extends { text: string; kind?: string }>(ordered: T[], previous: string[], question = ""): { repeated: T[]; fresh: T[]; lead: string | null } {
+  const said = new Set(previous);
+  if (!ordered.length || !ordered.every((x) => said.has(x.text)) || ASKS_AMOUNT_AGAIN.test(question)) return { repeated: [], fresh: ordered, lead: null };
+  return { repeated: ordered, fresh: [], lead: ordered.some(isAmountSentence) ? UNCHANGED_AMOUNTS : UNCHANGED_ANSWER };
+}
 export const RESUME_NOTE = "When you’re ready, here is the question I was on.";
 /** The composer's caveats an asking turn says before its question (never "nothing could be confirmed"). */
 // (PR #54: a dated listing said before a question keeps its later-date limit, as it does in a final answer)
@@ -225,7 +245,8 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
     // (a clause is quoted whole or not at all: a cut sentence can lose its condition, exception or "not")
     const whyText = why && why.length <= 240 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d|\d/.test(why) ? `the policy wording turns on it: “${why}”` : "it changes which of the policy's benefits or amounts applies";
     const lead = p.kind === "person" ? (p.purpose === "speaker" ? "I need to know who is asking first." : "I need to know who this is about first.") : `I'm asking because ${whyText}.`;
-    answer.summary = [...notes, ...(reply.preface ? [reply.preface] : []), ...said, ...(reply.trailing ?? [])].join(" ") || lead;
+    const shownAmounts = !!c && c.sentences.some((s) => s.kind === "conditional_illustration") && !c.sentences.some((s) => s.estimate);
+    answer.summary = [...notes, ...(reply.preface ? [reply.preface] : []), ...said, ...(shownAmounts ? [INSURER_DECIDES] : []), ...(reply.trailing ?? [])].join(" ") || lead;
     answer.questions = [q];
     if (p.kind === "person") answer.personCandidates = p.options.map((o) => ({ id: o.id, label: o.label }));
     if (c) {
@@ -258,9 +279,20 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
     const frame = illus.length >= 2 && new Set(illus.flatMap((x) => [...pageKeys(x.evidenceIds)].map((k) => k.split(":")[0]))).size >= 2
       ? sorted.find((x) => !illus.includes(x) && illus.filter((i) => { const mine = pageKeys(x.evidenceIds), theirs = pageKeys(i.evidenceIds); return [...mine].some((k) => theirs.has(k)); }).length >= 2) ?? null
       : null;
-    const texts = frame ? [frame, ...illus, ...sorted.filter((x) => x !== frame && !illus.includes(x))].map((x) => x.text) : sorted.map((x) => x.text);
+    const ordered = frame ? [frame, ...illus, ...sorted.filter((x) => x !== frame && !illus.includes(x))] : sorted;
+    // A3 (Critic site review, 16 Nov 2026; DC: "non-value adding answers that clutter"): a follow-up answer does not say again, word for
+    // word, what the answer just before it said about the same person. What it adds (a next step, a new amount, a changed one) is
+    // the reply, led by one line that the earlier answer stands. Only the immediately previous answer, only when this turn
+    // corrected nothing and withdrew nothing, and only an exact repeat: a recalculated amount is a different sentence and is said.
+    const prevTurn = state.turns.at(-1);
+    const sameThread = !!prevTurn?.composed?.length && !notes.length && !lost.length && (prevTurn.shown?.subjectId ?? null) === (c.subjectId ?? state.subjectId ?? null);
+    const { repeated, fresh, lead: unchanged } = followUp(ordered, sameThread ? prevTurn!.composed! : [], message);
+    const texts = [...(unchanged ? [unchanged] : []), ...fresh.map((x) => x.text)];
+    // The insurer's part is said ONCE per answer that shows an amount (DC, 16 Nov 2026: not after every amount); an indicative
+    // estimate already carries ESTIMATE_NOTICE, which says it.
+    const amounts = fresh.some(isAmountSentence) && !c.sentences.some((s) => s.estimate);
     // A correction is said first (what changed, and what no longer applies), then the answer.
-    const lead = notes.length ? [notes.join(" "), ...texts] : texts;
+    const lead = [...(notes.length ? [notes.join(" ")] : []), ...texts, ...(amounts ? [INSURER_DECIDES] : [])];
     // Agent P (task 3): the composer's notes are user-facing caveats (or, when nothing could be kept, one accurate
     // explanation) -- never commentary on what was removed.
     const body = keepLimitationWithFigure([...lead, ...(c.notes ?? []), ...(unknownPeople.length ? [unknownPersonText(unknownPeople)] : [])]);
@@ -273,7 +305,12 @@ async function runLoopChatTurn(context: ChatContext, opts: { save: Save; check?:
     if (c.libraryNames?.length) answer.libraryNames = c.libraryNames;
     if (c.absenceChecks?.length) { answer.absenceChecks = c.absenceChecks; answer.libraryNames = [...new Set([...(answer.libraryNames ?? []), ...c.absenceChecks.flatMap((x) => x.documents.map((d) => d.name))])]; }
     // Agent K: verified benefit calculations, and the claim record only when the household is pursuing a claim.
-    if (c.calculations.length) answer.calculations = c.calculations;
+    // (A3: a calculation the earlier answer already stated, and this one does not repeat, is that answer's, not this one's)
+    const kept = repeated.length ? c.calculations.filter((k) => fresh.some((x) => x.text.includes(k.sentence))) : c.calculations;
+    if (kept.length) answer.calculations = kept;
+    // (F8: the calculations it restated without saying, so a later correction withdraws this answer with the one it points back to)
+    const restated = c.calculations.filter((k) => !kept.includes(k)).map((k) => k.id).filter((x): x is string => typeof x === "string" && !!x);
+    if (restated.length) answer.restatedCalculationIds = restated;
     if (c.calcs.length) { const rec = await syncCalcClaimRecord({ accountId: request.accountId, conversationId: conversation.id, state, calcs: c.calcs, existingId: (prior as { claimSessionId?: string | null }).claimSessionId ?? null }); if (rec) answer.claimSessionId = rec.id; }
     answer.citations = await citationsFor(request.accountId, state, c.evidenceIds);
     if (out.reasked?.kind === "fact") {

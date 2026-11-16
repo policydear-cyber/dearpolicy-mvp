@@ -15,6 +15,7 @@
  */
 import { NextRequest } from "next/server";
 import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
+import { withOtherFractureDefined } from "./fixtures/reliable-chat/other-fracture-defined";
 import * as FX from "./fixtures/reliable-chat/fracture-conversation";
 import { ScriptedLoopModel, type ScriptCall, type ScriptTurn } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
@@ -37,8 +38,11 @@ const K4B_MSG1 = "grace fell down and broke her arm", K4B_MSG2 = "Actually it wa
 const nextStepsOf = (tag: string, turn = 0) => ((recordedTerminal(tag, turn).arguments as any).next_steps ?? []) as string[];
 
 async function main() {
-  setEnv(FX as any);
-  const h = await startHarness(FX as any);
+  // Declutter (16 Nov 2026): this suite tests conversation mechanics with the certificate's Other Fracture amount as one of its
+  // vehicles; it runs on the SYNTHETIC variant that defines Other Fracture (./fixtures/reliable-chat/other-fracture-defined.ts) so that
+  // amount is still shown. The undefined case (the real libraries) is tested in scripts/reliable-chat-fracture-replay.ts A2-A6b, B14.
+  setEnv(withOtherFractureDefined(FX) as any);
+  const h = await startHarness(withOtherFractureDefined(FX) as any);
   process.env.DEARPOLICY_RAG_LOOP = "1";
   const { installLoopModel } = await import("@/lib/rag2/loop/model");
   const { GET: history } = await import("@/app/api/chat/history/[id]/route");

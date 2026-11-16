@@ -2,12 +2,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
-import { sgDate } from "@/components/format-date";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
+import { Icon } from "@/components/icons";
 
-const LAST_VISIT_KEY = "dearpolicy.lastHomeVisit";
-/** Reloads within this gap keep the same "since your last visit" baseline. */
-const VISIT_GAP_MS = 30 * 60 * 1000;
 
 type Policy = {
   id: string; product_name: string | null; original_filename: string | null; processing_status: string; created_at?: string | null;
@@ -18,50 +15,51 @@ type Claim = { id: string; family_member_id: string; conversation_id?: string | 
 type Item = { key: string; tone: "warn" | "info"; title: string; detail: string; href: string; action: string };
 
 const docName = (p: Policy) => p.product_name?.trim() || p.original_filename?.trim() || "A document";
-const READING = new Set(["queued", "extracting", "indexing", "uploaded", "processing"]);
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function readJson<T>(key: string, fallback: T): T { try { return JSON.parse(localStorage.getItem(key) || "") as T; } catch { return fallback; } }
 
-/** The line shown when nothing needs the household: never "nothing needs you" while Home's own To-do lists something. */
-export function AllClear({ todo }: { todo: number }) {
-  return todo ? <>Nothing urgent. <Link className="text-link" href="#home-todo">{plural(todo, "thing", "things")} to check in your To-do</Link>.</> : <>Nothing needs you right now.</>;
-}
-
-/** What a returning household needs on landing: what changed since the last visit, what needs them, and a box to ask.
- * Built only from GET /api/policies and GET /api/claims, the same data the Documents and Claims pages show. `todo`: how
- * many items Home's own To-do list shows, so the top never says "nothing needs you" above a To-do that lists something. */
-export function HomeAttention({ memberId, todo = 0 }: { memberId?: string; todo?: number }) {
+/** Home's ask box: Ask DearPolicy is the main feature, so it sits beside the person's cards, never only in the menu (DC
+ * 16 Nov). It opens the chat with the question and the person chosen on Home. */
+export function HomeAsk({ memberId, name }: { memberId?: string; name?: string | null }) {
   const router = useRouter();
-  const [policies, setPolicies] = useState<Policy[] | null>(null);
-  const [claims, setClaims] = useState<Claim[] | null>(null);
-  const [since, setSince] = useState<string | null>(null);
-  const [notFamily, setNotFamily] = useState<string[]>([]);
   const [question, setQuestion] = useState("");
-
-  useEffect(() => {
-    const previous = readJson<string | null>(LAST_VISIT_KEY, null);
-    const now = Date.now();
-    if (previous && now - Date.parse(previous) < VISIT_GAP_MS) {
-      // Same sitting: keep comparing against the visit before it.
-      setSince(readJson<string | null>(`${LAST_VISIT_KEY}.before`, null));
-    } else {
-      setSince(previous);
-      try { if (previous) localStorage.setItem(`${LAST_VISIT_KEY}.before`, JSON.stringify(previous)); localStorage.setItem(LAST_VISIT_KEY, JSON.stringify(new Date(now).toISOString())); } catch { /* storage unavailable */ }
-    }
-    setNotFamily(readJson<string[]>(NOT_FAMILY_KEY, []));
-    fetch("/api/policies", { cache: "no-store" }).then((r) => r.json()).then((d) => setPolicies(d.policies ?? [])).catch(() => setPolicies([]));
-    fetch("/api/claims", { cache: "no-store" }).then((r) => r.json()).then((d) => setClaims(d.claims ?? [])).catch(() => setClaims([]));
-  }, []);
-
-  function ask(e: FormEvent) {
-    e.preventDefault();
+  function go(text: string) {
     const params = new URLSearchParams();
-    if (question.trim()) params.set("ask", question.trim().slice(0, 2000));
+    if (text.trim()) params.set("ask", text.trim().slice(0, 2000));
     if (memberId) params.set("member", memberId);
     const query = params.toString();
     router.push(`/chat${query ? `?${query}` : ""}`);
   }
+  function ask(e: FormEvent) { e.preventDefault(); go(question); }
+  const examples = ["What can I claim for a broken arm?", "Am I covered if I'm hospitalised overseas?", "What do I do after a car accident?"];
+  return <section className="home-ask-panel" id="ask" data-testid="home-ask" aria-labelledby="home-ask-title">
+    <h2 id="home-ask-title"><span className="title-icon"><Icon name="ask" /></span>Ask DearPolicy</h2>
+    <p>Ask anything about {name ? `${name}’s` : "your family’s"} cover, a claim or what to do next. Answers come from your own documents.</p>
+    <form className="home-ask" onSubmit={ask} role="search" aria-label="Ask DearPolicy">
+      <label htmlFor="home-ask-input" className="sr-only">Your question</label>
+      <textarea id="home-ask-input" value={question} maxLength={2000} rows={3} onChange={(e) => setQuestion(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); go(question); } }}
+        placeholder="Type your question" enterKeyHint="send" />
+      <button className="button primary" type="submit"><Icon name="ask" />Ask</button>
+    </form>
+    <ul className="home-ask-examples" aria-label="Example questions">{examples.map((q) => <li key={q}><button type="button" onClick={() => go(q)}>{q}</button></li>)}</ul>
+  </section>;
+}
+
+/** What needs the household on Home, under the cards: a document that couldn't be read, a name to confirm, a claim waiting
+ * on them. Nothing when nothing needs them (DC 16 Nov: Home only shows what matters). Built only from GET /api/policies and
+ * GET /api/claims, the same data the Documents and Claims pages show. */
+export function HomeAttention() {
+  const [policies, setPolicies] = useState<Policy[] | null>(null);
+  const [claims, setClaims] = useState<Claim[] | null>(null);
+  const [notFamily, setNotFamily] = useState<string[]>([]);
+
+  useEffect(() => {
+    setNotFamily(readJson<string[]>(NOT_FAMILY_KEY, []));
+    fetch("/api/policies", { cache: "no-store" }).then((r) => r.json()).then((d) => setPolicies(d.policies ?? [])).catch(() => setPolicies([]));
+    fetch("/api/claims", { cache: "no-store" }).then((r) => r.json()).then((d) => setClaims(d.claims ?? [])).catch(() => setClaims([]));
+  }, []);
 
   const items: Item[] = [];
   const all = policies ?? [];
@@ -81,35 +79,14 @@ export function HomeAttention({ memberId, todo = 0 }: { memberId?: string; todo?
     else if (tone === "info") items.push({ key: `c-${c.id}`, tone: "info", href: c.conversation_id ? `/chat?conversation=${c.conversation_id}` : `/chat?member=${c.family_member_id}`, action: "Continue",
       title: "Questions to answer", detail: c.event_summary ?? "For a claim" });
   }
-  const reading = all.filter((p) => READING.has(p.processing_status)).length;
-
-  const changes: string[] = [];
-  if (since) {
-    const added = all.filter((p) => p.created_at && p.created_at > since).length;
-    const updated = (claims ?? []).filter((c) => c.updated_at > since).length;
-    if (added) changes.push(`${plural(added, "document", "documents")} added`);
-    if (updated) changes.push(`${plural(updated, "claim", "claims")} updated`);
-  }
   const loaded = policies !== null && claims !== null;
 
+  if (!loaded || !items.length) return null;
   return <section className="section home-attention" data-testid="home-attention" aria-label="What needs your attention">
-    <form className="home-ask" onSubmit={ask} role="search" aria-label="Ask DearPolicy">
-      <label htmlFor="home-ask-input">Ask about your family&rsquo;s cover</label>
-      <div className="home-ask-row">
-        <input id="home-ask-input" type="text" value={question} maxLength={2000} onChange={(e) => setQuestion(e.target.value)} placeholder="For example: what can I claim for a broken arm?" enterKeyHint="go" />
-        <button className="button primary" type="submit">Ask</button>
-      </div>
-    </form>
-    {since && loaded ? <p className="home-since" data-testid="home-since">
-      {changes.length ? <><b>Since your last visit</b> on {sgDate(since)}: {changes.join(" and ")}.</> : <>Nothing new since your last visit on {sgDate(since)}.</>}
-      {reading ? ` ${plural(reading, "document is", "documents are")} still being read.` : ""}
-    </p> : reading ? <p className="home-since">{plural(reading, "document is", "documents are")} still being read.</p> : null}
-    {loaded ? items.length ? <>
-      <h2 className="home-attention-title">Needs your attention <span>{items.length}</span></h2>
-      <ul className="home-attention-list">{items.slice(0, 5).map((i) => <li key={i.key} className={i.tone}>
-        <Link href={i.href}><span className="home-attention-text"><strong>{i.title}</strong><small>{i.detail}</small></span><span className="home-attention-action">{i.action} ›</span></Link>
-      </li>)}</ul>
-      {items.length > 5 ? <p className="muted">{plural(items.length - 5, "more item is", "more items are")} on the Documents and Claims pages.</p> : null}
-    </> : <p className="home-all-clear" data-testid="home-all-clear"><AllClear todo={todo} /></p> : null}
+    <h2 className="home-attention-title">Needs your attention <span>{items.length}</span></h2>
+    <ul className="home-attention-list">{items.slice(0, 5).map((i) => <li key={i.key} className={i.tone}>
+      <Link href={i.href}><span className="home-attention-text"><strong>{i.title}</strong><small>{i.detail}</small></span><span className="home-attention-action">{i.action} ›</span></Link>
+    </li>)}</ul>
+    {items.length > 5 ? <p className="muted">{plural(items.length - 5, "more item is", "more items are")} on the Documents and Claims pages.</p> : null}
   </section>;
 }

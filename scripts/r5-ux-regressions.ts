@@ -182,7 +182,7 @@ async function main() {
   await test("empty portfolio: a next step, not 'everything looks current' or S$0.00", () => {
     const home = read("app/page.tsx");
     assert.match(home, /function EmptyPortfolio/);
-    assert.match(home, /emptyPortfolio\?<EmptyPortfolio/);
+    assert.match(home, /emptyPortfolio\?<>[^]{0,1200}<EmptyPortfolio hasFamily/);
   });
   await test("no verdict before the data is in: cover detail and Payments say nothing found only once loaded", () => {
     const cover = read("app/coverage/page.tsx");
@@ -206,7 +206,8 @@ async function main() {
     assert.match(payments, /fetch\("\/api\/premiums\/summary"\)/, "Payments loads the counted premiums");
     const source = read("lib/format/premium-source.ts");
     assert.match(payments, /<span>\{premiumRowDetail\(item\)\}<\/span>/, "each premium names where it was read");
-    assert.match(read("app/page.tsx"), /<span>\{premiumRowDetail\(i\)\}<\/span>/, "in the same words on Home's breakdown");
+    // DC 16 Nov: Home shows no premiums (its cards come first, decluttered); Payments is where every premium is listed.
+    assert.doesNotMatch(read("app/page.tsx"), /premiums\.(?:items|totals)/, "Home lists no premium of its own");
     assert.match(source, /policy_schedule: "From the policy schedule", payment_record: "From a payment record"/, "the words for each source");
     assert.match(source, /: "From your documents";/, "an unknown source says the neutral words");
     assert.match(payments, /p\.oneOff\.map/, "a premium paid once is listed, not hidden");

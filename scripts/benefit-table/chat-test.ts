@@ -8,6 +8,7 @@ import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-ta
 import { type ChatRow, amountsFromRows, asksForNobody, namesSomeone, intensiveCareRateOf, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, stayBlock, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
+import { CONFIRM_AMOUNT_STEP } from "@/lib/simple-chat/declutter";
 import { TABLE_ANSWER_SCHEMA } from "@/lib/simple-chat/prompt";
 import { claimWindows, datesSaidNote, dropLateClaims, maskIdentityNumbers, periodsNote, runSimpleChat } from "@/lib/simple-chat/hook";
 import type { SimpleModel, SimpleModelCall } from "@/lib/simple-chat/model";
@@ -358,7 +359,7 @@ async function turn(reply: (call: SimpleModelCall) => unknown, table: boolean | 
   const context = { request: { accountId: HOUSE.accountId, familyMemberId: null, question: "I broke my hip, how much?", submittedQuestion: "I broke my hip, how much?" },
     family: [{ id: "p1", display_name: "Lim Ah Kow", preferred_name: null, relationship: "self" }], people: [],
     conversation: { id: "c1", account_id: HOUSE.accountId, family_member_id: null, title: "t", revision: 1, state: { subjects: {} } }, token: {}, holdings: [] } as unknown as ChatContext;
-  const saved: { answer: { statements?: { amount: { text: string } | null; text: string; basis?: string | null }[] }; state: { simpleChat: { turns: { report: { dropped: { why: string }[] } }[] } } }[] = [];
+  const saved: { answer: { nextSteps: string[]; statements?: { amount: { text: string } | null; text: string; basis?: string | null }[] }; state: { simpleChat: { turns: { report: { sentencesLeftOut: string[]; dropped: { why: string; kind?: string }[] } }[] } } }[] = [];
   await runSimpleChat(context, {}, { model, household: async () => HOUSE, history: async () => [], save: (async (x: unknown) => { saved.push(x as never); }) as never, ledger: false,
     table: async () => (table === true ? tableWith() : table || null), today: () => new Date("2026-10-21T04:00:00Z") });
   return { call: calls[0], saved: saved[0] };
@@ -408,11 +409,14 @@ async function integration() {
     assert.doesNotMatch(t.call.library, /Written notice of a claim/);
     assert.ok(citedPages(chatRows(tableWith(), HOUSE)).size < cited.size, "rule pages are added to the cited ones");
   });
-  await atest("Critic R113-1: an amount given from narrowed pages always carries the server's note on waiting periods and exclusions", async () => {
+  // DC, 16 Nov 2026 (declutter): the generic "waiting periods ... on pages not used" line is no longer shown under every
+  // amount. The rule pages are still sent (test above); only the note is gone. Was: exactly one NARROWED_PAGES_NOTE.
+  await atest("an amount given from narrowed pages is shown without the generic note on waiting periods and exclusions (was Critic R113-1)", async () => {
     const t = await turn(hip, true);
     const st = t.saved.answer.statements ?? [];
     assert.ok(st.some((s) => s.amount), "the amount is shown");
-    assert.equal(st.filter((s) => s.text === NARROWED_PAGES_NOTE).length, 1);
+    assert.equal(st.filter((s) => s.text === NARROWED_PAGES_NOTE).length, 0);
+    assert.ok(t.saved.state.simpleChat.turns[0].report.sentencesLeftOut.includes(NARROWED_PAGES_NOTE), "the note is kept in the turn's report");
     assert.doesNotMatch(NARROWED_PAGES_NOTE, /\d/);
     const none = await turn(() => ({ bottomLine: "x", nextSteps: [], question: null, statements: [{ kind: "fact", text: "Ambulance is covered per incident.", person: "Lim Ah Kow", document: "D2",
       quote: "Ambulance Cost Up to S$500 per incident", amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null }] }), true);
@@ -428,7 +432,9 @@ async function integration() {
       percentOf: { percent: 75, baseAmount: "S$600,000", baseDocument: "D1", baseQuote: "Lim Ah Kow S$600,000 As of 01/01/2026" }, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: null }] }), true);
     assert.equal((t.saved.answer.statements ?? []).filter((s) => s.amount).length, 0);
     assert.match(t.saved.state.simpleChat.turns[0].report.dropped.map((d) => d.why).join(";"), /no table row/);
-    assert.ok((t.saved.answer.statements ?? []).some((s) => s.text === LEFT_OUT_AMOUNT), "the household is told an amount was left out");
+    // DC, 16 Nov 2026: the drop is recorded, not narrated; with no amount left, the household gets one step instead.
+    assert.ok(!(t.saved.answer.statements ?? []).some((s) => s.text === LEFT_OUT_AMOUNT), "no note that an amount was left out");
+    assert.ok(t.saved.answer.nextSteps.includes(CONFIRM_AMOUNT_STEP), "asked to confirm the amount with the insurer");
   });
   await atest("in the app's chat turn, a plan named with a number keeps its amount through every check (R91-2)", async () => {
     const t0 = tableWith();
@@ -440,10 +446,11 @@ async function integration() {
     assert.match(shown[0].text, /plan 300\)\.$/);
     assert.match(shown[0].basis ?? "", /^75% of .*sum insured/);
   });
-  await atest("in the app's chat turn, a made-up row is dropped and the household is told an amount was left out", async () => {
+  await atest("in the app's chat turn, a made-up row is dropped, recorded, and not narrated", async () => {
     const t = await turn(() => ({ bottomLine: "x", nextSteps: [], question: null, statements: [{ kind: "amount", text: "made up", person: "Lim Ah Kow", document: null, quote: null, amount: "S$777", percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: "R99" }] }), true);
     assert.equal((t.saved.answer.statements ?? []).filter((s) => s.amount).length, 0);
-    assert.ok((t.saved.answer.statements ?? []).some((s) => s.text === LEFT_OUT_AMOUNT));
+    assert.ok(!(t.saved.answer.statements ?? []).some((s) => s.text === LEFT_OUT_AMOUNT));
+    assert.ok(t.saved.state.simpleChat.turns[0].report.dropped.some((d) => d.kind === "amount"), "the dropped amount is in the turn's report");
     assert.ok(!JSON.stringify(t.saved.answer).includes("777"));
   });
 }

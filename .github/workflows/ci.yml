@@ -158,6 +158,9 @@ jobs:
       - name: Upload and reading failures say what happened and what to do, and name every unread page (mocked OCR, offline)
         run: npm run documents:upload-failure-paths-test
 
+      - name: A scanned page read as only placeholders or noise ("[illegible]") is named as not read; real, short and numbers-only pages are read (mocked OCR, offline)
+        run: npm run documents:illegible-page-test
+
       - name: V1.1 source-verified answers, quota failure, usage attribution
         run: npm run v11:answer-test
 
@@ -488,6 +491,12 @@ jobs:
 
       - name: Page-image figure check (off by default; blind page copies confirm OCR figures; documents read before the switch are checked, not shown unchecked)
         run: npm run benefit-table:image-check-test
+
+      - name: Chat answers without check narration; insurer contacts only from the household's own pages
+        run: npm run simple:declutter-contacts-test
+
+      - name: Printed figures rows shown as a table with the page's own headings; no cell moved
+        run: npm run simple:printed-table-test
 
       - name: Build
         run: npm run build

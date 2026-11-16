@@ -24,6 +24,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ChatAnswer } from "@/types";
 import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
+import { answerKey, type ReplacedAnswer } from "@/lib/chat/replaced-live";
 
 export const STALE_ANSWER_NOTICE = "This answer relied on a policy document that has since been deleted, so it no longer describes your cover. Ask again to get an answer from the documents you have now.";
 
@@ -62,7 +63,7 @@ export function invalidatedAnswer(answer: ChatAnswer, reason: InvalidationReason
     policyStatedLimits: [], potentialPayoutTotals: [], payoutQualifiers: [], absenceChecks: [],
     factFinding: undefined, composition: undefined, assessmentKind: undefined,
     // (what its figures were bound to and worked out from goes too: a page that draws figures from them must find none)
-    figureBindings: [], computations: [], calculations: [],
+    figureBindings: [], computations: [], calculations: [], restatedCalculationIds: [],
     // (the simple chat's cards and bottom line go too: a page or client that reads them must find no figure)
     ...("statements" in answer ? { statements: [] } : {}), ...("bottomLine" in answer ? { bottomLine: NOTICE[reason] } : {}),
     invalidated: { reason },
@@ -110,6 +111,7 @@ export function supersededIn(conversationState: unknown): (a: Partial<ChatAnswer
   const withdrawn = withdrawnCalculationIds(conversationState);
   const replaced = supersededAnswerIds(conversationState);
   return (a) => (withdrawn.size > 0 && (Array.isArray(a?.calculations) ? a!.calculations! : []).some((c) => typeof c?.id === "string" && withdrawn.has(c.id)))
+    || (withdrawn.size > 0 && (Array.isArray(a?.restatedCalculationIds) ? a!.restatedCalculationIds! : []).some((id) => typeof id === "string" && withdrawn.has(id)))
     || (replaced.size > 0 && typeof a?.answerId === "string" && replaced.has(a.answerId));
 }
 
@@ -118,6 +120,21 @@ export function supersededIn(conversationState: unknown): (a: Partial<ChatAnswer
 export function correctedAnswers<T extends Partial<ChatAnswer> | null | undefined>(answers: T[], conversationState: unknown): T[] {
   const superseded = supersededIn(conversationState);
   return answers.map((a) => (superseded(a) ? (invalidatedAnswer(a as ChatAnswer, "superseded") as unknown as T) : a));
+}
+
+/** The earlier answers of a chat that its saved state now marks replaced, each with its replacement as the reopened chat
+ * serves it (correctedAnswers: the same rule), keyed for the live page (lib/chat/replaced-live.ts). Sent with a finished
+ * answer, so the live chat marks a replaced answer the moment the correcting answer arrives (TE-ACC-20261116 journey 4).
+ * An answer with no key, or `except` (the answer just finished), is left out. Pure. */
+export function replacedEarlierAnswers(answers: (Partial<ChatAnswer> | null | undefined)[], conversationState: unknown, except?: Partial<ChatAnswer> | null): ReplacedAnswer[] {
+  const skip = answerKey(except);
+  const corrected = correctedAnswers(answers, conversationState);
+  const out: ReplacedAnswer[] = [];
+  answers.forEach((a, i) => {
+    const key = answerKey(a), now = corrected[i];
+    if (key && key !== skip && !a?.invalidated && now?.invalidated?.reason === "superseded" && !out.some((r) => r.key === key)) out.push({ key, answer: now as ChatAnswer });
+  });
+  return out;
 }
 
 /** Replaces every answer that cites a policy which is no longer active in

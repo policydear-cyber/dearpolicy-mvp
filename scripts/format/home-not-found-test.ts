@@ -29,12 +29,18 @@ test("with documents not fully read, it says so instead of implying no cover", (
 test("nothing missing: nothing shown", () => {
   assert.equal(html([]), "");
 });
-test("Home puts only found cover in tiles and the rest in the line, by status", () => {
+test("Home shows a card only for cover it can call Covered; nothing for on-file or not-found cover (DC 16 Nov)", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  // "On file, please confirm" (#358) keeps its own tile, with no amount: it is never folded into "Not found".
-  assert.match(page, /c\.status==="on_file"\?<><strong className="coverage-status muted-status">On file, please confirm<\/strong>/);
-  assert.match(page, /\{data\?\.coverages\?\.some\(c=>c\.status!=="not_covered"\)&&<div className="coverage-grid">\{data\.coverages\.filter\(c=>c\.status!=="not_covered"\)\.map\(c=>/);
-  assert.match(page, /<HomeNotFound categories=\{\(data\?\.coverages\?\?\[\]\)\.filter\(c=>c\.status==="not_covered"\)\.map\(c=>c\.category\)\} memberId=\{active\?\.id\?\?""\} note=\{data\?\.notFullyRead\}\/>/);
+  // DC 16 Nov: "If it's covered, it's covered." A cover no document gives the person has no card, and the "Not found" line
+  // and the "On file, please confirm" tile are gone from Home; each cover's own Coverage page still says what was found.
+  assert.match(page, /const covered=\(data\?\.coverages\?\?\[\]\)\.filter\(c=>c\.status==="covered"\);/);
+  assert.match(page, /covered\.map\(c=>/);
+  assert.doesNotMatch(page, /HomeNotFound|On file, please confirm|onFileNote|Not found/);
+  assert.doesNotMatch(page, /"Not covered"|>Not covered</);
+  // A person with documents on file but no card is never told to upload what they already uploaded, nor that they have no
+  // cover (site review Critic, 16 Nov): the upload nudge is only for a person with no document linked.
+  assert.match(page, /\(active\?\.policy_count\?\?0\)>0\?<>No cover card for/);
+  assert.doesNotMatch(page, /No cover for \{name/);
 });
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`home-not-found: ${passed} passed, fetches 0`);

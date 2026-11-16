@@ -37,7 +37,12 @@ async function sameAsSaved(request: APIRequestContext, shown: string, label: str
 }
 const cited = (a: any) => JSON.stringify(a.citations ?? []);
 
-test("FR1: Grace fell and broke her arm -- both documented alternatives with their bases first, no X-ray question, contact step on the reply, saved = displayed = reloaded", async ({ page, request }) => {
+// Declutter (DC, 16 Nov 2026; Critic site review A1-A3). EXPECTATION CHANGES, recorded with the originals in
+// docs/rag-migration/declutter-20261116/EXPECTATION-CHANGES.md. ORIG: both S$1,250 and S$120,000 in the top lines with "never a total",
+// the S$600,000 base dated, the two documents' relationship note ("Neither document says whether one amends ..."), and a reply that
+// shows both amounts again. NOW: the matching row's S$1,250 leads; the certificate's undefined "Other Fracture" row is named without an
+// amount; the insurer's part is said once; the reply says the amounts don't change and gives the contact step.
+test("FR1: Grace fell and broke her arm -- the matching row's amount first, the undefined Other Fracture row named without an amount, no X-ray question, a short reply with the contact step, saved = displayed = reloaded", async ({ page, request }) => {
   const [u1, u2] = await scenario(request, "FR1");
   await page.goto("/chat");
   await page.getByRole("button", { name: "New chat" }).click();
@@ -47,29 +52,31 @@ test("FR1: Grace fell and broke her arm -- both documented alternatives with the
   const top = norm(a1.shown).slice(0, 1400);
   // what the household learns, in the first lines
   expect(top).toMatch(/S\$1,250/);
-  expect(top).toMatch(/S\$120,000/);
-  expect(top).toMatch(/never a total/);
   expect(top).toMatch(/25% of the Simple Fracture benefit limit of S\$5,000/);
-  expect(top).toMatch(/20% of Grace's sum insured of S\$600,000/);
-  expect(a1.shown).toMatch(/printed as of 6 October 2022, not confirmation of cover on a later date/);
   expect(a1.shown).toMatch(/Product Summary \(page 13\)/);
-  expect(a1.shown).toMatch(/Certificate of Insurance Part 2 \(page 8\)/);
-  expect(a1.shown).toMatch(/Neither document says whether one amends, replaces or adds to the other/);
+  expect(a1.shown).toMatch(/Certificate of Insurance Part 2 \(page 8\) also lists/);
+  expect(a1.shown).toMatch(/don't say which fractures count as Other Fracture/);
+  expect(a1.shown).toMatch(/Ask the insurer whether Grace's fracture is one/);
+  // an amount whose row the documents don't define is not shown (nor its base); no total in any form; the insurer's part once
+  expect(a1.shown).not.toMatch(/S\$120,000|S\$600,000|S\$121,250|in total|combined/);
+  expect(a1.shown).not.toMatch(/never a total|not a payment or an insurer/);
+  expect(a1.shown.match(/The insurer decides what is paid\./g) ?? []).toHaveLength(1);
   // no unsupported question, no withheld notice, no technical residue
   expect(s1.questions ?? []).toHaveLength(0);
   expect(a1.shown).not.toMatch(/X-ray|registered medical practitioner/i);
   expect(a1.shown).not.toMatch(/withh|until claim evidence|left out a sentence|insurer review/i);
   expect(a1.shown).not.toMatch(/benefit_id|result_id|evidence_id|\bb[0-9a-f]{10}\b|\bk[0-9a-f]{10}\b/);
   expect(a1.shown).not.toMatch(/prevail|overrid|supersed|takes precedence/i);
-  // the saved citations carry both figures' pages and the certificate
+  // the saved citations carry the shown figure's page and the page-8 row the Other Fracture line names
   expect(cited(s1)).toMatch(/Simple Fracture Benefit Limit: S\$5,000/);
   expect(cited(s1)).toMatch(/Arm , Elbow, Wrist or Ribs/);
-  expect(cited(s1)).toMatch(/600,000/);
-  expect((s1.calculations ?? []).map((k: any) => k.result?.value).sort((x: number, y: number) => x - y)).toEqual([1250, 120000]);
+  expect((s1.calculations ?? []).map((k: any) => k.result?.value)).toEqual([1250]);
 
   const a2 = await send(page, u2);
   const s2 = await sameAsSaved(request, a2.shown, "FR1 reply", a2.visibleMs);
-  expect(norm(a2.shown).slice(0, 1400)).toMatch(/S\$1,250[\s\S]*S\$120,000|S\$120,000[\s\S]*S\$1,250/);
+  expect(String(s2.summary ?? "")).toMatch(/^That doesn't change the amounts above\./);
+  expect(norm(a2.shown)).toMatch(/That doesn't change the amounts above\./);
+  expect(a2.shown).not.toMatch(/S\$1,250|S\$120,000|Other Fracture/);
   expect(a2.shown).toMatch(/Aldermoor Life Ltd/);
   expect(s2.questions ?? []).toHaveLength(0);
   expect(a2.shown).not.toMatch(/302,500|121,250|withh|until claim evidence/i);
@@ -77,6 +84,6 @@ test("FR1: Grace fell and broke her arm -- both documented alternatives with the
 
   await page.reload();
   const reopened = page.locator(".message.assistant").last();
-  await expect(reopened).toContainText("S$120,000", { timeout: 60_000 });
+  await expect(reopened).toContainText("Aldermoor Life Ltd", { timeout: 60_000 });
   expect(norm(await reopened.innerText())).toBe(norm(a2.shown));
 });

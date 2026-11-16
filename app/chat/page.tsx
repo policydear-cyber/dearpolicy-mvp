@@ -17,9 +17,12 @@ import { readableDates,sgDate } from "@/components/format-date";
 import { AnswerWait,isAnswerStage,type AnswerStageId } from "@/components/answer-wait";
 import { SourceList } from "@/components/source-list";
 import { AnswerCards,showsCards } from "@/components/answer-cards";
+import { InsurerContacts } from "@/components/insurer-contacts";
+import { GENERIC_DISCLAIMER } from "@/lib/chat/generic-disclaimer";
 import { StoppedNotice,isStopped } from "@/components/answer-stopped";
 import { LearnLinks } from "@/components/learn-links";
 import { sendFailure } from "@/components/chat-send-failure";
+import { applyReplaced,type ReplacedAnswer } from "@/lib/chat/replaced-live";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
  * uncertainty, and one next question or action. Internal working -- what the
@@ -35,7 +38,9 @@ const NO_FAMILY_TEXT="Add a family member first, then ask again.";
 const CONFLICT_TEXT="This chat was updated in another tab or window, so this message was not sent. Reload the chat to see the latest messages, then send it again.";
 const shown=answerText,words=codeWords;
 /** An answer's next steps, each once and in order, once nothing is waiting on a question (then they sit with the question). */
-const nextStepsAfter=(answer?:ChatAnswer)=>{const steps=uniqueSteps(answer?.nextSteps);return steps.length&&!answer?.questions.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null;};
+/** The next steps, then how to reach the insurer as the household's documents print it. While a question is open, the
+ * steps and contacts are drawn above it instead (below). */
+const nextStepsAfter=(answer?:ChatAnswer)=>{if(answer?.questions.length)return null;const steps=uniqueSteps(answer?.nextSteps);return steps.length||answer?.insurerContacts?.length?<>{steps.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null}<InsurerContacts contacts={answer?.insurerContacts}/></>:null;};
 /** Keeps the open conversation in the address bar, so a reload (or a
  * closed tab reopened from history) returns to it -- and to its pending
  * answer -- instead of starting a new chat. */
@@ -50,6 +55,8 @@ const CHAT_MAX_WAIT_MS=6*60_000;
 // 0.1 s, so a 1 s gap was the largest wait after the model). Each check is one small read; the drains it starts keep their
 // own per-instance limits (lib/jobs/request-drain.ts).
 const CHAT_POLL_MS=500;
+/** A finished answer, with the earlier answers of the chat it replaced (lib/chat/replaced-live.ts). */
+type Finished={answer:ChatAnswer;replaced:ReplacedAnswer[]};
 type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string;conflict?:boolean;noFamily?:boolean;stopped?:boolean;restored?:boolean};
 type SavedChat={id:string;family_member_id:string|null;title:string;updated_at:string;revision:string};
 const factFindingStatusCopy:Record<NonNullable<ChatAnswer["factFinding"]>[number]["status"],string>={
@@ -185,13 +192,15 @@ function ChatContent(){
   function reset(){
     stopLocal();setMessages([]);setConversationId(null);setRevision(0);setMessageCursor(null);setQuestion("");setError("");setMemberId("");rememberConversation(null);
   }
-  function accept(answer:ChatAnswer,version:number){
+  function accept({answer,replaced}:Finished,version:number){
     if(version!==requestVersion.current)return;
     if(answer.resolvedFamilyMemberId)setMemberId(answer.resolvedFamilyMemberId);
     setConversationId(answer.conversationId??null);setRevision(answer.conversationRevision??0);
-    setMessages(previous=>[...previous,{role:"assistant",content:answer.summary,answer}]);
+    // An earlier answer this one replaced ("Actually it was Daniel, not Grace") is marked now, with the server's own
+    // replacement (the one the reopened chat shows): never left on screen unmarked until a reload (TE-ACC-20261116).
+    setMessages(previous=>[...applyReplaced(previous,replaced),{role:"assistant",content:answer.summary,answer}]);
   }
-  async function waitForJob(id:string,signal:AbortSignal,version:number):Promise<ChatAnswer>{
+  async function waitForJob(id:string,signal:AbortSignal,version:number):Promise<Finished>{
     jobId.current=id;
     // Never an endless spinner: after this long the turn is reported as not
     // finished, with the message kept, whatever the server still says.
@@ -202,7 +211,7 @@ function ChatContent(){
       const response=await fetch("/api/chat/jobs/"+id,{signal,cache:"no-store"});
       const data=await response.json();
       if(!response.ok)throw new Error(data.error??"DearPolicy lost track of this answer. Please check again in a moment.");
-      if(data.job.status==="complete"){jobId.current=null;return data.result.answer;}
+      if(data.job.status==="complete"){jobId.current=null;return {answer:data.result.answer,replaced:Array.isArray(data.replaced)?data.replaced:[]};}
       // A job this page did not cancel ends "cancelled" only when the chat
       // changed under it (lib/chat/jobs.ts: ChatConflict -> cancelled).
       if(data.job.status==="cancelled")throw new ConflictError();
@@ -279,7 +288,7 @@ function ChatContent(){
       if(version!==requestVersion.current)return;
       setConversationId(data.conversationId);setRevision(data.conversationRevision);rememberConversation(data.conversationId??null);
       const resolved=data.familyMemberId??"";setMemberId(resolved);
-      const answer=await waitForJob(data.jobId,abort.signal,version);accept(answer,version);
+      const finished=await waitForJob(data.jobId,abort.signal,version);accept(finished,version);
       if(version===requestVersion.current)await refreshHistory();
     }catch(e){
       // Marking the message itself -- instead of only a page-level banner --
@@ -397,7 +406,7 @@ function ChatContent(){
           </>;})()}
           {message.answer?.invalidated?<div className="alert" role="note" data-testid="answer-invalidated" data-reason={message.answer.invalidated.reason}><strong>{message.answer.invalidated.reason==="superseded"?"Replaced.":"Out of date."}</strong> {({policy_deleted:"A policy document this answer relied on has been deleted, so it no longer describes your cover.",documents_added:"Documents have been added since this answer, so it may no longer be right.",person_unlinked:"Someone this answer was about has since been removed from the document it relied on.",superseded:"This answer was replaced by the corrected answer below."} as Record<string,string>)[message.answer.invalidated.reason]??"This answer no longer describes your cover."}</div>:null}
           {/* dj-live-3: while a question is open, the supported practical steps are shown ahead of it (never collapsed behind it). */}
-          {(()=>{const steps=uniqueSteps(message.answer?.nextSteps);return steps.length&&message.answer?.questions.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null;})()}
+          {(()=>{const steps=uniqueSteps(message.answer?.nextSteps);return message.answer?.questions.length?<>{steps.length?<div className="next-steps" data-testid="next-step"><strong>{steps.length>1?"Next steps":"Next step"}</strong>{steps.length>1?<ol>{steps.map((step,i)=><li key={i} data-testid="next-step-item">{shown(step)}</li>)}</ol>:<p data-testid="next-step-item">{shown(steps[0])}</p>}</div>:null}<InsurerContacts contacts={message.answer.insurerContacts}/></>:null;})()}
           {message.answer?.questions.map(q=><div className="fact-question" key={q.id}><div className="question-label">A fact that changes this assessment</div><strong>{shown(q.text)}</strong><small>{shown(q.why)}</small>
             <div className="quick-replies">{(q.id==="claim_person"||q.id==="rag_person")&&message.answer?.personCandidates?.length?message.answer.personCandidates.map(p=><button key={p.id} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(p.label,p.id)}>{p.label}</button>):q.options?.map(option=><button key={option} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(option)}>{option}</button>)}</div>
             {/* A date or a free-text fact is answered in place: the reply
@@ -425,11 +434,8 @@ function ChatContent(){
               evidence page, so the affordance is one clear link, not a
               second uploader. */}
           {message.answer?.claimSessionId&&(message.answer.factFinding??[]).some(plan=>plan.missingDocuments.length)?<a className="claim-pack-link evidence-upload-link" href={`/claims/${message.answer.claimSessionId}`}>Upload documents for this claim — {[...new Set((message.answer.factFinding??[]).flatMap(plan=>plan.missingDocuments))].slice(0,4).join("; ")} →</a>:null}
-          {/* When information is still needed, the questions above are the
-              whole point of the turn: everything else collapses behind one
-              toggle so they are never buried under the full assessment. Once
-              nothing is open, the assessment renders expanded as before. */}
-          {(awaiting=>{const detail=<>
+          {/* The assessment is shown as it is, never behind a toggle: the questions above it come first. */}
+          {(()=>{const detail=<>
           {message.answer?.factFinding?.length?<div className="fact-finding" data-testid="fact-finding"><small>What DearPolicy still needs</small>{message.answer.factFinding.map((plan,i)=><div className="fact-finding-plan" key={i} data-status={plan.status}>
             <strong>{plan.subjectName?plan.subjectName+" · ":""}{plan.label}</strong> <span className="fact-finding-status">{factFindingStatusCopy[plan.status]}</span>
             {plan.missingDocuments.length?<p className="fact-finding-documents">Documents: {plan.missingDocuments.join("; ")}</p>:null}
@@ -474,13 +480,12 @@ function ChatContent(){
             :message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?null:message.role==="assistant"&&showsCards(message.answer)?null:message.answer?.details.map((detail,i)=><p key={i}>{shown(detail)}</p>)}
           {message.answer?.reviewCoverage&&!message.answer.reviewCoverage.complete?<div className="review-coverage partial" data-testid="answer-uncertainty"><p>DearPolicy could not check every part of your documents for this, so this is not a finding that it is missing.</p></div>:null}
           {/* V1.5: every saved next step, in order, each once (a repeated step is shown once) -- never only the first. While a
-              question is waiting for an answer they sit with the rest of the assessment under "Show full assessment". */}
+              question is waiting for an answer they are drawn above it. */}
           {message.role==="assistant"&&showsCards(message.answer)?null:nextStepsAfter(message.answer)}
           {message.answer?.citations.length&&!(message.role==="assistant"&&showsCards(message.answer))?<details className="citations"><summary>Sources</summary><SourceList citations={message.answer.citations} files={documentFiles}/></details>:null}
-          </>;return awaiting?<details className="assessment-details" data-testid="assessment-details"><summary>Show full assessment</summary>{detail}</details>:detail;})(
-            ((message.answer?.questions.length??0)+(message.answer?.factFinding?.reduce((n,p)=>n+p.nextQuestions.length,0)??0))>0
-          )}
-          {message.answer?.disclaimer&&!isStopped(message.answer,message.content)?<div className="answer-disclaimer">{message.answer.disclaimer}</div>:null}
+          </>;return detail;})()}
+          {/* Only a notice about this answer itself (an estimate is not a payout); the general note is said once, under the box. */}
+          {message.answer?.disclaimer&&message.answer.disclaimer.trim()!==GENERIC_DISCLAIMER&&!isStopped(message.answer,message.content)?<div className="answer-disclaimer">{message.answer.disclaimer}</div>:null}
           {/* Knowledge library: general explanations of terms this answer uses (static, never changes the answer). */}
           {message.role==="assistant"&&message.answer&&!isStopped(message.answer,message.content)?<LearnLinks texts={[message.content,...(message.answer.details??[]),...(message.answer.claimItems??[]).flatMap(item=>[item.reason,...(item.conditions??[])])]}/>:null}
         </div>
