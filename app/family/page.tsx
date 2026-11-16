@@ -135,7 +135,7 @@ export default function FamilyPage() {
                   return named.length ? <p data-testid="family-covered-for"><b>Covered for</b> {named.join(" · ")}. {see}</p>
                     : unknownOnly ? <p data-testid="family-covered-for"><b>Found</b> cover for {name}, but not yet what kind of cover it is. {see}</p>
                     : unknownToConfirm ? <p data-testid="family-covered-for"><b>Possible cover</b> for {name}, still to confirm: not yet what kind of cover it is. {see}</p>
-                    : null; })() ?? (member.policy_count ? <p>No cover found for them in your documents yet. <a className="text-link" href={`/ledger?member=${member.id}`}>See cover →</a></p> : null)}
+                    : null; })() ?? (member.policy_count ? <p>No cover found in {member.policy_count === 1 ? "this document" : "these documents"} yet. You can still ask about {member.policy_count === 1 ? "it" : "them"} in <Link className="text-link" href="/chat">Ask DearPolicy</Link>.</p> : null)}
               </div>
               <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>
                 <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name</label><input id={`fm-${member.id}-name`} value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} /></div>

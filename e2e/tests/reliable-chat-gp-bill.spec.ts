@@ -86,7 +86,7 @@ for (const [id, place] of [["GP-UNSAID", "unsaid"], ["GP-HOME", "home"], ["GP-AB
     expect(qi, "the panel GP line is quoted on the page").toBeGreaterThanOrEqual(0);
     expect(ls[qi + 1] ?? "", "the line directly under the panel GP quote is the whose-cover note").toMatch(NOTE);
     expect(ls[qi + 1] ?? "").toMatch(CONFIRM);
-    expect(t.shown).not.toMatch(/couldn.t confirm|could not confirm|returned an error/i);
+    expect(t.shown).not.toMatch(/couldn.t confirm|could not confirm|couldn.t finish|returned an error/i);
     expect(t.shown).not.toMatch(/S\$\s?800|S\$\s?30\b|S\$\s?1,000\b/);
     const abroad = ls.filter(ABROAD);
     if (place === "home") expect(abroad, "a bill in Singapore: the overseas-only line is not shown").toHaveLength(0);

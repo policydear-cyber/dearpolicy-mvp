@@ -26,7 +26,7 @@ const nav: NavItem[] = [
   { href: "/", label: "Home", icon: "home", tab: 1, also: ["/coverage", "/ledger", "/schedule"] },
   { href: "/policies", label: "Documents", icon: "documents", tab: 2 },
   { href: "/chat", label: "Ask DearPolicy", icon: "ask", tab: 3, short: "Ask", also: ["/claims"] },
-  { href: "/records", label: "Payments", icon: "payments", tab: 4 },
+  { href: "/records", label: "Premiums", icon: "payments", tab: 4 },
   { href: "/learn", label: "Learn", icon: "book" },
   { href: "/family", label: "Account settings", icon: "family", also: ["/household", "/usage"] },
 ];
@@ -210,9 +210,9 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
               <p>DearPolicy can&rsquo;t be reached right now. Check your connection, then refresh the page.</p>
             </div>
           )}
-          <div className="privacy-pill" data-tip={hosted ? "Your documents and questions are kept private to your household." : "Your documents and questions stay on this computer."} tabIndex={0}
-            aria-label={hosted ? "Hosted and encrypted. Your documents and questions are kept private to your household." : "Local-first. Your documents and questions stay on this computer."}>
-            <Icon name="lock" />{hosted ? "Private & encrypted" : "Local-first"}</div>
+          <div className="privacy-pill" data-tip={hosted ? "Only people in your household can see your documents and questions in DearPolicy." : "Your documents and questions stay on this computer."} tabIndex={0}
+            aria-label={hosted ? "Private to your household. Only people in your household can see your documents and questions in DearPolicy." : "Local-first. Your documents and questions stay on this computer."}>
+            <Icon name="lock" />{hosted ? "Private to your household" : "Local-first"}</div>
         </div>
       </aside>
       <main className="main-content">

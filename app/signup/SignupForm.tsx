@@ -99,7 +99,7 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
         <button className="button primary" type="submit" disabled={busy || !email.trim() || password.length < 8} style={{ marginTop: 10 }} aria-describedby="su-ready-hint">
           {busy ? "Creating…" : "Create account"}
         </button>
-        {!busy && (!email.trim() || password.length < 8) ? <p id="su-ready-hint" className="field-hint">Enter your email and a password of at least 8 characters to continue.</p> : null}
+        {!busy && !email.trim() ? <p id="su-ready-hint" className="field-hint">Enter your email to continue.</p> : null}
       </form>
       <p style={{ marginTop: 16 }}>
         Already have an account? <Link href={inviteNext ? `/login?next=${encodeURIComponent(inviteNext)}` : "/login"}>Sign in</Link>

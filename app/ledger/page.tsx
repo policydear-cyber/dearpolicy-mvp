@@ -174,7 +174,7 @@ function LedgerCoveragePage(){
         </select>
       </div>
     </div>
-    {loaded&&!rows.length&&!lines.length&&!error?<div className="empty-card">{(readStalled||stuck.length)&&!retrying?"Nothing to show yet, because those documents couldn’t be read. Try again above, or ask about them in Ask DearPolicy.":reading.pending>0||reading.inProgress?"Nothing to show yet. Rows appear here once your documents have been read.":"Nothing here yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you."}</div>:null}
+    {loaded&&!rows.length&&!lines.length&&!error?<div className="empty-card">{(readStalled||stuck.length)&&!retrying?`Nothing to show yet, because those documents couldn’t be read. ${(stuck.length?canRetryNow(stuck):readStalled)?"Try again above, or ask":"You can still ask"} about them in Ask DearPolicy.`:reading.pending>0||reading.inProgress?"Nothing to show yet. Rows appear here once your documents have been read.":"Nothing here yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you."}</div>:null}
     {loaded&&(rows.length||lines.length)?people.map(person=><section className="section coverage-person" key={person.name} data-testid="coverage-person">
       <div className="section-heading"><h2>{person.name}</h2></div>
       {/* At a glance: the kinds of cover found, then the main kinds that are not in the documents. */}

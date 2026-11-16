@@ -21,9 +21,9 @@ export const metadata: Metadata = {
 };
 
 const STEPS: Array<{ icon: IconName; title: string; text: string }> = [
-  { icon: "upload", title: "Upload your documents", text: "Policy schedules, policy wordings, certificates and benefit summaries from any insurer, in English. PDFs, scans and phone photos all work." },
+  { icon: "upload", title: "Upload your documents", text: "Policy schedules, policy wordings, certificates and benefit summaries from any insurer, in English. PDFs work best; clear scans and phone photos work too." },
   { icon: "family", title: "Link each one to a person", text: "Say whose cover each document is. A policy for your daughter stays hers, even when it shares a policy number with someone else\u2019s." },
-  { icon: "ask", title: "Ask in plain words", text: "“Is Mei covered if she breaks her arm?” DearPolicy answers from your own documents and shows the page each answer came from." },
+  { icon: "ask", title: "Ask in plain words", text: "“Is Mei covered if she breaks her arm?” Ask the way you would ask a friend who has read every page." },
 ];
 
 const HELPS: Array<{ icon: IconName; title: string; text: string }> = [
@@ -35,8 +35,7 @@ const HELPS: Array<{ icon: IconName; title: string; text: string }> = [
 
 const LIMITS = [
   "It explains your documents. It doesn’t sell, compare or recommend insurance, and it isn’t financial advice.",
-  "It doesn’t decide claims. Your insurer decides what is paid, after checking the claim.",
-  "An amount it works out for your situation is labelled as an illustration from the policy\u2019s own terms. It is not a promise of payment.",
+  "It doesn’t decide claims or promise payment. An amount it works out for you is an illustration from the policy\u2019s own terms; your insurer decides what is paid.",
   "If something isn’t in your documents, it says so instead of guessing.",
 ];
 
@@ -55,7 +54,6 @@ export default function WelcomePage() {
           </p>
           <div className="landing-actions">
             <Link className="button primary" href="/signup" data-testid="landing-sign-up">Create an account</Link>
-            <Link className="button secondary" href="/login" data-testid="landing-sign-in">Sign in</Link>
           </div>
           <p className="landing-small">It explains your policies. It doesn&rsquo;t sell you one.</p>
         </div>
@@ -129,7 +127,7 @@ export default function WelcomePage() {
         <p className="landing-lead">Create an account, upload a document, and ask your first question.</p>
         <div className="landing-actions">
           <Link className="button primary" href="/signup">Create an account</Link>
-          <Link className="button secondary" href="/login">Sign in</Link>
+          <span className="landing-small">Already have one? <Link className="text-link" href="/login">Sign in</Link></span>
         </div>
       </section>
     </div>

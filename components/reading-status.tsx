@@ -31,14 +31,22 @@ const label = (d: ReadingDocument) => d.name?.trim() || "Untitled document";
 export const stuckTitle = (stuck: ReadingDocument[], page: string) =>
   stuck.length === 1 ? `“${label(stuck[0])}” couldn’t be read for ${page} yet.` : `${stuck.length} documents couldn’t be read for ${page} yet.`;
 
-/** One line per stuck document: its name (linking to it in Documents), why, and when it is tried again. */
+/** One line per stuck document: its name (linking to it in Documents), why, and when it is tried again. When every
+ * document stuck for the same reason and is tried again at the same time, the reason is said once, after the names. */
 export function StuckDocuments({ stuck }: { stuck: ReadingDocument[] }) {
-  return <ul className="stuck-docs" data-testid="stuck-documents">{stuck.map((d) => {
-    const retry = d.state === "backed_off" && d.retryAfter ? when(d.retryAfter) : null;
-    return <li key={d.policyId}>
-      <a href={`/policies#doc-${d.policyId}`}>{label(d)}</a>
-      {d.reason ? <span>{d.reason.replace(/\.?\s*$/, ".")}</span> : null}
-      {retry ? <span className="stuck-retry">DearPolicy tries again {retry}.</span> : null}
-    </li>;
-  })}</ul>;
+  const retryOf = (d: ReadingDocument) => d.state === "backed_off" && d.retryAfter ? when(d.retryAfter) : null;
+  const reasonOf = (d: ReadingDocument) => d.reason ? d.reason.replace(/\.?\s*$/, ".") : null;
+  const shared = stuck.length > 1 && stuck.every((d) => reasonOf(d) === reasonOf(stuck[0]) && retryOf(d) === retryOf(stuck[0]));
+  const reason = shared ? reasonOf(stuck[0]) : null, retry = shared ? retryOf(stuck[0]) : null;
+  return <>
+    <ul className="stuck-docs" data-testid="stuck-documents">{stuck.map((d) => {
+      const own = shared ? null : retryOf(d);
+      return <li key={d.policyId}>
+        <a href={`/policies#doc-${d.policyId}`}>{label(d)}</a>
+        {!shared && reasonOf(d) ? <span>{reasonOf(d)}</span> : null}
+        {own ? <span className="stuck-retry">DearPolicy tries again {own}.</span> : null}
+      </li>;
+    })}</ul>
+    {reason || retry ? <span className="stuck-reason">{reason}{reason && retry ? " " : ""}{retry ? `DearPolicy tries again ${retry}.` : ""}</span> : null}
+  </>;
 }
