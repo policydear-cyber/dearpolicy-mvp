@@ -25,7 +25,7 @@ export default function HouseholdDeletedPage() {
   }
   return (
     <div className="page" style={{ maxWidth: 560, paddingTop: 72 }} data-testid="household-deleted">
-      <div className="eyebrow">HOUSEHOLD DELETED</div>
+      <div className="eyebrow">Household deleted</div>
       <h1>Your household has been deleted.</h1>
       <p className="lead">Its family members, documents, claims and chats have been removed, and DearPolicy no longer uses any of them. You can still sign in with the same email.</p>
       <div className="hero-actions" style={{ marginTop: 20 }}>

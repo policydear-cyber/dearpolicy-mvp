@@ -78,3 +78,19 @@
 .auth-frame .page { margin-inline: auto; padding-top: clamp(32px, 8vh, 88px) !important; }
 .auth-frame .page a:not(.button) { color: var(--brand-ink); font-weight: 600; }
 .auth-frame .page a:not(.button):hover { text-decoration: underline; }
+
+/* Wallet of cover: the hero holds a fan of policy sheets above the example answer. */
+.landing-wallet { display: grid; gap: 8px; min-width: 0; }
+.landing-fan { position: relative; height: 250px; }
+.landing-fan .policy-sheet { position: absolute; width: min(180px, 40%); top: 20px; }
+.landing-fan .policy-sheet:nth-child(1) { left: 6%; transform: rotate(-8deg); }
+.landing-fan .policy-sheet:nth-child(2) { left: 30%; top: 4px; transform: rotate(-1deg); }
+.landing-fan .policy-sheet:nth-child(3) { left: 54%; top: 24px; transform: rotate(6deg); }
+@media (max-width: 640px) {
+  .landing-fan { height: 220px; overflow: hidden; margin: 0 -16px; }
+  .landing-fan .policy-sheet { width: 150px; }
+  .landing-fan .policy-sheet-head { font-size: 13px; padding: 12px; }
+  .landing-fan .policy-sheet:nth-child(1) { left: 8%; }
+  .landing-fan .policy-sheet:nth-child(2) { left: 31%; }
+  .landing-fan .policy-sheet:nth-child(3) { left: 54%; }
+}
