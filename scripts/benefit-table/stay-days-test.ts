@@ -762,8 +762,21 @@ for (const name of ["Hospital Cash Benefit (Rider)", "Hospital Cash Benefit (Opt
   "Hosp Cash Benefit"])
   ROUND2.push([`R1 control name '${name}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
 // TE journeys W2: a qualifier on the line below the row, alone or in brackets, says whose or which stays: none.
-for (const below of ["(Spouse)", "(for all lives)", "(Child)", "Infant", "(Plan B)", "Maid", "(C)", "Lee Mei Ling", "(Accident only)", "- spouse"])
+for (const below of ["(Spouse)", "(for all lives)", "(Child)", "Infant", "(Plan B)", "Maid", "(C)", "(Accident only)", "- spouse", "Spouse", "Joint life"])
   ROUND2.push([`W2 line below '${below}': none`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, null]);
+// Critic #515 round 5: a heading, footer, note or cell under the row, or any line not straight under it, is not a qualifier.
+for (const below of ["Surgical Benefits", "OUTPATIENT BENEFITS", "Exclusions", "Other Benefits", "Section B", "Policy Schedule", "Riders", "Surgical benefit",
+  "Outpatient", "Ambulance", "Kestrel Life Singapore Ltd", "Kestrel Term Guard", "Notes", "Remarks", "Confidential", "Continued overleaf", "Effective date",
+  "See notes", "Terms apply", "Covered", "Yes", "N/A", "Not applicable", "Guaranteed", "For the Life Assured", "For the insured", "(see note 2)"])
+  ROUND2.push([`W2b control line below '${below}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, below === "(see note 2)" ? null : "S$3,000"]);
+ROUND2.push(["W2c a qualifier after a blank line is not the row's own fragment", Q1(", from the 3rd day, up to 30 days per stay"), ["", "Infant"], R3O, 40, "S$3,000"]);
+test("stay-wrap W2 a household member's name on the line under Tan's row: none", () => {
+  const h = household([{ person: TAN, row: Q1(", from the 3rd day, up to 30 days per stay"), below: ["Lee Mei Ling"], value: 100, maxDays: 30, fromDay: 3 },
+    { person: LEE, row: "Surgical benefit\tS$500 per operation", value: 500, maxDays: null }]);
+  const a = ask(h, TAN, ["I was in hospital for 40 days. How much will I get?"], { perDay: { stayDays: 40 } });
+  assert.ok(a.row);
+  assert.equal(stayCard(a)?.amount?.text ?? null, null, JSON.stringify(a.kept));
+});
 // A household member's name in the row's name: that person's row, never worked out as another's.
 test("stay-wrap Q2 name 'Mei Ling hospital cash' with Lee Mei Ling in the household: none", () => {
   const h = household([{ person: TAN, row: Q1(", from the 3rd day, up to 30 days per stay", "Mei Ling hospital cash"), value: 100, maxDays: 30, fromDay: 3, benefit: "Mei Ling hospital cash" },

@@ -420,10 +420,14 @@ export function stayBlock(pageText: string, offset: number): StayBlock {
   let limitHeading: string | null = null;
   // Once another benefit's own row has been passed, a line below may be that row's, not this one's (stay-wrap).
   let after = false;
+  // Whether the next line kept is the one printed straight under the row's own lines, with no blank or other line between.
+  let next = true;
   // Each line with the lines its cells wrap onto ("…instead of the daily" / "hospital income"), so a wrapped part of
   // another row stays with that row (stay-wrap, TE-ACC-20261116).
   for (const l of logicalLines(pageText.slice(row.end + 1).split("\n").slice(own.used))) {
-    if (!l.trim()) continue;
+    if (!l.trim()) { next = false; continue; }
+    const straight = next;
+    next = false;
     const table = nextTableRow(l);
     // A table's heading row is left out, never the end of the block: a cap printed under it may be this row's (Critic
     // P392 F). Was (round 5): it ended the block.
@@ -460,13 +464,13 @@ export function stayBlock(pageText: string, offset: number): StayBlock {
     const numbers = [...l.matchAll(/\d+/g)].map((m) => Number(m[0]));
     const rest = l.replace(/\b\d+\s*(?:st|nd|rd|th)?\b|\bdays?\b/gi, " ");
     if (numbers.length && numbers.every((n) => days.has(n)) && !MONEY_IN_VALUE.test(l) && !STAY_BLOCK_WORDS.test(rest) && !CAP_OR_RULE.test(rest)) continue;
-    kept.push({ text: l, after });
+    kept.push({ text: l, after, ...(straight ? { next: true } : {}) });
   }
   return { text: [own.text, ...kept.map((k) => k.text)].join(" "), tail: kept.map((k) => k.text).join(" "), own: own.text, labelMore: own.labelMore, wrapped: own.used > 0, lines: kept, others };
 }
 /** One line kept below a daily row, with the lines that wrap onto it joined (logicalLines); after: another benefit's
  * own row stands between it and the daily row. */
-export type StayLine = { text: string; after: boolean };
+export type StayLine = { text: string; after: boolean; next?: boolean };
 /** A daily row and the lines below it (stayBlock). own: the row's line with the lines its cells wrap onto; labelMore: the
  * words of its name that wrapped onto a line of their own; lines: every line kept below it; others: the names of the
  * other benefits' rows passed on the way. */
@@ -2026,7 +2030,7 @@ function nameAbbreviation(name: string, abbr: string, ownWords: string[] = []): 
 /** Whether a line under a daily row is a short fragment that may qualify it: a bracket, a "- x" clause, or up to four
  * words with no figure and no sentence end, that is not neutral benefit words, a harmless, cap or descriptive bracket, or
  * the row's own code. */
-function qualifierFragment(line: string, codeName: string, ownWords: string[]): boolean {
+function qualifierFragment(line: string, codeName: string, ownWords: string[], people: string[] = []): boolean {
   const t = line.trim();
   if (!t) return false;
   const bracket = /^\((.*)\)\s*[*†‡]?$/.exec(t);
@@ -2035,9 +2039,23 @@ function qualifierFragment(line: string, codeName: string, ownWords: string[]): 
   if (!bracket && !dash && !short) return false;
   const inner = (bracket?.[1] ?? dash?.[1] ?? t).trim();
   if (HARMLESS_BRACKET.test(inner) || CAP_BRACKET.test(inner) || DESCRIPTIVE_BRACKET.test(inner) || neutralBracket(inner)) return false;
-  if (/^[A-Z]{1,5}$/.test(inner) && !QUALIFIER_CAPS.has(inner) && nameAbbreviation(codeName, inner, ownWords)) return false;
-  return true;
+  const code = /^[A-Z]{1,5}$/.test(inner);
+  if (code && !QUALIFIER_CAPS.has(inner) && nameAbbreviation(codeName, inner, ownWords)) return false;
+  // A bracket or "- x" clause is the row's own words: anything but neutral words may qualify it. A bare short line may also be
+  // a heading, a footer or a cell ("Surgical Benefits", "Notes", "Covered"): only a qualifier word, a code or a household
+  // member's name in it qualifies the row.
+  if (bracket || dash) return true;
+  if (code) return true;
+  // "For the Life Assured", "For the insured": the policy's own life, said of every row.
+  if (/^for\s+the\s+(?:life\s+(?:assured|insured)|insured(?:\s+person)?)$/i.test(inner)) return false;
+  const words: string[] = inner.toLowerCase().match(/[\p{L}']+/gu) ?? [];
+  if (NAME_QUALIFIER.test(inner) || words.some((w) => NAME_QUALIFIER_WORDS.has(w) || FRAGMENT_QUALIFIER_WORDS.has(w))) return true;
+  return people.some((p) => (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []).some((w) => words.includes(w)));
 }
+/** Words that, alone on the line under a daily row, say whose or which stays it pays: people, roles, causes, places. */
+const FRAGMENT_QUALIFIER_WORDS = new Set(("infant infants baby babies newborn toddler student students youth retiree retirees pensioner staff "
+  + "helper helpers maid maids domestic payor policyholder proposer grandparent grandparents grandchild mum mom dad joint second co-insured "
+  + "travel psychiatric dengue hospice private government ward-class group corporate female male women men").split(" "));
 /** Words in a line below a row that tie an amount to it ("* Hospital cash counts towards this amount", "including daily
  * benefits", "shared with"): a limit this row may share, so no figure (gate #508 round 3 NEW-HIGH 1). */
 const SHARE_WORDS = /\b(?:counts?\s+(?:towards?|against)|count\s+(?:towards?|against)|includ(?:e|es|ed|ing)|inclusive\s+of|part\s+of|within|shared?|sharing|combined|together|aggregate|in\s+total)\b/i;
@@ -2126,9 +2144,10 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
     if (SHARE_WORDS.test(said)) shared = true;
     // A fragment under the row and before any other benefit's row, alone or in brackets ("(Spouse)", "(for all lives)",
     // "Infant", "Lee Mei Ling", "- spouse", "(C)"), reads as the row's own qualifier: it may say whose or which stays the
-    // row pays, so no figure, unless it holds only neutral benefit words, a harmless or cap bracket (TE journeys W2). A
-    // line of cells (another table's row or heading) is not a fragment.
-    if (!l.after && !l.tabbed && qualifierFragment(said, codeName, ownWords)) shared = true;
+    // row pays, so no figure, unless it holds only neutral benefit words, a harmless or cap bracket (TE journeys W2). Only
+    // the line printed straight under the row; a line of cells (another table's row or heading) is not a fragment
+    // (Critic #515 round 5).
+    if (l.next && !l.after && !l.tabbed && qualifierFragment(said, codeName, ownWords, people)) shared = true;
     const named = said.replace(/\b(?:in\s+|of\s+|per\s+|each\s+|any\s+)?hospital(?:\s+(?:stays?|admissions?|confinements?))?\b(?!\s+(?:cash|income|benefit|allowance))/gi, " ");
     if (l.after && distinct.some((w) => new RegExp(String.raw`\b${w}`, "i").test(named))) shared = true;
     const mark = l.after && !marked ? `${PAST_OTHER} ` : "";
