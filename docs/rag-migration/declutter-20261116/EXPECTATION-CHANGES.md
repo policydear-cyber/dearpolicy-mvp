@@ -31,7 +31,10 @@ no promised payment, returned = saved = reopened.
 
 5. (Critic on #512) Only a definition printed by the SAME policy (its own document, or a document of the person with the same policy
    number) unlocks the amount; another policy's "Other Fracture means …" does not (B16, shown able to fail by a mutation on a disposable
-   copy). A follow-up that adds a new amount beside a repeated one leads with "The amounts above still apply." (B15).
+   copy).
+6. Item 4 is narrowed after the CI suites: only a PURE repeat (every sentence said word for word just before) is shortened. A reply
+   that adds anything of its own keeps the earlier sentences beside it. Dropping them on partial repeats lost a bound amount and its
+   condition in rag2:conv4 R1-R5, rag2:binding and the r7 trap items, which pass on main (B15 unit check).
 
 ## Test changes
 
@@ -49,6 +52,7 @@ no promised payment, returned = saved = reopened.
 | same | SBb turn 1 | "Neither document says whether one amends, replaces or adds to the other" | "neither document says which one applies" | folded into the one-line frame |
 | same | grader v8 correction journey | verdict PASS | the only failing check may be K2, and K2 must hold without its "not a payment" clause | the registered grader (`scripts/rag2-live/structured-check.ts`) is **not edited**; its K2 still asks for the removed clause |
 | `scripts/reliable-chat-pr57-acceptance-test.ts` | R4 | `/never a total|not to be added/` | no total in any form (no sum, "in total", "combined", "added", "plus") | phrase replaced by behaviour |
+| `scripts/reliable-chat-death-journey.ts` | E13 | Simple S$2,500 and the PA summary's Other Fracture S$300,000 | S$2,500, and the PA summary's Other Fracture row named with its page (page 8) and no S$300,000 | undefined case (DC); both schedules still required |
 | `e2e/tests/reliable-chat-fx-repairs.spec.ts` | FR1 footnote | certificate paragraph found by its S$120,000 | found by its "also lists … under Other Fracture" line, and S$120,000 must not appear; the footnote checks are unchanged | the amount is no longer shown |
 | `e2e/tests/reliable-chat-fracture.spec.ts` | FR1 | both amounts with "never a total", dated base, relationship note; reply repeats both | as the replay A-checks above | same |
 

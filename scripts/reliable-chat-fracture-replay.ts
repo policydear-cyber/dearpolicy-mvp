@@ -209,15 +209,14 @@ async function main() {
     check("B11b (wrong-person control) Grace's conversation in the same library keeps her own S$600,000 -> S$120,000 and never Daniel's S$160,000 / S$800,000", /S\$120,000/.test(g.v) && /S\$600,000/.test(g.v) && !/S\$160,000|S\$800,000/.test(g.v) && g.shown === g.saved, g.v);
     check("B11c (wrong-person control) the fixed-limit alternative (25% x S$5,000 = S$1,250) is the same for both people and is not scaled by either person's sum", /S\$1,250/.test(d.v) && /S\$1,250/.test(g.v) && !/S\$200,000|S\$150,000/.test(d.v + g.v), d.v + "\n" + g.v);
   }
-  // B15 (Critic on #512, M1): a follow-up that repeats the earlier amount AND adds a new one leads with "The amounts above still apply.",
-  // so the new amount never reads as the whole answer; the repeated sentence is not said again. (Unit check of the hook's own rule: in
-  // these libraries the server already adds the second schedule on turn 1, so no scripted turn 2 produces a genuinely new amount.)
+  // B15 (Critic on #512, M1): only a PURE repeat is shortened. A reply that adds a new amount keeps the earlier amount beside it (nothing
+  // dropped, no lead line), so the new amount never reads as the whole answer; a reply with nothing new gets the one-line lead.
   {
     const { followUp } = await import("@/lib/rag2/loop/hook");
     const A = { text: "If X applies, the conditional illustration is S$1,250 ...", kind: "conditional_illustration" }, B = { text: "If Y applies, the conditional illustration is S$9,000 ...", kind: "conditional_illustration" }, F = { text: "Some printed term.", kind: "printed" };
-    const both = followUp([A, B], [A.text]), same = followUp([A], [A.text]), none = followUp([A, B], []), factsOnly = followUp([F, B], [F.text]);
-    check("B15 (M1) new amount beside a repeated one: 'The amounts above still apply.' then only the new amount; all repeated: 'That doesn't change the amounts above.'; nothing repeated: no lead; repeated fact beside a new amount: 'My answer above still stands.'",
-      both.lead === "The amounts above still apply." && both.fresh.length === 1 && both.fresh[0] === B && same.lead === "That doesn't change the amounts above." && !same.fresh.length && none.lead === null && none.fresh.length === 2 && factsOnly.lead === "My answer above still stands.", JSON.stringify({ both, same, none, factsOnly }));
+    const both = followUp([A, B], [A.text]), same = followUp([A], [A.text]), none = followUp([A, B], []), factsOnly = followUp([F], [F.text]);
+    check("B15 (M1) a new amount beside a repeated one keeps both and adds no lead; a pure repeat becomes 'That doesn't change the amounts above.' (or 'my answer above' with no amount)",
+      both.lead === null && both.fresh.length === 2 && same.lead === "That doesn't change the amounts above." && !same.fresh.length && none.lead === null && none.fresh.length === 2 && factsOnly.lead === "That doesn't change my answer above.", JSON.stringify({ both, same, none, factsOnly }));
   }
   // B16 (Critic on #512, M2): "Other Fracture means ..." printed by ANOTHER policy of Grace's (a different policy number) does not define the
   // certificate's term: the S$120,000 stays hidden and the no-amount line with "Ask the insurer" is said, with no S$ figure in it.

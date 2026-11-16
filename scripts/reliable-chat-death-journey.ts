@@ -118,7 +118,10 @@ async function schedules() {
     const evalCalls = (await lastTrace(h, c.id)).toolCalls.filter((t: any) => t.name === "evaluate_benefit");
     check("E11 the dismemberment schedule is excluded, with its reason", !!dis && dis.disposition === "excluded" && /dismemberment benefit, not the fracture/.test(dis.reason), JSON.stringify(rows));
     check("E13 zero evaluation calls for the dismemberment schedule", !evalCalls.some((t: any) => String(t.args?.benefit_id) === dis?.benefitId), JSON.stringify(evalCalls.map((t: any) => t.args)));
-    check("E13 both requested fracture schedules stay complete (Simple Fracture S$2,500 and the PA summary's Other Fracture S$300,000)", /S\$2,500/.test(out[1]) && /S\$300,000/.test(out[1]), out[1]);
+    // ORIG E13 (declutter, 16 Nov 2026; docs/rag-migration/declutter-20261116/EXPECTATION-CHANGES.md): required the PA summary's S$300,000.
+    // That row is labelled "(Other Fracture)", which no document of this library defines, so it is now named without an amount (DC: an
+    // unconfirmed amount is not shown). Both schedules must still be present: S$2,500 and the PA summary's Other Fracture row, page 8.
+    check("E13 both requested fracture schedules stay complete (Simple Fracture S$2,500; the PA summary's Other Fracture row named with its page, no unconfirmed S$300,000)", /S\$2,500/.test(out[1]) && /Group Personal Accident Benefit Summary \(page 8\) also lists “Jaw, Pelvis, Leg, Ankle or Knee” under Other Fracture/.test(out[1]) && !/S\$300,000/.test(out[1]), out[1]);
     check("E10 the fracture answer states no window printed under the dismemberment section", !/365 days/.test(out[1]), out[1]);
   });
   await withHousehold(DJ, async (h, install) => {

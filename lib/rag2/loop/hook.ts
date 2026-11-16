@@ -29,20 +29,18 @@ export const INSURER_DECIDES = "The insurer decides what is paid.";
 /** A follow-up whose amounts are exactly those of the answer just before it (A3). */
 export const UNCHANGED_AMOUNTS = "That doesn't change the amounts above.";
 export const UNCHANGED_ANSWER = "That doesn't change my answer above.";
-/** A follow-up that adds a new amount beside earlier ones it does not repeat (Critic on #512, M1). */
-export const STILL_APPLY = "The amounts above still apply.";
-export const ANSWER_STANDS = "My answer above still stands.";
 export const ESTIMATE_NOTICE = "Indicative estimates are worked out from your documents and what you have told me; they are not a payout, and the insurer decides what it pays.";
 
 const isAmountSentence = (x: { kind?: string }) => x.kind === "conditional_illustration" || x.kind === "indicative_estimate";
-/** A3 / M1 (#512): what a follow-up says of its composed sentences, given what the answer just before it said (exact text). Repeated
- * sentences are dropped; one line says the earlier answer stands -- "The amounts above still apply." beside a NEW amount, so the new one
- * never reads as the whole answer, "That doesn't change the amounts above." when nothing new is worked out. */
+/** A3 (#512): what a follow-up says of its composed sentences, given what the answer just before it said (exact text). Only a reply
+ * that would be a PURE repeat -- every sentence said word for word just before -- is shortened, to "That doesn't change the amounts
+ * above." (or "my answer above") plus its next steps. A reply that adds anything of its own (a new fact, a new amount, the household's
+ * new detail said back) keeps the earlier sentences it restates beside it: they frame the new part, and dropping them made answers lose
+ * a bound amount and its condition (rag2:conv4 R1-R5, r7 trap items, binding, death journey on #512). Critic M1 is moot as a result. */
 export function followUp<T extends { text: string; kind?: string }>(ordered: T[], previous: string[]): { repeated: T[]; fresh: T[]; lead: string | null } {
   const said = new Set(previous);
-  const repeated = ordered.filter((x) => said.has(x.text)), fresh = ordered.filter((x) => !said.has(x.text));
-  const lead = !repeated.length ? null : fresh.some(isAmountSentence) ? (repeated.some(isAmountSentence) ? STILL_APPLY : ANSWER_STANDS) : repeated.some(isAmountSentence) ? UNCHANGED_AMOUNTS : UNCHANGED_ANSWER;
-  return { repeated, fresh, lead };
+  if (!ordered.length || !ordered.every((x) => said.has(x.text))) return { repeated: [], fresh: ordered, lead: null };
+  return { repeated: ordered, fresh: [], lead: ordered.some(isAmountSentence) ? UNCHANGED_AMOUNTS : UNCHANGED_ANSWER };
 }
 export const RESUME_NOTE = "When you’re ready, here is the question I was on.";
 /** The composer's caveats an asking turn says before its question (never "nothing could be confirmed"). */
