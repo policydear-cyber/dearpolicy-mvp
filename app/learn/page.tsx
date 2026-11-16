@@ -19,7 +19,7 @@ export default function LearnPage() {
   const pages: Entry[] = [
     ...GUIDES.map((g) => ({
       slug: g.slug, title: g.title, summary: g.summary, icon: g.icon, group: g.group, cover: learnCover(g.icon),
-      meta: g.region ? `From ${sourceNames(g).join(" and ")}` : "General guide", minutes: readMinutes(g),
+      meta: g.region ? `From ${sourceNames(g).join(" and ")}` : "", minutes: readMinutes(g),
     })),
     { ...TERMS_PAGE, icon: "read", cover: "other", meta: "Glossary" },
   ];
@@ -48,7 +48,7 @@ export default function LearnPage() {
                   <span className="lsh-body">
                     <strong>{page.title}</strong>
                     <span className="lsh-sum">{page.summary}</span>
-                    <span className="lsh-foot"><span>{page.meta}</span>{page.minutes ? <span>{page.minutes} min read</span> : null}</span>
+                    <span className="lsh-foot">{page.meta ? <span>{page.meta}</span> : null}{page.minutes ? <span>{page.minutes} min read</span> : null}</span>
                   </span>
                 </Link>
               </li>

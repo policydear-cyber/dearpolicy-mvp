@@ -101,7 +101,7 @@ export const LIMIT_TEXT: Record<MeterStop["kind"], string> = {
   household_allowance: "I couldn’t look that up: this household has used its monthly allowance for assistant answers. Your documents and their pages are still available; assistant answers resume next month.",
   household_spend_cap: "I couldn’t look that up: this household has reached DearPolicy’s monthly model-use limit. Your documents and their pages are still available; assistant answers resume next month.",
   run_budget: "I couldn’t look that up: the model-use budget set for this test run is used up, so no model was called.",
-  model_error: "I couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.",
+  model_error: "I couldn’t finish this answer, so I stopped rather than guess. Nothing was saved from this attempt; please try again in a moment.",
 };
 /** Agent F: the household says the person was wrong ("sorry, it was Chloe, not Ethan", "I mixed them up").
  * PR #57 follow-up (critic H1): a correction MOVES the event and takes it off the first person, so the cue must be explicit about the

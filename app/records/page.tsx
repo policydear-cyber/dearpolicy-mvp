@@ -47,15 +47,13 @@ export default function RecordsPage() {
 
   return (
     <div className="page">
-      <header className="page-header compact"><div><h1><span className="title-icon"><Icon name="payments"/></span>Payments</h1><p className="lead">What each person&apos;s cover costs, from policy schedules, renewal notices, receipts and statements.</p></div></header>
-      {/* One place to upload (Documents): a receipt or renewal notice uploaded there is read for its payments too. */}
-      <p className="note"><Icon name="upload"/> To add a payment, upload the notice or receipt on <Link href="/policies" className="text-link">Documents</Link>.</p>
+      <header className="page-header compact"><div><h1><span className="title-icon"><Icon name="payments"/></span>Premiums</h1><p className="lead">What each person&apos;s cover costs, from policy schedules, renewal notices, receipts and statements.</p></div></header>
       {peopleFailed && <div className="alert error" role="alert">What your cover costs could not be loaded. Please refresh the page in a moment.</div>}
       {!people && !peopleFailed && <div className="empty-card" role="status">Loading what your cover costs…</div>}
       {people?.map((person)=><PersonPremiums person={person} key={person.id}/>)}
       {people && !people.length && <div className="empty-card">Add the people your policies cover in <Link href="/family" className="text-link">Account settings</Link>, then upload their documents. Their premiums are listed here.</div>}
       <section className="section">
-        <div className="section-heading"><div><div className="icon-heading"><span className="title-icon"><Icon name="receipt"/></span><h2>Payment records</h2></div><p className="note premium-cost-line">Newest first.</p></div></div>
+        <div className="section-heading"><div><div className="icon-heading"><span className="title-icon"><Icon name="receipt"/></span><h2>Payment records</h2></div>{records && records.length>1 && <p className="note premium-cost-line">Newest first.</p>}</div></div>
         <div className="payment-list">
           {failed && <div className="alert error" role="alert">Your payments could not be loaded. Please refresh the page in a moment.</div>}
           {!records && !failed && <div className="empty-card" role="status">Loading your payments…</div>}

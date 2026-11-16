@@ -67,7 +67,7 @@ export default async function LearnGuidePage({ params }: { params: Promise<{ slu
               {group ? <p className="learn-shelf-tag">{group.title}</p> : null}
               <h1>{guide.title}</h1>
               <p className="lead">{guide.summary}</p>
-              <p className="lh-meta">{readMinutes(guide)} min read{guide.region ? ` · ${guide.region.name}` : " · General guide"}</p>
+              <p className="lh-meta">{readMinutes(guide)} min read{guide.region ? ` · ${guide.region.name}` : ""}</p>
             </div>
             <div className="lh-picture"><Pictogram icon={guide.icon} size={112} /></div>
           </header>

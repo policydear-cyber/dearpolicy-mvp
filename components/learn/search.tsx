@@ -58,7 +58,7 @@ export function LearnSearch({ entries }: { entries: LearnSearchEntry[] }) {
   return (
     <div className="learn-search" role="search">
       <label htmlFor={id}>Search the library</label>
-      <input id={id} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. deductible, rider" autoComplete="off" data-testid="learn-search" />
+      <input id={id} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="For example: deductible, rider" autoComplete="off" data-testid="learn-search" />
       <div aria-live="polite">
         {typed ? (results.length ? (
           <ul className="learn-results" data-testid="learn-results">

@@ -25,7 +25,7 @@ export default function PublicShell({ children, onLearn, authPage = false }: { c
           <Link className={`public-nav-link${onLearn ? " active" : ""}`} href="/learn" aria-current={onLearn ? "page" : undefined}>Learn</Link>
           {!authPage && <>
             <Link className="public-nav-link" href="/login" data-testid="public-sign-in">Sign in</Link>
-            <Link className="button primary compact" href="/signup" data-testid="public-sign-up">Create account</Link>
+            <Link className="button primary compact" href="/signup" data-testid="public-sign-up">Create an account</Link>
           </>}
         </nav>
       </header>
@@ -38,7 +38,7 @@ export default function PublicShell({ children, onLearn, authPage = false }: { c
             <span aria-hidden="true"> · </span>
             <Link className="text-link" href="/login">Sign in</Link>
             <span aria-hidden="true"> · </span>
-            <Link className="text-link" href="/signup">Create account</Link>
+            <Link className="text-link" href="/signup">Create an account</Link>
           </>}
         </p>
       </footer>
