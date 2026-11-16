@@ -39,10 +39,20 @@ const CASE_TERM = /\b((?:[A-Za-z]+\s+)?Fracture)(?:s|\/s|\(s\))?(?![A-Za-z])/i;
 /** A case name outside brackets needs its qualifier ("Other Fracture", "Compound Fracture"): a plain "Fractures" heading or "Bone
  * Fracture" title names no case. */
 const QUALIFIED = String.raw`(?!(?:bone|bones|the|all|any|for|of)\s)[A-Za-z]+\s+Fractures?`;
-const caseOf = (label: string): { tag: string; row: string } | null => {
+/** The kinds of fracture a benefit's own name prints ("Simple Fracture or Compound Fracture due to Accident" -> simple, compound). */
+const namedKinds = (benefit: string): Set<string> =>
+  new Set([...benefit.matchAll(new RegExp(String.raw`\b(${QUALIFIED})`, "gi"))].map((m) => m[1].toLowerCase().replace(/\s+fractures?$/, "")));
+const caseOf = (label: string, benefit = ""): { tag: string; row: string } | null => {
   const b = CASE_BRACKET.exec(label);
   const tag = b ? CASE_TERM.exec(b[1])?.[1] : null;
   if (b && tag) return { tag, row: label.slice(0, b.index).trim() };
+  // (TE journeys on main 9bca70a, W1) A bracket that names a kind without the word -- "(Compound)", "(Other)" -- under a benefit whose
+  // own name prints kinds of fracture is that kind's label: one of the kinds the name prints, or "Other", the kind it leaves over.
+  const word = b ? /^\s*([A-Za-z]+)\s*$/.exec(b[1])?.[1] : null;
+  if (b && word && /\bFractures?\b/i.test(benefit)) {
+    const kinds = namedKinds(benefit);
+    if (kinds.size && (kinds.has(word.toLowerCase()) || /^other$/i.test(word))) return { tag: `${word} Fracture`, row: label.slice(0, b.index).trim() };
+  }
   // (Test engineer on #512, F2c: the same label written another way -- "[Other Fracture]", "Arm … – Other Fracture", "Other Fracture:
   // Arm …". Only a labelling form: a row that merely names a bone's fracture, "Fracture of the skull", is not a case label.)
   const sq = /\s*\[([^\]]*)\]\s*$/.exec(label);
@@ -267,15 +277,17 @@ export function renderCalculation(resultId: string, d: Deps, alt?: { label: stri
     // the reported event is the document's to define, and these documents print no definition of it)
     // (a case a document of theirs defines -- DEFINED_CASE -- keeps its label whole and needs no note)
     const defined = definedCase(d.ctx).has(resultId);
-    const label = pct ? (defined ? pct.label : caseOf(pct.label)?.row ?? pct.label) : "";
-    const tagged = pct && !defined ? caseOf(pct.label)?.tag ?? null : null;
+    const label = pct ? (defined ? pct.label : caseOf(pct.label, c.benefit)?.row ?? pct.label) : "";
+    const tagged = pct && !defined ? caseOf(pct.label, c.benefit)?.tag ?? null : null;
     // (C4, Policy Evidence Reviewer / UX on C3: beside that figure, plainly: what is not defined, the household's own reported kind of
     // fracture, and that the insurer decides)
     const kind = tagged ? reportedValue(ATTRIBUTES[0], d.ctx.reportedFacts?.get(c.subjectId) ?? []).value : null;
     // (C6, Test engineer on C5: an untagged row of a benefit that names both kinds -- "Simple Fracture or Other Fracture due to Accident",
     // "Hip" -- carries the same plain note after a correction as a labelled row does: neither kind is defined here)
-    const bothKinds = !tagged && !defined && /\bSimple Fracture\b[^.]*\bOther Fracture\b/i.test(c.benefit) && ![...(d.ctx.benefitRecords?.values() ?? [])].some((r) => r.policy.id === c.policyId && r.definitions.length);
-    const undefinedNote = bothKinds ? " (the benefit names Simple Fracture and Other Fracture alike, and this row is labelled as neither; these documents do not define either kind, so the insurer decides how it applies)" : tagged ? ` (the row the document labels “${tagged}”; these documents do not define which fractures count as ${tagged}${kind ? `, or whether a${kind === "open" ? "n" : ""} ${kind} fracture is one` : ""}, so the insurer decides whether it applies)` : "";
+    // (W1: any benefit whose name prints two kinds or more -- "Simple Fracture or Compound Fracture" -- not only Simple and Other)
+    const kindsNamed = [...namedKinds(c.benefit)];
+    const bothKinds = !tagged && !defined && kindsNamed.length >= 2 && ![...(d.ctx.benefitRecords?.values() ?? [])].some((r) => r.policy.id === c.policyId && r.definitions.length);
+    const undefinedNote = bothKinds ? ` (the benefit names ${kindsNamed.map((k) => `${k[0].toUpperCase()}${k.slice(1)} Fracture`).join(" and ")} alike, and this row is labelled as neither; these documents do not define either kind, so the insurer decides how it applies)` : tagged ? ` (the row the document labels “${tagged}”; these documents do not define which fractures count as ${tagged}${kind ? `, or whether a${kind === "open" ? "n" : ""} ${kind} fracture is one` : ""}, so the insurer decides whether it applies)` : "";
     // (DC, 16 Nov 2026: "not a payment or an insurer's decision" is no longer said after every amount; the answer says once that the
     // insurer decides what is paid -- lib/rag2/loop/hook.ts INSURER_DECIDES)
     return `If the ${named} applies${pct ? ` to ${who}'s case “${label}”${undefinedNote}` : ""}${said}, the conditional illustration is ${money(c.amount, c.currency)}${pct && base ? `: ${pct.value}% of ${baseText}` : ""}${alt ? `, in the ${alt.label} (page ${alt.page})` : `, under the ${product}`}${rowNote(c.record?.rowNotes)}.`;
@@ -293,7 +305,7 @@ async function undefinedCaseOf(resultId: string, d: Deps): Promise<{ c: NonNulla
   const c = calcOutcomes(d.ctx).get(resultId);
   if (!c || c.kind !== "conditional_illustration" || c.calculator !== "lump_sum" || c.amount == null) return null;
   const pct = (c.record?.operands ?? []).find((o) => o.source === "document" && o.unit === "percent");
-  let cs = pct ? caseOf(pct.label) : null;
+  let cs = pct ? caseOf(pct.label, c.benefit) : null;
   if (pct && !cs) {
     const ev = c.evidence.find((e) => e.policyId === c.policyId && (e.passage?.text ?? "").includes(pct.label)) ?? c.evidence.find((e) => e.policyId === c.policyId);
     const text = ev ? (await pageMap(d.ctx.accountId, c.policyId).catch(() => new Map<number, string>())).get(ev.passage?.onPage ?? ev.page.start) : null;

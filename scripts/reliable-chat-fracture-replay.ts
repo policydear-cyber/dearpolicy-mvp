@@ -260,6 +260,20 @@ async function main() {
       const o = await once(fx2, fracScript(G2), "grace fell down and broke her arm");
       check(`B25 (F2c/F10) the Other Fracture case written as ${name} is the same undefined case: no S$120,000 anywhere, the row named with 'Ask the insurer', no 'labelled as neither'`, hidden(o) && /Ask the insurer/.test(rowLine(o.v)) && !/labelled as neither/.test(o.v), o.v);
     }
+    // TE journeys on main 9bca70a, W1: a bracket that names the kind without the word -- "(Other)", or "(Compound)" under a benefit
+    // named "Simple Fracture or Compound Fracture" -- is the same undefined case: no amount, the row named, 'Ask the insurer'.
+    for (const [name, from, to, kind] of [["(Other)", /\(Other Fracture\)/g, "(Other)", "Other Fracture"], ["(Compound) under Simple or Compound", /Other Fracture/g, "Compound Fracture", "Compound Fracture"]] as const) {
+      const fx2 = { ...FX, DOCS: FX.DOCS.map((d) => ({ ...d, pages: Object.fromEntries(Object.entries(d.pages).map(([n, t]) => [n, String(t).replace(from, to).replace(/\(Compound Fracture\)/g, "(Compound)")])) })) } as any;
+      const o = await once(fx2, fracScript(G2), "grace fell down and broke her arm");
+      const line = o.v.split("\n").find((l) => l.includes(`under ${kind}`)) ?? "";
+      check(`B26 (W1) a row labelled ${name} is the undefined ${kind} case: no S$120,000 anywhere, the row named with 'Ask the insurer', no 'labelled as neither'`, hidden(o) && /Ask the insurer/.test(line) && !/labelled as neither/.test(o.v), o.v);
+    }
+    // ... a bracket that names no kind the benefit prints ("(Left)") is not a case label: the row keeps its amount, with the note.
+    {
+      const fx2 = { ...FX, DOCS: FX.DOCS.map((d) => ({ ...d, pages: Object.fromEntries(Object.entries(d.pages).map(([n, t]) => [n, String(t).replace(/\(Other Fracture\)/g, "(Left)")])) })) } as any;
+      const o = await once(fx2, fracScript(G2), "grace fell down and broke her arm");
+      check("B26b (W1 control) a row labelled '(Left)' is not a case label: it is not named as an undefined case", !/under Left Fracture/.test(o.v), o.v);
+    }
     // F2: the plural label "(Other Fractures)"
     {
       const plural = { ...FX, DOCS: FX.DOCS.map((d) => ({ ...d, pages: Object.fromEntries(Object.entries(d.pages).map(([n, t]) => [n, String(t).replace(/\(Other Fracture\)/g, "(Other Fractures)")])) })) } as any;
