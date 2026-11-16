@@ -756,6 +756,14 @@ for (const name of ["Hospital Cash 65", "US Hospital Cash", "Hospital Cash - US"
   ];
   for (const [name, ins, prod] of kept) test(`stay-wrap P4b control '${name}' in '${prod}' by '${ins}' keeps its figure`, () => assert.notEqual(rule(name, ins, prod), null));
 }
+// TE journeys on main 9bca70a R1: neutral descriptive brackets and "Hosp." keep main's figure.
+for (const name of ["Hospital Cash Benefit (Rider)", "Hospital Cash Benefit (Optional)", "Hospital Income Benefit (Accommodation)", "Hospital Income Benefit (Confinement)",
+  "Hospital Cash Benefit (Each Day)", "Hospital Cash Benefit (Per Day of Confinement)", "Hospital Cash (each day)", "Hosp. Cash", "Hospital Income Benefit (Daily Cash)",
+  "Hosp Cash Benefit"])
+  ROUND2.push([`R1 control name '${name}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
+// TE journeys W2: a qualifier on the line below the row, alone or in brackets, says whose or which stays: none.
+for (const below of ["(Spouse)", "(for all lives)", "(Child)", "Infant", "(Plan B)", "Maid", "(C)", "Lee Mei Ling", "(Accident only)", "- spouse"])
+  ROUND2.push([`W2 line below '${below}': none`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, null]);
 // A household member's name in the row's name: that person's row, never worked out as another's.
 test("stay-wrap Q2 name 'Mei Ling hospital cash' with Lee Mei Ling in the household: none", () => {
   const h = household([{ person: TAN, row: Q1(", from the 3rd day, up to 30 days per stay", "Mei Ling hospital cash"), value: 100, maxDays: 30, fromDay: 3, benefit: "Mei Ling hospital cash" },

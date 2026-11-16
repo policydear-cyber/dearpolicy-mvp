@@ -1828,7 +1828,7 @@ const NAME_QUALIFIER = new RegExp([
  * a household member's name, or a name with no stay-benefit core that is not benefit words alone ("A Benefit of"). */
 function qualifiedName(name: string, words: string[], people: string[], ownWords: string[] = []): boolean {
   // Brackets after the name that hold a currency, a per-day unit or a footnote number say nothing about whose stays.
-  const clean = name.replace(/\(\s*(?:[A-Z]{0,3}\$|SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|per\s+day|daily|a\s+day|\d{1,2}|[*†‡])\s*\)/gi, " ").replace(/[*†‡]/g, " ");
+  const clean = name.replace(/\bhosp\b\.?/gi, "hospital").replace(/\(\s*(?:[A-Z]{0,3}\$|SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|per\s+day|daily|a\s+day|\d{1,2}|[*†‡])\s*\)/gi, " ").replace(/[*†‡]/g, " ");
   if (NAME_QUALIFIER.test(clean) || words.some((w) => NAME_QUALIFIER_WORDS.has(w))) return true;
   const printed = new Set(clean.toLowerCase().match(/[\p{L}\d]+/gu) ?? []);
   const person = people.some((p) => { const t = (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []); return t.some((w) => printed.has(w) && !DAILY_NAME_WORDS.has(w)); });
@@ -1855,7 +1855,7 @@ const DAILY_NAME_WORDS = new Set("hospital hospitalisation hospitalization incom
  * "Payout", "Protector"). An allow-list (gate #513 round 3/4 HIGH). */
 const NEUTRAL_NAME_WORDS = new Set([...DAILY_NAME_WORDS, ...("stay room board and an the of per day payable payout payment amount plus enhanced "
   + "cover coverage insurance plan protector protection protect replacement indemnity compensation grant relief shield guard saver secure support assist "
-  + "supplementary supplement additional optional addon ii iii sgd usd myr rm gbp eur aud hkd").split(" ")]);
+  + "supplementary supplement additional optional addon each accommodation hosp ii iii sgd usd myr rm gbp eur aud hkd").split(" ")]);
 /** Words of a document's insurer or product name that say nothing about whose or which stays ("Life", "Singapore",
  * "Insurance", "Ltd"): never taken as the document's own words. */
 const COMPANY_WORDS = new Set(("life insurance assurance general takaful company co ltd limited pte plc inc berhad bhd group holdings financial "
@@ -1973,6 +1973,9 @@ const CAP_PERIOD = String.raw`(?:per|each|in\s+any\s+one|for\s+any\s+one|in\s+an
 const CAP_BRACKET = new RegExp(String.raw`^\s*(?:(?:(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?|up\s+to)\s*(?:of\s+)?\d{1,3}\s*(?:consecutive\s+)?days?|\d{1,3}\s*days?\s+max(?:imum)?\.?)(?:\s+(?:of\s+(?:hospitali[sz]ation|(?:hospital\s+)?(?:stay|confinement))|in\s+hospital))?(?:\s*,?\s*${CAP_PERIOD}){0,2}\s*[*†‡^]?\s*$`, "i");
 /** Brackets that describe the benefit and never limit it: "(Inpatient)", "(Daily)", "(Per Day)", "(Hospitalisation)". */
 const DESCRIPTIVE_BRACKET = /^\s*(?:in-?\s?patient|daily|per\s+day|hospitali[sz]ation)\s*$/i;
+/** A bracket of neutral benefit words only ("(Rider)", "(Optional)", "(Each Day)", "(Per Day of Confinement)", "(Daily
+ * Cash)", "(Accommodation)"): it describes the benefit and limits nothing (TE journeys on main 9bca70a, R1). */
+const neutralBracket = (b: string) => { const w = b.toLowerCase().match(/[\p{L}\d]+/gu) ?? []; return w.length > 0 && w.every((x) => NEUTRAL_NAME_WORDS.has(x)); };
 /** Capitals in a bracket that say which stays or whose: a level of care, accident, overseas, critical illness, child. */
 const QUALIFIER_CAPS = new Set("ICU HDU CCU NICU PICU OS ACC AO CI CH SP".split(" "));
 /** Whether a currency named in a bracket is the row's own: the row prints its daily figure in it. */
@@ -2020,6 +2023,21 @@ function nameAbbreviation(name: string, abbr: string, ownWords: string[] = []): 
     return fits(abbr, initials) || (abbr.length >= 2 && /[BR]$/.test(abbr) && fits(abbr.slice(0, -1), initials));
   });
 }
+/** Whether a line under a daily row is a short fragment that may qualify it: a bracket, a "- x" clause, or up to four
+ * words with no figure and no sentence end, that is not neutral benefit words, a harmless, cap or descriptive bracket, or
+ * the row's own code. */
+function qualifierFragment(line: string, codeName: string, ownWords: string[]): boolean {
+  const t = line.trim();
+  if (!t) return false;
+  const bracket = /^\((.*)\)\s*[*†‡]?$/.exec(t);
+  const dash = /^[-–—]\s*(.+)$/.exec(t);
+  const short = !bracket && !dash && t.split(/\s+/).length <= 4 && !/\d|[.:;!?]\s*$/.test(t);
+  if (!bracket && !dash && !short) return false;
+  const inner = (bracket?.[1] ?? dash?.[1] ?? t).trim();
+  if (HARMLESS_BRACKET.test(inner) || CAP_BRACKET.test(inner) || DESCRIPTIVE_BRACKET.test(inner) || neutralBracket(inner)) return false;
+  if (/^[A-Z]{1,5}$/.test(inner) && !QUALIFIER_CAPS.has(inner) && nameAbbreviation(codeName, inner, ownWords)) return false;
+  return true;
+}
 /** Words in a line below a row that tie an amount to it ("* Hospital cash counts towards this amount", "including daily
  * benefits", "shared with"): a limit this row may share, so no figure (gate #508 round 3 NEW-HIGH 1). */
 const SHARE_WORDS = /\b(?:counts?\s+(?:towards?|against)|count\s+(?:towards?|against)|includ(?:e|es|ed|ing)|inclusive\s+of|part\s+of|within|shared?|sharing|combined|together|aggregate|in\s+total)\b/i;
@@ -2036,7 +2054,7 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   // and the lines of the quote that reach past them. A first cell that only numbers the row ("4") is not one of them.
   // Everything else below the row is its tail, line by line.
   const line = block.own.replace(/^\s*\(?(?:\d{1,2}[a-z]?|[a-z])[.)]?\t/i, "").replace(ROW_ENUMERATOR, "").replace(/\s+/g, " ").trim();
-  let lines = block.lines.map((l) => ({ ...l, text: l.text.replace(/\s+/g, " ").trim() }));
+  let lines = block.lines.map((l) => ({ ...l, tabbed: l.text.includes("\t"), text: l.text.replace(/\s+/g, " ").trim() }));
   let rowText = quoted;
   if (ownRow) {
     rowText = line;
@@ -2068,7 +2086,7 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
     // A currency bracket is harmless only when it is the row's own currency ("(S$)" on an S$ row; "(USD)" on one is not).
     const code = /^\s*(?:([A-Z]{0,3})\$|(SGD|USD|MYR|RM|GBP|EUR|AUD|HKD))\s*$/.exec(m[1]);
     if (code) { if (ownCurrency(code[1] !== undefined ? `${code[1]}$` : code[2], rowText)) continue; return null; }
-    if (HARMLESS_BRACKET.test(m[1]) || CAP_BRACKET.test(m[1]) || DESCRIPTIVE_BRACKET.test(m[1])) continue;
+    if (HARMLESS_BRACKET.test(m[1]) || CAP_BRACKET.test(m[1]) || DESCRIPTIVE_BRACKET.test(m[1]) || neutralBracket(m[1])) continue;
     // A bracket of 1-4 capitals anywhere in the row ("(HC)", "(HCB)", "(H)") is a label, unless it names a level of care,
     // a cause or a place (gate #508 round 7).
     // Only the row's own name's code passes (gate #513 round 4 HIGH): "(C)", "(PA)", "(VIP)" give no figure.
@@ -2106,6 +2124,11 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
     // or, past another benefit's row, still names this row once its read waiting sentences are out: that row's amount may
     // be this row's limit (gate #508 round 3 NEW-HIGH 1).
     if (SHARE_WORDS.test(said)) shared = true;
+    // A fragment under the row and before any other benefit's row, alone or in brackets ("(Spouse)", "(for all lives)",
+    // "Infant", "Lee Mei Ling", "- spouse", "(C)"), reads as the row's own qualifier: it may say whose or which stays the
+    // row pays, so no figure, unless it holds only neutral benefit words, a harmless or cap bracket (TE journeys W2). A
+    // line of cells (another table's row or heading) is not a fragment.
+    if (!l.after && !l.tabbed && qualifierFragment(said, codeName, ownWords)) shared = true;
     const named = said.replace(/\b(?:in\s+|of\s+|per\s+|each\s+|any\s+)?hospital(?:\s+(?:stays?|admissions?|confinements?))?\b(?!\s+(?:cash|income|benefit|allowance))/gi, " ");
     if (l.after && distinct.some((w) => new RegExp(String.raw`\b${w}`, "i").test(named))) shared = true;
     const mark = l.after && !marked ? `${PAST_OTHER} ` : "";
