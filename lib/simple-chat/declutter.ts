@@ -39,15 +39,35 @@ const NARRATION: RegExp[] = [
 /** A sentence about what the app shows ("No amount card is shown for it…", "The pages shown do not give an amount for it
  * that can be shown here"): it says no amount is shown, and names a card or what is shown here (DECL-20261116-B/C). */
 const aboutTheDisplay = (f: string) => /\b(?:amount|figure)s?\b/.test(f) && /\b(?:no|not|n't|never)\b/.test(f) && /\b(?:cards?|shown here|can be shown|could be shown|be shown here)\b/.test(f);
-const isNarration = (sentence: string) => { const f = flat(sentence); return !!f && (SERVER_NOTES.has(f) || NARRATION.some((r) => r.test(f)) || aboutTheDisplay(f)); };
+/** Words after the display clause that carry a point of the documents' own (Critic #505 b70e90b M1). */
+const CARRIES_A_POINT = /\b(?:because|since|as|but|except|only|limited|up to|covers?)\b|[;:]/;
+const isNarration = (sentence: string) => { const f = flat(sentence); return !!f && (SERVER_NOTES.has(f) || NARRATION.some((r) => r.test(f))); };
+
+/** One sentence as shown: unchanged, rewritten without its display clause ("No amount card is shown for it, as the stay
+ * would need to follow an accident." -> "The stay would need to follow an accident."), or null when it only narrates. */
+function asShown(sentence: string): { text: string | null; display: boolean } {
+  if (isNarration(sentence)) return { text: null, display: false };
+  const f = flat(sentence);
+  if (!f || !aboutTheDisplay(f)) return { text: sentence, display: false };
+  if (!CARRIES_A_POINT.test(f)) return { text: null, display: true };
+  // The display clause first, then its reason: only the reason stays, in the sentence's own words.
+  const m = /^(.+?)(?:,?\s+(?:as|because|since)\s+|\s*[;:]\s*)(.+)$/.exec(sentence.trim());
+  if (m && aboutTheDisplay(flat(m[1])) && !aboutTheDisplay(flat(m[2]))) {
+    const rest = m[2].trim();
+    return { text: rest.charAt(0).toUpperCase() + rest.slice(1), display: true };
+  }
+  return { text: sentence, display: false };
+}
 
 /** Sentences split at a full stop, ! or ? followed by a capital or an opening quote (as the answer cards split them). */
 const sentencesOf = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z“"(])/).map((s) => s.trim()).filter(Boolean);
-/** The text with every narrating sentence taken out; the rest exactly as written. */
+/** The text with every narrating sentence taken out (or its display clause, when the rest says something); the rest
+ * exactly as written. */
 export function withoutNarration(text: string): string {
   const all = sentencesOf(text);
-  const kept = all.filter((s) => !isNarration(s));
-  return kept.length === all.length ? text : kept.join(" ");
+  const shown = all.map(asShown);
+  if (shown.every((x, i) => x.text === all[i])) return text;
+  return shown.flatMap((x) => (x.text ? [x.text] : [])).join(" ");
 }
 
 /** Said as a step when an amount was left out and none is shown. */
@@ -60,7 +80,12 @@ type Declutterable = { summary?: string; bottomLine?: string | null; details?: s
 /** Takes the narration out of an answer in place. Returns the sentences taken out (for the turn's report). */
 export function declutterAnswer(answer: Declutterable): string[] {
   const removed: string[] = [];
-  const clean = (text: string) => { const out = withoutNarration(text); if (out !== text) removed.push(...sentencesOf(text).filter(isNarration)); return out; };
+  let displayNote = false;
+  const clean = (text: string) => {
+    const out = withoutNarration(text);
+    if (out !== text) for (const s of sentencesOf(text)) { const x = asShown(s); if (x.text !== s) { removed.push(s); if (x.display) displayNote = true; } }
+    return out;
+  };
   if (answer.statements) {
     answer.statements = answer.statements.filter((s) => {
       if (NARRATION_IDS.has(s.id)) { removed.push(s.text); return false; }
@@ -81,7 +106,8 @@ export function declutterAnswer(answer: Declutterable): string[] {
   // When an amount was left out, the one thing the household can do about it is said as a step, not as a note about the
   // check. With other amounts still shown, the step says another may apply, so the cards never read as all there is
   // (Critic #505 M2).
-  const leftOutAmount = removed.some((r) => flat(r) === flat(LEFT_OUT_AMOUNT));
+  // A sentence saying no amount is shown here is a left-out amount in the model's words: the same step is said.
+  const leftOutAmount = removed.some((r) => flat(r) === flat(LEFT_OUT_AMOUNT)) || displayNote;
   if (leftOutAmount && answer.statements) {
     const step = answer.statements.some((s) => s.amount) ? CONFIRM_OTHER_AMOUNT_STEP : CONFIRM_AMOUNT_STEP;
     answer.nextSteps = [...(answer.nextSteps ?? [])];

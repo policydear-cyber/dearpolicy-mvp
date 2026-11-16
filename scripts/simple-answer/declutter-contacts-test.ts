@@ -77,7 +77,12 @@ async function main() {
   });
 
   await t("DECL-20261116-B/C: a sentence about what the app shows is taken out; one that says what the documents print stays", () => {
-    assert.equal(withoutNarration("Wei Ling has a hospital cash benefit after an accident. No amount card is shown for it, as the stay would need to follow an accident."), "Wei Ling has a hospital cash benefit after an accident.");
+    // The display clause goes; the reason after it stays, in its own words (Critic #505 b70e90b M1).
+    assert.equal(withoutNarration("Wei Ling has a hospital cash benefit after an accident. No amount card is shown for it, as the stay would need to follow an accident."), "Wei Ling has a hospital cash benefit after an accident. The stay would need to follow an accident.");
+    assert.equal(withoutNarration("No amount is shown here because the policy pays actual hospital charges up to the ward limit."), "The policy pays actual hospital charges up to the ward limit.");
+    assert.equal(withoutNarration("No amount card is shown for it; the benefit only covers emergency dental treatment."), "The benefit only covers emergency dental treatment.");
+    // A point that cannot be separated from the display words keeps the whole sentence.
+    for (const keep of ["No amount card is shown, but the schedule covers emergency dental treatment only."]) assert.equal(withoutNarration(keep), keep);
     assert.equal(withoutNarration("The PA plan has a hospital cash benefit. The pages shown do not give an amount for it that can be shown here."), "The PA plan has a hospital cash benefit.");
     // Kept: what the documents print, a condition, or a card mentioned without saying an amount is missing.
     for (const keep of ["The schedule prints no amount for outpatient care.", "Keep the card the hospital gives you for the claim.", "The benefit is not payable unless the stay follows an accident."])
@@ -87,6 +92,13 @@ async function main() {
     const { scrubMonetaryText } = await import("@/lib/chat/monetary-boundary");
     assert.equal(scrubMonetaryText("so you can claim from Merlion General."), "so you can claim from Merlion General.");
     assert.match(scrubMonetaryText("You will get the benefit."), /^the policy may respond with the benefit\.$/);
+  });
+  await t("Critic #505 M1: a 'no amount shown' sentence taken out of an answer with no amount card adds the confirm step", () => {
+    const a = { summary: "Grace has a dental benefit.", bottomLine: "Grace has a dental benefit.", details: [], nextSteps: [] as string[],
+      statements: [{ id: "s1", kind: "fact", text: "The pages shown do not give an amount for it that can be shown here.", conditions: [] } as unknown as AnswerStatement] };
+    declutterAnswer(a);
+    assert.equal(a.statements.length, 0);
+    assert.deepEqual(a.nextSteps, [CONFIRM_AMOUNT_STEP]);
   });
   // ------------------------------------------------------------------ part 2: contacts from the page
   const on = (text: string, insurer = "Harbourline Assurance plc") => contactsOnPage(text, 2, "Family PA Schedule", insurer).map((c) => `${c.kind}|${c.label}|${c.value}`);
