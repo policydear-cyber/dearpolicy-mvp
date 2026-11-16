@@ -8,6 +8,7 @@
  * person, proves nothing and stays unconfirmed. Pure: no database access. */
 import { locatePassage } from "@/lib/documents/evidence";
 import { personPrinted } from "@/lib/documents/fact-check";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 
 const flat = (v: string) => v.toLowerCase().replace(/\s+/g, " ");
 /** A label naming the person who is covered: life assured or insured (never "sum assured" or "sum insured"), insured or
@@ -84,7 +85,7 @@ export async function heldLines(query: Query, accountId: string, memberId: strin
   // Only the person's own proof of cover: a personal schedule or certificate the household confirmed as personal (Test
   // engineer #506 F2: an illustration or product summary that prints the name is not the person's cover).
   const pages = await query<{ policy_id: string; page_number: number; text: string | null }>(
-    `SELECT pp.policy_id::text AS policy_id,pp.page_number,pp.text FROM policy_pages pp JOIN policies p ON p.id=pp.policy_id AND p.account_id=pp.account_id
+    `SELECT pp.policy_id::text AS policy_id,pp.page_number,pp.text FROM policy_pages pp JOIN policies p ON p.id=pp.policy_id AND p.account_id=pp.account_id AND ${activePredicate("p")}
       WHERE pp.account_id=$1 AND pp.policy_id=ANY($2::uuid[]) AND ${OWN_WORDS} AND p.personal_coverage_confirmed=true AND p.document_role IN ('personal_schedule','certificate') ORDER BY pp.page_number`,
     [accountId, policies]);
   // Every printed name on these documents, the person's own and everyone else's (another life on a joint schedule).
