@@ -169,12 +169,10 @@ function unknownName(text: string, mentions: Mention[], household: Household): s
 /** A question a "<A>, not <B>" reply answers rather than corrects: one asking who ("Who was driving?", "Whose card is it?",
  * "Which of you…?", "In whose name…?"), closed list (round 5, N5-1). */
 const WHO_QUESTION = /\b(?:who|whom|whose|which\s+of|in\s+whose\s+name)\b/i;
-/** A yes/no question: its last sentence opens with an auxiliary verb ("Was ...?", "Did ...?", "Is ...?"), closed list. */
-const YES_NO_QUESTION = /^\s*(?:was|were|is|are|did|does|do|has|had|have|will|would|could|can|should)\b/i;
 /** `opts.askedBefore`: the final question of the answer just before, when it ended with one. A reply in a replacement's
  * shape answers it, and corrects nothing, only when that question asks who, or names both A and B ("Is the policy in
- * Grace's name or Daniel's?"), or is a yes/no question naming A or B ("Was Grace driving at the time?", R6-1); after any
- * other question ("Was she admitted to hospital?") it is still a correction (round 4, R4-3, narrowed in round 5, N5-1). */
+ * Grace's name or Daniel's?"); after any other question ("Was she admitted to hospital?") it is still a correction
+ * (round 4, R4-3, narrowed in round 5, N5-1). */
 export function resolveSubjects(household: Household, said: readonly string[], opts: { askedBefore?: string | null } = {}): Subjects {
   const latest = norm(said[0] ?? "");
   const previousText = said[1] != null ? norm(said[1]) : "";
@@ -182,12 +180,7 @@ export function resolveSubjects(household: Household, said: readonly string[], o
   const mentions = nameMentions(latest, household);
   const found = replacement(latest, mentions, previous, household);
   const asked = opts.askedBefore ? norm(opts.askedBefore) : "";
-  // A yes/no question about one of them by name ("Was Grace driving at the time?") is answered by "Daniel, not Grace" too
-  // (R6-1); one with a pronoun only ("Was she admitted to hospital?") stays a correction (N5-1).
-  const yesNo = (q: string) => YES_NO_QUESTION.test(q.replace(/^.*[.!:]\s+(?=\S[^.!:]*\?\s*$)/, ""));
-  const namedIn = (q: string) => nameMentions(q, household).map((x) => x.person);
-  const answers = !!found && !!asked && (WHO_QUESTION.test(asked) || [...found.a, ...found.b].every((p) => looselyNamed(asked, household).includes(p))
-    || (yesNo(asked) && [...found.a, ...found.b].some((p) => namedIn(asked).includes(p))));
+  const answers = !!found && !!asked && (WHO_QUESTION.test(asked) || [...found.a, ...found.b].every((p) => looselyNamed(asked, household).includes(p)));
   const swap = answers ? null : found;
   if (swap) return { people: swap.pronoun ? null : swap.a, change: "replace", replaced: swap.b.filter((p) => !swap.a.includes(p)), unknown: null, kept: swap.a };
   const unknown = unknownName(latest, mentions, household);

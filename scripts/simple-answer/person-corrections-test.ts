@@ -486,23 +486,16 @@ async function main() {
           assert.equal(r.reopened[0].invalidated?.reason, "superseded");
           assert.match(r.calls[1].question, /corrected who this is about/);
         });
-    // R6-1 (gate #510 MEDIUM 2): a yes/no question naming one of them is answered by "Daniel, not Grace", never a
-    // correction, so Grace's answer is never replaced, live or reopened. With a pronoun only it stays a correction (N5-1).
-    for (const ask of ["Was Grace driving at the time?", "Grace broke her arm. Was Grace driving at the time?", "Did Grace fall off her bike?", "Was Daniel with her at the time?", "Is Grace left-handed?"])
-      await test(`GATE R6-1 the answer asked "${ask}", then "Daniel, not Grace." (${m}): an answer, nothing replaced live or reopened`, async () => {
-        const r = await converse(TERNS, [OPEN, "Daniel, not Grace."], [[G], [G]], "faithful", table, [ask, null]);
-        assert.deepEqual(people(r.saved[1]), [G]);
-        assert.ok(!r.reopened.some((a) => a.invalidated));
-        assert.ok(!r.live.some((x) => x.answer?.invalidated));
-        assert.doesNotMatch(r.calls[1].question, /corrected who this is about/);
-      });
-    for (const ask of ["Was she driving at the time?", "Did she fall off her bike?"])
-      await test(`GATE R6-1 control: "${ask}" (a pronoun only), then "Daniel, not Grace." (${m}): still a correction`, async () => {
-        const r = await converse(TERNS, [OPEN, "Daniel, not Grace."], [[G], [D]], "sticky", table, [ask, null]);
-        assert.deepEqual(people(r.saved[1]), [D]);
-        assert.equal(r.reopened[0].invalidated?.reason, "superseded");
-        assert.equal(r.live[0].answer?.invalidated?.reason, "superseded");
-      });
+    // R6-1 stays a known safe-side gap (gate #510 round 2): after a yes/no question about Grace by name, a reply in a
+    // replacement's shape is a correction, as on main, so the wrong person's figure never stays current.
+    for (const ask of ["Was Grace admitted to hospital?", "Did Grace fall off her bike?", "Is Grace the injured person?", "Was Grace driving at the time?"])
+      for (const reply of ["Actually it was Daniel, not Grace.", "Daniel, not Grace."])
+        await test(`GATE R6-1 the answer asked "${ask}", then "${reply}" (${m}): a correction, replaced live and reopened`, async () => {
+          const r = await converse(TERNS, [OPEN, reply], [[G], [D]], "sticky", table, [ask, null]);
+          assert.deepEqual(people(r.saved[1]), [D]);
+          assert.equal(r.reopened[0].invalidated?.reason, "superseded");
+          assert.equal(r.live[0].answer?.invalidated?.reason, "superseded");
+        });
     await test(`GATE R4-3 control: no question before, "Daniel, not Grace." still replaces (${m})`, async () => {
       const r = await converse(TERNS, [OPEN, "Daniel, not Grace."], [[G], [D]], "sticky", table, [null, null]);
       assert.deepEqual(people(r.saved[1]), [D]);
