@@ -10,7 +10,7 @@
  * the verbatim page they cite. Pure functions; no I/O.
  */
 import { moneyShapedFigure } from "@/lib/documents/image-currency";
-import { documentStatedCurrency, lineNamesCurrency } from "@/lib/documents/document-currency";
+import { documentStatedCurrency, figureStandsAlone, lineNamesCurrency } from "@/lib/documents/document-currency";
 import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, namePrinted as nameWordsOnLine, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
@@ -314,13 +314,17 @@ export type FactCheckResult = { extraction: PolicyExtraction; dropped: string[] 
 
 /** Re-finds every fact of a policy extraction in the document's pages.
  * `roleFromReader`: the role was the reader's choice (no wording rule decided it), so it must be plausible. */
-export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: { roleFromReader?: boolean; documentTitle?: string | null } = {}): FactCheckResult {
+export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: { roleFromReader?: boolean; documentTitle?: string | null;
+  /** Every page of the document, checked or not: another currency on any of them blocks the document-level currency. */
+  allPages?: { pageNumber: number; text: string }[];
+  /** false: the document-level currency rule is off (the stored-cover recheck compares with and without it). */
+  documentCurrency?: boolean } = {}): FactCheckResult {
   const fullText = pages.map((p) => p.text).join("\n");
   const pageText = new Map(pages.map((p) => [p.pageNumber, p.text]));
   const pageCurrency = new Map(pages.flatMap((p) => p.imageCurrency ? [[p.pageNumber, p.imageCurrency] as const] : []));
   // The one currency this document states for all its amounts ("Currency : Singapore Dollar"), only within this document
-  // and only when it names no other currency anywhere (lib/documents/document-currency).
-  const statedCurrency = documentStatedCurrency(pages);
+  // and only when it names no other currency on any of its pages (lib/documents/document-currency).
+  const statedCurrency = opts.documentCurrency === false ? null : documentStatedCurrency(pages, opts.allPages ?? pages);
   const dropped: string[] = [];
   const drop = (what: string) => { dropped.push(what); return null; };
   const printedOr = (value: string | null, what: string) => (value && !namePrinted(fullText, value) ? drop(what + " that is not printed in this document") : value);
@@ -626,7 +630,7 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
       // SGD"), on any of its pages: a money-shaped figure on an evidence line that prints no explicit currency of its own is
       // confirmed only in exactly that currency (lib/documents/document-currency). A line's own currency always decides.
       if (!ok && statedCurrency && (coverage.currency ?? "").toUpperCase() === statedCurrency && (!code || code === statedCurrency))
-        ok = onEvidence((line) => !lineNamesCurrency(line) && moneyShapedFigure(line, Number(coverage.amount)));
+        ok = onEvidence((line) => !lineNamesCurrency(line) && moneyShapedFigure(line, Number(coverage.amount)) && figureStandsAlone(line, Number(coverage.amount)));
     }
   }
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;

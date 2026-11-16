@@ -32,14 +32,16 @@ async function main() {
   const Messages = (anthropic as { default?: { Messages?: { prototype: { create: unknown } } } } | null)?.default?.Messages;
   if (Messages) Messages.prototype.create = () => { outbound++; throw new Error("no model call in this test"); };
 
-  const account = randomUUID(), other = randomUUID();
-  await query("INSERT INTO accounts(id,name) VALUES($1,'Recheck test household'),($2,'Another recheck household')", [account, other]);
+  const account = randomUUID(), other = randomUUID(), third = randomUUID();
+  await query("INSERT INTO accounts(id,name) VALUES($1,'Recheck test household'),($2,'Another recheck household'),($3,'Third recheck household')", [account, other, third]);
   const member = async (acct: string, name: string) => (await query<{ id: string }>("INSERT INTO family_members(account_id,display_name,relationship) VALUES($1,$2,'self') RETURNING id", [acct, name])).rows[0].id;
-  const mei = await member(account, "Mei Tan"), ravi = await member(other, "Ravi Menon");
+  const mei = await member(account, "Mei Tan"), ravi = await member(other, "Ravi Menon"), ana = await member(third, "Ana Lim");
 
   const SCHED = (name: string) => `Benefit Schedule\nLife Assured\t${name}\nCritical Illness\t150,000.00\nDeath\t200,000.00\nPersonal Accident\t100,000.00`;
   const LINES = [["Critical Illness", 150000, "Critical Illness\t150,000.00"], ["Death", 200000, "Death\t200,000.00"], ["Personal Accident", 100000, "Personal Accident\t100,000.00"]] as const;
-  type Stored = { proven?: boolean; lines?: readonly (readonly [string, number, string])[] };
+  type Stored = { proven?: boolean; lines?: readonly (readonly [string, number, string])[];
+    /** The intake's record of pages read against their image: {} (none), a map, or null for a reading stored before it. */
+    record?: Record<string, string | null> | null; methods?: (string | null)[]; status?: string };
   /** A document as the intake stored it before this fix: its reading, its pages, the person's name and their lines. */
   const doc = async (acct: string, fm: string, name: string, pages: string[], s: Stored = {}) => {
     const id = randomUUID(), lines = s.lines ?? LINES, proven = s.proven ?? false;
@@ -50,8 +52,9 @@ async function main() {
       referenceCoverages: [], premium: { amount: null, currency: null, frequency: null }, paymentRecords: [], keyExclusions: [], waitingPeriods: [], deductiblesAndCoinsurance: [], riders: [],
     });
     await query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,original_filename,storage_key,processing_status,processing_stage,quarantine_status,personal_coverage_confirmed,document_role,extracted_json)
-      VALUES($1,$2,$3,'Lantern Mutual (fictitious)','Lantern Shield','schedule.pdf',$4,'ready','ready','scan_clean',true,'personal_schedule',$5::jsonb)`, [id, acct, fm, `test/${id}`, JSON.stringify({ ...extraction, benefitTableProgress: { keep: true } })]);
-    for (const [i, text] of pages.entries()) await query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [acct, id, i + 1, text]);
+      VALUES($1,$2,$3,'Lantern Mutual (fictitious)','Lantern Shield','schedule.pdf',$4,'ready','ready','scan_clean',true,'personal_schedule',$5::jsonb)`, [id, acct, fm, `test/${id}`, JSON.stringify({ ...extraction, benefitTableProgress: { keep: true }, ...(s.record === null ? {} : { pageImageCurrency: s.record ?? {} }) })]);
+    if (s.status) await query("UPDATE policies SET processing_status=$2 WHERE id=$1", [id, s.status]);
+    for (const [i, text] of pages.entries()) await query("INSERT INTO policy_pages(account_id,policy_id,page_number,text,extraction_method) VALUES($1,$2,$3,$4,$5)", [acct, id, i + 1, text, s.methods?.[i] ?? "native"]);
     await query("INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'ai_name_match',0.95)", [id, fm, acct]);
     await query("INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id,confidence) VALUES($1,$2,$3,$4,0.95)", [acct, id, name, fm]);
     for (const [category, amount, evidence] of lines) await query(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,source_page,authority,confirmed,evidence_text,evidence_verified)
@@ -78,7 +81,7 @@ async function main() {
       assert.ok(r.changes.every((c) => !c.applied));
       assert.deepEqual(await rows(stated), before.stated);
       assert.ok((await json(stated)).insuredPeople[0].coverages.every((c) => c.evidenceVerified === false));
-      assert.match(recheckSummary(r), /Unconfirmed -> confirmed: 3\.[\s\S]*Confirmed -> unconfirmed: 3 \(reported only/);
+      assert.match(recheckSummary(r), /Unconfirmed -> confirmed: 3;[\s\S]*Confirmed -> unconfirmed: 3 \(reported only/);
     });
     await test("A apply on one document: its bare lines are confirmed; amounts and currency unchanged; the stored reading agrees", async () => {
       const r = await recheckStoredCover({ accountId: account, policyId: stated }, { apply: true });
@@ -121,9 +124,57 @@ async function main() {
       assert.equal(r.downgradesApplied, 3); assert.ok(r.changes.every((c) => c.applied));
       assert.ok((await rows(imageOnly)).every((x) => !x.confirmed && !x.evidence_verified));
     });
+    // ---- Page image currency (gate fix 2): what intake knew about each page's image
+    const HEAD = "Lantern Mutual (fictitious)\nPolicy Schedule\nCurrency : Singapore Dollar\nPolicyholder\tAna Lim";
+    await test("P1 a reading stored before the image record, on a text-layer PDF page: upgrades held (needs a re-read)", async () => {
+      const id = await doc(third, ana, "Ana Lim", [HEAD, SCHED("Ana Lim")], { record: null });
+      const r = await recheckStoredCover({ accountId: third, policyId: id }, { apply: true });
+      assert.equal(r.upgrades, 3); assert.equal(r.heldImageUnknown, 3); assert.equal(r.upgradesApplied, 0);
+      assert.ok(r.changes.every((c) => !c.applied && c.held === "image currency unknown"));
+      assert.ok((await rows(id)).every((x) => !x.confirmed));
+      assert.match(recheckSummary(r), /image currency unknown \(needs a re-read\): 3/);
+    });
+    await test("P2 an older reading of scanned pages (OCR, no separate image reading): applied", async () => {
+      const id = await doc(third, ana, "Ana Lim", [HEAD, SCHED("Ana Lim")], { record: null, methods: ["ocr", "ocr"] });
+      const r = await recheckStoredCover({ accountId: third, policyId: id }, { apply: true });
+      assert.equal(r.upgradesApplied, 3); assert.ok((await rows(id)).every((x) => x.confirmed));
+    });
+    await test("P3 an older reading whose cover page prints a currency in its text (an image never gives one): applied", async () => {
+      const id = await doc(third, ana, "Ana Lim", [HEAD, SCHED("Ana Lim") + "\nAnnual Premium\tS$2,400.00"], { record: null });
+      const r = await recheckStoredCover({ accountId: third, policyId: id }, { apply: true });
+      assert.equal(r.upgradesApplied, 3); assert.equal(r.heldImageUnknown, 0);
+    });
+    await test("P4 an older reading whose figure-free page was never image-checked does not hold it", async () => {
+      const id = await doc(third, ana, "Ana Lim", [HEAD, SCHED("Ana Lim"), "Important notes\nPlease keep this schedule."], { record: null, methods: ["native", "ocr", "native"] });
+      const r = await recheckStoredCover({ accountId: third, policyId: id }, { apply: true });
+      assert.equal(r.upgradesApplied, 3);
+    });
+    await test("P5 gate repro: a recorded image currency (USD on page 3) blocks the document-level SGD fill", async () => {
+      const id = await doc(third, ana, "Ana Lim", [HEAD, SCHED("Ana Lim"), "Rider schedule\nLife Assured\tAna Lim\nRider CI\t300,000.00"], { record: { "3": "USD" } });
+      const r = await recheckStoredCover({ accountId: third, policyId: id }, { apply: true });
+      assert.equal(r.upgrades, 0); assert.ok((await rows(id)).every((x) => !x.confirmed));
+    });
+    await test("P6 control: a recorded image check with no currency lets the rule apply", async () => {
+      const id = await doc(third, ana, "Ana Lim", [HEAD, SCHED("Ana Lim")], { record: { "2": null } });
+      const r = await recheckStoredCover({ accountId: third, policyId: id }, { apply: true });
+      assert.equal(r.upgradesApplied, 3);
+    });
+    // ---- Only the document-currency rule's upgrades (gate fix 6)
+    await test("R1 a line the check proves without the new rule is reported and not written", async () => {
+      const lines = [["Death", 200000, "Death\tS$200,000.00"]] as const;
+      const id = await doc(third, ana, "Ana Lim", [HEAD, "Benefit Schedule\nLife Assured\tAna Lim\nDeath\tS$200,000.00"], { lines });
+      const r = await recheckStoredCover({ accountId: third, policyId: id }, { apply: true });
+      assert.equal(r.upgrades, 1); assert.equal(r.heldOtherRule, 1); assert.equal(r.upgradesApplied, 0);
+      assert.equal((await rows(id))[0].confirmed, false);
+    });
+    await test("R2 a document being read again (not ready) is left alone", async () => {
+      const id = await doc(third, ana, "Ana Lim", [HEAD, SCHED("Ana Lim")], { status: "indexing" });
+      const r = await recheckStoredCover({ accountId: third, policyId: id }, { apply: true });
+      assert.equal(r.documents, 0); assert.ok((await rows(id)).every((x) => !x.confirmed));
+    });
     await test("Z no request left this machine and no model was called", async () => assert.equal(outbound, 0));
   } finally {
-    for (const acct of [account, other]) {
+    for (const acct of [account, other, third]) {
       for (const t of ["policy_coverages", "policy_pages", "policy_detected_people", "policy_members", "premium_records", "policies", "family_members"]) await query(`DELETE FROM ${t} WHERE account_id=$1`, [acct]).catch(() => {});
       await query("DELETE FROM accounts WHERE id=$1", [acct]).catch(() => {});
     }

@@ -15,7 +15,7 @@ async function test(name: string, fn: () => void | Promise<void>) {
 }
 
 async function main() {
-  const { documentStatedCurrency, statedCurrencies, mentionedCurrencies } = await import("@/lib/documents/document-currency");
+  const { documentStatedCurrency, statedCurrencies, mentionedCurrencies, currencyStatements } = await import("@/lib/documents/document-currency");
   const FC = await import("@/lib/documents/fact-check");
   const { verifiedExtraction } = await import("@/lib/rag/ingest");
   const { PolicyExtractionSchema } = await import("@/lib/ai/extract-policy");
@@ -151,6 +151,43 @@ async function main() {
     assert.ok(mentionedCurrencies("Limit CAD 5,000").some((c) => c.startsWith("?")));
   });
   await test("U documentStatedCurrency is null for a bare $ document with $ figures", () => assert.equal(documentStatedCurrency([{ text: "Currency: $\nDeath\t$200,000.00" }]), null));
+
+  // ---- G: round 1 gate repros (PR #507)
+  const P3 = (text: string): P => ({ pageNumber: 3, text });
+  for (const value of ["USS", "U.S.D.", "U5D", "Dollar (US)", "USDollar", "Unites States Dollar", "Ringgit Malaysia", "SGD (USD for Plan B)"])
+    await test(`G1 an unknown currency field value blocks the document ('Policy Currency : ${value}')`, () => {
+      const pages = [cover("Currency : SGD"), { pageNumber: 2, text: SCHED }, P3(`Policy 2\nLife Assured\tMei Tan\nPolicy Currency : ${value}\nDeath\t300,000.00`)];
+      all(verified([...COVS(), { category: "Death", amount: 300000, currency: "SGD", page: 3, evidence: "Death\t300,000.00" }], pages), false);
+    });
+  await test("G1 an unknown value in a statement sentence blocks ('All amounts are in USS.')", () => all(verified(COVS(), [cover("Currency : SGD"), { pageNumber: 2, text: SCHED + "\nAll amounts are in USS." }]), false));
+  await test("G3 another currency on an unchecked page blocks (intake passes every page)", () => {
+    const e = verifiedExtraction(extraction(COVS().slice(0, 1)), [cover("Currency : SGD"), { pageNumber: 2, text: SCHED }],
+      { allPages: [cover("Currency : SGD"), { pageNumber: 2, text: SCHED }, P3("Rider\nCurrency : USD")] });
+    assert.equal(e.insuredPeople[0].coverages[0].evidenceVerified, false);
+    const control = verifiedExtraction(extraction(COVS().slice(0, 1)), [cover("Currency : SGD"), { pageNumber: 2, text: SCHED }], { allPages: [cover("Currency : SGD"), { pageNumber: 2, text: SCHED }, P3("Rider notes")] });
+    assert.equal(control.insuredPeople[0].coverages[0].evidenceVerified, true);
+  });
+  for (const head of ["Premium  Currency : SGD", "Premium\tCurrency\tSGD", "Premium Payment\tCurrency: SGD", "Mode of Payment  Currency: SGD", "Premium Currency : SGD", "Rider Currency : SGD",
+    "Premium amounts are payable in SGD.", "Your premium figures are shown in SGD.", "Rider benefits are payable in SGD.", "Cash values are in SGD"])
+    await test(`G4 a premium, rider or value statement is not the document's ('${head.replace(/\t/g, "<TAB>")}')`, () => all(verified(COVS(), [cover(head), { pageNumber: 2, text: SCHED }]), false));
+  for (const next of ["Save for the overseas rider, which is in another currency.", "Except the hospital cash benefit.", "Other than the rider shown on page 3.", "Excluding the investment-linked rider."])
+    await test(`G5 an exception on the next line blocks ('${next}')`, () => all(verified(COVS(), [cover("All amounts are in SGD.\n" + next), { pageNumber: 2, text: SCHED }]), false));
+  await test("G5 control: an unrelated next line keeps the statement", () => all(verified(COVS(), [cover("All amounts are in SGD.\nPolicyholder copy"), { pageNumber: 2, text: SCHED }]), true));
+  for (const [label, line, amount] of [["units", "Units held\t100,000.00 units", 100000], ["km", "Ambulance\t10,000.00 km", 10000], ["kg", "Baggage\t1,000.00 kg", 1000], ["a word after", "Death\t200,000.00 approx", 200000]] as const)
+    await test(`G7 a figure followed by a unit or word is not confirmed (${label})`, () => {
+      assert.deepEqual(verified([{ category: "Death", amount, currency: "SGD", page: 2, evidence: line }], [cover("Currency : SGD"), { pageNumber: 2, text: `Benefit Schedule\nLife Assured\tMei Tan\n${line}` }]), [false]);
+    });
+  await test("G7 control: a figure ending its line, or its cell before another cell, is confirmed", () => {
+    const text = "Benefit Schedule\nLife Assured\tMei Tan\nDeath 200,000.00\nCritical Illness\t150,000.00\t20 years";
+    assert.deepEqual(verified([{ category: "Death", amount: 200000, currency: "SGD", page: 2, evidence: "Death 200,000.00" }, { category: "Critical Illness", amount: 150000, currency: "SGD", page: 2, evidence: "Critical Illness\t150,000.00\t20 years" }],
+      [cover("Currency : SGD"), { pageNumber: 2, text }]), [true, true]);
+  });
+  await test("G statement and blocking pieces", () => {
+    assert.deepEqual(currencyStatements("Currency of the Policy: US Dollars"), { stated: ["USD"], block: false });
+    assert.deepEqual(currencyStatements("Policy Currency : USS"), { stated: [], block: true });
+    assert.deepEqual(currencyStatements("Currency risk applies to investment-linked funds."), { stated: [], block: false });
+    assert.deepEqual(currencyStatements("Claims are payable in Singapore Dollars or the equivalent."), { stated: [], block: false });
+  });
 
   if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
   console.log(`document-currency: ${passed} passed, 0 failed`);

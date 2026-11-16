@@ -11,11 +11,18 @@
  *   A bare "$" or "dollars" never names one;
  * - the document names no other currency anywhere: not in a second statement, a figure ("US$ 50,000", "RM 120,000"), a
  *   currency word or sign, or the currency its page images print. Two currencies, or one the list does not know, give none;
- * - the evidence line itself prints no explicit currency (a line's own currency always decides).
+ * - no currency field or statement anywhere in the document (checked pages or not) gives a value outside the allow-list
+ *   ("Policy Currency : USS" blocks), and no statement has an exception on its line or the next ("save for", "except");
+ *   a premium, rider or value field ("Premium Currency : SGD") is never a statement for the whole document;
+ * - the evidence line itself prints no explicit currency (a line's own currency always decides), and its figure stands
+ *   alone in its cell with no unit after it ("100,000.00 units" is not an amount: figureStandsAlone).
  * Only within one document: the pages passed are that document's own, never another document of the household.
  * Pure: no model, no I/O, nothing about a particular insurer or document. */
 
 export type StatedCurrency = "SGD" | "USD";
+/** The key in policies.extracted_json that records, at intake, every page checked against its image and the one currency
+ * that image printed (or null): { "3": "USD", "4": null }. A page not listed was not looked at against its image. */
+export const PAGE_IMAGE_CURRENCY_KEY = "pageImageCurrency";
 
 const SGD_VALUE = String.raw`(?:S\$|SG\$|SGD|Singapore\s+Dollars?)`;
 const USD_VALUE = String.raw`(?:US\$|USD|U\.?S\.?\s+Dollars?|United\s+States\s+Dollars?)`;
@@ -30,34 +37,60 @@ function valueCurrency(value: string): StatedCurrency | null {
   return null;
 }
 
-/** A field naming the document's currency: the label opens its line (or a cell), the value follows. */
-const FIELD = /(?:^|\t|\s{2,}|\|\s*)(?:(?:policy|contract|plan|benefit|schedule|base|basic)\s+)?currency(?:\s+of\s+(?:the\s+)?(?:policy|plan|contract|benefits?|schedule|this\s+(?:policy|plan|schedule|document)))?\s*(?::|-|–|=|\t|\s{2,}|\s(?=\S))\s*([^\t|]+?)(?=\t|\s{2,}|\s*\||$)/gim;
-/** A sentence about all of the document's amounts. */
-const SENTENCE = new RegExp(String.raw`(?:^|[\s(\[])(?:all\s+)?(?:the\s+)?(?:monetary\s+)?(?:amounts?|figures|sums(?:\s+(?:insured|assured))?|values|benefits)`
-  + String.raw`(?:\s+(?:shown|stated|stated|listed|printed|payable|quoted))?`
+/** Words that make a currency field or sentence about one kind of amount, not the whole document's ("Premium Currency",
+ * "Mode of Payment  Currency: SGD", "Rider Currency"). Such a statement never fills in; an unknown value in it still blocks. */
+const QUALIFIED = /\b(?:premiums?|payments?|paying|rider|riders|cash|surrender|funds?|investment|units?|loan|bonus(?:es)?|dividends?|mode|billing|top-?ups?|withdrawals?|annuity|coupon|maturity)\b/i;
+/** Lines about converting one currency into another, which state no currency of the document. */
+const CONVERSION = /\b(?:convert(?:ed|s|ing)?|conversion|exchange|rate|equivalent)\b/i;
+/** An exception to a statement, on its line or the next one: the statement does not hold for every amount. */
+const EXCEPTION = /\b(?:except|exception|save\s+(?:for|as|that)|other\s+than|unless|excluding|exclud(?:e|es|ed)|apart\s+from|but\s+(?:not|for)|otherwise)\b/i;
+/** Any currency field: "<qualifier> Currency (of the ...) <sep> <value>". `sep` is ":", "=", a dash, a tab or a cell gap;
+ * a single space only when the value is one the list knows. */
+const FIELD = /(?<![A-Za-z])currency(\s+of\s+[A-Za-z ]{1,30}?(?=\s*(?::|=|–|-\s|\t|\s{2,})))?(\s*(?::|=|–|-(?=\s)|\t|\s{2,})\s*|\s(?!of\b))([^\t|]*?)\s*(?=\t|\s{2,}|\||$)/gi;
+/** A sentence about all of the document's amounts, opening its line, a sentence or a bracket. */
+const SENTENCE = new RegExp(String.raw`(?:^|[.;:!?]\s+|[(\[]\s*)(?:all\s+)?(?:the\s+)?(?:monetary\s+)?(?:amounts?|figures|sums(?:\s+(?:insured|assured))?|benefits)`
+  + String.raw`(?:\s+(?:shown|stated|listed|printed|payable|quoted))?`
   + String.raw`(?:\s+(?:in|on|under)\s+this\s+(?:schedule|document|policy|certificate|statement|page|table|summary))?`
   + String.raw`(?:\s+(?:are|is|will\s+be|shall\s+be))?(?:\s+(?:shown|stated|expressed|denominated|quoted|presented|given|payable))?`
-  + String.raw`\s+in\s+(${SGD_VALUE}|${USD_VALUE})(?:\s*\(\s*(?:${SGD_VALUE}|${USD_VALUE})\s*\))?(?:\s+only)?\s*(?:[.)\]]|$)`, "gim");
-/** A sentence that converts, exchanges or makes an exception is never the document's own currency. */
-const NOT_A_STATEMENT = /\b(?:convert(?:ed|s|ing)?|conversion|exchange|rate|equivalent|unless|except|otherwise|foreign)\b/i;
+  + String.raw`\s+in\s+([^.;)\]\n]{1,60}?)\s*(?=[.;)\]]|$)`, "gi");
+const BARE = /^(?:\$|dollars?|the\s+dollar)$/i;
 
-/** The currencies a document's text states for its amounts, in the closed shapes above. */
-export function statedCurrencies(text: string): StatedCurrency[] {
+export type CurrencyStatements = { stated: StatedCurrency[]; block: boolean };
+/** The currencies a document's text states for all its amounts, in the closed shapes above, and whether anything in it
+ * blocks the fill: a currency field or statement whose value is outside the allow-list ("Policy Currency : USS",
+ * "U.S.D.", "Dollar (US)"), or a statement with an exception on its line or the next. */
+export function currencyStatements(text: string): CurrencyStatements {
   const out: StatedCurrency[] = [];
-  for (const raw of String(text ?? "").split("\n")) {
-    const line = raw.normalize("NFKC");
-    if (NOT_A_STATEMENT.test(line)) continue;
+  let block = false;
+  const lines = String(text ?? "").normalize("NFKC").split("\n");
+  const next = (i: number) => lines.slice(i + 1).find((l) => l.trim()) ?? "";
+  for (const [i, line] of lines.entries()) {
+    const conversion = CONVERSION.test(line);
+    const found: { code: StatedCurrency | null; qualified: boolean }[] = [];
     for (const m of line.matchAll(FIELD)) {
-      const c = valueCurrency(m[1]);
-      if (c) out.push(c);
+      const value = m[3].trim(), single = m[2] === " ";
+      if (!value || BARE.test(value.replace(/[.;,]+$/, ""))) continue;
+      const code = valueCurrency(value);
+      if (single && !code) continue; // prose ("currency risk applies"), not a field
+      const before = line.slice(Math.max(0, m.index - 40), m.index);
+      found.push({ code, qualified: QUALIFIED.test(before) || QUALIFIED.test(m[1] ?? "") });
     }
     for (const m of line.matchAll(SENTENCE)) {
-      const c = valueCurrency(m[1]);
-      if (c) out.push(c);
+      const value = m[1].trim();
+      if (BARE.test(value)) continue;
+      found.push({ code: valueCurrency(value), qualified: false });
+    }
+    for (const f of found) {
+      if (!f.code) { if (!conversion) block = true; continue; }
+      if (f.qualified || conversion) continue;
+      if (EXCEPTION.test(line) || EXCEPTION.test(next(i))) { block = true; continue; }
+      out.push(f.code);
     }
   }
-  return out;
+  return { stated: out, block };
 }
+/** The currencies a document's text states for all its amounts (currencyStatements). */
+export const statedCurrencies = (text: string) => currencyStatements(text).stated;
 
 /** Every currency the text names: codes for the dollars and the currencies the fact check knows, "?" for any other, "$"
  * for a bare dollar sign or word. A three-letter code counts on its own only for a currency the fact check knows (an
@@ -87,16 +120,32 @@ export function mentionedCurrencies(text: string): string[] {
 }
 
 /** The one dollar currency the document states for all its amounts, or null (see the module note). `pages` are this one
- * document's pages; a page's image currency (lib/documents/image-currency) counts as a currency the document names. */
-export function documentStatedCurrency(pages: { text: string; imageCurrency?: string }[]): StatedCurrency | null {
-  const text = pages.map((p) => p.text).join("\n");
-  const stated = new Set(statedCurrencies(text));
-  if (stated.size !== 1) return null;
+ * document's checked pages: a statement counts only there, and a page's image currency (lib/documents/image-currency)
+ * counts as a currency the document names. `allPages`, when given, are every page of the document, checked or not: any
+ * other currency or blocking statement on any of them gives none (it only blocks, never fills). */
+export function documentStatedCurrency(pages: { text: string; imageCurrency?: string }[], allPages: { text: string }[] = pages): StatedCurrency | null {
+  const text = pages.map((p) => p.text).join("\n"), everything = [...pages, ...allPages].map((p) => p.text).join("\n");
+  const stated = new Set(currencyStatements(text).stated);
+  if (stated.size !== 1 || currencyStatements(everything).block) return null;
   const code = [...stated][0];
-  const named = new Set(mentionedCurrencies(text).filter((c) => c !== "$"));
+  const named = new Set(mentionedCurrencies(everything).filter((c) => c !== "$"));
   for (const p of pages) if (p.imageCurrency) named.add(p.imageCurrency.toUpperCase());
   for (const c of named) if (c !== code) return null;
   return code;
+}
+
+/** A bare figure in an amount position: the whole of its cell, or the end of its line, with no unit or other word after it
+ * in the same cell ("100,000.00 units", "10,000.00 km" are not amounts). */
+export function figureStandsAlone(line: string, value: number): boolean {
+  for (const m of String(line ?? "").matchAll(/(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})/g)) {
+    if (Math.abs(Number(m[1].replace(/,/g, "")) - value) >= 0.005) continue;
+    const before = line.slice(0, m.index), after = line.slice(m.index + m[1].length);
+    // The figure opens its cell: after a tab, a cell gap, or a single space after a label's word or colon.
+    if (!/(?:\t|\s{2,}|[A-Za-z):]\s)$/.test(before)) continue;
+    if (!/^\s*(?:$|\t|\s{2,})/.test(after)) continue;
+    return true;
+  }
+  return false;
 }
 
 /** Whether the line prints an explicit currency of its own (a bare "$" is none). */

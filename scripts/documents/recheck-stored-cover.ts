@@ -29,7 +29,7 @@ async function main() {
   const { pool } = await import("@/lib/db/client");
   const report = await recheckStoredCover({ accountId: household, policyId: document }, { apply: process.argv.includes("--apply"), allowDowngrade: process.argv.includes("--allow-downgrade") });
   console.log(recheckSummary(report));
-  for (const c of report.changes) console.log(`  ${c.from ? "confirmed -> unconfirmed" : "unconfirmed -> confirmed"}${c.applied ? "" : " (not written)"}: document ${c.policyId}, line ${c.coverageId}, ${c.category}${c.sourcePage ? `, page ${c.sourcePage}` : ""}`);
+  for (const c of report.changes) console.log(`  ${c.from ? "confirmed -> unconfirmed" : "unconfirmed -> confirmed"}${c.applied ? "" : c.held ? ` (not written: ${c.held})` : " (not written)"}: document ${c.policyId}, line ${c.coverageId}, ${c.category}${c.sourcePage ? `, page ${c.sourcePage}` : ""}`);
   await pool.end();
 }
 main().catch((e) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });
