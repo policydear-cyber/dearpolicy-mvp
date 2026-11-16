@@ -55,6 +55,10 @@ no promised payment, returned = saved = reopened.
    - **F2c / F10:** the same case written another way ("[Other Fracture]", "… - Other Fracture", "Other Fracture: …"), or printed
      as a sub-heading line above the rows ("Other Fracture:" then "Hip 75%"), is the same undefined case. Outside brackets the case
      needs its qualifier word, so a plain "Fractures" heading or "Fracture of the skull" row is not a case label. B25.
+   - **Compared with main, more rows than "(Other Fracture)" can now lose their amount** (Critic on #512): any row whose label or
+     sub-heading names a case ("Compound Fracture", "Major Fracture", and also "Simple Fracture") that the same policy does not
+     define. A labelled "(Simple Fracture)" row was already treated as a case before this PR; the rule now also reads it as a
+     sub-heading. Each such row is still named, with its document and page, and the household is told to ask the insurer.
    - Not changed: an UNLABELLED row (no bracket, no sub-heading) of a benefit named "Simple Fracture or Other Fracture" (a "Hip" row) still shows its amount with
      the existing note that the row is labelled as neither kind. Its row applies to that bone whichever kind it is, unlike a row the
      document assigns to one undefined kind. Hiding it too would remove the main fracture amount in every such schedule; that is

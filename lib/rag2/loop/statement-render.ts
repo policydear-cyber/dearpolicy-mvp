@@ -56,10 +56,13 @@ const caseOf = (label: string): { tag: string; row: string } | null => {
 };
 /** (Test engineer on #512, F10) A case printed as a sub-heading of the table -- "Other Fracture:" on its own line, then "Hip 75%" --
  * labels the rows below it as surely as a bracket does. The nearest such heading above the row's line, within its table. */
-const headingAbove = (pageText: string, row: string): string | null => {
+const headingAbove = (pageText: string, row: string, pct?: number): string | null => {
   const lines = pageText.split("\n");
   const key = row.trim().toLowerCase();
-  const at = lines.findIndex((l) => l.trim().toLowerCase().startsWith(key));
+  // (Critic on #512: a short label -- "Hip" -- is found on the line that also prints its percentage, not on "Hipbone …" earlier)
+  const starts = (l: string) => l.trim().toLowerCase().startsWith(key) && !/[a-z]/i.test(l.trim().charAt(key.length));
+  const withPct = pct != null ? lines.findIndex((l) => starts(l) && new RegExp(String.raw`(?:^|\D)${pct}\s*%`).test(l)) : -1;
+  const at = withPct >= 0 ? withPct : lines.findIndex(starts);
   if (at < 0) return null;
   for (let i = at - 1; i >= Math.max(0, at - 20); i--) {
     const l = lines[i].trim();
@@ -292,7 +295,7 @@ async function undefinedCaseOf(resultId: string, d: Deps): Promise<{ c: NonNulla
   if (pct && !cs) {
     const ev = c.evidence.find((e) => e.policyId === c.policyId && (e.passage?.text ?? "").includes(pct.label)) ?? c.evidence.find((e) => e.policyId === c.policyId);
     const text = ev ? (await pageMap(d.ctx.accountId, c.policyId).catch(() => new Map<number, string>())).get(ev.passage?.onPage ?? ev.page.start) : null;
-    const h = text ? headingAbove(text, pct.label) : null;
+    const h = text ? headingAbove(text, pct.label, typeof pct.value === "number" ? pct.value : undefined) : null;
     if (h) cs = { tag: h, row: pct.label };
   }
   const tag = cs?.tag ?? null;
