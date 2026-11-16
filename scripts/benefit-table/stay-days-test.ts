@@ -424,7 +424,7 @@ const WRAP: [string, string, string[], WrapOpts, number, string | null][] = [
   ["TE16-1b the same, the quote ending at the row's first line", KROW.split("\n")[0], ["policy year", "Annual premium\tS$285.00", KW], { value: 100, maxDays: 365 }, 6, "S$400"],
   ["TE16-1c the name and the terms both wrap ('income\\tpolicy year')", "Hospital\tS$100 per day in hospital, up to 365 days per", ["income\tpolicy year", "Annual premium\tS$285.00", KW], { value: 100, maxDays: 365, benefit: "Hospital income" }, 6, "S$400"],
   ["TE16-1d the name alone wraps ('income')", "Daily hospital\tS$100 per day in hospital, up to 365 days per policy year", ["income", "Annual premium\tS$285.00", "The daily hospital income does not pay for the first 2 days of any hospital stay."], { value: 100, maxDays: 365 }, 6, "S$400"],
-  ["TE16-1e another benefit's own row between the row and its waiting sentence, which names the row", KROW, ["Surgical benefit\tUp to S$2,000 per operation", KW], { value: 100, maxDays: 365 }, 6, "S$400"],
+  ["TE16-1e another benefit's own row between the row and its waiting sentence, which names the row", KROW, ["Surgical benefit\tS$500 per operation", KW], { value: 100, maxDays: 365 }, 6, "S$400"],
   ["TE16-1f a wrapped yearly cap ('maximum S$1,000 per' / 'policy year'), 20 days", "Hospital income rider\tS$100 per day in hospital from the 3rd day, up to 365 days per policy year, maximum S$1,000 per", ["policy year"], { value: 100, maxDays: 365 }, 20, "S$1,000"],
   // Shape 2: the terms wrap after "from the first day,"; the cover-start waiting period names another benefit on the page.
   ["TE16-2 'from the first day,' / 'up to 20 days per policy year' + another benefit's waiting period, 3 days", PROW, [PWAIT], { value: 80, maxDays: 20, currencyLine: US, above: PACIFIC_ABOVE }, 3, "US$240"],
@@ -436,10 +436,12 @@ const WRAP: [string, string, string[], WrapOpts, number, string | null][] = [
   ["TE16-3b 'Maximum days' under the row, then the ICU row: none", OROW, [OMAX, ...OICU, OWAIT], { value: 150, maxDays: 10 }, 15, null],
   // Shape 3 with another benefit's own row in its place: worked out. The retest's reading gave the row no most days (they
   // are on a line of their own): the printed line still decides it.
-  ["TE16-3c surgical row, 'Maximum days' row, 'Waiting days:' sentence, read with no most days, 5 days", OROW, ["Surgical benefit\tUp to S$2,000 per operation", OMAX, OWAIT, "Annual premium: S$420.00"], { value: 150, maxDays: null }, 5, "S$450"],
-  ["TE16-3d 'Maximum days' under the row itself, then a surgical row, 15 days (capped at 10)", OROW, [OMAX, "Surgical benefit\tUp to S$2,000 per operation", OWAIT], { value: 150, maxDays: 10 }, 15, "S$1,500"],
+  ["TE16-3c surgical row, 'Maximum days' row, 'Waiting days:' sentence, read with no most days, 5 days", OROW, ["Surgical benefit\tS$500 per operation", OMAX, OWAIT, "Annual premium: S$420.00"], { value: 150, maxDays: null }, 5, "S$450"],
+  ["TE16-3d 'Maximum days' under the row itself, then a surgical row, 15 days (capped at 10)", OROW, [OMAX, "Surgical benefit\tS$500 per operation", OWAIT], { value: 150, maxDays: 10 }, 15, "S$1,500"],
   // Shape 4: a numbered table, the next benefit's own row, an exclusions line and a wrapped how-to-claim note below.
-  ["TE16-4 numbered row, 'Medical expenses' row, exclusions and a wrapped how-to-claim note, 5 days", MROW, MBELOW, { value: 50, maxDays: 30, fromDay: 3, benefit: "Hospital cash", above: MABOVE }, 5, "S$150"],
+  // Round 3 (gate #508 NEW-HIGH 1): its "Up to S$2,500 per accident" is a limit shape that may be shared, so it stays: none.
+  ["TE16-4 numbered row, 'Medical expenses' row (a limit shape), exclusions and a how-to-claim note, 5 days: none", MROW, MBELOW, { value: 50, maxDays: 30, fromDay: 3, benefit: "Hospital cash", above: MABOVE }, 5, null],
+  ["TE16-4b the same table with a plain unit-rate row in its place, 5 days", MROW, ["5\tSurgical benefit\tS$500 per operation", ...MBELOW.slice(1)], { value: 50, maxDays: 30, fromDay: 3, benefit: "Hospital cash", above: MABOVE }, 5, "S$150"],
   // Negatives: unsure means no figure.
   ["TE16-N1 'Maximum days' past another benefit's row may be that row's: a stay it would cut short gets none", OROW, [...OICU, OMAX, OWAIT], { value: 150, maxDays: 10 }, 15, null],
   ["TE16-N1b read with no most days, and the most-days line says more ('for all insured persons')", OROW, [OMAX + ", for all insured persons", OWAIT], { value: 150, maxDays: null }, 5, null],
@@ -521,8 +523,9 @@ const ROUND2: [string, string, string[], WrapOpts, number, string | null][] = [
   ["R2-1e 'Accidental benefit\\tUp to S$3,000 per accident' (no specific benefit), 40 days", R2C, ["Accidental benefit\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, null],
   ["R2-1f 'Medical or surgical benefit…', 40 days", R2C, ["Medical or surgical benefit\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, null],
   ["R2-1g 'Hospital allowance\\tUp to S$3,000 per accident', 40 days", R2C, ["Cash allowance\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, null],
-  ["R2-1h control: a specific other benefit ('Accidental medical benefit') is still left out, 40 days", R2C, ["Accidental medical benefit\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, "S$4,000"],
-  ["R2-1i control: 'Medical expenses\\tUp to S$2,500 per accident', 40 days", R2C, ["Medical expenses\tUp to S$2,500 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, "S$4,000"],
+  // Round 3: a limit shape ("Up to S$3,000 per accident") under the row may be shared with it, whatever its name: none.
+  ["R2-1h 'Accidental medical benefit\\tUp to S$3,000 per accident' (round 3: a limit shape), 40 days", R2C, ["Accidental medical benefit\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, null],
+  ["R2-1i 'Medical expenses\\tUp to S$2,500 per accident' (round 3: a limit shape), 40 days", R2C, ["Medical expenses\tUp to S$2,500 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, null],
   // HIGH 2: a bracketed condition in the row's own words, wrapped or on one line, gives no figure.
   ["R2-2 wrapped 'per stay (accident only)', 40 days", R2W, ["per stay (accident only)"], { value: 100, maxDays: 30, fromDay: 3 }, 40, null],
   ["R2-2b wrapped 'per accident (overseas only)', 6 days", R2W, ["per accident (overseas only)"], { value: 100, maxDays: 30, fromDay: 3 }, 6, null],
@@ -537,6 +540,42 @@ const ROUND2: [string, string, string[], WrapOpts, number, string | null][] = [
   // MEDIUM 3 (kept on purpose): a pointer to notes elsewhere may add conditions, so no figure.
   ["R2-3 'see notes on the next page' below the row, 6 days", "Hospital cash\tS$100 per day, from the 3rd day, up to 30 days", ["see notes on the next page"], { value: 100, maxDays: 30, fromDay: 3 }, 6, null],
 ];
+// ============ Gate #508 round 3 ============
+const R3W = "Hospital cash\tS$100 per day in hospital, from the 3rd day, up to 30 days per stay";
+const R3O = { value: 100, maxDays: 30, fromDay: 3 };
+const R3C = { value: 100, maxDays: 60, fromDay: 1 };
+ROUND2.push(
+  // NEW-HIGH 1: any limit shape between the row and the end of its block stops the figure; so does a footnote tying it.
+  ["R3-1 'Accidental medical benefit…per accident' + '* Hospital cash counts towards this amount.', 40 days", R2C, ["Accidental medical benefit\tUp to S$3,000 per accident", "* Hospital cash counts towards this amount."], R3C, 40, null],
+  ["R3-1b 'Medical expenses…per accident' + '\\tincluding daily benefits', 40 days", R2C, ["Medical expenses\tUp to S$3,000 per accident", "\tincluding daily benefits"], R3C, 40, null],
+  ["R3-1c 'Medical\\tUp to S$3,000 per accident', 40 days", R2C, ["Medical\tUp to S$3,000 per accident"], R3C, 40, null],
+  ["R3-1d 'Surgical benefit\\tMaximum S$2,000 per operation', 40 days", R2C, ["Surgical benefit\tMaximum S$2,000 per operation"], R3C, 40, null],
+  ["R3-1e 'Surgical benefit\\tS$2,000 per policy year', 40 days", R2C, ["Surgical benefit\tS$2,000 per policy year"], R3C, 40, null],
+  ["R3-1f 'Medical expenses\\tS$3,000 overall', 40 days", R2C, ["Medical expenses\tS$3,000 overall"], R3C, 40, null],
+  ["R3-1g 'Surgical benefit\\tS$500 per stay', 40 days", R2C, ["Surgical benefit\tS$500 per stay"], R3C, 40, null],
+  ["R3-1h a plain unit-rate row, then 'Note: hospital cash is shared with it.', 40 days", R2C, ["Surgical benefit\tS$500 per operation", "Note: hospital cash is shared with it."], R3C, 40, null],
+  ["R3-1i a plain unit-rate row, then a footnote naming the row, 40 days", R2C, ["Surgical benefit\tS$500 per operation", "* Hospital cash is reduced by any surgical benefit paid."], R3C, 40, null],
+  ["R3-1j a footnote 'counts towards' directly under the row, 40 days", R2C, ["* Hospital cash counts towards the overall limit."], R3C, 40, null],
+  ["R3-1k control: a plain unit-rate row ('Surgical benefit\\tS$500 per operation') is still left out, 40 days", R2C, ["Surgical benefit\tS$500 per operation"], R3C, 40, "S$4,000"],
+  ["R3-1l control: 'Physiotherapy\\tS$80 per visit', 40 days", R2C, ["Physiotherapy\tS$80 per visit"], R3C, 40, "S$4,000"],
+  // NEW-HIGH 2: a leading enumerator and a name's abbreviation are labels, not conditions.
+  ["R3-2 '(a) Hospital cash\\t…', 40 days", `(a) ${R3W}`, [], R3O, 40, "S$3,000"],
+  ["R3-2b 'Hospital cash (HC)\\t…', 40 days", R3W.replace("Hospital cash", "Hospital cash (HC)"), [], { ...R3O, benefit: "Hospital cash (HC)" }, 40, "S$3,000"],
+  ["R3-2c '1. Hospital cash\\t…', 40 days", `1. ${R3W}`, [], R3O, 40, "S$3,000"],
+  ["R3-2d 'i) Hospital cash\\t…', 40 days", `i) ${R3W}`, [], R3O, 40, "S$3,000"],
+  ["R3-2e '(a) Hospital cash (HC)\\t…', 6 days", `(a) ${R3W.replace("Hospital cash", "Hospital cash (HC)")}`, [], { ...R3O, benefit: "Hospital cash (HC)" }, 6, "S$400"],
+  ["R3-2f 'Hospital cash (Plan B)' stays a condition: none", R3W.replace("Hospital cash", "Hospital cash (Plan B)"), [], { ...R3O, benefit: "Hospital cash (Plan B)" }, 40, null],
+  ["R3-2g 'Hospital cash (see note 3)' stays a condition: none", R3W.replace("Hospital cash", "Hospital cash (see note 3)"), [], { ...R3O, benefit: "Hospital cash (see note 3)" }, 40, null],
+  ["R3-2h 'Hospital cash (XY)' (not its initials) stays a condition: none", R3W.replace("Hospital cash", "Hospital cash (XY)"), [], { ...R3O, benefit: "Hospital cash (XY)" }, 40, null],
+  // HIGH 3: any bracket type, and a trailing ", <x> only" or "- <x> only" clause, is a condition.
+  ["R3-3 '[accident only]', 40 days", `${R3W} [accident only]`, [], R3O, 40, null],
+  ["R3-3b ', accident only', 40 days", `${R3W}, accident only`, [], R3O, 40, null],
+  ["R3-3c '- accident only', 40 days", `${R3W} - accident only`, [], R3O, 40, null],
+  ["R3-3d '{for all lives}', 40 days", `${R3W} {for all lives}`, [], R3O, 40, null],
+  ["R3-3e full-width '（accident only）', 40 days", `${R3W} （accident only）`, [], R3O, 40, null],
+  ["R3-3f wrapped '[accident only]', 40 days", R3W, ["[accident only]"], R3O, 40, null],
+  ["R3-3g wrapped ', overseas only' clause, 6 days", "Hospital cash\tS$100 per day in hospital, from the 3rd day, up to 30 days per stay,", ["overseas only"], R3O, 6, null],
+);
 for (const [name, row, below, o, days, want] of ROUND2) test(`stay-wrap ${name}`, () => {
   const h = household([{ person: TAN, row, below, value: o.value, maxDays: o.maxDays, fromDay: o.fromDay ?? null, currencyLine: o.currencyLine, above: o.above, benefit: o.benefit }]);
   const a = ask(h, TAN, [`I was in hospital for ${days} days. How much will I get?`], { perDay: { stayDays: days } });

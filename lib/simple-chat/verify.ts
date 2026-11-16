@@ -540,8 +540,10 @@ const benefitKindName = (name: string) => { const w = name.toLowerCase().match(/
  * with a unit ("per accident", "per operation"), and a closed set of words around them ("up to", "after an excess of").
  * A bare lump amount, a pool, a shared or family limit, an alternative to this row ("instead of", "in place of",
  * "substitutes", "replaces") or any other word keeps the row in the block. */
-const OTHER_TERMS_WORDS = new Set("up to per each a an of after excess payable paid day accident fracture operation claim visit injury procedure surgery event".split(" "));
-const OTHER_TERMS_UNIT = /\b(?:per|each|a)\s+(?:day|accident|fracture|operation|claim|visit|injury|procedure|surgery|event)\b/i;
+// Round 3 (gate #508 NEW-HIGH 1): only a plain unit rate ("S$500 per operation"). Any limit shape ("up to", "maximum",
+// per accident, claim, year, stay or overall) may be a limit this row shares, so that row stays and stops the figure.
+const OTHER_TERMS_WORDS = new Set("per each a day operation fracture visit procedure".split(" "));
+const OTHER_TERMS_UNIT = /\b(?:per|each|a)\s+(?:day|fracture|operation|visit|procedure)\b/i;
 /** A level of care in a name or terms (one test at a time, no global state): ICU, intensive, high dependency, critical
  * care (gate #508 HIGH 4). */
 const CARE_WORD = /\b(?:intensive(?:\s+care)?|icu|hdu|high[\s-]+dependency|critical\s+care)\b/i;
@@ -1850,6 +1852,20 @@ function pageRowNames(pageText: string, rowStart: number): string[] {
 /** What a bracket in a daily row's own words may hold and change nothing: a number ("(30) days"), a currency, or the unit
  * the row is already read by. */
 const HARMLESS_BRACKET = /^\s*(?:\d{1,3}|[A-Z]{0,3}\$|SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|per\s+day|a\s+day|days?|consecutive|inclusive)\s*$/i;
+/** A row's leading number ("(a) ", "1. ", "i) ", "2a)"): a label, never a condition (gate #508 round 3 NEW-HIGH 2). */
+const ROW_ENUMERATOR = /^\s*(?:\((?:\d{1,2}[a-z]?|[a-z]|[ivx]{1,4})\)|(?:\d{1,2}[a-z]?|[a-z]|[ivx]{1,4})[.)])\s+/i;
+/** Whether a bracket of capitals after a row's name is that name's abbreviation ("Hospital cash (HC)"): its letters are
+ * initials of the name's words, in order. */
+function nameAbbreviation(name: string, abbr: string): boolean {
+  if (!/^[A-Z]{2,5}$/.test(abbr)) return false;
+  const initials = (name.match(/[\p{L}]+/gu) ?? []).map((w) => w[0].toUpperCase()).join("");
+  let i = 0;
+  for (const c of initials) if (c === abbr[i]) i++;
+  return i === abbr.length && initials[0] === abbr[0];
+}
+/** Words in a line below a row that tie an amount to it ("* Hospital cash counts towards this amount", "including daily
+ * benefits", "shared with"): a limit this row may share, so no figure (gate #508 round 3 NEW-HIGH 1). */
+const SHARE_WORDS = /\b(?:counts?\s+(?:towards?|against)|count\s+(?:towards?|against)|includ(?:e|es|ed|ing)|inclusive\s+of|part\s+of|within|shared?|sharing|combined|together|aggregate|in\s+total)\b/i;
 export function readStayRule(pageText: string, offset: number, excerpt: string, daily: number): StayRule | null {
   // The row with every line under it up to the next heading (stayBlock), or the quote with those lines when it reaches
   // further; each rule is read once. A limit, aggregate, day rule or condition anywhere below the row gives no total,
@@ -1862,7 +1878,7 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   // The row's own words: its line and the lines its cells wrap onto (stayBlock own: "up to 365 days per" / "policy year"),
   // and the lines of the quote that reach past them. A first cell that only numbers the row ("4") is not one of them.
   // Everything else below the row is its tail, line by line.
-  const line = block.own.replace(/^\s*\(?(?:\d{1,2}[a-z]?|[a-z])[.)]?\t/i, "").replace(/\s+/g, " ").trim();
+  const line = block.own.replace(/^\s*\(?(?:\d{1,2}[a-z]?|[a-z])[.)]?\t/i, "").replace(ROW_ENUMERATOR, "").replace(/\s+/g, " ").trim();
   let lines = block.lines.map((l) => ({ ...l, text: l.text.replace(/\s+/g, " ").trim() }));
   let rowText = quoted;
   if (ownRow) {
@@ -1877,13 +1893,19 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
       lines = lines.map((l) => { const w = l.text.split(" ").filter(Boolean), take = Math.min(left, w.length); left -= take; return { ...l, text: w.slice(take).join(" ") }; }).filter((l) => l.text);
     }
   }
-  rowText = prep(rowText);
+  // Any bracket type is a bracket ("[accident only]", "{for all lives}", "（accident only）"; gate #508 round 3 HIGH 3).
+  rowText = prep(rowText).replace(/[[{（［｛]/g, "(").replace(/[\]}）］｝]/g, ")");
+  // A trailing ", accident only" or "- accident only" clause is a condition, as a bracket is: no figure.
+  if (/(?:[,;]|\s[-–—])\s*[\p{L}][\p{L}' -]{0,30}?\bonly\b/u.test(rowText)) return null;
+  // The row's name before its first tab: a capitals bracket that abbreviates it ("Hospital cash (HC)") is a label.
+  const nameCell = (block.own.replace(/^\s*\(?(?:\d{1,2}[a-z]?|[a-z])[.)]?\t/i, "").replace(ROW_ENUMERATOR, "").split("\t")[0] ?? "").trim();
   // A condition in brackets in the row's own words, on its line or wrapped onto the next ("up to 30 days" / "per stay
   // (accident only)", "(for all lives)", "(overseas only)", "(child)"): the stay may not be paid as the household's own,
   // so no figure, unless the bracket holds only a harmless note (gate #508 round 2 HIGH 2).
   // A bracket that is wholly a waiting form the row reads ("(first 2 days of any admission not payable)") is the row's own.
   for (const m of rowText.matchAll(/\(([^()]*)\)/g)) {
     if (HARMLESS_BRACKET.test(m[1])) continue;
+    if (block.own.includes("\t") && nameCell.endsWith(m[0]) && nameAbbreviation(nameCell.slice(0, -m[0].length), m[1].trim())) continue;
     const w = takeWaiting(m[1]);
     if (w.unpaid.length && !/[\p{L}\d]/u.test(w.rest.replace(/\b(?:of|the|a|an|any|each|every|is|are)\b/gi, " "))) continue;
     return null;
@@ -1900,7 +1922,7 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   // Below the row: each sentence that states a read waiting form about this row (nothing but its name and grammar words
   // left) is taken out; every other word stays and is checked as before. Past another benefit's own row, the sentence must
   // name this row by a word that row's name does not hold: "This benefit does not pay ..." there may be that row's.
-  let marked = false;
+  let marked = false, shared = false;
   const tailRest = lines.map((l) => {
     if (otherCoverStartWait(l.text, ownName, pageNames)) return " ";
     const said = prep(l.text).split(/(?<=[.;])\s+/).map((s) => {
@@ -1912,10 +1934,17 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
       unpaid.push(...w.unpaid);
       return " ";
     }).join(" ");
+    // A line that ties an amount to this row ("* Hospital cash counts towards this amount", "including daily benefits"),
+    // or, past another benefit's row, still names this row once its read waiting sentences are out: that row's amount may
+    // be this row's limit (gate #508 round 3 NEW-HIGH 1).
+    if (SHARE_WORDS.test(said)) shared = true;
+    const named = said.replace(/\b(?:in\s+|of\s+|per\s+|each\s+|any\s+)?hospital(?:\s+(?:stays?|admissions?|confinements?))?\b(?!\s+(?:cash|income|benefit|allowance))/gi, " ");
+    if (l.after && distinct.some((w) => new RegExp(String.raw`\b${w}`, "i").test(named))) shared = true;
     const mark = l.after && !marked ? `${PAST_OTHER} ` : "";
     if (l.after) marked = true;
     return mark + said;
   }).join(" ");
+  if (shared) return null;
   const fromRow = takeWaiting(rowText);
   unpaid.push(...fromRow.unpaid);
   const newWaiting = fromRow.newForm || unpaid.length > fromRow.unpaid.length;
