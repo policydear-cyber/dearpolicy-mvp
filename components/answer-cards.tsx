@@ -230,6 +230,8 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
       {members.map((m, i) => <Fragment key={m.id}>{i ? <div className="answer-either-or" aria-hidden="true"><span>or</span></div> : null}{one(own(m))}</Fragment>)}
     </div>);
   }
+  // A figure worked out for this case (a stay, a bill, children) says once that it is not a payment; printed amounts need no note.
+  const illustrations = statements.some((s) => s.amount?.illustration);
   return <div className="answer-cards">
     {bottomLine ? <p className="answer-bottom-line" data-testid="answer-bottom-line">{render(bottomLine)}</p> : null}
     {showSummary ? <p className="answer-point">{summary}</p> : null}
@@ -241,5 +243,6 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
     <div className="answer-more">
       <WhereFrom statements={statements} citations={answer.citations} sources={sources} idFor={idFor} detailsRef={where} />
     </div>
+    {illustrations ? <p className="answer-cards-foot">Worked out from your documents, not a payment or an insurer&rsquo;s decision.</p> : null}
   </div>;
 }

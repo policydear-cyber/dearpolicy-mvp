@@ -25,6 +25,7 @@ import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import type { AnswerStatement, StructuredAnswer } from "@/components/answer-cards";
 import { moneyFiguresIn, sentencesOf, type StatedFigure } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN } from "@/lib/format/currency";
+import { GENERIC_DISCLAIMER } from "@/lib/chat/generic-disclaimer";
 import { keepsCapIn, noteMultiple, timesWords } from "@/lib/benefit-table/multiplier";
 import { childCase, childLimitIn, childLimitNotes, childShareAllowed, personStatus, provenAdult, printedLife, withoutChildLimit } from "@/lib/benefit-table/child-limit";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
@@ -40,7 +41,7 @@ export const LEFT_OUT_FACT = "I left out a point I couldn’t find in your docum
 export const NOTHING_SHOWN = "I couldn’t match the points behind this answer to words in your documents, so none are shown. Please ask again, or open the documents on the Documents page.";
 export const NO_ANSWER = "I couldn’t put together an answer from your documents. Please ask again, or ask about one benefit at a time.";
 export const ALTERNATIVES_NOTE = "These are alternatives under one benefit in the same document, not a total.";
-export const DISCLAIMER = "Answers come from the documents you uploaded. The insurer decides eligibility and the final amount.";
+export const DISCLAIMER = GENERIC_DISCLAIMER;
 
 // ------------------------------------------------------------------ finding a quote in the stored pages
 /** Text for matching: case, spacing, quote marks and dashes do not count. `at[i]` is where character i came from. */

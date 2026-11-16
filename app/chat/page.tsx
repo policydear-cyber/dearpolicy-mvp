@@ -17,6 +17,7 @@ import { AnswerWait,isAnswerStage,type AnswerStageId } from "@/components/answer
 import { SourceList } from "@/components/source-list";
 import { AnswerCards,showsCards } from "@/components/answer-cards";
 import { InsurerContacts } from "@/components/insurer-contacts";
+import { GENERIC_DISCLAIMER } from "@/lib/chat/generic-disclaimer";
 import { StoppedNotice,isStopped } from "@/components/answer-stopped";
 import { LearnLinks } from "@/components/learn-links";
 import { sendFailure } from "@/components/chat-send-failure";
@@ -470,6 +471,8 @@ function ChatContent(){
           {message.role==="assistant"&&showsCards(message.answer)?null:nextStepsAfter(message.answer)}
           {message.answer?.citations.length&&!(message.role==="assistant"&&showsCards(message.answer))?<details className="citations"><summary>Sources</summary><SourceList citations={message.answer.citations} files={documentFiles}/></details>:null}
           </>;return detail;})()}
+          {/* Only a notice about this answer itself (an estimate is not a payout); the general note is said once, under the box. */}
+          {message.answer?.disclaimer&&message.answer.disclaimer.trim()!==GENERIC_DISCLAIMER&&!isStopped(message.answer,message.content)?<div className="answer-disclaimer">{message.answer.disclaimer}</div>:null}
           {/* Knowledge library: general explanations of terms this answer uses (static, never changes the answer). */}
           {message.role==="assistant"&&message.answer&&!isStopped(message.answer,message.content)?<LearnLinks texts={[message.content,...(message.answer.details??[]),...(message.answer.claimItems??[]).flatMap(item=>[item.reason,...(item.conditions??[])])]}/>:null}
         </div>
