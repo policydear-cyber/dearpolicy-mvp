@@ -508,6 +508,51 @@ test("gate #508 LOW 6: a per-accident day cap printed below the row says 'per ac
   assert.match(st!.basis ?? "", /for at most 10 days per accident/, JSON.stringify(st));
 });
 
+// ============ Gate #508 round 2 ============
+const R2C = "Hospital cash\tS$100 per day in hospital, from the first day, up to 60 days per stay";
+const R2I = "Hospital income\tS$100 per day in hospital, from the first day, up to 60 days per stay";
+const R2W = "Hospital cash\tS$100 per day in hospital, from the 3rd day, up to 30 days";
+const ROUND2: [string, string, string[], WrapOpts, number, string | null][] = [
+  // NEW-HIGH 1: a shared limit named with this row's kind, several benefits or no one benefit is never "another benefit".
+  ["R2-1 'Medical and cash benefits\\tUp to S$3,000 per accident', 40 days", R2C, ["Medical and cash benefits\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, null],
+  ["R2-1b 'Medical and income benefits…', 40 days", R2I, ["Medical and income benefits\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1, benefit: "Hospital income" }, 40, null],
+  ["R2-1c 'Accidental benefits\\tUp to S$3,000 per accident', 40 days", R2C, ["Accidental benefits\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, null],
+  ["R2-1d 'Accidental benefits\\tS$3,000 per accident', 40 days", R2C, ["Accidental benefits\tS$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, null],
+  ["R2-1e 'Accidental benefit\\tUp to S$3,000 per accident' (no specific benefit), 40 days", R2C, ["Accidental benefit\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, null],
+  ["R2-1f 'Medical or surgical benefit…', 40 days", R2C, ["Medical or surgical benefit\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, null],
+  ["R2-1g 'Hospital allowance\\tUp to S$3,000 per accident', 40 days", R2C, ["Cash allowance\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, null],
+  ["R2-1h control: a specific other benefit ('Accidental medical benefit') is still left out, 40 days", R2C, ["Accidental medical benefit\tUp to S$3,000 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, "S$4,000"],
+  ["R2-1i control: 'Medical expenses\\tUp to S$2,500 per accident', 40 days", R2C, ["Medical expenses\tUp to S$2,500 per accident"], { value: 100, maxDays: 60, fromDay: 1 }, 40, "S$4,000"],
+  // HIGH 2: a bracketed condition in the row's own words, wrapped or on one line, gives no figure.
+  ["R2-2 wrapped 'per stay (accident only)', 40 days", R2W, ["per stay (accident only)"], { value: 100, maxDays: 30, fromDay: 3 }, 40, null],
+  ["R2-2b wrapped 'per accident (overseas only)', 6 days", R2W, ["per accident (overseas only)"], { value: 100, maxDays: 30, fromDay: 3 }, 6, null],
+  ["R2-2c one line '…per stay (accident only)', 40 days", R2W + " per stay (accident only)", [], { value: 100, maxDays: 30, fromDay: 3 }, 40, null],
+  ["R2-2d one line '…(for all lives)', 40 days", R2W + " per stay (for all lives)", [], { value: 100, maxDays: 30, fromDay: 3 }, 40, null],
+  ["R2-2e one line '…(Lee Mei Ling)', 6 days", R2W + " per stay (Lee Mei Ling)", [], { value: 100, maxDays: 30, fromDay: 3 }, 6, null],
+  ["R2-2f one line '…(child)', 6 days", R2W + " per stay (child)", [], { value: 100, maxDays: 30, fromDay: 3 }, 6, null],
+  ["R2-2g one line '…per accident (overseas only)', 6 days", R2W + " per accident (overseas only)", [], { value: 100, maxDays: 30, fromDay: 3 }, 6, null],
+  ["R2-2h control: the same row with no bracket keeps main's figure, 40 days", R2W + " per stay", [], { value: 100, maxDays: 30, fromDay: 3 }, 40, "S$3,000"],
+  ["R2-2i control: a wrapped 'per stay' with no bracket, 40 days", R2W, ["per stay"], { value: 100, maxDays: 30, fromDay: 3 }, 40, "S$3,000"],
+  ["R2-2j control: a harmless bracket ('(30) days'), 40 days", "Hospital cash\tS$100 per day in hospital, from the 3rd day, up to (30) days per stay", [], { value: 100, maxDays: 30, fromDay: 3 }, 40, "S$3,000"],
+  // MEDIUM 3 (kept on purpose): a pointer to notes elsewhere may add conditions, so no figure.
+  ["R2-3 'see notes on the next page' below the row, 6 days", "Hospital cash\tS$100 per day, from the 3rd day, up to 30 days", ["see notes on the next page"], { value: 100, maxDays: 30, fromDay: 3 }, 6, null],
+];
+for (const [name, row, below, o, days, want] of ROUND2) test(`stay-wrap ${name}`, () => {
+  const h = household([{ person: TAN, row, below, value: o.value, maxDays: o.maxDays, fromDay: o.fromDay ?? null, currencyLine: o.currencyLine, above: o.above, benefit: o.benefit }]);
+  const a = ask(h, TAN, [`I was in hospital for ${days} days. How much will I get?`], { perDay: { stayDays: days } });
+  assert.ok(a.row, `no daily row: ${JSON.stringify(h.rows.map((r) => [r.benefit, r.pays, r.figure.kind]))}`);
+  assert.equal(stayCard(a)?.amount?.text ?? null, want, JSON.stringify(a.kept.map((s) => [s.text, s.amount?.text ?? null, s.basis ?? null])));
+});
+for (const [name, other] of [["A6 'Recovery cash'", "Recovery cash\tS$80 per day at home"], ["Q9 'Recovery and rehabilitation benefit'", "Recovery and rehabilitation benefit\tS$80 per day"]] as const)
+  test(`stay-wrap R2-4 ${name}: a day cap printed after another benefit's row is never stated as this row's`, () => {
+    const h = household([{ person: TAN, row: OROW, below: [other, "Maximum days\t30 days per stay", OWAIT], value: 150, maxDays: null }]);
+    const a = ask(h, TAN, ["I was in hospital for 5 days. How much will I get?"], { perDay: { stayDays: 5 } });
+    const st = stayCard(a);
+    assert.equal(st?.amount?.text, "S$450", JSON.stringify(a.kept));
+    assert.doesNotMatch(st!.basis ?? "", /at most 30 days per stay/, JSON.stringify(st));
+    assert.match(st!.basis ?? "", /may be that row's/, JSON.stringify(st));
+  });
+
 // ============ Report ============
 for (const r of results) console.log(`${r.ok ? "PASS" : "FAIL"}  ${r.name}${r.ok ? "" : `\n      ${r.detail}`}`);
 console.log(`stay-days-test: ${results.filter((r) => r.ok).length} passed, ${results.filter((r) => !r.ok).length} failed`);

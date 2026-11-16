@@ -500,6 +500,8 @@ function ownRowLines(pageText: string, offset: number): { text: string; labelMor
     const cells = l.split("\t");
     if (cells.length === 2 && nameOnly(cells[0]) && /^\s*[a-z]/.test(cells[1]) && !/[.:;!?]\s*$/.test(text)) { labelMore.push(cells[0].trim()); text = `${text} ${cells[1].trim()}`; }
     else if (cells.length === 1 && nameOnly(l)) labelMore.push(l.trim());
+    // A lower-case line under the row is read as the row's own words, so "see notes on the next page" stops the figure
+    // (gate #508 round 2 MEDIUM 3, kept on purpose): notes printed elsewhere may add conditions this page does not show.
     else if (wrapsOnto(text, l)) text = `${text} ${l.trim()}`;
     else break;
     used++;
@@ -527,6 +529,11 @@ const OTHER_BENEFIT_NAME_WORDS = new Set(("medical surgical surgery operation op
   + "home nursing outpatient follow up specialist consultation emergency transport travel accidental death disablement disability permanent "
   + "partial loss sight hearing limb limbs scarring dismemberment mobility aids prosthesis prosthetic benefit benefits cash "
   + "income allowance rider of and or a the").split(" "));
+/** Words in another row's name that make it a limit shared with this row, or over several benefits (otherBenefitRow). */
+const SHARED_NAME = /\b(?:cash|income|allowances?|benefits|and|or)\b|[&/+]/i;
+/** Words of a benefit name that name no one benefit ("Accidental benefit", "Rider benefit"). */
+const UNSPECIFIC_NAME_WORDS = new Set("benefit accidental accident rider of a the personal".split(" "));
+const nameWordsOf = (name: string) => name.toLowerCase().match(/[\p{L}\d]+/gu) ?? [];
 /** Whether a row's name is a benefit kind only (OTHER_BENEFIT_NAME_WORDS), with brackets and hyphens. */
 const benefitKindName = (name: string) => { const w = name.toLowerCase().match(/[\p{L}\d]+/gu) ?? []; return w.length > 0 && w.every((x) => OTHER_BENEFIT_NAME_WORDS.has(x)); };
 /** What another benefit's own terms may hold (an allow-list, gate #508 NEW-HIGH 1, MEDIUM 5): its own money amounts, each
@@ -557,6 +564,11 @@ function otherBenefitRow(line: string, ownName: string): string | null {
   const starts = (w: string, t: string) => new RegExp(String.raw`\b${w}`, "i").test(t);
   if (!words.length || !ownWords.length || /[:\d]/.test(name) || words.some((w) => starts(w, ownName)) || ownWords.some((w) => starts(w, name))) return null;
   if (!benefitKindName(name) || CARE_WORD.test(name)) return null;
+  // A name that may hold this row's own kind or several benefits is a shared limit, never another benefit (gate #508 round
+  // 2 NEW-HIGH 1: "Medical and cash benefits\tUp to S$3,000 per accident", "Accidental benefits\t..."): a cash, income or
+  // allowance word, "and" / "or", or a plural "benefits". Nor is a name with no specific benefit word ("Accidental
+  // benefit"), whose "up to S$3,000 per accident" may be a limit on every benefit.
+  if (SHARED_NAME.test(name) || !nameWordsOf(name).some((w) => !UNSPECIFIC_NAME_WORDS.has(w))) return null;
   const terms = cells.slice(at).join(" ");
   if (CARE_WORD.test(terms) || !OTHER_TERMS_UNIT.test(terms)) return null;
   const left = terms.replace(/(?:[A-Z]{1,3}\$|\$|£|€|¥|\b(?:SGD|USD|MYR|RM|GBP|EUR|AUD|HKD)\s?)\s?\d[\d,]*(?:\.\d+)?/g, " ").toLowerCase().match(/[\p{L}\d]+/gu) ?? [];
@@ -1835,6 +1847,9 @@ function pageRowNames(pageText: string, rowStart: number): string[] {
   }
   return out;
 }
+/** What a bracket in a daily row's own words may hold and change nothing: a number ("(30) days"), a currency, or the unit
+ * the row is already read by. */
+const HARMLESS_BRACKET = /^\s*(?:\d{1,3}|[A-Z]{0,3}\$|SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|per\s+day|a\s+day|days?|consecutive|inclusive)\s*$/i;
 export function readStayRule(pageText: string, offset: number, excerpt: string, daily: number): StayRule | null {
   // The row with every line under it up to the next heading (stayBlock), or the quote with those lines when it reaches
   // further; each rule is read once. A limit, aggregate, day rule or condition anywhere below the row gives no total,
@@ -1863,6 +1878,16 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
     }
   }
   rowText = prep(rowText);
+  // A condition in brackets in the row's own words, on its line or wrapped onto the next ("up to 30 days" / "per stay
+  // (accident only)", "(for all lives)", "(overseas only)", "(child)"): the stay may not be paid as the household's own,
+  // so no figure, unless the bracket holds only a harmless note (gate #508 round 2 HIGH 2).
+  // A bracket that is wholly a waiting form the row reads ("(first 2 days of any admission not payable)") is the row's own.
+  for (const m of rowText.matchAll(/\(([^()]*)\)/g)) {
+    if (HARMLESS_BRACKET.test(m[1])) continue;
+    const w = takeWaiting(m[1]);
+    if (w.unpaid.length && !/[\p{L}\d]/u.test(w.rest.replace(/\b(?:of|the|a|an|any|each|every|is|are)\b/gi, " "))) continue;
+    return null;
+  }
   const label = rowName(rowLine(pageText, offset).text);
   const ownName = `${label} ${block.labelMore.join(" ")}`;
   const labelWords = new Set(ownName.toLowerCase().match(/[a-z]+/g) ?? []);
@@ -1999,7 +2024,9 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   // paid in that year, which the household has not said, so the figure is for this stay alone.
   const working = `${payable} × ${amount.text}${cap && days > cap.value ? ` = ${formatMoney(sign, days)}, capped at the ${formatMoney(sign, cap.value)} a ${cap.period}` : ""}`;
   return { value, text: formatMoney(sign, value), currencyResolved: amount.currencyResolved, stay, payable, working, yearly: !!period || !!cap,
-    rule: `${amount.text} a day, paid from day ${unpaid + 1}, for at most ${most} days${per}${capWords}` };
+    // A most-days line printed past another benefit's row may be that row's (mostUnsure): it is never stated as this row's
+    // cap (gate #508 round 2 LOW 4); the figure is used only where it is the same either way.
+    rule: `${amount.text} a day, paid from day ${unpaid + 1}, for at most ${most} days${r.mostUnsure ? " (a limit printed after another benefit's row, which may be that row's; this stay is within it either way)" : per}${capWords}` };
 }
 
 /** What a figure printed per child could pay for the number of children the household's latest message gives
