@@ -576,6 +576,34 @@ ROUND2.push(
   ["R3-3f wrapped '[accident only]', 40 days", R3W, ["[accident only]"], R3O, 40, null],
   ["R3-3g wrapped ', overseas only' clause, 6 days", "Hospital cash\tS$100 per day in hospital, from the 3rd day, up to 30 days per stay,", ["overseas only"], R3O, 6, null],
 );
+// ============ Gate #508 round 4 (stay-qualifier) ============
+// HIGH (main the same): a qualifier with no brackets, after or before the cap period, says which stays it pays: none.
+// Past the name, the row's terms are an allow-list (period words, waiting rule, punctuation).
+const R4Y = "Hospital cash\tS$100 per day in hospital, from the 3rd day, up to 30 days per policy year";
+ROUND2.push(
+  ["R4-1 '…per stay accident only' (no punctuation), 40 days", `${R3W} accident only`, [], R3O, 40, null],
+  ["R4-1b '…in hospital for accidents only, from the 3rd day…', 40 days", "Hospital cash\tS$100 per day in hospital for accidents only, from the 3rd day, up to 30 days per stay", [], R3O, 40, null],
+  ["R4-1c '…per stay, overseas', 40 days", `${R3W}, overseas`, [], R3O, 40, null],
+  ["R4-1d '…per stay, solely for accidents', 40 days", `${R3W}, solely for accidents`, [], R3O, 40, null],
+  ["R4-1e '…per stay, for all lives', 40 days", `${R3W}, for all lives`, [], R3O, 40, null],
+  ["R4-1f '(a) Hospital cash for all lives\\t…', 40 days", `(a) ${R3W.replace("Hospital cash", "Hospital cash for all lives")}`, [], { ...R3O, benefit: "Hospital cash for all lives" }, 40, null],
+  ["R4-1g '(a) Hospital cash\\t…per stay, for all lives', 40 days", `(a) ${R3W}, for all lives`, [], R3O, 40, null],
+  ["R4-1h wrapped 'per accident overseas', 6 days", R2W, ["per accident overseas"], R3O, 6, null],
+  ["R4-1i '…per stay worldwide', 40 days", `${R3W} worldwide`, [], R3O, 40, null],
+  ["R4-1j '…per stay, illness', 6 days", `${R3W}, illness`, [], R3O, 6, null],
+  ["R4-1k '…per policy year, overseas', 6 days", `${R4Y}, overseas`, [], R3O, 6, null],
+  ["R4-1l 'Hospital cash only for you\\t…', 6 days", R3W.replace("Hospital cash", "Hospital cash only for you"), [], { ...R3O, benefit: "Hospital cash only for you" }, 6, null],
+  // Controls: the period words, punctuation and the row's own waiting rule keep main's figure.
+  ["R4-2 control: '…per stay.', 40 days", `${R3W}.`, [], R3O, 40, "S$3,000"],
+  ["R4-2b control: '…per policy year', 6 days", R4Y, [], R3O, 6, "S$400"],
+  // "per confinement" after "up to 30 days" gives none on 725e661c already (a reading this follow-up does not change).
+  ["R4-2c '…per confinement' (none before this change too), 40 days", R3W.replace("per stay", "per confinement"), [], R3O, 40, null],
+  ["R4-2d control: '…per accident', 6 days", R3W.replace("per stay", "per accident"), [], R3O, 6, "S$400"],
+  ["R4-2e control: '…per hospital stay;', 40 days", R3W.replace("per stay", "per hospital stay;"), [], R3O, 40, "S$3,000"],
+  ["R4-2f control: wrapped 'per stay', 40 days", R2W, ["per stay"], R3O, 40, "S$3,000"],
+  ["R4-2g control: '(a) Hospital cash (HC)\\t…per stay', 40 days", `(a) ${R3W.replace("Hospital cash", "Hospital cash (HC)")}`, [], { ...R3O, benefit: "Hospital cash (HC)" }, 40, "S$3,000"],
+  ["R4-2h control: '…up to 30 days of hospitalisation', 6 days", "Hospital cash\tS$100 per day in hospital, from the 3rd day, up to 30 days of hospitalisation", [], R3O, 6, "S$400"],
+);
 for (const [name, row, below, o, days, want] of ROUND2) test(`stay-wrap ${name}`, () => {
   const h = household([{ person: TAN, row, below, value: o.value, maxDays: o.maxDays, fromDay: o.fromDay ?? null, currencyLine: o.currencyLine, above: o.above, benefit: o.benefit }]);
   const a = ask(h, TAN, [`I was in hospital for ${days} days. How much will I get?`], { perDay: { stayDays: days } });

@@ -1799,6 +1799,13 @@ function takeWaiting(t: string, perStayOnly = false): { unpaid: number[]; rest: 
  * you and your spouse") may change whose cap it is or which stays wait, so no figure is worked out (gate SD-H2b, SD-H4).
  * An allow-list: no list of sharing or cause words would ever be complete. */
 const ROW_GRAMMAR_WORDS = new Set("a an the of and".split(" "));
+/** Words in a daily row's name that say whose stays or which stays it pays ("Hospital cash for all lives"). */
+const NAME_QUALIFIER_WORDS = new Set("for only solely except excluding unless lives persons insured overseas abroad while when if".split(" "));
+/** Verbs and the run of the days a row's terms may hold and say nothing about which stays it pays ("shall be payable",
+ * "thirty (30) days continuously"). */
+const ROW_TERMS_VERBS = new Set("shall be is are will payable paid continuously consecutively continuous consecutive".split(" "));
+/** The period a row's most days are counted by, after them: per stay, confinement, admission, accident, disability. */
+const STAY_PERIOD_WORDS = /\b(?:per|each|for\s+(?:any|each|one)|in\s+(?:any|one|each|a))\s+(?:one\s+)?(?:(?:hospital\s+)?(?:stay|admission|confinement)|accident|disability|period\s+of\s+(?:hospitali[sz]ation|confinement))\b|\bof\s+(?:(?:continuous|consecutive)\s+)?(?:hospitali[sz]ation|confinement|(?:hospital\s+)?stay|admission)\b|\bin\s+(?:the\s+)?hospital\b/gi;
 /** Words above a daily row that say its limits are not this person's alone (gate SD-H2d, SD-L2). "Per policy year" and
  * "per-policy year" are a cap's period, not sharing words. */
 const SHARED_ABOVE = /\b(?:shared?|sharing|all\s+(?:the\s+)?(?:insured|lives|persons|members)|per[\s-]+policy\b(?!\s+year\b)|not\s+per\s+person|famil(?:y|ies)|combined|aggregate|together|collectively|for\s+everyone|per\s+certificate|households?|pooled|jointly|split\s+between|each\s+policy|whole\s+policy|per\s+plan|dependants?|dependents?)\b/i;
@@ -2020,14 +2027,30 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   const dayNumbers = [...rule.matchAll(/(\d+)\)?\s*(?:st|nd|rd|th)?\s+(?:consecutive\s+)?days?\b/gi)].map((m) => Number(m[1]));
   if (dayNumbers.some((d) => d !== most)) return null;
   // A row whose cells wrap onto the next line is read exactly as if it were printed on one line (gate #508 NEW-HIGH 2).
-  if (period || cap || newWaiting || mostUnsure) {
-    // The row's name: benefit-name words only. Past it, grammar words only (its own name words are no exemption).
-    if (!(ownName.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => BENEFIT_NAME_WORDS.has(w) || ROW_GRAMMAR_WORDS.has(w))) return null;
+  const strict = period || cap || newWaiting || mostUnsure;
+  // The row's name says whose stays or which stays it pays ("(a) Hospital cash for all lives"): no figure (gate #508
+  // round 4 HIGH). With a rule read since R4 H2-C, benefit-name words only.
+  const nameWordList = ownName.replace(ROW_ENUMERATOR, " ").replace(/\(([A-Z]{2,5})\)/g, (m, a: string) => nameAbbreviation(ownName.replace(ROW_ENUMERATOR, "").split("(")[0], a) ? " " : m)
+    .toLowerCase().match(/[\p{L}\d]+/gu) ?? [];
+  if (nameWordList.some((w) => NAME_QUALIFIER_WORDS.has(w))) return null;
+  if (strict && !nameWordList.every((w) => BENEFIT_NAME_WORDS.has(w) || ROW_GRAMMAR_WORDS.has(w))) return null;
+  // Past the name, the row's own terms are an allow-list (gate #508 round 4 HIGH: "…up to 30 days per stay accident
+  // only", "…per stay, overseas", "…, for all lives"): its daily figure, the unit it is paid by, its waiting rule (taken
+  // out above), its most days and their period (per stay, per policy year, per year, per confinement, per accident),
+  // grammar words and punctuation. Any other word may say which stays it pays, so no figure.
+  {
     const rowPart = withoutMost.split("¶")[0];
-    const at = label ? rowPart.toLowerCase().indexOf(label.toLowerCase()) : -1;
-    const own = (at >= 0 ? rowPart.slice(0, at) + " " + rowPart.slice(at + label.length) : rowPart).replace(dailies[0].raw ?? "", " ")
+    // The label as printed, or past a leading enumerator ("(a) Hospital cash"), which the row's words no longer hold.
+    const bare = label.replace(ROW_ENUMERATOR, "");
+    const lab = label && rowPart.toLowerCase().includes(label.toLowerCase()) ? label : bare;
+    const at = lab ? rowPart.toLowerCase().indexOf(lab.toLowerCase()) : -1;
+    let own = (at >= 0 ? rowPart.slice(0, at) + " " + rowPart.slice(at + lab.length) : rowPart).replace(dailies[0].raw ?? "", " ")
       .replace(/\b(?:per|a|each)\s+day\b(?:\s+in\s+(?:the\s+)?hospital\b|\s+of\s+(?:continuous\s+)?hospitali[sz]ation\b|\s+of\s+(?:a\s+|the\s+)?(?:hospital\s+)?stay\b)?/i, " ").replace("@most", " ");
-    if (!(own.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => ROW_GRAMMAR_WORDS.has(w))) return null;
+    // A period word wrapped onto a line of its own ("maximum 30 days per" / "confinement") was read as the name's: it ends
+    // the row's terms.
+    const wrappedPeriod = block.labelMore.length > 0 && /^\s*(?:(?:hospital\s+)?(?:stay|admission|confinement)|accident|disability)\s*$/i.test(block.labelMore.join(" "));
+    if (!strict) own = (wrappedPeriod ? own.replace(/;\s*$/, ` ${block.labelMore.join(" ")} ;`) : own).replace(ROW_ENUMERATOR, " ").replace(/\(([A-Z]{2,5})\)/g, " ").replace(STAY_PERIOD_WORDS, " ");
+    if (!(own.toLowerCase().match(/[\p{L}\d]+/gu) ?? []).every((w) => ROW_GRAMMAR_WORDS.has(w) || (!strict && ROW_TERMS_VERBS.has(w)))) return null;
   }
   return { unpaid: unpaid[0], most, period, cap, ...(mostUnsure ? { mostUnsure } : {}), ...(mostBelow ? { mostBelow } : {}), ...(per && !period ? { per } : {}) };
 }
