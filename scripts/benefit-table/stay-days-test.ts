@@ -619,6 +619,43 @@ ROUND2.push(
   ["R5-2 '(max 30 days, accident only)' stays a condition: none", `${R5} (max 30 days, accident only)`, [], R3O, 40, null],
   ["R5-2b '(up to 30 days for all lives)' stays a condition: none", `${R5} (up to 30 days for all lives)`, [], R3O, 40, null],
 );
+// ============ Gate #513 round 1 ============
+// NEW-HIGH 1 (regression vs #508 and main): ordinary period and verb wording keeps main's figure.
+const Q1 = (terms: string, name = "Hospital cash") => `${name}\tS$100 per day${terms}`;
+for (const [what, terms] of [
+  ["of hospital confinement, maximum", " of hospital confinement, from the 3rd day, maximum 30 days"],
+  ["for a maximum of", ", from the 3rd day, for a maximum of 30 days"],
+  ["per hospitalisation", ", from the 3rd day, up to 30 days per hospitalisation"],
+  ["per hospitalization", ", from the 3rd day, up to 30 days per hospitalization"],
+  ["per illness", ", from the 3rd day, up to 30 days per illness"],
+  ["per any one illness", ", from the 3rd day, up to 30 days per any one illness"],
+  ["per sickness", ", from the 3rd day, up to 30 days per sickness"],
+  ["per sickness or accident", ", from the 3rd day, up to 30 days per sickness or accident"],
+  ["per event", ", from the 3rd day, up to 30 days per event"],
+  [", per insured", ", from the 3rd day, up to 30 days, per insured"],
+  ["per life", ", from the 3rd day, up to 30 days per life"],
+  ["per person", ", from the 3rd day, up to 30 days per person"],
+  ["maximum N days", ", from the 3rd day, maximum 30 days"],
+  ["max. N days", ", from the 3rd day, max. 30 days"],
+  ["of hospitalisation", " of hospitalisation, from the 3rd day, up to 30 days"],
+  ["in hospital", " in hospital, from the 3rd day, up to 30 days"],
+  ["while hospitalised", " while hospitalised, from the 3rd day, up to 30 days"],
+  ["in any one hospital", " in any one hospital, from the 3rd day, up to 30 days"],
+  ["payable to the policyholder", ", from the 3rd day, payable to the policyholder, up to 30 days"],
+  ["per stay of the policy", ", from the 3rd day, up to 30 days per stay of the policy"],
+] as const) ROUND2.push([`Q1 '${what}' keeps main's figure, 40 days`, Q1(terms), [], R3O, 40, "S$3,000"]);
+ROUND2.push(["Q1b 'Hospital cash benefit for the insured' keeps main's figure, 40 days", Q1(", from the 3rd day, up to 30 days per stay", "Hospital cash benefit for the insured"), [], { ...R3O, benefit: "Hospital cash benefit for the insured" }, 40, "S$3,000"]);
+ROUND2.push(["Q1c 'Ward cash' keeps main's figure, 40 days", Q1(", from the 3rd day, up to 30 days per stay", "Ward cash"), [], { ...R3O, benefit: "Ward cash" }, 40, "S$3,000"]);
+// Still none: a place or cause after the period.
+ROUND2.push(["Q1d '…per day in a hospital in Singapore…': none", Q1(" in a hospital in Singapore, from the 3rd day, up to 30 days"), [], R3O, 40, null]);
+ROUND2.push(["Q1e '…of hospitalisation abroad…': none", Q1(" of hospitalisation abroad, from the 3rd day, up to 30 days"), [], R3O, 40, null]);
+// HIGH 2: a name that carries a person, plan, relation, cause or place gives none on every row.
+for (const name of ["Accidental hospital cash", "Child hospital income", "Spouse hospital cash", "Juvenile hospital cash", "Dependant hospital cash",
+  "Hospital cash - accident", "Hospital cash - spouse", "Hospital cash - accident (HCA)", "Child hospital cash (CHC)", "Accident hospital cash (AHC)",
+  "Maternity hospital cash", "Cancer hospital cash", "Hospital cash rider Life 2", "Mei Ling hospital cash", "Hospital cash Plan B", "Hospital cash - Deluxe", "Overseas hospital cash"])
+  ROUND2.push([`Q2 name '${name}': none`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, null]);
+for (const name of ["Daily hospital income", "Hospital income benefit (HIB)", "Hospitalisation daily allowance"])
+  ROUND2.push([`Q2b control name '${name}' keeps main's figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
 for (const [name, row, below, o, days, want] of ROUND2) test(`stay-wrap ${name}`, () => {
   const h = household([{ person: TAN, row, below, value: o.value, maxDays: o.maxDays, fromDay: o.fromDay ?? null, currencyLine: o.currencyLine, above: o.above, benefit: o.benefit }]);
   const a = ask(h, TAN, [`I was in hospital for ${days} days. How much will I get?`], { perDay: { stayDays: days } });
