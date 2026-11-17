@@ -2898,7 +2898,11 @@ const ABOUT_DOCUMENTS = /\b(?:documents?|files|uploads?|uploaded|paperwork)\b|\b
 const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
 /** A question about whether files were read ("which documents haven't been fully read?", "could all my files be read?"). */
-const READ_STATUS = /\b(?:read|readable|unreadable|scanned|failed)\b/i;
+const READ_STATUS_WORD = /\b(?:read|readable|unreadable|scanned|failed)\b/i;
+/** Only a which/what/any/all question about files being (not) read; never "I read in my documents ...", "can you read",
+ * "did you read my Shield document" (Critic on #521, M2). */
+const READ_STATUS = { test: (q: string) => READ_STATUS_WORD.test(q) && /\b(?:which|what|any|all|every|how\s+many)\b[^.?!]*\b(?:read|readable|unreadable|scanned|failed)\b/i.test(q)
+  && !/\b(?:i|we)\s+(?:have\s+)?read\b|\b(?:can|could|did|will|would|please)\s+you\s+(?:please\s+)?read\b|\bread\s+(?:it|this|that|my|the)\b/i.test(q) };
 /** What a document is called in a point about the file: its product, or, when it has none and its file name says nothing
  * ("scan_20260101090000.pdf", a hash), what the app takes it to be ("Example Insurance endorsement, uploaded 1 Jan 2026"), with the
  * file name after it so it can be found on the Documents page (overnight run 23 Oct, N195, N282). A name a person gave the
@@ -2925,8 +2929,12 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
   // not matched to their page, in the Documents page's words (launch checklist C10, 17 Nov).
   const table = tableWords(d);
   const fileRead = !unreadable(d) && !(d.unreadablePages?.length && !d.pages.length);
+  // Said of its benefits, never of the file the line before calls read (Critic on #521, M1).
+  const OF_BENEFITS: Record<string, string> = { "could not be read": "its benefits could not be read", "stopped being read": "the reading of its benefits stopped",
+    "is on hold for its scan": "the reading of its benefits is on hold for its scan", "is still being read": "its benefits are still being read" };
   const benefits = fileRead && table ? table.startsWith("page") || table.startsWith("some pages")
     ? ` Its benefits were read in part: ${table}, so any cover printed only there is not counted.`
+    : OF_BENEFITS[table] ? ` ${sentence(OF_BENEFITS[table])}, so no cover or amount from it is counted in answers.`
     : ` It ${table}, so no cover or amount from it is counted in answers.` : "";
   const review = fileRead && d.needsReview ? " Some details in it could not be matched to the page they came from, so DearPolicy does not use them in answers yet." : "";
   // A linked file uploaded for someone else says it as one contrast, as libraryGroups does ("It is linked to Mei, but it
@@ -2940,7 +2948,8 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
  * pages read past (readPastWords). Null when read, unknown, or a document that holds no cover (a receipt). */
 function tableWords(d: HouseholdDocument): string | null {
   const state = d.tableState;
-  if (!state || state === "read") return null;
+  // A file a newer upload replaced is not counted for that reason, as noteCoverNotCounted leaves it out.
+  if (!state || state === "read" || d.supersededAt) return null;
   if (NO_COVER_READING_ROLES.includes(d.documentRole ?? "") && !MISFILED_STATES.has(state)) return null;
   if (TABLE_STATE_WORDS[state]) return TABLE_STATE_WORDS[state];
   return readPastWords(d, new Map([[d.policyId, state]]));

@@ -55,5 +55,19 @@ check("a question not about reading lists only what the model named (negative co
   const t = answer.statements!.map((x) => x.text).join("\n");
   assert.doesNotMatch(t, /Booklet/, t);
 });
+check("a table state is said of the benefits, never against 'was read' (Critic on #521, M1)", () => {
+  for (const [state, words] of [["not_readable", "Its benefits could not be read"], ["waiting", "Its benefits are still being read"], ["stalled", "The reading of its benefits stopped"], ["held", "The reading of its benefits is on hold"]] as const) {
+    const t = libraryFact(HOUSE, doc(8, { name: "Plan X.pdf", productName: "Plan X", tableState: state }));
+    assert.match(t, new RegExp(`was read\\. ${words}`), t);
+    assert.doesNotMatch(t, /\. It (?:could not be read|is still being read|stopped being read|is on hold)/, t);
+  }
+  assert.doesNotMatch(libraryFact(HOUSE, doc(9, { name: "Old.pdf", supersededAt: "2026-11-01", tableState: "no_table" })), /benefits/);
+});
+check("only a which/what/any/all question about files being read lists them all (Critic on #521, M2)", () => {
+  const ask = (q: string) => verifyAnswer(HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [st("Plan E is linked to Mei.", "D4")] }, [q]).answer.statements!.map((x) => x.text).join("\n");
+  for (const q of ["Which of our documents haven't been fully read?", "Were all my files read?", "Are any documents unreadable?", "What documents could not be read?"]) assert.match(ask(q), /Booklet/, q);
+  for (const q of ["Can you read the document I uploaded and tell me if I'm covered for dental?", "Did you read my Example Shield document?",
+    "What does my uploaded file say about dental? Did you read it?", "I read in my documents that dental is covered. Is it?"]) assert.doesNotMatch(ask(q), /Booklet/, q);
+});
 console.log(`\n${passed} read-status checks passed, ${failed.length} failed`);
 if (failed.length) process.exit(1);
