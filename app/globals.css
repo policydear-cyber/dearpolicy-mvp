@@ -1741,6 +1741,11 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 .document-list.rows { grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: start; }
 .rows .document-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px 16px; }
 .rows .document-main { display: grid; gap: 10px; min-width: 0; }
+/* Each row has a visible edge. Site-wide --edge is transparent (surfaces told apart by tone), which left
+   full-width rows on the grey page with nothing between them. A needs-review row keeps its amber edge; a row
+   still being read uses the ordinary edge (its progress bar and wait text say it is reading). */
+.rows .document-card { border-color: var(--line-strong); }
+.rows .document-card.needs-review { border-color: var(--warn-line); }
 .rows .document-head { align-items: start; }
 .rows .document-head > .status { font-style: normal; text-transform: none; white-space: nowrap; align-self: start; }
 .rows .document-title .document-numbers { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; }
