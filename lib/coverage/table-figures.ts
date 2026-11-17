@@ -500,7 +500,7 @@ export function tableDisplay(all: (SummaryRow & { coverKey?: string })[]): strin
 
 /** A limit short enough for a card line: one phrase of at most eight words, with no sentence break inside it ("Max 6 claims
  * per policy year", "after 2 nights"). */
-const shortLimit = (c: string) => { const t = c.trim().replace(/[.;]\s*$/, ""); return !/[.;:]\s/.test(t) && t.split(/\s+/).length <= 8; };
+const shortLimit = (c: string) => { const t = c.trim().replace(/[.;]\s*$/, ""); return !/[.;]\s/.test(t) && t.split(/\s+/).length <= 8; };
 
 /** One confirmed schedule line (a sum insured) of a tile's category: the documents of its policy, and its amount. */
 export type ConfirmedLine = { documentIds: string[]; amount: number | null; currency: string | null };

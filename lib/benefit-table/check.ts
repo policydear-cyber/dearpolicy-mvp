@@ -1751,14 +1751,15 @@ function unescaped(v: unknown): unknown {
  * cover's own printed line is its row (below). `notesKind`: the kind of the document a part's reading is merged into
  * (checkStored), so a later part stored with its own kind ("other", none) still works out the document's notes, which
  * mergeReadings intersects (#474 perf gate, P474-H1). */
-/** The most cover a plan offers: a clause that OPENS with the offer ("Be insured up to (a maximum coverage of)", "Stay
- * insured for up to", "Maximum coverage/sum insured/sum assured (of)", "Choose/Apply for (a sum insured of) up to"), on its
- * own line after any bullet or number, with the figure straight after those words, and no rate after the figure ("per
- * day", "a year", "each accident"). A benefit named first ("Hospital cash: maximum cover of S$30 a day", "Funeral
- * expenses: insured for up to S$5,000") is a limit on a claim and is kept (Critic #528 NEW-HIGH 1). */
-const OFFER_START = /^(?:(?:be|stay)\s+insured\s+(?:for\s+)?up\s+to\b|maximum\s+(?:coverage|cover|sum\s+(?:insured|assured)|insured\s+amount)\b|(?:choose|select|apply\s+for)\s+(?:an?\s+)?(?:sum\s+(?:insured|assured)|coverage|cover)?\s*(?:of\s+)?up\s+to\b)[^.;:,\d]{0,40}?[:\s]*$/i;
+/** The most cover a plan offers, printed as an offer to buy: a clause that OPENS with "Be insured up to (a maximum coverage
+ * of)", "Stay insured for up to", or "Choose/Select/Apply for (a sum insured/cover/coverage of) up to", on its own line after
+ * any bullet or number, with the figure straight after those words, and no rate or benefit after the figure ("per day",
+ * "each accident", "for accidental death"). Wording that names a limit ("Maximum cover for baggage", "Maximum sum insured
+ * per accident", "Be covered up to S$50,000 for accidental death", "Medical expenses: insured for up to S$20,000") is a
+ * limit on a claim and is kept (Critic and TE #528). */
+const OFFER_START = /^(?:(?:be|stay)\s+insured\s+(?:for\s+)?up\s+to(?:\s+an?\s+maximum\s+(?:coverage|cover|sum\s+(?:insured|assured))\s+of)?|(?:choose|select|apply\s+for)\s+(?:an?\s+)?(?:(?:sum\s+(?:insured|assured)|coverage|cover)\s+)?(?:of\s+)?up\s+to)\s*$/i;
 const LINE_MARK = /^[\s•·*\-–—]*(?:\(?(?:\d{1,2}|[a-z])[.)]\s+)?/i;
-const RATE_AFTER = /^\s*(?:per|a|an|each|every)\b/i;
+const RATE_AFTER = /^\s*(?:per|a|an|each|every|for|against|on|in\s+respect\s+of)\b/i;
 function offerFigure(line: string, value: number): boolean {
   const text = plainText(line);
   const spans = anyMoneyFigures(text).filter((f) => Math.abs(f.value - value) < 0.005);

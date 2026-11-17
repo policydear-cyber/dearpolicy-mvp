@@ -344,6 +344,8 @@ test("a card never shows a figure without its currency, or a clause, as its amou
   // leaves the card without an amount rather than show it.
   assert.equal(tableDisplay([keyed("gtl", perDay(30, "SGD", { conditions: live }))]), null);
   assert.equal(tableDisplay([keyed("gtl", perDay(30, "SGD", { conditions: [live[0]] }))]), "S$30 a day · from day 11 · up to 30 days");
+  // A limit with a colon in it is still a short limit (TE #528).
+  assert.equal(tableDisplay([keyed("gtl", perDay(30, "SGD", { conditions: ["Limit: 30 days per year"] }))]), "S$30 a day · from day 11 · up to 30 days · Limit: 30 days per year");
   // A short limit stays on the card with its figure.
   assert.equal(tableDisplay([keyed("gtl", perDay(30, "SGD", { conditions: [live[0], "Max 6 claims per policy year"] }))]),
     "S$30 a day · from day 11 · up to 30 days · Max 6 claims per policy year");

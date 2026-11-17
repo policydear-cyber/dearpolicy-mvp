@@ -25,8 +25,16 @@ const page = [
   "Overseas medical expenses: you are covered up to S$250,000 per trip",
   "Funeral expenses: insured for up to S$7,000",
   "•\tMaximum coverage S$90 per day for each stay",
+  "Maximum cover for baggage: S$3,000 per trip",
+  "Maximum coverage per trip for overseas medical expenses S$200,000",
+  "Maximum sum insured per accident: S$100,000",
+  "Be covered up to S$50,000 for accidental death while travelling",
+  "Each child is covered up to S$25,000",
+  "Rental car excess: Maximum cover S$1,000",
+  "•\tStay insured for up to S$400,000 for terminal illness",
   "•\tChoose a sum insured of up to $500,000",
   "•\tMaximum sum assured: S$2,000,000",
+  "Apply for cover of up to S$900,000",
   "•\tReceive 100% Advance Payment Benefit up to S$300,000 if diagnosed with Terminal Illness",
   "•\tCoverage up to S$250,000 against 37 critical illnesses",
   "•\tAmbulance cost up to S$500 per accident",
@@ -38,7 +46,7 @@ const row = (benefit: string, pays: string, value: number, quote: string, extra:
 const offers = [
   row("Maximum coverage", "up_to", 800000, "Be insured up to a maximum coverage of S$800,000 at S$1.10 per day"),
   row("Sum insured", "up_to", 500000, "Choose a sum insured of up to $500,000"),
-  row("Maximum sum assured", "amount", 2000000, "Maximum sum assured: S$2,000,000"),
+  row("Apply for cover", "up_to", 900000, "Apply for cover of up to S$900,000"),
 ];
 const limits = [
   row("Advance Payment Benefit", "up_to", 300000, "Receive 100% Advance Payment Benefit up to S$300,000 if diagnosed with Terminal Illness"),
@@ -55,6 +63,15 @@ const limits = [
   row("Funeral expenses", "up_to", 7000, "Funeral expenses: insured for up to S$7,000"),
   row("Daily stay", "per_day", 90, "Maximum coverage S$90 per day for each stay"),
   row("Cover without check-up", "up_to", 250000, "Get covered for up to RM 250,000 with no medical check-up"),
+  // Limits named by "maximum" or "covered", and an offer line with a benefit after the figure (TE #528).
+  row("Maximum sum assured", "amount", 2000000, "Maximum sum assured: S$2,000,000"),
+  row("Baggage", "up_to", 3000, "Maximum cover for baggage: S$3,000 per trip"),
+  row("Overseas medical", "up_to", 200000, "Maximum coverage per trip for overseas medical expenses S$200,000"),
+  row("Accident", "up_to", 100000, "Maximum sum insured per accident: S$100,000"),
+  row("Accidental death", "up_to", 50000, "Be covered up to S$50,000 for accidental death while travelling"),
+  row("Child", "up_to", 25000, "Each child is covered up to S$25,000"),
+  row("Rental car excess", "up_to", 1000, "Rental car excess: Maximum cover S$1,000"),
+  row("Terminal illness", "up_to", 400000, "Stay insured for up to S$400,000 for terminal illness"),
 ];
 const read = (kind: string, benefits: unknown[]) => checkReading(src, { document: { kind, product: "Group Term Life", insurer: null, namedPeople: [] }, covers: [], benefits });
 

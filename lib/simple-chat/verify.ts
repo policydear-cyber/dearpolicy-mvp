@@ -63,7 +63,8 @@ function squash(s: string): { text: string; at: Int32Array } {
     if (code < 128) {
       if (code === 32 || (code >= 9 && code <= 13)) continue;
       chars.push(code === 96 ? "'" : code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : s[i]); at[n++] = i;
-      if (code >= 48 && code <= 57 && ORDINAL_AT(s, i)) i += 2;
+      // The letters go; a number after them stays apart from this one ("1st 30 days" is never "130 days"; Critic #528).
+      if (code >= 48 && code <= 57 && ORDINAL_AT(s, i)) { i += 2; if (/^\s*\d/.test(s.slice(i + 1, i + 8))) { chars.push("~"); at[n++] = i; } }
       continue;
     }
     let c = s[i];

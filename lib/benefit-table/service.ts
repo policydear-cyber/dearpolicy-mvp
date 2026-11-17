@@ -389,7 +389,7 @@ export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReadi
  * The earlier reading is replaced only when every part was read: a reading with pages missing would drop their rows.
  * A failed reading is never silent: the earlier one is kept and the document says so (noteUnreadTable), and a later
  * reading that finishes takes that note away. A document the app could not read is not sent. */
-export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage, time: ReadTime = {}, guards?: GuardSetup): Promise<{ read: boolean; why?: string; pagesReread: number; keptEarlier?: number; parts?: number; figuresChecking?: number; guardsAt?: string; carried?: boolean; stalls?: number; skipped?: number[] }> {
+export async function readDocument(db: Db, model: TableModel, accountId: string, policyId: string, onUsage?: OnUsage, time: ReadTime = {}, guards?: GuardSetup): Promise<{ read: boolean; why?: string; pagesReread: number; parts?: number; figuresChecking?: number; guardsAt?: string; carried?: boolean; stalls?: number; skipped?: number[] }> {
   const now = time.now ?? Date.now;
   // How long the next call may run: until SAVE_MARGIN_MS before the deadline. null: no time limit; 0: no time for a call.
   const callTime = () => time.deadline == null ? null : Math.max(0, time.deadline - SAVE_MARGIN_MS - now());
@@ -533,14 +533,6 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     await onUsage?.("page reading", reply);
     if (reply.json != null) stored.pages.push({ page: f.page, json: reply.json });
   }
-  // A row the earlier reading had, still printed on today's pages, that no row of this reading reads is kept (keepEarlierRows).
-  const reread = stored.pages.length - (done.length - 1);
-  const earlier = await db("SELECT reading, prompt_version FROM benefit_readings WHERE policy_id=$1 AND account_id=$2", [doc.id, accountId]).catch(() => []);
-  const previous = earlier.length ? (typeof earlier[0].reading === "string" ? JSON.parse(earlier[0].reading) : earlier[0].reading) as StoredReading : null;
-  // Only a reading made with today's reading instructions: a row a changed prompt leaves out on purpose is not brought back
-  // (Critic #528 MEDIUM).
-  const kept = previous && earlier[0].prompt_version === PROMPT_VERSION ? keepEarlierRows(doc, previous, stored) : 0;
-  if (kept) console.log(`benefit table reading for policy ${doc.id}: kept ${kept} row(s) of the earlier reading that this reading did not read`);
   // The figure guards (switch on only): every figure of the finished reading is checked by five readers before it is used.
   // Whatever happens in the check, the paid reading is stored (Critic R389-1); a check that failed outright leaves every
   // figure unchecked, for the continuation job.
@@ -561,53 +553,11 @@ export async function readDocument(db: Db, model: TableModel, accountId: string,
     [doc.id, accountId, JSON.stringify(stored), done[0].model, PROMPT_VERSION]);
   await clearUnreadTableNote(db, accountId, doc.id);
   if (stored.skippedPages) await noteReadPast(db, accountId, doc.id, stored.skippedPages);
-  return { read: true, pagesReread: reread, ...(kept ? { keptEarlier: kept } : {}), ...(done.length > 1 ? { parts: done.length } : {}), ...(skipped.length ? { skipped } : {}),
+  return { read: true, pagesReread: stored.pages.length - (done.length - 1), ...(done.length > 1 ? { parts: done.length } : {}), ...(skipped.length ? { skipped } : {}),
     ...(stored.guards ? { figuresChecking: unfinishedCount(checkStored(doc, stored), stored.guards), guardsAt: stored.guards.at } : {}) };
 }
 
 type RawReading = { document?: Record<string, unknown>; covers?: { page?: unknown }[]; benefits?: { page?: unknown }[] };
-
-/** A line's words only, to compare a quote with a row's excerpt whatever the spacing, tabs or marks. */
-const flatWords = (t: string) => t.toLowerCase().replace(/[^a-z0-9%]+/g, "");
-/** A re-read never loses a row the earlier reading had (live 17 Nov: a Read again of a 36-page summary read every line of
- * its page 5 but the hospital cash line, and its page 13 limit line: the S$30 a day and S$5,000 rows left the table for
- * both people). The reader is a model, and two readings of the same pages can leave out different lines. So each row of
- * the earlier reading (a benefit or a cover line) is added to the new one when:
- * - it still checks against today's pages on its own (checkReading: its quote, figure and person are printed as before), and
- * - no row of the new reading reads any of its lines: none on its page has an excerpt holding one of the row's quoted
- *   lines, or held by it. A row the new reading reads again, under a new name, a new heading or with a corrected figure, is
- *   the new reading's: an earlier misreading never stands beside its correction (Critic #528 NEW-HIGH 2).
- * - it is checked with the new reading's document facts (its kind, named people), never the earlier reading's.
- * Only a reading made with the same reading instructions is used (readDocument): a re-read never removes a row the
- * earlier reading had that is still printed and read by no new row, unless the instructions changed.
- * The kept rows are added as one more part (checkStored merges parts), so every check applies to them as to any row.
- * Changes `stored` in place; returns how many rows were kept. Pure apart from that. */
-export function keepEarlierRows(doc: SourceDoc, previous: StoredReading, stored: StoredReading): number {
-  const now = checkStored(doc, stored);
-  const read = [...now.benefits, ...now.covers].map((r) => ({ page: r.source.page, words: flatWords(r.source.excerpt) }));
-  const linesOf = (q: unknown) => String(q ?? "").split("\n").map(flatWords).filter((l) => l.length >= 4);
-  const readAgain = (row: { page?: unknown; quote?: unknown }) => {
-    const lines = linesOf(row.quote), page = Number(row.page);
-    return !lines.length || read.some((r) => r.page === page && lines.some((line) => r.words.includes(line) || (r.words.length >= 4 && line.includes(r.words))));
-  };
-  const facts = ((stored.document ?? {}) as RawReading).document ?? {};
-  const raws = [previous.document, ...(previous.pages ?? []).map((p) => p.json)].map((j) => (j ?? {}) as RawReading);
-  const benefits: { page?: unknown }[] = [], covers: { page?: unknown }[] = [];
-  const seen = new Set<string>();
-  for (const [list, out, field] of [[raws.flatMap((r) => Array.isArray(r.benefits) ? r.benefits : []), benefits, "benefits"], [raws.flatMap((r) => Array.isArray(r.covers) ? r.covers : []), covers, "covers"]] as const) {
-    for (const row of list) {
-      const key = JSON.stringify(row);
-      if (seen.has(key) || readAgain(row as { page?: unknown; quote?: unknown })) continue;
-      seen.add(key);
-      const alone = checkReading(doc, { document: facts, covers: field === "covers" ? [row] : [], benefits: field === "benefits" ? [row] : [] });
-      if ((field === "benefits" ? alone.benefits : alone.covers).length) out.push(row);
-    }
-  }
-  if (!benefits.length && !covers.length) return 0;
-  const pages = [...benefits, ...covers].map((r) => Number(r.page)).filter(Number.isFinite);
-  stored.pages.push({ page: pages.length ? Math.min(...pages) : doc.pages[0]?.page ?? 1, json: { document: facts, covers, benefits } });
-  return benefits.length + covers.length;
-}
 /** A part's reading without the rows it read from its context page. */
 function withoutPage(json: unknown, page: number): unknown {
   const r = (json ?? {}) as RawReading;

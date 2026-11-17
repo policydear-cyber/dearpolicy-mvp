@@ -36,6 +36,11 @@ test("only an ordinal's letters after a number are ignored: other words and figu
   assert.equal(read("Daily Hospital Cash Benefit\tS$40 per day from the 8the day onwards.").benefits.length, 0, "a word, not an ordinal");
   assert.equal(locateQuote(household, "from the 8 day onwards", 0)?.page, 4);
   assert.equal(locateQuote(household, "the 8 thousandth day", 0), null, "a word after a space is not an ordinal's letters");
+  // The numbers either side of an ordinal never run together (Critic #528 round 2).
+  const joined = { documents: [{ name: "x.pdf", pages: [{ page: 1, text: "Paid for the 1st 30 days of a stay" }], processingStatus: "ready" }] } as unknown as Parameters<typeof locateQuote>[0];
+  assert.equal(locateQuote(joined, "for the 130 days", 0), null);
+  assert.equal(locateQuote(joined, "for the 1st 30 days", 0)?.page, 1);
+  assert.equal(locateQuote(household, "payable from 8th to 67th day", 0)?.page, 6);
 });
 
 console.log(`ordinal quote: ${passed} passed, ${failures.length} failed`);
