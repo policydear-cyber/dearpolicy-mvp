@@ -71,7 +71,7 @@
   --scrim: rgba(14, 22, 18, .28);
 
   --shadow-float: 0 4px 12px rgba(22, 33, 28, .10), 0 1px 2px rgba(22, 33, 28, .06);
-  --focus: 0 0 0 3px rgba(37, 99, 235, .4);
+  --focus: 0 0 0 3px #2563eb;
 
   --r-sm: 10px; --r-md: 14px; --r-lg: 20px;
   --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 22px; --fs-2xl: 28px; --fs-3xl: 36px;
