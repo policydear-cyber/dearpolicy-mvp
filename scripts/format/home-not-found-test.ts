@@ -30,7 +30,7 @@ test("wording or a booklet alone (on file): listed apart, never said to be missi
   const g = homeGaps([cov("Death", "covered"), cov("Hospitalisation", "on_file")]);
   assert.deepEqual(g.onFile, ["Hospitalisation"]); assert.ok(!g.missing.includes("Hospitalisation"));
   const t = text(html(g.missing, null, "Ama", g.onFile));
-  assert.match(t, /Found only in a booklet or wording, not on Ama\u2019s own policy:Hospitalisation/);
+  assert.match(t, /Found only in a booklet or wording, not yet shown on Ama\u2019s own policy:Hospitalisation/);
   assert.doesNotMatch(t.split("Found only")[0], /Hospitalisation/, "the on-file kind is not under 'No cover ... was found'");
   assert.equal(text(html([], null, "Ama", ["Travel"])).includes("No cover of these kinds"), false, "no 'not found' line when nothing is missing");
 });

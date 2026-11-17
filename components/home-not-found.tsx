@@ -32,7 +32,7 @@ export function HomeNotFound({missing,onFile=[],memberId,name,note}:{missing:str
   return <section className="home-gaps" data-testid="home-gaps" aria-labelledby="home-gaps-title">
     <h2 id="home-gaps-title">Gaps to consider</h2>
     {!!missing.length&&<><p>{note?`No cover of these kinds was found in what DearPolicy could read of ${whose}.`:`No cover of these kinds was found in ${whose}.`}</p>{chips(missing)}</>}
-    {!!onFile.length&&<><p>{`Found only in a booklet or wording, not on ${own}:`}</p>{chips(onFile)}</>}
+    {!!onFile.length&&<><p>{`Found only in a booklet or wording, not yet shown on ${own}:`}</p>{chips(onFile)}</>}
     {note&&<small>{note}</small>}
     <p className="home-gaps-foot"><Link className="text-link" href="/learn/types-of-cover">What each type of cover is for</Link><span aria-hidden="true"> · </span><Link className="text-link" href="/policies">Have one of these? Upload it</Link></p>
   </section>;
