@@ -1554,6 +1554,10 @@ function checkAmount(st: ModelStatement, quoted: Found, household: Household, pe
     // the table's heading or wording is read as the one row it means, when exactly one fits (rowFor).
     const ownPcts = (f: Found) => [...rowLine(household.documents[f.docIndex].pages.find((p) => p.page === f.page)!.text, f.offset).text.matchAll(PCTS)].map((m) => Number(m[1]));
     let found = quoted;
+    // A quote that opens on a footnote mark printed on its own line above the row ("#" / "Arm , Elbow, Wrist or Ribs	25%",
+    // live 17 Nov C4) is that row: the mark is read past, inside the quote only, when nothing but marks stands before it.
+    const marked = ownPcts(found).length ? null : pastMarkLines(household, found);
+    if (marked && ownPcts(marked).at(-1) === pct) found = marked;
     if (ownPcts(found).at(-1) !== pct) {
       const row = ownPcts(found).length ? null : rowFor(st, quoted, household);
       if (!row) return { ok: false, why: NOT_ROW_FIGURE };
@@ -1563,6 +1567,29 @@ function checkAmount(st: ModelStatement, quoted: Found, household: Household, pe
     return { ...r, found };
   }
   return plainAmount(st, quoted, household);
+}
+/** A line that is only footnote or reference marks ("#", "*", "^", "**", "†"): no letter, digit or percentage. */
+const MARK_LINE = /^[ \t]*[#*^†‡§¶]+[ \t]*$/;
+/** The quote read from its first line that is not only marks, when the quote opens on one or more mark-only lines and goes on
+ * past them on the same page. Null when it does not open on a mark line, or nothing of the quote follows the marks. */
+function pastMarkLines(household: Household, found: Found): Found | null {
+  const page = household.documents[found.docIndex]?.pages.find((p) => p.page === found.page);
+  if (!page || found.end == null) return null;
+  let start = rowLine(page.text, found.offset).start, skipped = false;
+  for (;;) {
+    const nl = page.text.indexOf("\n", start);
+    const line = page.text.slice(start, nl < 0 ? undefined : nl);
+    if (!MARK_LINE.test(line)) break;
+    if (nl < 0) return null;
+    // The mark must be the quote's own first words, and the quote must go on past its line.
+    if (nl + 1 >= found.end) return null;
+    start = nl + 1; skipped = true;
+  }
+  if (!skipped || start < found.offset) return null;
+  const lead = page.text.slice(start).length - page.text.slice(start).trimStart().length;
+  const offset = start + lead;
+  if (offset >= found.end) return null;
+  return { docIndex: found.docIndex, page: found.page, excerpt: page.text.slice(offset, found.end).replace(/[ \t]+/g, " ").trim(), offset, end: found.end };
 }
 function percentAmount(st: ModelStatement, found: Found, household: Household, person: string | null): AmountCheck {
   const doc = household.documents[found.docIndex];
