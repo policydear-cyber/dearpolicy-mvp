@@ -27,12 +27,13 @@ export function rowFractureKind(benefit: string): string | null {
   return kinds.size === 1 ? [...kinds][0] : null;
 }
 
-/** The kinds of fracture said in the household's words ("a simple fracture", "it was compound", "closed break"). */
+/** The kinds of fracture said in the household's words ("a simple fracture", "it was compound", "closed break"). Used only
+ * to put that kind's amount first, never to withhold another kind's: a misread costs nothing. */
 export function kindsSaid(text: string): Set<string> {
   const out = new Set<string>();
   // Words before the kind that deny it or leave it open ("not a simple fracture", "I don't know if it was simple",
   // "whether it was a compound break"): that kind is not said (Critic on #518, NEW-HIGH 2, 3).
-  const open = /\b(?:not|never|no|n't|isn't|wasn't|unsure|whether|if|maybe|perhaps|might|possibly|or|than|unless)\b[^.?!]{0,30}$/i;
+  const open = /(?:\b(?:not|never|no|unsure|whether|if|maybe|perhaps|might|could|possibly|probably|hardly|ruled|suspects?|suspected|thought|or|than|unless)\b|n't\b)[^.?!]{0,30}$/i;
   const add = (kind: string, before: string, after: string) => { if (!open.test(before) && !/^\s*(?:fractures?|breaks?|broken)?\s*(?:,\s*)?or\b/i.test(after)) out.add(kind.toLowerCase()); };
   // Only a kind word said of the fracture itself: "other" or "simple" alone ("any other benefits?") says nothing.
   for (const m of text.matchAll(new RegExp(String.raw`\b(${KIND_WORDS})\s+(?:fractures?|breaks?|broken)\b`, "gi")))

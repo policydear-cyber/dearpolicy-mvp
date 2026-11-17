@@ -88,12 +88,16 @@ test("live walk 17 Nov shape: no kind said, two kinds printed: both amounts as a
     assert.match(a.question, /Which kind of fracture did Rowan Hartley have: "Simple Fracture" or "Other Fracture"\?/);
   }
 });
-test("the kind said: that kind's amount; the other kind's none, with why", () => {
+test("the kind said: every kind still shown, the said kind first and named so, no question (Critic #518 round 2)", () => {
   const simple = answer(both(), "Rowan had a simple fracture of his arm. What can he claim?", [/Other Fracture/, /^Simple Fracture: /]);
-  assert.deepEqual(simple.amounts, ["S$1,250"]);
-  assert.ok(simple.points.some((t) => /"Other Fracture", not the kind of fracture you described/.test(t)), simple.points.join(" | "));
+  assert.deepEqual(simple.amounts, ["S$1,250", "S$120,000"]);
+  assert.ok(simple.points.some((t) => /"Simple Fracture", the kind you described/.test(t)), simple.points.join(" | "));
+  assert.doesNotMatch(simple.question, /Which kind/);
   const other = answer(both(), "Rowan had an other fracture of his arm. What can he claim?", [/Other Fracture/]);
-  assert.deepEqual(other.amounts, ["S$120,000"]);
+  assert.deepEqual(other.amounts, ["S$120,000", "S$1,250"]);
+  // Misread kinds cost nothing: both amounts stay.
+  for (const q of ["The X-ray doesn't look like a simple fracture.", "The doctor ruled out a simple fracture.", "Last year he had a simple fracture of his leg."])
+    assert.equal(answer(both(), `Rowan broke his arm. ${q}`, [/Other Fracture/]).amounts.length, 2, q);
 });
 test("a kind the documents do not print says nothing: both as alternatives", () => {
   const a = answer(both(), "Rowan had a compound fracture of his arm. What can he claim?", [/Other Fracture/]);

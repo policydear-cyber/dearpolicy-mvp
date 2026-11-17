@@ -256,7 +256,11 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
     }
     const match = named ?? shared;
     if (!match) { unmatched.push(c); continue; }
-    found.push({ ...c, ...householdLife(c.life, match.member), personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null, documentKind: r.kind, planType: planTypeOf(c, r.planType ?? null, { product: r.product, baseCovers: r.covers.filter((x) => !x.riderOf).length }) });
+    // The household's "self" is no proof of an adult on a document that also insures someone it records as a parent: the
+    // self may be insured there as that parent's dependent child (Critic on #518 round 2).
+    const parentHere = match.member.relationship?.trim().toLowerCase() === "self" && r.covers.some((o) => o !== c
+      && /^(?:parent|mother|father)$/i.test(((m) => m && m !== "nobody" ? m.member.relationship?.trim() ?? "" : "")(householdRecord(o.person, r.documentId, family) ?? findFamilyMatchWithKind(o.person, family))));
+    found.push({ ...c, ...householdLife(c.life, parentHere ? { relationship: null } : match.member), personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null, documentKind: r.kind, planType: planTypeOf(c, r.planType ?? null, { product: r.product, baseCovers: r.covers.filter((x) => !x.riderOf).length }) });
   }
   // One person's printed policy numbers for one cover type, grouped where they may be one policy's number written two ways
   // ("MT-104455", "MT104455", "00104455", "104455-01"; TE P152 F1).

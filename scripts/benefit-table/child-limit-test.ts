@@ -30,7 +30,7 @@ const ACC = "55555555-5555-4555-8555-555555555555";
 const DOC = "eeeeeeee-0000-4000-8000-000000000081";
 const ben = (o: Record<string, unknown>) => ({ section: null, column: null, pays: "amount", value: null, period: null, basis: null, asOf: null, percentOf: null, baseAmount: null, baseQuote: null,
   cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 2, ...o });
-function schedule(people: Person[], tableLines: string[], benefits: Record<string, unknown>[], o: { product?: string; header?: string; period?: string | null; familyDob?: Record<string, string>; page3?: string } = {}) {
+function schedule(people: Person[], tableLines: string[], benefits: Record<string, unknown>[], o: { product?: string; header?: string; period?: string | null; familyDob?: Record<string, string>; page3?: string; relationships?: Record<string, string> } = {}) {
   const product = o.product ?? "Family Personal Accident";
   const page1 = `Example Assurance plc\n${product.toUpperCase()} - SCHEDULE${o.period === null ? "" : `\nPeriod of insurance: ${o.period ?? "1 March 2026 to 28 February 2027"}`}\n${o.header ?? "Insured person\tRelationship\tDate of birth\tSum Insured"}\n${people.map((p) => p.line).join("\n")}`;
   const page2 = `TABLE OF BENEFITS\nSection\tBenefit\tAmount payable\n${tableLines.join("\n")}`;
@@ -38,7 +38,7 @@ function schedule(people: Person[], tableLines: string[], benefits: Record<strin
     documentRole: "personal_schedule", effectiveDate: null, expiryDate: null, uploadedAt: "2026-10-01", uploadedFor: null, linkedPeople: people.map((p) => p.name), supersededAt: null,
     processingStatus: "ready", pages: [page1, page2, ...(o.page3 ? [o.page3] : [])].map((text, i) => ({ page: i + 1, text })) };
   const house: Household = { accountId: ACC, members: people.map((p) => ({ name: p.name, relationship: p.relationship })), documents: [d] };
-  const family: FamilyMember[] = people.map((p, i) => ({ id: `m${i}`, display_name: p.name, relationship: p.relationship, date_of_birth: o.familyDob?.[p.name] ?? null }));
+  const family: FamilyMember[] = people.map((p, i) => ({ id: `m${i}`, display_name: p.name, relationship: o.relationships?.[p.name] ?? p.relationship, date_of_birth: o.familyDob?.[p.name] ?? null }));
   const src: SourceDoc = { id: d.policyId, name: d.name, readable: true, pages: d.pages };
   const reading = checkReading(src, { document: { kind: "personal_proof", product, insurer: d.insurer, namedPeople: people.map((p) => p.name), plan: null,
       periodFrom: o.period === null ? null : (o.period ?? "1 March 2026 to 28 February 2027").split(" to ")[0], periodTo: o.period === null ? null : (o.period ?? "1 March 2026 to 28 February 2027").split(" to ")[1] },
@@ -537,6 +537,14 @@ test("household record: Self and Spouse keep a group scheme's figures when the s
   assert.deepEqual(death(h, me).amounts, ["£100,000"]);
   assert.deepEqual(death(h, wife).amounts, ["£80,000"]);
   assert.deepEqual(death(h, kid).amounts, []);
+});
+test("household record: Self is no proof of an adult on a document that also insures a member recorded as a parent", () => {
+  const bare = (name: string, rel: string, sum: string, value: number) => P(name, rel, "", sum, value, [name, sum]);
+  const mum = { ...bare("Ngozi Okafor", "Policyholder", "GBP 100,000", 100000) };
+  const student = { ...bare("Daniel Okafor", "Policyholder", "GBP 80,000", 80000) };
+  const fam = (rel: Record<string, string>) => family([mum, student], "100% of the Sum Insured. For a dependent child, limited to 20% of the Sum Insured.", { header: "Insured person\tSum Insured", condition: null, relationships: rel });
+  assert.deepEqual(death(fam({ "Daniel Okafor": "self", "Ngozi Okafor": "parent" }), student).amounts, []);
+  assert.deepEqual(death(fam({ "Daniel Okafor": "self", "Ngozi Okafor": "spouse" }), student).amounts, ["£80,000"]);
 });
 // ---------- Gate round 6: giving a child's share needs a document with no other child or age words ----------
 test("gate R6-H1: any other child or age wording in the document, however laid out, gives the child no share", () => {
