@@ -77,6 +77,18 @@ async function partA() {
     assert.deepEqual(findFamilyMatchWithKind("TAN BOB", fam), { member: fam[2], kind: "exact" }, "order-insensitive");
     assert.deepEqual(findFamilyMatchWithKind("Josephine Tan", fam), { member: fam[0], kind: "partial" });
     assert.equal(findFamilyMatch("Marc Lim", fam)?.id, "m", "preferred name counts");
+    // #530 (preferred name required): a preferred name finds a person only by an exact match of a name of two words or
+    // more. A one-word one ("Alex", "Tan") or any preferred name's words inside a longer printed name never does.
+    assert.equal(findFamilyMatch("Marc Lim Wei Ming", fam), null, "a preferred name is never matched by its words");
+    const pref = [{ id: "a", display_name: "Alex Tan", preferred_name: "Alex" }];
+    assert.equal(findFamilyMatch("Alex Chen", pref), null, "a one-word preferred name inside a stranger's name: no match");
+    assert.equal(findFamilyMatch("Alex", pref), null, "a one-word preferred name is never a document name");
+    assert.equal(findFamilyMatch("Alex Tan", pref)?.id, "a", "the full name still matches");
+    assert.equal(findFamilyMatch("Tan Alex Wei", pref)?.id, "a", "the full name's words still match");
+    const wj = [{ id: "1", display_name: "Lim Wei Jie", preferred_name: "Wei Jie" }, { id: "2", display_name: "Jay Lim", preferred_name: "Jay" }];
+    assert.equal(findFamilyMatch("Tan Wei Jie", wj), null, "preferred names' words never pick a person for a stranger");
+    assert.equal(findFamilyMatch("Chen Tan Ming", [{ id: "t", display_name: "Ah Kow", preferred_name: "Tan" }]), null);
+    assert.equal(findFamilyMatch("Wei Jie", wj)?.id, "1", "an exact two-word preferred name still counts");
     assert.equal(findFamilyMatch("Alice Wong", fam), null);
     assert.equal(findFamilyMatch("Tan", fam), null, "a profile needs ALL its words printed");
     const twins = [{ id: "1", display_name: "Josephine" }, { id: "2", display_name: "Josephine Lee" }];
