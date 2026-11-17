@@ -204,7 +204,7 @@ export default function FamilyPage() {
       <section className="profile-add-panel" aria-label="Add a family member">
         {family.length ? <h3>Add a family member</h3> : null}
         <form onSubmit={add} className="profile-add-grid">
-          <div className="field wide"><label htmlFor="fm-new-name">Full name, as on their policies</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen Wei Ming" autoComplete="off" required /></div>
+          <div className="field wide"><label htmlFor="fm-new-name">Full name, as on their policies</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen" autoComplete="off" required /></div>
           <div className="field"><label htmlFor="fm-new-relationship">Relationship to you</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
           <div className="field"><label htmlFor="fm-new-dob">Date of birth</label><input id="fm-new-dob" type="date" min="1900-01-01" max={today} value={dob} onChange={(e) => setDob(e.target.value)} required /></div>
           {sexField ? <div className="field"><label htmlFor="fm-new-sex">Sex</label><select id="fm-new-sex" value={sex} onChange={(e) => setSex(e.target.value)} required><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div> : null}
