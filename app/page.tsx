@@ -80,7 +80,9 @@ export default function DashboardPage(){
  return <div className="page dashboard-page">
   {data?.error&&<div className="alert error" role="alert"><strong>DearPolicy couldn&rsquo;t load your family&rsquo;s cover just now.</strong><small>Your documents are safe. Please refresh the page in a moment.</small></div>}
   {emptyPortfolio?<>
-   <header className="page-header portfolio-hero"><div><h1>Know what your family has. Know what to do next.</h1><p className="lead">Upload your family&rsquo;s insurance documents. DearPolicy shows who is covered for what, and answers your questions with the page each answer comes from.</p></div><div className="hero-actions"><Link href="/policies" className="button secondary"><Icon name="upload"/>Upload documents</Link><Link href="/chat" className="button primary"><Icon name="ask"/>Ask DearPolicy</Link></div></header>
+   {/* A new household gets one thing to do at a time: the steps below carry the only button, so nothing on the page sends
+       them to Ask before there is a document to ask about. */}
+   <header className="page-header portfolio-hero"><div><h1>Let&rsquo;s read your first policy.</h1><p className="lead">Upload your family&rsquo;s insurance documents. DearPolicy shows who is covered for what, and answers your questions with the page each answer comes from.</p></div></header>
    {!!data?.family?.length&&people}
    <EmptyPortfolio hasFamily={!!data?.family?.length}/>
   </>:<>
@@ -127,13 +129,16 @@ function PersonNothingYet({name,paidFor}:{name:string;paidFor:string[]}){
 
 /** The portfolio before anything is uploaded: what to do first, in order. */
 function EmptyPortfolio({hasFamily}:{hasFamily:boolean}){
+ // The step to do now is a white sheet with the page's one button; a step done is ticked; a step still to come is an
+ // empty dashed slot, like a sheet not yet in the wallet.
+ const state=(n:number)=>n<(hasFamily?2:1)?"done":n===(hasFamily?2:1)?"current":"later";
  return <section className="section empty-portfolio" data-testid="empty-portfolio">
-  <div className="section-heading"><Titled icon="sparkle"><h2>Nothing here yet</h2></Titled></div>
+  <h2 className="sr-only">Getting started</h2>
   <p className="lead">Three steps to get started. Once DearPolicy has read your documents, this page shows what each person is covered for, what you pay, and anything that needs you.</p>
   <ol className="getting-started">
-   <li className={hasFamily?"done":""}><strong><Icon name={hasFamily?"checkCircle":"family"}/>{hasFamily?"Family added":"Add the people in your family"}</strong><span>So DearPolicy knows whose cover is whose.</span>{!hasFamily&&<Link href="/family" className="button primary">Add family members</Link>}</li>
-   <li><strong><Icon name="upload"/>Upload a policy document</strong><span>A policy schedule, certificate, renewal notice or benefits booklet. A PDF, a scan or a photo is fine.</span>{hasFamily&&<Link href="/policies" className="button primary">Upload a document</Link>}</li>
-   <li><strong><Icon name="ask"/>Ask a question</strong><span>In your own words. For example, &ldquo;Is my son covered if he breaks his arm?&rdquo; or &ldquo;What should I do after a car accident?&rdquo;</span></li>
+   <li className={state(1)}><span className="step-mark" aria-hidden="true">{hasFamily?<Icon name="check"/>:"1"}</span><div><strong><Icon name={hasFamily?"checkCircle":"family"}/>{hasFamily?"Family added":"Add the people in your family"}</strong><span>So DearPolicy knows whose cover is whose.</span>{!hasFamily&&<Link href="/family" className="button primary">Add family members</Link>}</div></li>
+   <li className={state(2)}><span className="step-mark" aria-hidden="true">2</span><div><strong><Icon name="upload"/>Upload a policy document</strong><span>A policy schedule, certificate, renewal notice or benefits booklet. A PDF, a scan or a photo is fine.</span>{hasFamily&&<Link href="/policies" className="button primary">Upload a document</Link>}</div></li>
+   <li className={state(3)}><span className="step-mark" aria-hidden="true">3</span><div><strong><Icon name="ask"/>Ask a question</strong><span>In your own words. For example, &ldquo;Is my son covered if he breaks his arm?&rdquo; or &ldquo;What should I do after a car accident?&rdquo;</span></div></li>
   </ol>
  </section>;
 }

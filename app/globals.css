@@ -1004,10 +1004,21 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 }
 
 /* Round 5: empty portfolio */
-.getting-started { margin: 12px 0 0; padding-left: 20px; display: grid; gap: 14px; }
-.getting-started li { display: grid; gap: 4px; justify-items: start; }
-.getting-started li span { color: var(--muted); }
+/* First steps as sheets: the step to do now is a white sheet holding the page's one button, a done step is ticked, a step
+   still to come is an empty dashed slot. Numbers come from the step mark, not the list. */
+.getting-started { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; max-width: 720px; }
+.getting-started li { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 14px; align-items: start; padding: 18px 20px; border-radius: 6px 0 14px 14px; }
+.getting-started li > div { display: grid; gap: 6px; justify-items: start; }
+.getting-started li > div > span { color: var(--muted); }
+.getting-started li > div > .button { margin-top: 6px; }
+.getting-started .step-mark { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: var(--fs-sm); background: var(--surface-2); color: var(--ink-2); }
+.getting-started .step-mark svg { width: 16px; height: 16px; }
+.getting-started li.current { background: var(--surface); box-shadow: var(--sheet-shadow); }
+.getting-started li.current .step-mark { background: var(--accent); color: var(--accent-ink); }
+.getting-started li.done { background: var(--surface); }
 .getting-started li.done strong { color: var(--good-text); }
+.getting-started li.done .step-mark { background: var(--good-tint); color: var(--good-text); }
+.getting-started li.later { border: 2px dashed var(--slot-line); }
 
 /* Round 8: chat answers on a phone.
    - The chat column is a grid; without a 0 minimum, one wide table (the
