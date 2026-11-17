@@ -6,6 +6,8 @@
  * when another count avoids it. Pure; used by app/page.tsx. Works for any household and any insurer.
  *   Test: scripts/coverage/home-card-test.ts */
 
+import { isMachineFilename } from "@/lib/policies/document-name";
+
 const clean = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
 
 export type HomeCardInput = { policyNames?: string[] | null; parts?: { name?: string | null }[] | null; count?: number | null; sources?: string[] | null };
@@ -21,10 +23,12 @@ const GENERIC = new Set(["a", "an", "the", "and", "of", "for", "&", "death", "be
  * not made only of generic words. The dashboard picks each source's first such name (app/api/dashboard/route.ts). */
 export function readablePolicyName(name: string | null | undefined): boolean {
   const n = clean(name);
-  if (!n || /_/.test(n)) return false;
+  // A file's name ("scan0012.pdf", "IMG 4471") or a system code ("SGGRP_COI_APP") is no policy's name (TE PR 525 F3).
+  if (!n || /_/.test(n) || /\.(?:pdf|jpe?g|png|heic|gif|tiff?|docx?|xlsx?)$/i.test(n) || isMachineFilename(n)) return false;
   const words = n.toLowerCase().split(/[^\p{L}\p{N}&]+/u).filter(Boolean);
-  // A word of 3 or more letters is needed: "CD-594" or "EJ7" alone is a code.
-  if (!words.some((w) => /\p{L}{3,}/u.test(w))) return false;
+  // A word of 4 or more letters, or two of 3, is needed: "CD-594", "EJ7" or "COI-2026-0012" is a code.
+  const lettered = words.filter((w) => /^\p{L}{3,}$/u.test(w));
+  if (!lettered.some((w) => w.length >= 4) && lettered.length < 2) return false;
   return words.some((w) => !GENERIC.has(w));
 }
 
@@ -49,7 +53,12 @@ export function pickCoverByName(label: string, covers: (string | null | undefine
 
 /** Short words kept in capitals when an all-capitals name is set in title case: likely initials ("AIA", "MHA", "CPF").
  * Common short words are not initials. */
-const SHORT_WORDS = new Set(["and", "of", "the", "for", "to", "in", "on", "at", "by", "or", "pro", "max", "new", "one", "two", "six", "ten", "all", "top", "my", "our", "plus", "care", "life", "term"]);
+// Short words that are words, not initials: never kept in capitals.
+const SHORT_WORDS = new Set(["and", "of", "the", "for", "to", "in", "on", "at", "by", "or", "co", "st", "pro", "max", "new", "one", "two", "six", "ten",
+  "all", "top", "my", "our", "your", "plus", "care", "life", "term", "gold", "home", "cash", "plan", "trip", "star", "safe", "wise", "link", "flex",
+  "best", "rich", "pure", "year", "fund", "save", "good", "sure", "more", "only", "lady", "kids", "baby", "free", "full", "high", "mega", "easy", "key",
+  "wealth", "with", "card", "work", "living", "cover", "basic", "term", "whole", "pay", "per", "day", "own", "first", "time", "lite", "prime", "smart", "sun",
+  "great", "true", "elite", "solo", "duo", "max", "mini", "maxi", "gain", "grow", "keep", "self", "next", "go", "up"]);
 const LOWER_WORDS = new Set(["and", "of", "the", "for", "to", "in", "on", "at", "by", "or"]);
 /** A policy's name as a card shows it: an all-capitals name in title case ("MINDEF & MHA GROUP INSURANCE SCHEME" ->
  * "Mindef & MHA Group Insurance Scheme"), and a long name without its trailing codes in brackets ("PruFlexiCash Protection
@@ -59,14 +68,17 @@ export function homePolicyName(name: string): string {
   let n = clean(name);
   if (n.length > 26) { const bare = n.replace(/(?:\s*\([^()]*\))+\s*$/, "").trim(); if (bare.length >= 4) n = bare; }
   if (/\p{Lu}{2}/u.test(n) && !/\p{Ll}/u.test(n)) {
-    n = n.replace(/\p{L}[\p{L}'’]*/gu, (w, i: number) => {
+    // Each run of letters on its own, so "O'BRIEN" -> "O'Brien" and "CO-OPERATIVE" -> "Co-Operative".
+    n = n.replace(/\p{L}+/gu, (w, i: number) => {
       const lower = w.toLowerCase();
-      if (w.length <= 3 && !SHORT_WORDS.has(lower)) return w;
+      // Initials: up to 3 letters, or 4 with at most one vowel ("NTUC", "OCBC"; not "GOAL", "LUKE").
+      if ((w.length <= 3 || (w.length === 4 && (lower.match(/[aeiouy]/g) ?? []).length <= 1)) && !SHORT_WORDS.has(lower)) return w;
       if (i > 0 && LOWER_WORDS.has(lower)) return lower;
       return lower[0].toUpperCase() + lower.slice(1);
     });
   }
-  return n;
+  // A short code with a hyphen ("(H-2026)") never breaks at its hyphen (TE PR 525 F5).
+  return n.replace(/(^|[\s(])([^\s()-]{1,6})-([^\s()-]{1,6})(?=$|[\s)])/g, "$1$2\u2011$3");
 }
 
 /** Whether Home may show the card's amount: only when the cover rests on one line, so the figure is never a sum of
@@ -88,7 +100,8 @@ export function homeCardSource(c: HomeCardInput): string | null {
   // The policies behind the cover, by their documents' names, where the dashboard gives them; else its cover names, less
   // any made only of generic words ("Death Benefit") while another names the policy.
   let pool = (c.sources?.length ? c.sources : [...(c.policyNames ?? []), ...(c.parts ?? []).map((p) => p?.name ?? "")]).map((n) => clean(n));
-  if (!c.sources?.length && pool.some(readablePolicyName)) pool = pool.filter(readablePolicyName);
+  // A cover name that names no policy ("Business", "Death Benefit", a file code) is never shown (TE PR 525 F3).
+  if (!c.sources?.length) pool = pool.filter(readablePolicyName);
   for (const raw of pool) {
     const name = homePolicyName(raw);
     // "Policy" and "Owned policy" are the dashboard's stand-ins for a cover with no product name: they name nothing.

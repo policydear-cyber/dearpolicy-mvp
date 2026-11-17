@@ -60,8 +60,9 @@ test("a card names the policy, not a benefit or a file code (coordinator 17 Nov)
   assert.equal(homeCardSource({ sources: ["Mindef & MHA Group Insurance Scheme Extended Plus", "Kite Term 60"] }), "2 policies");
   // With no sources, a name made only of generic words gives way to one that names the policy.
   assert.equal(homeCardSource({ policyNames: ["GROUP TERM LIFE", "Death Benefit"], count: 1 }), "Group Term Life");
-  assert.equal(homeCardSource({ policyNames: ["Travel insurance"] }), "Travel insurance", "the only name is still shown");
-  for (const n of ["Business", "Death Benefit", "Travel insurance", "SGGRP_COI_APP", "1105 CD-594 COI_SAF", "EJ7", "", "Owned policy"]) assert.equal(readablePolicyName(n), false, n);
+  assert.equal(homeCardSource({ policyNames: ["Travel insurance"] }), null, "a name that names no policy is never shown (TE F3)");
+  assert.equal(homeCardSource({ policyNames: ["Death Benefit", "Business"], count: 2 }), "2 covers");
+  for (const n of ["Business", "Death Benefit", "Travel insurance", "SGGRP_COI_APP", "1105 CD-594 COI_SAF", "EJ7", "", "Owned policy", "scan0012.pdf", "IMG 4471", "COI-2026-0012", "AIA"]) assert.equal(readablePolicyName(n), false, n);
   for (const n of ["Group Term Life", "Business Single Trip", "READYBUILDER 10", "AIA PRO LIFETIME PROTECTOR - MAX", "PruLink Enhanced Protector (PW9)"]) assert.equal(readablePolicyName(n), true, n);
   // An unnamed held cover named by its document (Charmaine's Outpatient): a source alone is enough.
   assert.equal(homeCardSource({ policyNames: [], sources: ["PruFlexiCash Protection Plus (7th Series) (EJ7)"], count: 0 }), "PruFlexiCash Protection Plus");
@@ -86,6 +87,15 @@ test("readable names: all capitals in title case, initials kept; long names lose
   assert.equal(homePolicyName("Shield (Plan A)"), "Shield (Plan A)", "short enough to keep");
   assert.equal(homePolicyName("MINDEF & MHA GROUP INSURANCE SCHEME (GROUP TERM LIFE)"), "Mindef & MHA Group Insurance Scheme");
   assert.equal(homePolicyName("Shield Plan A"), "Shield Plan A");
+  // TE PR 525 F2: initials up to 4 letters stay; hyphen and apostrophe parts each get their own capital.
+  assert.equal(homePolicyName("NTUC INCOME"), "NTUC Income");
+  assert.equal(homePolicyName("OCBC LIFE GOAL"), "OCBC Life Goal");
+  assert.equal(homePolicyName("MSIG TRAVELEASY"), "MSIG Traveleasy");
+  assert.equal(homePolicyName("HSBC HOME SHIELD (H-2026)"), "HSBC Home Shield (H\u20112026)", "and a short code never breaks at its hyphen");
+  assert.equal(homePolicyName("NTUC INCOME CO-OPERATIVE"), "NTUC Income Co-Operative");
+  assert.equal(homePolicyName("O'BRIEN FAMILY PLAN"), "O'Brien Family Plan");
+  assert.equal(homePolicyName("ST. LUKE CARE"), "St. Luke Care");
+  assert.equal(homePolicyName("AIA HEALTHSHIELD GOLD MAX B"), "AIA Healthshield Gold Max B");
 });
 test("phone person switcher: two keys a row, wraps names, never scrolls sideways", () => {
   const css = readFileSync("app/globals.css", "utf8");

@@ -22,7 +22,7 @@ import { OWNED_BY_MEMBER, notFullyRead, notFullyReadNote, unownedNotFullyRead } 
 import { readingCacheReady } from "@/lib/policies/read-failures";
 import { coverVerdict } from "@/lib/coverage/cover-verdict";
 import { heldLines } from "@/lib/coverage/held-line";
-import { documentName } from "@/lib/policies/document-name";
+import { documentName, isMachineFilename, prettifyFilename } from "@/lib/policies/document-name";
 import { onFileDocumentName } from "@/lib/coverage/on-file-note";
 import { pickCoverByName, readablePolicyName } from "@/lib/coverage/home-card";
 /** The document's own naming fields, read beside an on-file line or wording (documentName). */
@@ -215,7 +215,7 @@ export async function GET(request:NextRequest){
   const benefitUnmatched=unmatchedRows.rows.filter(r=>asBenefitLine(r,r.evidence_text));
   const held=await heldLines(query,accountId,active.id,benefitUnmatched);
   const heldCategories=new Map<string,number>();
-  benefitUnmatched.forEach((r,i)=>{const c=normalizeCoverageCategory(r.category);unmatchedLines.set(c,(unmatchedLines.get(c)??0)+1);noteDoc(c,r);if(held[i]){heldCategories.set(c,(heldCategories.get(c)??0)+1);if(!coverageMap.has(c))addSource(c,r.policy_number??r.policy_id,r.doc_product,r.doc_insurer);}});
+  benefitUnmatched.forEach((r,i)=>{const c=normalizeCoverageCategory(r.category);unmatchedLines.set(c,(unmatchedLines.get(c)??0)+1);noteDoc(c,r);if(held[i]){heldCategories.set(c,(heldCategories.get(c)??0)+1);if(!coverageMap.has(c))addSource(c,r.policy_number??r.policy_id,r.doc_product,r.doc_insurer,isMachineFilename(r.original_filename)?null:prettifyFilename(r.original_filename));}});
   const statusOf=(category:string)=>({covered:"covered",on_file:"on_file",not_found:"not_covered"} as const)[coverVerdict({proven:coverageMap.has(category)?1:0,unmatchedLines:unmatchedLines.get(category)??0,referenceOnly:referenceOnly.get(category)??0,held:heldCategories.get(category)??0})];
   const partial=(category:string)=>(unmatchedLines.get(category)??0)>0;
   const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:statusOf(category),reviewRequired:conflictCategories.has(category),amount:partial(category)?null:row?.total??null,displayAmount:partial(category)?null:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,sources:statusOf(category)==="covered"?[...(sources.get(category)?.values()??[])]:[],onFileDocuments:statusOf(category)==="on_file"?[...(onFileDocs.get(category)??[])].sort():[]};});
