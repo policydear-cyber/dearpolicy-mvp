@@ -99,6 +99,12 @@ async function partA() {
     assert.equal(findFamilyMatch("Tan Wei", [{ id: "w", display_name: "Tan Wei Jie", preferred_name: "Kevin Tan" }]), null);
     assert.equal(findFamilyMatch("Alex Chen", [{ id: "x", display_name: "Alexander Tan", preferred_name: "Alex" }]), null);
     assert.equal(findFamilyMatch("Alex", [{ id: "x", display_name: "Alexander Tan", preferred_name: "Alex" }]), null);
+    // Initials count only beside the household's own name for them (main matched "Kevin Tan ..."); a bare "Tan W J" may be
+    // anyone, and a middle initial that is not theirs is someone else (Critic on #530).
+    assert.equal(findFamilyMatch("Tan W J", [{ id: "k", display_name: "Tan Wei Jie", preferred_name: "Kevin Tan" }]), null);
+    assert.equal(findFamilyMatch("TAN W.J.", [{ id: "k", display_name: "Tan Wei Jie", preferred_name: "Kevin Tan" }]), null);
+    assert.equal(findFamilyMatch("Alex S Tan", [{ id: "x", display_name: "Alexander Tan", preferred_name: "Alex" }]), null);
+    assert.equal(findFamilyMatch("Ravi s/o Kumar", [{ id: "r", display_name: "Ravi Kumar", preferred_name: "Ravi" }])?.id, "r", "s/o is a joiner");
     assert.equal(findFamilyMatch("Alex Tan", [{ id: "x", display_name: "Alexander Tan", preferred_name: "Alex" }, { id: "y", display_name: "Alex Tan" }])?.id, "y", "an exact full name beats a stand-in");
     assert.equal(findFamilyMatch("Alice Wong", fam), null);
     assert.equal(findFamilyMatch("Tan", fam), null, "a profile needs ALL its words printed");

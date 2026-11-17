@@ -35,25 +35,29 @@ function memberNames(member: FamilyCandidate) {
 }
 function partialNames(member: FamilyCandidate) { return [member.display_name].filter((n): n is string => !!n && !!n.trim()); }
 
-/** Words that join a name and say nothing about who it is ("binte", "s/o"). */
-const NAME_JOINERS = new Set(["bin", "binte", "bte", "bt", "binti", "s", "o", "d", "a", "l", "p", "al", "ap", "son", "of", "daughter"]);
-const nameWords = (n: string | null | undefined) => normalizePersonName(n ?? "").split(" ").filter((w) => w && !NAME_JOINERS.has(w));
+/** Words that join a name and say nothing about who it is ("binte"; "s/o", "d/o", "a/l", "a/p" are taken out whole
+ * first, so a single letter is otherwise always a word of the name: a middle initial that is not theirs is someone else). */
+const NAME_JOINERS = new Set(["bin", "binte", "bte", "bt", "binti"]);
+const nameWords = (n: string | null | undefined) => normalizePersonName((n ?? "").replace(/(?<![\p{L}])(?:[sd]\s*\/\s*o|a\s*\/\s*[lp])(?![\p{L}])/giu, " "))
+  .split(" ").filter((w) => w && !NAME_JOINERS.has(w));
 
 /** A printed name every word of which belongs to this person, and which leaves out none of their full name except words
  * their preferred name stands in for (#530, so a required preferred name keeps main's right matches and no stranger's):
  * - "Alex Tan" is Alexander Tan who goes by Alex ("Alex" stands in for "Alexander");
  * - "Nurul Aisyah Ahmad" is Nurul Aisyah binte Ahmad; "Kevin Tan W J" is Tan Wei Jie who goes by Kevin Tan (W, J: the
- *   initials of Wei, Jie);
+ *   initials of Wei, Jie, counted only beside a word of the preferred name, as main matched "Kevin Tan ..."; "Tan W J"
+ *   alone may be anyone);
  * - never "Alex Chen" for Alex Tan, "Mary Tan Ah Moi" for Tan Siew Lan who goes by Mary Tan, "Tan Wei" for Tan Wei Jie,
  *   or a one-word printed name: a word that is none of theirs, or a word of theirs left out, is someone else. */
 export function nameAccountsForMember(printedName: string, member: FamilyCandidate): boolean {
   const printed = nameWords(printedName), full = nameWords(member.display_name), pref = nameWords(member.preferred_name);
   if (printed.length < 2 || !full.length) return false;
   const fullSet = new Set(full), prefOnly = new Set(pref.filter((w) => !fullSet.has(w)));
-  const initialOf = (w: string) => w.length === 1 && full.some((f) => f.length > 1 && f[0] === w && !printed.includes(f));
+  const nickname = printed.some((w) => prefOnly.has(w));
+  const initialOf = (w: string) => nickname && w.length === 1 && full.some((f) => f.length > 1 && f[0] === w && !printed.includes(f));
   if (!printed.every((w) => fullSet.has(w) || prefOnly.has(w) || initialOf(w))) return false;
   if (!printed.some((w) => fullSet.has(w))) return false;
-  const missing = full.filter((f) => !printed.includes(f) && !printed.some((w) => w.length === 1 && w === f[0])).length;
+  const missing = full.filter((f) => !printed.includes(f) && !(nickname && printed.some((w) => w.length === 1 && w === f[0]))).length;
   const standIns = printed.filter((w) => prefOnly.has(w)).length;
   return missing <= standIns;
 }
