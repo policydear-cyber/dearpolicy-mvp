@@ -68,7 +68,7 @@ function answer(h: ReturnType<typeof household>, question: string, rowsAsked: Re
 /** The live shape (17 Nov): the "Other Fracture" row in the certificate's Benefit Summary, under a numbered section heading,
  * and the simple-fracture row in a separate Product Summary, as a share of the table's own printed limit that the reading
  * left unsettled. */
-function twoDocuments() {
+function twoDocuments(live = false) {
   const product = "Group Personal Accident", DOC2 = "eeeeeeee-0000-4000-8000-000000000092";
   const otherLine = "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%";
   const certPages = [`Kestrel Assurance Ltd\n${product.toUpperCase()} - CERTIFICATE\nInsured person\tSum Insured\n${NAME}\tS$600,000`,
@@ -86,9 +86,11 @@ function twoDocuments() {
   const a = checkReading({ id: DOC, name: cert.name, readable: true, pages: cert.pages }, { document: { kind: "personal_proof", ...meta },
     covers: [{ person: NAME, product, cover: product, plan: null, riderOf: null, policyNumber: null, premium: null, premiumFrequency: null, asOf: null,
       startDate: null, endDate: null, page: 1, sumInsured: 600000, quote: `${NAME}\tS$600,000` }],
-    benefits: [ben({ section: "BENEFIT 2: GROUP PERSONAL ACCIDENT: E. Simple Fracture or Other Fracture", benefit: "Arm, Elbow, Wrist or Ribs (Other Fracture)", pays: "percent", value: 20, percentOf: "sum_insured", quote: otherLine })] } as never);
+    benefits: [ben(live ? { section: "BENEFIT 2: GROUP PERSONAL ACCIDENT", benefit: "E. Simple Fracture or Other Fracture: Arm, Elbow, Wrist or Ribs (Other Fracture)", pays: "percent", value: 20, percentOf: "sum_insured", quote: otherLine }
+      : { section: "BENEFIT 2: GROUP PERSONAL ACCIDENT: E. Simple Fracture or Other Fracture", benefit: "Arm, Elbow, Wrist or Ribs (Other Fracture)", pays: "percent", value: 20, percentOf: "sum_insured", quote: otherLine })] } as never);
   const b = checkReading({ id: DOC2, name: ps.name, readable: true, pages: ps.pages }, { document: { kind: "scheme_terms", ...meta, namedPeople: [] }, covers: [],
-    benefits: [ben({ section: "Simple Fracture due to Accident", benefit: "Arm, Elbow, Wrist or Ribs", pays: "percent", value: 25, percentOf: "other", quote: armLine })] } as never);
+    benefits: [ben(live ? { section: "Group Personal Accident", benefit: "Simple Fracture due to Accident: Arm, Elbow, Wrist or Ribs", pays: "percent", value: 25, percentOf: "fixed_amount", baseAmount: 5000, baseQuote: "% of S$5,000", quote: armLine }
+      : { section: "Simple Fracture due to Accident", benefit: "Arm, Elbow, Wrist or Ribs", pays: "percent", value: 25, percentOf: "other", quote: armLine })] } as never);
   const key = coverKeyOf({ product, cover: product, plan: null, riderOf: null });
   const links = [...a.benefits.map((x) => sectionKeyOf(DOC, x)), ...b.benefits.map((x) => sectionKeyOf(DOC2, x))].map((section) => ({ section, cover: key, why: "the scheme's benefits" }));
   const table = assembleTable([a, b], family, links, [], NOW);
@@ -138,6 +140,17 @@ test("bones under different headings stay apart: a leg's simple fracture is neve
     ben({ section: "Fracture of Arm: Other Fracture", benefit: "Lump sum", pays: "percent", value: 20, percentOf: "sum_insured", quote: "Fracture of Arm: Other Fracture: Lump sum\t20% of the Sum Insured" })]);
   const a = answer(h, "It was a simple fracture.", [/Fracture of Arm/], null, ["Rowan broke his arm. What can he claim?"]);
   assert.deepEqual(a.amounts, ["S$120,000"]);
+});
+test("DC's stored shape (coverage capture 17 Nov): the table's own S$1,250 record is paired with the Other Fracture row; no heading rule needed", () => {
+  const h = twoDocuments(true);
+  const simple = h.rows.find((r) => /Simple Fracture due to Accident/.test(r.benefit));
+  assert.ok(simple && simple.figure.kind === "worked_out" && simple.figure.amount === 1250, JSON.stringify(simple?.figure));
+  for (const asked of [[/Other Fracture\)/], [/Simple Fracture due to Accident/], [/Other Fracture\)/, /Simple Fracture due to Accident/]]) {
+    const a = answer(h, "Rowan broke his arm in an accident and was in hospital for 5 days. What can he claim?", asked);
+    assert.deepEqual(a.amounts, ["S$1,250", "S$120,000"], String(asked));
+    assert.match(a.question, /Which kind of fracture/);
+  }
+  assert.deepEqual(answer(h, "It was a simple fracture.", [/Other Fracture\)/], null, ["Rowan broke his arm in an accident. What can he claim?"]).amounts, ["S$1,250"]);
 });
 test("rowFractureKind: a closing kind bracket, or one kind in the name; two kinds with no bracket is none", () => {
   assert.equal(rowFractureKind("Simple Fracture or Other Fracture: Arm, Elbow, Wrist or Ribs (Other Fracture)"), "other");
