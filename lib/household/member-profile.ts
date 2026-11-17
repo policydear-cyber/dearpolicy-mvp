@@ -31,14 +31,29 @@ export function genderOfSex(sex: string | null | undefined): "f" | "m" | null {
   return v === "female" ? "f" : v === "male" ? "m" : null;
 }
 
-/** What a member's profile still lacks, in the words the Family page uses. `sexField`: whether the database can store a
- * sex yet (sql/member-profile.sql applied); before it is, sex is never asked for. */
-export function profileGaps(m: { date_of_birth?: string | null; sex?: string | null }, sexField: boolean): string[] {
+/** What a member's profile still lacks, in the words and order the Family page uses. All four are required when a person
+ * is added or edited on the Family page (DC, 17 Nov 2026); a member saved before that keeps working everywhere and is
+ * asked to complete them. `sexField`: whether the database can store a sex yet (sql/member-profile.sql applied); before
+ * it is, sex is never asked for. "Prefer not to say" ("unspecified") is an answer, not a gap. */
+export function profileGaps(m: { relationship?: string | null; date_of_birth?: string | null; sex?: string | null; preferred_name?: string | null }, sexField: boolean): string[] {
   const gaps: string[] = [];
+  if (!m.relationship?.trim()) gaps.push("relationship");
   if (!m.date_of_birth) gaps.push("date of birth");
   if (sexField && !m.sex) gaps.push("sex");
+  if (!m.preferred_name?.trim()) gaps.push("preferred name");
   return gaps;
 }
+
+/** Why each detail is asked, one short clause each, for the line that asks a household to complete a profile. */
+export const PROFILE_GAP_WHY: Record<string, string> = {
+  "relationship": "the relationship tells who \u201cmy wife\u201d or \u201cmy son\u201d is",
+  "date of birth": "a date of birth tells adult cover from child cover",
+  "sex": "sex tells \u201cmy son\u201d from \u201cmy daughter\u201d",
+  "preferred name": "the preferred name is what you call them when you ask DearPolicy",
+};
+
+/** The id suffix of the Family page field for a gap, so "Add now" can put the cursor in the first one missing. */
+export const PROFILE_GAP_FIELD: Record<string, string> = { "relationship": "relationship", "date of birth": "dob", "sex": "sex", "preferred name": "preferred" };
 
 type Queryable = { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
 let sexColumnSeen = false;

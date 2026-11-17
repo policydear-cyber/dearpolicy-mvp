@@ -41,6 +41,7 @@ test.describe.serial("mobile critical path", () => {
     // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
     await page.locator("#fm-new-dob").fill("1990-01-01");
     await page.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
+    await page.locator("#fm-new-preferred").fill(person); // required since DC 17 Nov; a later line may set the real one
     await page.getByRole("button", { name: "+ Add person" }).tap();
     await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
 
