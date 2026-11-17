@@ -1688,3 +1688,33 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 .answer-table th, .answer-table td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
 .answer-table thead th { font-size: var(--fs-xs); color: var(--muted); font-weight: 600; vertical-align: bottom; white-space: normal; max-width: 9rem; }
 .answer-table tbody th { text-align: left; font-weight: 600; }
+
+/* --------------------------------------------------------------------------
+   Documents as rows (Nov 2026). One document per full-width row, like lines
+   on a statement, instead of tiles side by side: easier to scan, less noise.
+   Left: what it is, its numbers, whose it is, what was found. Right (wide
+   screens): its read status and actions. Phone: the same row, stacked.
+   Layout only; no colour roles change.
+   -------------------------------------------------------------------------- */
+/* Scoped to the household page (.document-list.rows); the staff page keeps its tiles. */
+.document-list.rows { grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: start; }
+.rows .document-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px 16px; }
+.rows .document-main { display: grid; gap: 10px; min-width: 0; }
+.rows .document-head { align-items: start; }
+.rows .document-head > .status { font-style: normal; text-transform: none; white-space: nowrap; align-self: start; }
+.rows .document-title .document-numbers { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; }
+/* A long unbroken number or name wraps inside the row instead of widening the page on a phone. */
+.rows .document-title span, .rows .document-for, .rows .document-names { overflow-wrap: anywhere; }
+.rows .document-main .covers-summary { margin-top: 0; }
+.rows .document-card > .detail-panel { grid-column: 1 / -1; }
+@media (max-width: 480px) {
+  /* Narrow: the status goes under the name rather than squeezing it. */
+  .rows .document-head > .status { grid-column: 2; justify-self: start; }
+}
+@media (min-width: 1024px) {
+  .rows .document-card { grid-template-columns: minmax(0, 1fr) auto; column-gap: 28px; align-items: start; padding: 16px 20px; }
+  .rows .document-card > .document-meta { margin-top: 0; flex-wrap: wrap; justify-content: flex-end; max-width: 440px; }
+  .rows .document-meta .mini-button.danger { margin-left: 0; }
+  /* Everything under the name lines up with the name, so each row reads as one block. */
+  .rows .document-main > :not(.document-head) { margin-left: 52px; }
+}
