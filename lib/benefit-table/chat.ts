@@ -11,7 +11,7 @@ import { benefitNamesRead, figureText, periodWords } from "./assemble";
 import { benefitName, benefitNames, qualifierText } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
-import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, readStayRule, verifyAnswer, type StayRule } from "@/lib/simple-chat/verify";
+import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, readStayRule, documentOwnWords, verifyAnswer, type StayRule } from "@/lib/simple-chat/verify";
 import { CAP_WORDS } from "./check";
 import { noteMultiple, sameNote, type Multiplier, type RowFacts } from "./multiplier";
 import { withoutChildLimit } from "./child-limit";
@@ -1628,7 +1628,7 @@ function dailyRateRule(row: ChatRow, household: Household): StayRule | null {
   // left out (stayBlock); one waiting period in a read form, one most days (a year of cover may be its period) and at
   // most one yearly cap in the row's own currency. A limit, aggregate, day rule or condition anywhere else below the row
   // gives no total (Critic P392, TE #392, R4 H2-C).
-  return readStayRule(page.text, found.offset, found.excerpt, row.figure.amount, household.members.map((m) => m.name));
+  return readStayRule(page.text, found.offset, found.excerpt, row.figure.amount, household.members.map((m) => m.name), documentOwnWords(household.documents[found.docIndex]));
 }
 
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is

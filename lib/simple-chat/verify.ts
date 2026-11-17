@@ -420,10 +420,14 @@ export function stayBlock(pageText: string, offset: number): StayBlock {
   let limitHeading: string | null = null;
   // Once another benefit's own row has been passed, a line below may be that row's, not this one's (stay-wrap).
   let after = false;
+  // Whether the next line kept is the one printed straight under the row's own lines, with no blank or other line between.
+  let next = true;
   // Each line with the lines its cells wrap onto ("…instead of the daily" / "hospital income"), so a wrapped part of
   // another row stays with that row (stay-wrap, TE-ACC-20261116).
   for (const l of logicalLines(pageText.slice(row.end + 1).split("\n").slice(own.used))) {
-    if (!l.trim()) continue;
+    if (!l.trim()) { next = false; continue; }
+    const straight = next;
+    next = false;
     const table = nextTableRow(l);
     // A table's heading row is left out, never the end of the block: a cap printed under it may be this row's (Critic
     // P392 F). Was (round 5): it ended the block.
@@ -460,13 +464,13 @@ export function stayBlock(pageText: string, offset: number): StayBlock {
     const numbers = [...l.matchAll(/\d+/g)].map((m) => Number(m[0]));
     const rest = l.replace(/\b\d+\s*(?:st|nd|rd|th)?\b|\bdays?\b/gi, " ");
     if (numbers.length && numbers.every((n) => days.has(n)) && !MONEY_IN_VALUE.test(l) && !STAY_BLOCK_WORDS.test(rest) && !CAP_OR_RULE.test(rest)) continue;
-    kept.push({ text: l, after });
+    kept.push({ text: l, after, ...(straight ? { next: true } : {}) });
   }
   return { text: [own.text, ...kept.map((k) => k.text)].join(" "), tail: kept.map((k) => k.text).join(" "), own: own.text, labelMore: own.labelMore, wrapped: own.used > 0, lines: kept, others };
 }
 /** One line kept below a daily row, with the lines that wrap onto it joined (logicalLines); after: another benefit's
  * own row stands between it and the daily row. */
-export type StayLine = { text: string; after: boolean };
+export type StayLine = { text: string; after: boolean; next?: boolean };
 /** A daily row and the lines below it (stayBlock). own: the row's line with the lines its cells wrap onto; labelMore: the
  * words of its name that wrapped onto a line of their own; lines: every line kept below it; others: the names of the
  * other benefits' rows passed on the way. */
@@ -1826,13 +1830,23 @@ const NAME_QUALIFIER = new RegExp([
 ].join("|"), "i");
 /** Whether a daily row's name carries a qualifier, so no figure: a qualifier word above, any word of NAME_QUALIFIER_WORDS,
  * a household member's name, or a name with no stay-benefit core that is not benefit words alone ("A Benefit of"). */
-function qualifiedName(name: string, words: string[], people: string[]): boolean {
+function qualifiedName(name: string, words: string[], people: string[], ownWords: string[] = []): boolean {
   // Brackets after the name that hold a currency, a per-day unit or a footnote number say nothing about whose stays.
-  const clean = name.replace(/\(\s*(?:[A-Z]{0,3}\$|SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|per\s+day|daily|a\s+day|\d{1,2}|[*†‡])\s*\)/gi, " ").replace(/[*†‡]/g, " ");
+  const clean = name.replace(/\bhosp\b\.?/gi, "hospital").replace(/\(\s*(?:[A-Z]{0,3}\$|SGD|USD|MYR|RM|GBP|EUR|AUD|HKD|per\s+day|daily|a\s+day|\d{1,2}|[*†‡])\s*\)/gi, " ").replace(/[*†‡]/g, " ");
   if (NAME_QUALIFIER.test(clean) || words.some((w) => NAME_QUALIFIER_WORDS.has(w))) return true;
-  const own = new Set(clean.toLowerCase().match(/[\p{L}\d]+/gu) ?? []);
-  const person = people.some((p) => { const t = (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []); return t.some((w) => own.has(w) && !DAILY_NAME_WORDS.has(w)); });
+  const printed = new Set(clean.toLowerCase().match(/[\p{L}\d]+/gu) ?? []);
+  const person = people.some((p) => { const t = (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []); return t.some((w) => printed.has(w) && !DAILY_NAME_WORDS.has(w)); });
   if (person) return true;
+  // An allow-list (gate #513 round 3/4 HIGH): past the qualifier lists, every word of the name is a neutral benefit word,
+  // a number, or a word of the document's own product name or insurer ("Kestrel Hospital Cash" in a Kestrel policy).
+  // Any other word ("Infant", "Travel", "VIP", "Group", "Singapore", a person not in the household) may say whose or which
+  // stays the row pays, so no figure: no deny-list of such words would ever be complete.
+  // The document's own words count only as a run printed in its product name or insurer, from its start or to its end
+  // ("Kestrel", "Term Guard", "PRU" for "PRUShield"): a word from inside it alone ("Baby" in "Mum & Baby Care") does not.
+  // "S" of a printed "S$", and "A" as the name's first word ("A Benefit of"), are not tier letters ("Hospital Cash A").
+  const sign = /S\$/.test(name);
+  const plain = words.filter((w, i) => !(w === "s" && sign) && !(w === "a" && i === 0));
+  if (!withoutOwnPhrases(plain, ownWords).every((w) => NEUTRAL_NAME_WORDS.has(w) || /^\d$/.test(w))) return true;
   if (STAY_NAME_CORE.test(clean)) return false;
   return !words.every((w) => DAILY_NAME_WORDS.has(w) || ROW_GRAMMAR_WORDS.has(w) || /^\d{1,2}$/.test(w) || /^(?:s|sgd|per|day)$/.test(w));
 }
@@ -1840,6 +1854,69 @@ function qualifiedName(name: string, words: string[], people: string[]): boolean
  * only. A person, plan, relation, cause or place word ("Child hospital income", "Accidental hospital cash", "Hospital cash
  * Plan B", "Mei Ling hospital cash", "Overseas hospital cash") may say whose or which stays it pays: no figure. */
 const DAILY_NAME_WORDS = new Set("hospital hospitalisation hospitalization income cash daily allowance benefit benefits rider in patient inpatient confinement ward".split(" "));
+/** The only words a daily row's name may hold besides a number or the document's own product and insurer words: kinds of
+ * daily hospital benefit, the unit and currency it is paid in, and a few neutral product words ("Plus", "Enhanced",
+ * "Payout", "Protector"). An allow-list (gate #513 round 3/4 HIGH). */
+const NEUTRAL_NAME_WORDS = new Set([...DAILY_NAME_WORDS, ...("stay room board and an the of per day payable payout payment amount plus enhanced "
+  + "cover coverage insurance plan protector protection protect replacement indemnity compensation grant relief shield guard saver secure support assist "
+  + "supplementary supplement additional optional addon each accommodation hosp ii iii sgd usd myr rm gbp eur aud hkd").split(" ")]);
+/** Words of a document's insurer or product name that say nothing about whose or which stays ("Life", "Singapore",
+ * "Insurance", "Ltd"): never taken as the document's own words. */
+const COMPANY_WORDS = new Set(("life insurance assurance general takaful company co ltd limited pte plc inc berhad bhd group holdings financial "
+  + "corporation international the of and singapore malaysia hong kong asia pacific asian china chinese america american british india indian "
+  + "japan japanese korea korean thailand thai indonesia philippines vietnam australia australian europe european us usa uk").split(" "));
+/** The runs of a document's own product name and insurer that a daily row's name may repeat ("Kestrel Hospital Cash" in a
+ * Kestrel policy, "Term Guard Hospital Cash" in "Kestrel Term Guard"): the insurer's words from its start, the product's
+ * whole name, alone or past the insurer's brand, and the initials of each ("TM" for Tokio Marine), with generic company and place words left out. A run holding a qualifier word is
+ * never one. A brand, never a qualifier: a word from the middle alone ("Baby" in "Kestrel Mum & Baby Care") is not a run. */
+export function documentOwnWords(doc: { insurer: string | null; productName: string | null }): string[] {
+  const runs = new Set<string>();
+  const words = (t: string | null) => ((t ?? "").toLowerCase().match(/[\p{L}\d]+/gu) ?? []).filter((w) => !COMPANY_WORDS.has(w));
+  const insurer = words(doc.insurer), product = words(doc.productName);
+  // The insurer's words from its start; the product's whole name only, so a first word of it alone ("Infant" in "Infant
+  // Shield") is never the brand (TE #515 round 1 HIGH).
+  for (let i = 1; i <= insurer.length; i++) runs.add(insurer.slice(0, i).join(" "));
+  if (product.length) runs.add(product.join(" "));
+  for (const ws of [insurer, product]) if (ws.length >= 2) runs.add(ws.map((w) => w[0]).join(""));
+  // The product's name past the insurer's own leading words, whole ("Term Guard" in "Kestrel Term Guard"), never a part of
+  // it ("Hospice" in "Kestrel Care with Hospice").
+  let lead = 0;
+  while (lead < product.length && lead < insurer.length && product[lead] === insurer[lead]) lead++;
+  if (lead > 0 && lead < product.length) runs.add(product.slice(lead).join(" "));
+  // A product word that is plainly a brand (TE #515 round 2): it starts with the insurer's own first letters ("Singlife"
+  // by Singapore Life, "ManuCare" by Manulife, "PRUExtra" by Prudential, then "PRU" too) or its initials, or it is one word
+  // with a capital inside ("HealthShield", "IncomeShield"). A plain first word ("Infant" in "Infant Shield") never is.
+  const rawProduct = ((doc.productName ?? "").match(/[\p{L}\d]+/gu) ?? []).filter((w) => !COMPANY_WORDS.has(w.toLowerCase()));
+  // The insurer's first printed word, company or place word or not ("Singapore" in "Singapore Life Ltd" for "Singlife").
+  const insurerFirst = ((doc.insurer ?? "").toLowerCase().match(/[\p{L}\d]+/u) ?? [""])[0], insurerInitials = insurer.length >= 3 ? insurer.map((w) => w[0]).join("") : "";
+  for (const raw of rawProduct) {
+    const w = raw.toLowerCase();
+    let common = 0;
+    while (common < w.length && common < insurerFirst.length && w[common] === insurerFirst[common]) common++;
+    const camel = /\p{Ll}\p{Lu}/u.test(raw) || /^\p{Lu}{2,}\p{Ll}/u.test(raw);
+    // Sharing the insurer's first letters counts only for a glued word ("Sing" + "life", "Manu" + "Care"); a plain word
+    // that merely shares them ("Single", "Helper" by Helvetia, "Travel" by Travelers) never does (TE #515 round 3).
+    const glued = common >= 3 && w.length - common >= 4;
+    if (glued || (insurerInitials && w.startsWith(insurerInitials) && w.length > insurerInitials.length) || camel) runs.add(w);
+    if (glued || (camel && common >= 3 && common < w.length)) runs.add(w.slice(0, common));
+  }
+  return [...runs].filter((r) => !r.split(" ").some((w) => NAME_QUALIFIER.test(w) || NAME_QUALIFIER_WORDS.has(w)));
+}
+/** A name word that is a document's one-word run. A start of a glued word counts only as its own run, when it also starts
+ * the insurer's name ("PRU" for "PRUShield" by Prudential); never otherwise ("Infant" in "InfantShield", Critic #515 round 4). */
+const ownWordFits = (w: string, run: string) => w === run;
+/** Company words a brand may carry in a row's name ("HSBC Life Shield"): skipped only straight after the brand. */
+const BRAND_COMPANY_WORDS = new Set("life insurance assurance general takaful".split(" "));
+/** A name's words with every run of the document's own words taken out, longest run first. */
+function withoutOwnPhrases(words: string[], runs: string[]): string[] {
+  const rs = runs.map((r) => r.split(" ")).sort((a, b) => b.length - a.length);
+  const out: string[] = [];
+  for (let i = 0; i < words.length;) {
+    const r = rs.find((r) => i + r.length <= words.length && r.every((o, k) => r.length === 1 ? ownWordFits(words[i], o) : words[i + k] === o));
+    if (r) { i += r.length; while (i < words.length && BRAND_COMPANY_WORDS.has(words[i])) i++; } else out.push(words[i++]);
+  }
+  return out;
+}
 /** Words above a daily row that say its limits are not this person's alone (gate SD-H2d, SD-L2). "Per policy year" and
  * "per-policy year" are a cap's period, not sharing words. */
 const SHARED_ABOVE = /\b(?:shared?|sharing|all\s+(?:the\s+)?(?:insured|lives|persons|members)|per[\s-]+policy\b(?!\s+year\b)|not\s+per\s+person|famil(?:y|ies)|combined|aggregate|together|collectively|for\s+everyone|per\s+certificate|households?|pooled|jointly|split\s+between|each\s+policy|whole\s+policy|per\s+plan|dependants?|dependents?)\b/i;
@@ -1900,6 +1977,9 @@ const CAP_PERIOD = String.raw`(?:per|each|in\s+any\s+one|for\s+any\s+one|in\s+an
 const CAP_BRACKET = new RegExp(String.raw`^\s*(?:(?:(?:up\s+to\s+(?:a\s+)?)?max(?:imum)?\.?|up\s+to)\s*(?:of\s+)?\d{1,3}\s*(?:consecutive\s+)?days?|\d{1,3}\s*days?\s+max(?:imum)?\.?)(?:\s+(?:of\s+(?:hospitali[sz]ation|(?:hospital\s+)?(?:stay|confinement))|in\s+hospital))?(?:\s*,?\s*${CAP_PERIOD}){0,2}\s*[*†‡^]?\s*$`, "i");
 /** Brackets that describe the benefit and never limit it: "(Inpatient)", "(Daily)", "(Per Day)", "(Hospitalisation)". */
 const DESCRIPTIVE_BRACKET = /^\s*(?:in-?\s?patient|daily|per\s+day|hospitali[sz]ation)\s*$/i;
+/** A bracket of neutral benefit words only ("(Rider)", "(Optional)", "(Each Day)", "(Per Day of Confinement)", "(Daily
+ * Cash)", "(Accommodation)"): it describes the benefit and limits nothing (TE journeys on main 9bca70a, R1). */
+const neutralBracket = (b: string) => { const w = b.toLowerCase().match(/[\p{L}\d]+/gu) ?? []; return w.length > 0 && w.every((x) => NEUTRAL_NAME_WORDS.has(x)); };
 /** Capitals in a bracket that say which stays or whose: a level of care, accident, overseas, critical illness, child. */
 const QUALIFIER_CAPS = new Set("ICU HDU CCU NICU PICU OS ACC AO CI CH SP".split(" "));
 /** Whether a currency named in a bracket is the row's own: the row prints its daily figure in it. */
@@ -1912,19 +1992,87 @@ function ownCurrency(c: string, rowText: string): boolean {
 }
 /** A row's leading number ("(a) ", "1. ", "i) ", "2a)"): a label, never a condition (gate #508 round 3 NEW-HIGH 2). */
 const ROW_ENUMERATOR = /^\s*(?:\((?:\d{1,2}[a-z]?|[a-z]|[ivx]{1,4})\)|(?:\d{1,2}[a-z]?|[a-z]|[ivx]{1,4})[.)])\s+/i;
-/** Whether a bracket of capitals after a row's name is that name's abbreviation ("Hospital cash (HC)"): its letters are
- * initials of the name's words, in order. */
-function nameAbbreviation(name: string, abbr: string): boolean {
-  if (!/^[A-Z]{2,5}$/.test(abbr)) return false;
-  const initials = (name.match(/[\p{L}]+/gu) ?? []).map((w) => w[0].toUpperCase()).join("");
-  let i = 0;
-  for (const c of initials) if (c === abbr[i]) i++;
-  return i === abbr.length && initials[0] === abbr[0];
+/** Whether a bracket of capitals is the row's own name's code ("Hospital cash (HC)", "(H)", "(HCB)"): its letters are
+ * initials of the name's words, in order, from the first, optionally followed by B or R (benefit, rider). Any other code
+ * ("(C)", "(PA)", "(VIP)", "(ADB)", "(CHC)") may say whose or which stays the row pays, so no figure (gate #513 round 4
+ * HIGH: a closed rule, never a list of bad codes). */
+/** Leading words a name's code may leave out: "Daily", "Enhanced", "The" (never a benefit's own core word). */
+const CODE_LEAD_WORDS = new Set("daily the a enhanced".split(" "));
+function nameAbbreviation(name: string, abbr: string, ownWords: string[] = []): boolean {
+  if (!/^[A-Z]{1,5}$/.test(abbr)) return false;
+  // "Inpatient" is read as "In Patient" for its initials ("Inpatient Cash (IPC)"; Critic #515 round 2).
+  const words = name.replace(/\([^()]*\)/g, " ").replace(/\bin-?patient\b/gi, "In Patient").match(/[\p{L}]+/gu) ?? [];
+  // The code may start past leading words that are neutral or the document's own ("Daily Hospital Cash (HC)",
+  // "Kestrel Hospital Cash (HC)"; gate #515 round 1 NEW-HIGH 2).
+  const starts = [0];
+  const lower = words.map((w) => w.toLowerCase());
+  for (let s = 0; s < words.length - 1;) {
+    if (CODE_LEAD_WORDS.has(lower[s])) { s++; starts.push(s); continue; }
+    // The longest run of the document's own words at this point ("Kestrel Term Guard", "K Care", "PRU").
+    const run = ownWords.map((r) => r.split(" ")).filter((r) => s + r.length < words.length
+      && r.every((o, k) => r.length === 1 ? ownWordFits(lower[s], o) : lower[s + k] === o)).sort((a, b) => b.length - a.length)[0];
+    if (!run) break;
+    s += run.length;
+    starts.push(s);
+  }
+  const fits = (code: string, initials: string) => {
+    if (!code || !initials || initials[0] !== code[0]) return false;
+    let i = 0;
+    for (const c of initials) if (c === code[i]) i++;
+    return i === code.length;
+  };
+  return starts.some((s) => {
+    if (s > 0 && abbr.length < 2) return false;
+    const initials = words.slice(s).map((w) => w[0].toUpperCase()).join("");
+    return fits(abbr, initials) || (abbr.length >= 2 && /[BR]$/.test(abbr) && fits(abbr.slice(0, -1), initials));
+  });
 }
+/** Whether a line under a daily row is a short fragment that may qualify it: a bracket, a "- x" clause, or up to four
+ * words with no figure and no sentence end, that is not neutral benefit words, a harmless, cap or descriptive bracket, or
+ * the row's own code. */
+function qualifierFragment(line: string, codeName: string, ownWords: string[], people: string[] = []): boolean {
+  const t = line.trim();
+  if (!t) return false;
+  const bracket = /^\((.*)\)\s*[*†‡]?$/.exec(t);
+  const dash = /^[-–—]\s*(.+)$/.exec(t);
+  const short = !bracket && !dash && t.split(/\s+/).length <= 4 && !/\d|[.:;!?]\s*$/.test(t);
+  if (!bracket && !dash && !short) return false;
+  const inner = (bracket?.[1] ?? dash?.[1] ?? t).trim();
+  // Another plan, tier or life ("(Plan II)", "Life 2") qualifies the row even when its words are neutral (gate #515 round 8).
+  if (/\b(?:plan|tier|option|class|level|type|life|lives)\s+(?:[a-z]|\d{1,2}|[ivx]{1,4})\b/i.test(inner)) return true;
+  if (HARMLESS_BRACKET.test(inner) || CAP_BRACKET.test(inner) || DESCRIPTIVE_BRACKET.test(inner) || neutralBracket(inner)) return false;
+  const code = /^[A-Z]{1,5}$/.test(inner);
+  if (code && !QUALIFIER_CAPS.has(inner) && nameAbbreviation(codeName, inner, ownWords)) return false;
+  // A line under the row, bracketed or bare, may also be a heading, a footer, a cell or a note ("Surgical Benefits", "NOTES",
+  // "(continued)", "(Covered)", "(Note 1)", "(a)"): only a qualifier word, a qualifier code (ICU) or a household member's
+  // name in it qualifies the row (gate #515 round 6 NEW-HIGH 1).
+  if (code && QUALIFIER_CAPS.has(inner)) return true;
+  // A pointer to a note or another page ("(Note 1)", "(see overleaf)") holds terms this row's answer has not read: none.
+  if ((bracket || dash) && /\b(?:see\s+)?notes?\s*\(?\d|\bsee\s+(?:note|overleaf|next\s+page|page)\b|\boverleaf\b/i.test(inner)) return true;
+  // "For the Life Assured", "For the insured": the policy's own life, said of every row.
+  if (/^for\s+the\s+(?:life\s+(?:assured|insured)|insured(?:\s+person)?)$/i.test(inner)) return false;
+  const words: string[] = inner.toLowerCase().match(/[\p{L}']+/gu) ?? [];
+  // A bare line ending "Benefit(s)" or "Cover", or naming another benefit anywhere ("Early Critical Illness", "B. Personal
+  // Accident", "Dread Disease"), is the next section's heading (gate #515 TE round 7), unless it names a person or role
+  // ("Child Benefits"): then it may say whose stays. A household member's name still counts.
+  const heading = short && (/\b(?:benefits?|cover)$/i.test(inner) || OTHER_BENEFIT_NAME.test(inner)) && !ROLE_WORD.test(inner)
+    && !words.some((w) => NAME_QUALIFIER_WORDS.has(w));
+  if (heading) return people.some((p) => (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []).some((w) => words.includes(w)));
+  if (NAME_QUALIFIER.test(inner) || words.some((w) => NAME_QUALIFIER_WORDS.has(w) || FRAGMENT_QUALIFIER_WORDS.has(w))) return true;
+  return people.some((p) => (p.toLowerCase().match(/[\p{L}]{2,}/gu) ?? []).some((w) => words.includes(w)));
+}
+/** Another benefit's name, which a line under a daily row names when it heads the next section. */
+const OTHER_BENEFIT_NAME = /\b(?:critical\s+illness(?:es)?|dread\s+diseases?|major\s+illness(?:es)?|terminal\s+illness|personal\s+accident|accidental\s+(?:death|dismemberment|medical)|accident\s+medical|cancer|death|(?:total\s+(?:and|&)\s+)?permanent\s+disability)\b/i;
+/** People and roles: a heading that names one may say whose stays the row above pays. */
+const ROLE_WORD = /\b(?:child|children|kids?|juvenile|junior|spouse|wife|husband|partner|parents?|father|mother|son|daughter|dependants?|dependents?|family|infants?|baby|babies|newborns?|maids?|helpers?|domestic|staff|employees?|group|corporate|payor|grandparents?|joint|second|students?|women|men|female|male|senior|elderly|retirees?|worker|workers)\b/i;
+/** Words that, alone on the line under a daily row, say whose or which stays it pays: people, roles, causes, places. */
+const FRAGMENT_QUALIFIER_WORDS = new Set(("infant infants baby babies newborn toddler student students youth retiree retirees pensioner staff "
+  + "helper helpers maid maids domestic payor policyholder proposer grandparent grandparents grandchild mum mom dad joint second co-insured "
+  + "travel psychiatric dengue hospice private government ward-class group corporate female male women men").split(" "));
 /** Words in a line below a row that tie an amount to it ("* Hospital cash counts towards this amount", "including daily
  * benefits", "shared with"): a limit this row may share, so no figure (gate #508 round 3 NEW-HIGH 1). */
 const SHARE_WORDS = /\b(?:counts?\s+(?:towards?|against)|count\s+(?:towards?|against)|includ(?:e|es|ed|ing)|inclusive\s+of|part\s+of|within|shared?|sharing|combined|together|aggregate|in\s+total)\b/i;
-export function readStayRule(pageText: string, offset: number, excerpt: string, daily: number, people: string[] = []): StayRule | null {
+export function readStayRule(pageText: string, offset: number, excerpt: string, daily: number, people: string[] = [], ownWords: string[] = []): StayRule | null {
   // The row with every line under it up to the next heading (stayBlock), or the quote with those lines when it reaches
   // further; each rule is read once. A limit, aggregate, day rule or condition anywhere below the row gives no total,
   // except a waiting form the row's own sentence states.
@@ -1937,7 +2085,7 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   // and the lines of the quote that reach past them. A first cell that only numbers the row ("4") is not one of them.
   // Everything else below the row is its tail, line by line.
   const line = block.own.replace(/^\s*\(?(?:\d{1,2}[a-z]?|[a-z])[.)]?\t/i, "").replace(ROW_ENUMERATOR, "").replace(/\s+/g, " ").trim();
-  let lines = block.lines.map((l) => ({ ...l, text: l.text.replace(/\s+/g, " ").trim() }));
+  let lines = block.lines.map((l) => ({ ...l, tabbed: l.text.includes("\t"), text: l.text.replace(/\s+/g, " ").trim() }));
   let rowText = quoted;
   if (ownRow) {
     rowText = line;
@@ -1963,15 +2111,18 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   // A bracket that is wholly a waiting form the row reads ("(first 2 days of any admission not payable)") is the row's own.
   // "(30 days max)" is read as "(maximum 30 days)", so the most days are found where a day cap is looked for.
   rowText = rowText.replace(/\(\s*(\d{1,3})\s*days?\s+max(?:imum)?\.?(\s+[^()]*)?\)/gi, (m, d: string, rest: string | undefined) => CAP_BRACKET.test(m.slice(1, -1)) ? `(maximum ${d} days${rest ?? ""})` : m);
+  // The name a capitals code is read against: the row's own name, with any words it wraps onto.
+  const codeName = `${rowName(rowLine(pageText, offset).text)} ${block.labelMore.join(" ")}`.replace(ROW_ENUMERATOR, "");
   for (const m of rowText.matchAll(/\(([^()]*)\)/g)) {
     // A currency bracket is harmless only when it is the row's own currency ("(S$)" on an S$ row; "(USD)" on one is not).
     const code = /^\s*(?:([A-Z]{0,3})\$|(SGD|USD|MYR|RM|GBP|EUR|AUD|HKD))\s*$/.exec(m[1]);
     if (code) { if (ownCurrency(code[1] !== undefined ? `${code[1]}$` : code[2], rowText)) continue; return null; }
-    if (HARMLESS_BRACKET.test(m[1]) || CAP_BRACKET.test(m[1]) || DESCRIPTIVE_BRACKET.test(m[1])) continue;
+    if (HARMLESS_BRACKET.test(m[1]) || CAP_BRACKET.test(m[1]) || DESCRIPTIVE_BRACKET.test(m[1]) || neutralBracket(m[1])) continue;
     // A bracket of 1-4 capitals anywhere in the row ("(HC)", "(HCB)", "(H)") is a label, unless it names a level of care,
     // a cause or a place (gate #508 round 7).
-    if (/^\s*[A-Z]{1,4}\s*$/.test(m[1]) && !QUALIFIER_CAPS.has(m[1].trim())) continue;
-    if (block.own.includes("\t") && nameCell.endsWith(m[0]) && nameAbbreviation(nameCell.slice(0, -m[0].length), m[1].trim())) continue;
+    // Only the row's own name's code passes (gate #513 round 4 HIGH): "(C)", "(PA)", "(VIP)" give no figure.
+    if (/^\s*[A-Z]{1,5}\s*$/.test(m[1]) && !QUALIFIER_CAPS.has(m[1].trim()) && nameAbbreviation(codeName, m[1].trim(), ownWords)) continue;
+    if (block.own.includes("\t") && nameCell.endsWith(m[0]) && !QUALIFIER_CAPS.has(m[1].trim()) && nameAbbreviation(nameCell.slice(0, -m[0].length), m[1].trim(), ownWords)) continue;
     const w = takeWaiting(m[1]);
     if (w.unpaid.length && !/[\p{L}\d]/u.test(w.rest.replace(/\b(?:of|the|a|an|any|each|every|is|are)\b/gi, " "))) continue;
     return null;
@@ -2004,6 +2155,12 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
     // or, past another benefit's row, still names this row once its read waiting sentences are out: that row's amount may
     // be this row's limit (gate #508 round 3 NEW-HIGH 1).
     if (SHARE_WORDS.test(said)) shared = true;
+    // A fragment under the row and before any other benefit's row, alone or in brackets ("(Spouse)", "(for all lives)",
+    // "Infant", "Lee Mei Ling", "- spouse", "(C)"), reads as the row's own qualifier: it may say whose or which stays the
+    // row pays, so no figure, unless it holds only neutral benefit words, a harmless or cap bracket (TE journeys W2). Only
+    // the line printed straight under the row; a line of cells (another table's row or heading) is not a fragment
+    // (Critic #515 round 5).
+    if (l.next && !l.after && !l.tabbed && qualifierFragment(said, codeName, ownWords, people)) shared = true;
     const named = said.replace(/\b(?:in\s+|of\s+|per\s+|each\s+|any\s+)?hospital(?:\s+(?:stays?|admissions?|confinements?))?\b(?!\s+(?:cash|income|benefit|allowance))/gi, " ");
     if (l.after && distinct.some((w) => new RegExp(String.raw`\b${w}`, "i").test(named))) shared = true;
     const mark = l.after && !marked ? `${PAST_OTHER} ` : "";
@@ -2089,9 +2246,9 @@ export function readStayRule(pageText: string, offset: number, excerpt: string, 
   const strict = period || cap || newWaiting || mostUnsure;
   // The row's name says whose stays or which stays it pays ("(a) Hospital cash for all lives"): no figure (gate #508
   // round 4 HIGH). With a rule read since R4 H2-C, benefit-name words only.
-  const nameWordList = ownName.replace(ROW_ENUMERATOR, " ").replace(/\bfor\s+the\s+(?:insured(?:\s+person)?|life\s+assured)\s*$/i, " ").replace(/\(\s*per\s+(?:life(?:\s+(?:assured|insured))?|insured(?:\s+person)?|person)\s*\)/gi, " ").replace(/\(([A-Z]{2,5})\)/g, (m, a: string) => nameAbbreviation(ownName.replace(ROW_ENUMERATOR, "").split("(")[0], a) ? " " : m)
+  const nameWordList = ownName.replace(ROW_ENUMERATOR, " ").replace(/\bpay-out\b/gi, "payout").replace(/\badd-on\b/gi, "addon").replace(/\bfor\s+the\s+(?:insured(?:\s+person)?|life\s+assured)\s*$/i, " ").replace(/\(\s*per\s+(?:life(?:\s+(?:assured|insured))?|insured(?:\s+person)?|person)\s*\)/gi, " ").replace(/\(\s*([A-Z]{1,5})\s*\)/g, (m, a: string) => nameAbbreviation(ownName.replace(ROW_ENUMERATOR, ""), a, ownWords) ? " " : m)
     .toLowerCase().match(/[\p{L}\d]+/gu) ?? [];
-  if (strict ? !nameWordList.every((w) => BENEFIT_NAME_WORDS.has(w) || ROW_GRAMMAR_WORDS.has(w)) : qualifiedName(ownName, nameWordList, people)) return null;
+  if (strict ? !nameWordList.every((w) => BENEFIT_NAME_WORDS.has(w) || ROW_GRAMMAR_WORDS.has(w)) : qualifiedName(ownName, nameWordList, people, ownWords)) return null;
   // Past the name, the row's own terms are an allow-list (gate #508 round 4 HIGH: "…up to 30 days per stay accident
   // only", "…per stay, overseas", "…, for all lives"): its daily figure, the unit it is paid by, its waiting rule (taken
   // out above), its most days and their period (per stay, per policy year, per year, per confinement, per accident),
@@ -2121,7 +2278,7 @@ function stayPays(st: ModelStatement, found: Found, household: Household, amount
   const stay = st.perDay?.stayDays ?? stayDaysSaid(asked.slice(0, 1));
   if (!stay || !Number.isInteger(stay) || stay < 1 || stay > 366 || !stayDaysWritten(asked, stay)) return null;
   const page = household.documents[found.docIndex].pages.find((p) => p.page === found.page)!;
-  const r = readStayRule(page.text, found.offset, found.excerpt, amount.value, household.members.map((m) => m.name));
+  const r = readStayRule(page.text, found.offset, found.excerpt, amount.value, household.members.map((m) => m.name), documentOwnWords(household.documents[found.docIndex]));
   if (!r) return null;
   const { unpaid, most, period, cap } = r;
   // A most-days line that may be another row's (readStayRule mostUnsure) is used only when the stay's paid days stay

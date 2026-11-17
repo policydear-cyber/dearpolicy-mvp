@@ -18,7 +18,7 @@ import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/li
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
-import { readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
+import { documentOwnWords, readModelAnswer, readStayRule, verifyAnswer } from "@/lib/simple-chat/verify";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|GEMINI|_API_KEY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network in this test"); }) as typeof fetch;
@@ -566,7 +566,8 @@ ROUND2.push(
   ["R3-2e '(a) Hospital cash (HC)\\t…', 6 days", `(a) ${R3W.replace("Hospital cash", "Hospital cash (HC)")}`, [], { ...R3O, benefit: "Hospital cash (HC)" }, 6, "S$400"],
   ["R3-2f 'Hospital cash (Plan B)' stays a condition: none", R3W.replace("Hospital cash", "Hospital cash (Plan B)"), [], { ...R3O, benefit: "Hospital cash (Plan B)" }, 40, null],
   ["R3-2g 'Hospital cash (see note 3)' stays a condition: none", R3W.replace("Hospital cash", "Hospital cash (see note 3)"), [], { ...R3O, benefit: "Hospital cash (see note 3)" }, 40, null],
-  ["R3-2h 'Hospital cash (XY)' (round 7: capitals in a bracket are a label, as main reads them)", R3W.replace("Hospital cash", "Hospital cash (XY)"), [], { ...R3O, benefit: "Hospital cash (XY)" }, 40, "S$3,000"],
+  // Gate #513 round 4 HIGH: only the name's own code is a label; any other code may say whose or which stays: none.
+  ["R3-2h 'Hospital cash (XY)': a code that is not the name's own gives none", R3W.replace("Hospital cash", "Hospital cash (XY)"), [], { ...R3O, benefit: "Hospital cash (XY)" }, 40, null],
   // HIGH 3: any bracket type, and a trailing ", <x> only" or "- <x> only" clause, is a condition.
   ["R3-3 '[accident only]', 40 days", `${R3W} [accident only]`, [], R3O, 40, null],
   ["R3-3b ', accident only', 40 days", `${R3W}, accident only`, [], R3O, 40, null],
@@ -675,6 +676,119 @@ for (const name of ["Hospital Stay Benefit", "Kestrel Hospital Cash", "Hospital 
 // Still none: a qualifier next to a brand, a tier with a letter, and an unknown name with no stay-benefit core.
 for (const name of ["Kestrel Child Hospital Cash", "Hospital Cash Option B", "Kestrel Accident Hospital Cash", "Hospital cash (Child)", "Recovery payment"])
   ROUND2.push([`Q3b name '${name}': none`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, null]);
+// Gate #513 round 4 HIGH (same as main): a capitals code in brackets passes only when it is the name's own code (its
+// initials in order, optionally ending in B or R). Any other code ("(C)", "(PA)", "(VIP)") gives none, on any insurer.
+for (const name of ["Hospital Cash (C)", "Hospital Cash (PA)", "Hospital Cash (S)", "Hospital Cash (A)", "Hospital Cash (ADB)", "Hospital Cash (MAT)",
+  "Hospital Cash (SG)", "Hospital Cash (B)", "Hospital Cash (VIP)", "Hospital Cash (HCA)", "Hospital Cash (CH)", "Hospital Cash (XYZ)"])
+  ROUND2.push([`C1 code '${name}': none`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, null]);
+for (const name of ["Hospital Cash (H)", "Hospital Cash (HC)", "Hospital Cash (HCB)", "Hospital Cash Rider (HCR)", "Hospital Cash Allowance (HCA)",
+  "Hospital Income Benefit (HIB)", "Daily Hospital Cash (DHC)", "Hospital Cash Benefit (HCB)"])
+  ROUND2.push([`C1b control code '${name}' keeps main's figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
+// Gate #513 round 3/4 HIGH (same as main): a name's words are an allow-list. Past the stay-benefit words, a number and a
+// few neutral product words, only the document's own product or insurer words pass. Any other word gives none.
+for (const name of ["Infant Hospital Cash", "Baby Hospital Cash", "Newborn Hospital Cash", "Student Hospital Cash", "Youth Hospital Cash",
+  "Retiree Hospital Cash", "Staff Hospital Cash", "Helper Hospital Cash", "Maid Hospital Cash", "Domestic Helper Hospital Cash", "Mum Hospital Cash",
+  "Dad Hospital Cash", "Grandparent Hospital Cash", "Second Life Hospital Cash", "Joint Life Hospital Cash", "Travel Hospital Cash",
+  "Psychiatric Hospital Cash", "Dengue Hospital Cash", "COVID-19 Hospital Cash", "Hospice Hospital Cash", "Nursing Home Hospital Cash",
+  "Emergency Hospital Cash", "Private Hospital Cash", "Government Hospital Cash", "Singapore Hospital Cash", "Malaysia Hospital Cash",
+  "Asia Hospital Cash", "VIP Hospital Cash", "Prestige Hospital Cash", "Diamond Hospital Cash", "Hospital Cash Lite", "Essential Hospital Cash",
+  "Group Hospital Cash", "Corporate Hospital Cash", "Female Hospital Cash", "Mens Hospital Cash", "Policyholder Hospital Cash", "Payor Hospital Cash",
+  "Lee Hospital Cash", "Hospital Cash - Mei", "Falcon Hospital Cash", "Life Hospital Cash"])
+  ROUND2.push([`N1 name '${name}': none`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, null]);
+for (const name of ["Kestrel Hospital Cash", "Term Guard Hospital Cash", "Kestrel Term Guard Hospital Income", "Hospital Cash Payout", "Hospital Income Protector",
+  "Daily hospital cash payable", "Hospital Cash Benefit 2", "Hospital Cash/Income Rider", "Hospital Cash & Income", "In-Hospital Cash", "HOSPITAL CASH",
+  "Hospital Cash Benefit (Per Day)", "Inpatient Daily Cash", "Hospital Confinement Benefit"])
+  ROUND2.push([`N1b control name '${name}' keeps main's figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
+// Gate #515 round 1 NEW-HIGH 1: generic insurance-product words and roman numerals keep main's figure.
+for (const name of ["Hospital Cash Cover", "Hospital Cash Coverage", "Hospital Cash Insurance", "Hospital Cash Insurance Benefit", "Hospital Cash Plan",
+  "Hospital Cash Payment", "Hospital Cash Amount", "Hospital Cash Pay-out", "Hospital Cash Indemnity", "Hospital Cash Compensation", "Hospital Cash Grant",
+  "Hospital Cash Relief", "Hospital Income Protection", "Hospital Cash Protect", "Hospital Income Replacement", "Hospital Cash II", "Hospital Cash III",
+  "Hospital Cash Shield", "Hospital Cash Saver", "Secure Hospital Cash", "Hospital Cash Support", "Hospital Cash Assist"])
+  ROUND2.push([`P1 control name '${name}' keeps main's figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
+// Gate #515 round 2: Guard, Supplementary, Additional, Optional and Add-on are neutral; "Inpatient" reads as two initials;
+// a code may start past a brand of several words.
+for (const name of ["Hospital Cash Guard", "Guard Hospital Cash", "Supplementary Hospital Cash", "Hospital Cash Supplement", "Additional Hospital Cash",
+  "Optional Hospital Cash", "Hospital Cash Add-on", "Inpatient Cash (IPC)", "Inpatient Cash Benefit (IPCB)", "Term Guard Hospital Cash (HC)",
+  "Kestrel Term Guard Hospital Cash (HC)", "The Hospital Cash Benefit (HCB)"])
+  ROUND2.push([`P5 control name '${name}' keeps main's figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
+// A letter or Roman tier is never neutral past the first word.
+for (const name of ["Hospital Cash A", "Ward A Hospital Cash", "Hospital Cash Cover A", "Hospital Cash S", "Hospital Cash Rider IV"])
+  ROUND2.push([`P5b name '${name}': none`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, null]);
+// Gate #515 round 1 NEW-HIGH 2: a code may start past "Daily" or the document's own brand.
+for (const name of ["Daily Hospital Cash (HC)", "Daily Hospital Income (HI)", "Daily Hospital Cash Benefit (HCB)", "Kestrel Hospital Cash (HC)"])
+  ROUND2.push([`P2 control code '${name}' keeps main's figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
+// ... but never a one-letter code past a core word ("Hospital Cash (C)" stays none, above), and a number of two digits
+// (an age band) or a place code is not neutral.
+for (const name of ["Hospital Cash 65", "US Hospital Cash", "Hospital Cash - US", "HK Hospital Cash", "Hospital Cash HK"])
+  ROUND2.push([`P3 name '${name}': none`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, null]);
+// Gate #515 round 1 HIGH: the document's own words count only as a run from the start or to the end of its product name or
+// insurer, never a word from inside it alone, and never a qualifier or a place.
+{
+  const rule = (name: string, insurer: string | null, productName: string | null) => {
+    const row = Q1(", from the 3rd day, up to 30 days per stay", name);
+    const page = `${insurer ?? ""}\nPOLICY SCHEDULE\nBenefit\tAmount\n${row}\n`;
+    return readStayRule(page, page.indexOf(row), row, 100, [TAN], documentOwnWords({ insurer, productName }));
+  };
+  const none: [string, string | null, string | null][] = [
+    ["Baby Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Mum & Baby Care"], ["Mum Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Mum & Baby Care"],
+    ["Payor Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Payor Saver"], ["Hospital Cash with Hospice", "Kestrel Life Singapore Ltd", "Kestrel Care with Hospice"],
+    ["Hospice Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Care with Hospice"], ["China Hospital Cash", "China Life Insurance (Singapore) Pte Ltd", "Kestrel Shield"],
+    ["American Hospital Cash", "American International Assurance Company", "Kestrel Shield"], ["Infant Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Infant Travel Shield"],
+    ["Travel Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Infant Travel Shield"], ["Falcon Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Term Guard"],
+    ["Infant Hospital Cash", "Falcon Insurance Ltd", "Infant Shield"], ["Mum Hospital Cash", "Falcon Insurance Ltd", "Mum and Baby Care"],
+    ["Student Hospital Cash", "Falcon Insurance Ltd", "Student Care"], ["Baby Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel BabyCare"],
+    ["Life Hospital Cash", "HSBC Life (Singapore) Pte Ltd", "HSBC Life Shield"], ["Infant Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel InfantShield"],
+    ["Maid Hospital Cash", "Meridian Allied Assurance", "Maid Plan"], ["Single Hospital Cash", "Singapore Life Ltd", "Single Room Plan"],
+    ["Travel Hospital Cash", "Travelers Insurance", "Travel Protect"], ["Helper Hospital Cash", "Helvetia Insurance", "Helper Protect"],
+    ["Infant Hospital Cash", "Infinity Life", "Infant Care"], ["Private Hospital Cash", "Privilege Insurance", "Private Care"], ["Travel Hospital Cash", "Kestrel Life Singapore Ltd", "TravelCover"], ["Infant Hospital Cash", "Falcon Insurance Ltd", "Falcon Infant Plan"],
+  ];
+  for (const [name, ins, prod] of none) test(`stay-wrap P4 '${name}' in '${prod}' by '${ins}': none`, () => assert.equal(rule(name, ins, prod), null));
+  const kept: [string, string | null, string | null][] = [
+    ["PRU Hospital Cash", "Prudential Assurance Company Singapore", "PRUShield"], ["TM Hospital Cash", "Tokio Marine Life Insurance Singapore", "TM Shield"],
+    ["HealthShield Hospital Cash", "AIA Singapore", "AIA HealthShield"], ["Kestrel Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Mum & Baby Care"],
+    ["Term Guard Hospital Cash", "Kestrel Life Singapore Ltd", "Kestrel Term Guard"], ["Tokio Marine Hospital Cash", "Tokio Marine Life Insurance Singapore", "TM Shield"],
+    ["Kestrel Hospital Cash (KHC)", "Kestrel Life Singapore Ltd", "Kestrel Term Guard"],
+    // TE #515 round 2: a brand at the start of the product name, by the insurer's own letters or a capital inside one word.
+    ["Singlife Hospital Cash", "Singapore Life Ltd", "Singlife Shield"], ["Singlife Shield Hospital Cash", "Singapore Life Ltd", "Singlife Shield Plan 1"],
+    ["ManuCare Hospital Cash", "Manulife (Singapore) Pte Ltd", "ManuCare Hospital Income"], ["PRUExtra Hospital Cash", "Prudential Assurance Company Singapore", "PRUExtra Premier CoPay"],
+    ["PRU Hospital Cash", "Prudential Assurance Company Singapore", "PRUExtra Premier CoPay"], ["IncomeShield Hospital Cash", "Income Insurance Ltd", "Enhanced IncomeShield"],
+    ["HSBC Life Shield Hospital Cash", "HSBC Life (Singapore) Pte Ltd", "HSBC Life Shield"], ["AIA HealthShield Hospital Cash", "AIA Singapore", "AIA HealthShield Gold Max"],
+  ];
+  for (const [name, ins, prod] of kept) test(`stay-wrap P4b control '${name}' in '${prod}' by '${ins}' keeps its figure`, () => assert.notEqual(rule(name, ins, prod), null));
+}
+// TE journeys on main 9bca70a R1: neutral descriptive brackets and "Hosp." keep main's figure.
+for (const name of ["Hospital Cash Benefit (Rider)", "Hospital Cash Benefit (Optional)", "Hospital Income Benefit (Accommodation)", "Hospital Income Benefit (Confinement)",
+  "Hospital Cash Benefit (Each Day)", "Hospital Cash Benefit (Per Day of Confinement)", "Hospital Cash (each day)", "Hosp. Cash", "Hospital Income Benefit (Daily Cash)",
+  "Hosp Cash Benefit"])
+  ROUND2.push([`R1 control name '${name}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay", name), [], { ...R3O, benefit: name }, 40, "S$3,000"]);
+// TE journeys W2: a qualifier on the line below the row, alone or in brackets, says whose or which stays: none.
+for (const below of ["(Spouse)", "(for all lives)", "(Child)", "Infant", "(Plan B)", "Maid", "(Accident only)", "- spouse", "Spouse", "Joint life"])
+  ROUND2.push([`W2 line below '${below}': none`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, null]);
+// Critic #515 round 5: a heading, footer, note or cell under the row, or any line not straight under it, is not a qualifier.
+for (const below of ["Surgical Benefits", "OUTPATIENT BENEFITS", "Exclusions", "Other Benefits", "Section B", "Policy Schedule", "Riders", "Surgical benefit",
+  "Outpatient", "Ambulance", "Kestrel Life Singapore Ltd", "Kestrel Term Guard", "Notes", "Remarks", "Confidential", "Continued overleaf", "Effective date",
+  "See notes", "Terms apply", "Covered", "Yes", "N/A", "Not applicable", "Guaranteed", "For the Life Assured", "For the insured", "(see note 2)"])
+  ROUND2.push([`W2b control line below '${below}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, below === "(see note 2)" ? null : "S$3,000"]);
+// Critic #515 round 6: a bare capitals line (heading, cell or section letter) is not a code unless it is a qualifier code.
+for (const below of ["NOTES", "NOTE", "YES", "NIL", "NA", "PAGE", "END", "ALL", "B", "C", "XY"])
+  ROUND2.push([`W2d control bare capitals '${below}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, "S$3,000"]);
+for (const below of ["ICU", "MAID", "INFANT", "SPOUSE"])
+  ROUND2.push([`W2d bare qualifier '${below}' below: none`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, null]);
+// TE #515 round 6: a bracketed note, cell or enumerator, or the next section's heading, under the row is not a qualifier.
+for (const below of ["(continued)", "(cont'd)", "(Page 1 of 2)", "(Covered)", "(Yes)", "(No)", "(Nil)", "(N/A)", "(Paid)", "(Waived)", "(Guaranteed)",
+  "(as charged)", "(Cashless)", "(Reimbursement)", "(see below)", "(*)", "(A)", "(a)", "(i)", "(SA)", "(100%)", "(TPD)", "(C)",
+  "Critical Illness Benefits", "Accident Benefits", "Personal Accident Benefits", "Accidental Death", "Cancer Benefits", "Travel Benefits", "Personal Accident", "Critical Illness Benefit", "Early Critical Illness Benefit", "Cancer Benefit", "Accidental Death Benefit", "Dread Disease Benefit", "Terminal Illness Benefit", "Early Stage Critical Illness", "Major Illness", "Critical Illness Cover", "Accident Medical Expenses", "Accidental Medical Reimbursement", "Accidental Dismemberment", "B. Personal Accident", "Cancer", "CRITICAL ILLNESS"])
+  ROUND2.push([`W2e control line below '${below}' keeps the figure`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, "S$3,000"]);
+for (const below of ["Cancer only", "Death except", "Child Benefits", "Spouse Benefit", "Group Benefits", "(Plan II)", "(Plan III)", "- Plan II", "(Note 1)", "(see overleaf)", "(Spouse only)", "(Infant)", "(ICU)", "(for each life)", "(Plan 2)", "- child", "(Overseas)", "(Wife)"])
+  ROUND2.push([`W2e bracket qualifier '${below}' below: none`, Q1(", from the 3rd day, up to 30 days per stay"), [below], R3O, 40, null]);
+ROUND2.push(["W2c a qualifier after a blank line is not the row's own fragment", Q1(", from the 3rd day, up to 30 days per stay"), ["", "Infant"], R3O, 40, "S$3,000"]);
+test("stay-wrap W2 a household member's name on the line under Tan's row: none", () => {
+  const h = household([{ person: TAN, row: Q1(", from the 3rd day, up to 30 days per stay"), below: ["Lee Mei Ling"], value: 100, maxDays: 30, fromDay: 3 },
+    { person: LEE, row: "Surgical benefit\tS$500 per operation", value: 500, maxDays: null }]);
+  const a = ask(h, TAN, ["I was in hospital for 40 days. How much will I get?"], { perDay: { stayDays: 40 } });
+  assert.ok(a.row);
+  assert.equal(stayCard(a)?.amount?.text ?? null, null, JSON.stringify(a.kept));
+});
 // A household member's name in the row's name: that person's row, never worked out as another's.
 test("stay-wrap Q2 name 'Mei Ling hospital cash' with Lee Mei Ling in the household: none", () => {
   const h = household([{ person: TAN, row: Q1(", from the 3rd day, up to 30 days per stay", "Mei Ling hospital cash"), value: 100, maxDays: 30, fromDay: 3, benefit: "Mei Ling hospital cash" },
