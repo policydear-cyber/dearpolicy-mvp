@@ -6,7 +6,7 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.te
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { homeCardShowsAmount, homeCardSource, homeGridColumns } from "@/lib/coverage/home-card";
+import { homeAmountText, homeCardShowsAmount, homeCardSource, homeGridColumns } from "@/lib/coverage/home-card";
 
 let passed = 0; const failures: string[] = [];
 function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
@@ -66,7 +66,11 @@ test("the page shows the amount only when there is one, names the source, and se
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /const amount=!homeCardShowsAmount\(c\)\?null:c\.amount!=null\?money\(c\.amount,c\.currency\):c\.displayAmount;const source=homeCardSource\(c\);/);
   assert.match(page, /\{source&&<span className="coverage-source" title=\{source\}>\{source\}<\/span>\}/);
-  assert.match(page, /\{amount&&<span className="coverage-amount">\{amount\}<\/span>\}/);
+  assert.match(page, /\{amount&&<span className="coverage-amount">\{homeAmountText\(amount\)\}<\/span>\}/);
+  // A period wraps as a unit (TE A9): "S$3,000 a month" may break only before "a".
+  assert.equal(homeAmountText("S$3,000 a month"), "S$3,000 a\u00a0month");
+  assert.equal(homeAmountText("S$150.00 per day"), "S$150.00 per\u00a0day");
+  assert.equal(homeAmountText("S$1,000,000"), "S$1,000,000");
   assert.match(page, /data-cols=\{homeGridColumns\(covered\.length\)\}/);
   const css = readFileSync("app/globals.css", "utf8");
   // Columns follow the width the cards get, not the screen (Test engineer #519 F2): 2 until 3 or 4 fit card-sized.
