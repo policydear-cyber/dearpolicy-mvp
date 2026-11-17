@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
-import { kindsForInjury, kindsSaid, rowFractureKind } from "@/lib/benefit-table/fracture-kind";
+import { kindSettled, kindsForInjury, kindsSaid, rowFractureKind } from "@/lib/benefit-table/fracture-kind";
 import type { Household } from "@/lib/simple-chat/library";
 import { readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 
@@ -106,6 +106,21 @@ test("live shape: the two documents' kinds side by side, S$1,250 worked out from
   assert.deepEqual(said.amounts, ["S$1,250"]);
   assert.doesNotMatch(said.question, /Which kind/);
 });
+test("a settled kind is for this injury only: a new injury, even with no break word, starts again (Critic on #520)", () => {
+  assert.equal(kindSettled(["Rowan broke his arm.", "It was a simple fracture."]), "simple");
+  assert.equal(kindSettled(["Rowan broke his arm.", "It was a simple fracture.", "Sorry, it was Amy, not Rowan."]), "simple");
+  assert.equal(kindSettled(["Rowan broke his arm.", "It was a simple fracture.", "He also hurt his wrist in the fall."]), null);
+  assert.equal(kindSettled(["Rowan broke his arm.", "It was a simple fracture.", "Rowan broke his arm too."]), null);
+  assert.equal(kindSettled(["Rowan had a simple fracture last year. Now Amy broke her arm."]), null);
+  assert.equal(kindSettled(["Rowan broke his arm.", "Simple", "or maybe an other fracture"]), null);
+});
+test("bones under different headings stay apart: a leg's simple fracture is never the arm's (Critic on #520, NEW-HIGH 2)", () => {
+  const h = household(["Fracture of Leg: Simple Fracture: Lump sum\tS$2,000", "Fracture of Arm: Other Fracture: Lump sum\t20% of the Sum Insured"], [
+    ben({ section: "Fracture of Leg: Simple Fracture", benefit: "Lump sum", pays: "amount", value: 2000, currency: "SGD", quote: "Fracture of Leg: Simple Fracture: Lump sum\tS$2,000" }),
+    ben({ section: "Fracture of Arm: Other Fracture", benefit: "Lump sum", pays: "percent", value: 20, percentOf: "sum_insured", quote: "Fracture of Arm: Other Fracture: Lump sum\t20% of the Sum Insured" })]);
+  const a = answer(h, "It was a simple fracture.", [/Fracture of Arm/], null, ["Rowan broke his arm. What can he claim?"]);
+  assert.deepEqual(a.amounts, ["S$120,000"]);
+});
 test("rowFractureKind: a closing kind bracket, or one kind in the name; two kinds with no bracket is none", () => {
   assert.equal(rowFractureKind("Simple Fracture or Other Fracture: Arm, Elbow, Wrist or Ribs (Other Fracture)"), "other");
   assert.equal(rowFractureKind("Simple Fracture due to Accident: Arm, Elbow, Wrist or Ribs"), "simple");
@@ -130,20 +145,27 @@ test("live walk 17 Nov shape: no kind said, two kinds printed: both amounts as a
     assert.match(a.question, /Which kind of fracture did Rowan Hartley have: "Simple Fracture" or "Other Fracture"\?/);
   }
 });
-test("the kind said for this injury: only that kind's amount, named so, no question (live 17 Nov)", () => {
-  const simple = answer(both(), "Rowan had a simple fracture of his arm. What can he claim?", [/Other Fracture/, /^Simple Fracture: /]);
-  assert.deepEqual(simple.amounts, ["S$1,250"]);
-  assert.ok(simple.points.some((t) => /"Simple Fracture", the kind you described/.test(t)), simple.points.join(" | "));
-  assert.doesNotMatch(simple.question, /Which kind/);
-  // The model gave only the other kind's card: the said kind's card is brought in, the other's left out.
-  assert.deepEqual(answer(both(), "Rowan had a simple fracture of his arm. What can he claim?", [/Other Fracture/]).amounts, ["S$1,250"]);
+test("a kind said in passing only puts its card first; a kind given as the answer shows only its amount (live 17 Nov, Critic on #520)", () => {
+  const passing = answer(both(), "Rowan had a simple fracture of his arm. What can he claim?", [/Other Fracture/, /^Simple Fracture: /]);
+  assert.deepEqual(passing.amounts, ["S$1,250", "S$120,000"]);
   const other = answer(both(), "Rowan had an other fracture of his arm. What can he claim?", [/Other Fracture/]);
-  assert.deepEqual(other.amounts, ["S$120,000"]);
-  // A reply that is only the kind says it.
-  for (const q of ["Simple", "It was simple.", "simple fracture"]) assert.deepEqual(answer(both(), q, [/Other Fracture/], null, ["Rowan broke his arm. What can he claim?"]).amounts, ["S$1,250"], q);
-  // Misread kinds cost nothing: both amounts stay.
-  for (const q of ["The X-ray doesn't look like a simple fracture.", "The doctor ruled out a simple fracture.", "Last year he had a simple fracture of his leg.", "His sister had a simple fracture once."])
-    assert.equal(answer(both(), `Rowan broke his arm. ${q}`, [/Other Fracture/]).amounts.length, 2, q);
+  assert.deepEqual(other.amounts, ["S$120,000", "S$1,250"]);
+  const told = ["Rowan broke his arm. What can he claim?"];
+  for (const q of ["Simple", "It was simple.", "It was a simple fracture.", "just a simple one"]) {
+    const a = answer(both(), q, [/Other Fracture/], null, told);
+    assert.deepEqual(a.amounts, ["S$1,250"], q);
+    assert.ok(a.points.some((t) => /"Simple Fracture", the kind you described/.test(t)), a.points.join(" | "));
+    assert.doesNotMatch(a.question, /Which kind/);
+  }
+  assert.deepEqual(answer(both(), "Other", [/Other Fracture/], null, told).amounts, ["S$120,000"]);
+  // Anything more than the answer, or about another time or person, settles nothing: both amounts stay, with the question.
+  for (const q of ["The X-ray doesn't look like a simple fracture.", "The doctor ruled out a simple fracture.", "Last year he had a simple fracture of his leg.",
+    "His sister had a simple fracture once.", "My sister had a simple fracture last month.", "Does the simple fracture benefit cover it?",
+    "How much would he get for a simple fracture?", "Simple fracture was ruled out by the X-ray.", "A simple fracture? No.", "A simple fracture was unlikely.", "Not simple."]) {
+    const a = answer(both(), q, [/Other Fracture/], null, told);
+    assert.equal(a.amounts.length, 2, q);
+    assert.ok(!a.points.some((t) => /the kind you described/.test(t)), q);
+  }
 });
 test("a kind said carries across a correction of who it was, not to a new injury (live 17 Nov)", () => {
   const earlier = ["Rowan broke his arm in an accident. What can he claim?", "It was a simple fracture."];

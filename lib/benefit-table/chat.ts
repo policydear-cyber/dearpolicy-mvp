@@ -15,7 +15,7 @@ import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSa
 import { CAP_WORDS } from "./check";
 import { noteMultiple, sameNote, type Multiplier, type RowFacts } from "./multiplier";
 import { withoutChildLimit } from "./child-limit";
-import { kindsForInjury, namedKinds, rowFractureKind } from "./fracture-kind";
+import { kindSettled, kindsForInjury, namedKinds, rowFractureKind } from "./fracture-kind";
 import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN, anyMoneyFigures, statedCurrencyCode } from "@/lib/format/currency";
@@ -852,6 +852,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const kindRows = new Map<string, string>();
   // Each group's kind the household said (a printed one): its card comes first.
   const saidKinds = new Map<string, string>();
+  // Each group's kind the household settled (kindSettled): its card is named "the kind you described".
+  const settledKinds = new Map<string, string>();
   // Each row's own card statement, by row id: cards for the same bones may carry the same label.
   const cardOf = new Map<string, Record<string, unknown>>();
   const away = new Map<string, Record<string, unknown>>();
@@ -915,39 +917,44 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     // when the model gave only one. A kind the household said rules the others out: theirs get no amount.
     const kind = rowFractureKind(fullName(row));
     if (kind) {
-      const said = kindsForInjury([...earlier].reverse().concat(question));
+      const told = [...earlier].reverse().concat(question);
+      const said = kindsForInjury(told), settled = kindSettled(told);
       // The kinds printed for the same bones: the row's own name's, and the person's other rows for those bones.
       const others = new Set([...namedKinds(fullName(row)), ...rows.filter((o) => o.personId === row.personId && bones(o) === bones(row))
         .map((o) => rowFractureKind(fullName(o))).filter((k): k is string => !!k)]);
       others.delete(kind);
       const who = baseName(row.person);
       // Only a kind the documents print counts as said: "it was compound" says nothing about "Simple" or "Other Fracture".
-      // Two printed kinds said ("simple or other?") settle nothing.
+      // Two printed kinds said ("simple or other?") settle nothing. A kind said only puts its card first; only a kind
+      // settled as a whole answer ("It was a simple fracture.") rules the others' amounts out (kindSettled).
       const printedSaid = [...said].filter((k) => k === kind || others.has(k));
       if (printedSaid.length > 1) printedSaid.length = 0;
+      const settledKind = settled && (settled === kind || others.has(settled)) ? settled : null;
       if (others.size) {
         // One group per person, bones and policy: a second policy's amounts for the same bones are not its alternatives.
         const group = `fracture kinds ${who}: ${bones(row)}: ${row.holding ?? row.coverKey}`;
         raw.alternativeGroup = group;
-        const saidKind = printedSaid[0] ?? null;
-        if (!saidKind) {
+        const saidKind = settledKind ?? printedSaid[0] ?? null;
+        if (!settledKind) {
           const ask = fractureKinds.get(who) ?? new Set<string>();
           for (const k of [kind, ...others]) ask.add(k);
           fractureKinds.set(who, ask);
-        } else saidKinds.set(group, saidKind);
+        }
+        if (saidKind) saidKinds.set(group, saidKind);
+        if (settledKind) settledKinds.set(group, settledKind);
         // The same bones' rows of the other kinds on the same policy, in any of its documents, when the model did not give
         // them: every kind when none was said, else only the kind said (live 17 Nov: the simple row, printed in the
         // Product Summary, never came beside the Benefit Summary's "Other Fracture" card).
         for (const o of rows) {
           const k = rowFractureKind(fullName(o));
-          if (!k || k === kind || (saidKind && k !== saidKind) || o.personId !== row.personId || !samePolicy(o, row) || given.has(o.id) || ruledOut.has(o.id) || bones(o) !== bones(row)) continue;
+          if (!k || k === kind || (settledKind && k !== settledKind) || o.personId !== row.personId || !samePolicy(o, row) || given.has(o.id) || ruledOut.has(o.id) || bones(o) !== bones(row)) continue;
           if (pointed.some((x) => x && x.kind === "amount" && typeof x.row === "string" && x.row.trim().toUpperCase() === o.id)) continue;
           pointed.push({ ...raw, text: o.benefit, row: o.id, rowBenefit: o.benefit, quote: null, conditions: [], multiplierNote: "", alternativeGroup: group });
         }
         // A kind the household said for this injury rules the others out: their amounts are not shown (live 17 Nov: "it
         // was a simple fracture" still showed only the "Other Fracture" S$120,000).
-        if (saidKind && kind !== saidKind) {
-          report.dropped.push({ why: `${names(row)} pays for what the policy calls ${kindName(kind)}; the household said it was ${kindName(saidKind)}`, text, row: row.id });
+        if (settledKind && kind !== settledKind) {
+          report.dropped.push({ why: `${names(row)} pays for what the policy calls ${kindName(kind)}; the household said it was ${kindName(settledKind)}`, text, row: row.id });
           continue;
         }
         kindRows.set(row.id, kind);
@@ -1121,7 +1128,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     for (const st of sorted) {
       const r = cardRow.get(st)!;
       const g = String((st as { alternativeGroup?: unknown }).alternativeGroup);
-      const fact = `${bareName(r)}: this amount is for what the policy calls ${kindName(kindRows.get(r.id)!)}${saidKinds.get(g) === kindRows.get(r.id) ? ", the kind you described" : ""}.`;
+      const fact = `${bareName(r)}: this amount is for what the policy calls ${kindName(kindRows.get(r.id)!)}${settledKinds.get(g) === kindRows.get(r.id) ? ", the kind you described" : ""}.`;
       const k = statements.indexOf(st);
       if (!statements.some((x) => (x as { text?: unknown; document?: unknown }).text === fact && (x as { document?: unknown }).document === documentId(r.docIndex)))
         statements.splice(k + 1, 0, { kind: "fact", text: fact, person: baseName(r.person), document: documentId(r.docIndex), quote: r.source.excerpt, amount: null, percentOf: null,
@@ -1147,7 +1154,18 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
 /** A row's section and benefit together: "Simple Fracture or Other Fracture: Arm, Elbow, Wrist or Ribs (Other Fracture)". */
 const fullName = (r: ChatRow) => [r.section, r.benefit].filter(Boolean).join(": ");
 /** A fracture row's name without its kind: the closing bracket and a leading "... Fracture ...:" heading go. */
-const bareName = (r: ChatRow) => fullName(r).replace(/\s*\([^()]*\)\s*$/, "").replace(/^.*\bfractures?\b[^:]*:\s*/i, "").trim() || r.benefit;
+const bareName = (r: ChatRow) => {
+  const parts = fullName(r).replace(/\s*\([^()]*\)\s*$/, "").split(/\s*:\s*/);
+  // The last part that names a kind ("E. Simple Fracture or Other Fracture", "Simple Fracture due to Accident") is a heading:
+  // the bones are what follows it, with any earlier heading that names a fracture of its own ("Fracture of Leg"), never a
+  // numbered section above it ("BENEFIT 2", "GROUP PERSONAL ACCIDENT"; live 17 Nov). Bones are never dropped: "Fracture
+  // of Leg: Simple Fracture: Lump sum" and "Fracture of Arm: Other Fracture: Lump sum" stay apart (Critic on #520, NEW-HIGH 2).
+  let k = -1;
+  parts.forEach((p, i) => { if (i < parts.length - 1 && namedKinds(p).size) k = i; });
+  const kept = k < 0 ? [fullName(r).replace(/\s*\([^()]*\)\s*$/, "").replace(/^[^:]*\bfractures?\b[^:]*:\s*/i, "")]
+    : [...parts.slice(0, k).filter((p) => /\bfractures?\b/i.test(p)), ...parts.slice(k + 1)];
+  return kept.join(": ").trim() || r.benefit;
+};
 /** The bones a fracture row pays for, compared without case or punctuation. */
 const bones = (r: ChatRow) => bareName(r).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 /** A kind of fracture as the policy names it: "Simple Fracture", "Other Fracture", in quotes. */

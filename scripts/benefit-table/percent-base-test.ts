@@ -156,6 +156,21 @@ async function main() {
     assert.equal(r.figure.kind, "none");
     assert.doesNotMatch(JSON.stringify(r.figure), /1,250|150,000|2,000/);
   });
+  test("tableBase: a base that is not the row's own is never used (Critic on #520, NEW-HIGH 1)", () => {
+    const cases: [string, string[], string, number][] = [
+      ["a row naming its own base", ["\u2022\tMedical Expenses", "Medical Expenses Benefit Limit: S$5,000"], "Physiotherapy\t80% of reasonable expenses incurred", 80],
+      ["a share of another benefit", ["\u2022\tHospital Cash", "Hospital Cash Benefit Limit: S$5,000"], "Intensive care\t200% of the daily benefit", 200],
+      ["a limit named for another benefit", ["\u2022\tFractures", "Burns Benefit Limit: S$5,000"], "Arm\t25%", 25],
+      ["a next table with a non-money base", ["\u2022\tSimple Fracture", "(% of S$5,000)", "Hip\t75%", "Dislocation\t(% of Medical Expenses Limit)"], "Shoulder\t30%", 30],
+      ["an overall yearly limit", ["\u2022\tSimple Fracture", "Simple Fracture Benefit Limit: S$20,000 per policy year"], "Arm\t25%", 25],
+      ["a plan footnote", ["\u2022\tSimple Fracture", "(% of S$5,000)", "^ Plan A only"], "Arm\t25%", 25],
+    ];
+    for (const [why, head, line, value] of cases) {
+      const rows = table({ cover: "PA Cover", sum: 600000, sumText: "S$600,000", lines: [...head, line], benefits: [{ benefit: line.split("\t")[0], value, quote: line, percentOf: "other" }] });
+      const r = rows.find((x) => x.benefit === line.split("\t")[0]);
+      assert.ok(!r || r.figure.kind === "none", `${why}: ${JSON.stringify(r?.figure)}`);
+    }
+  });
   test("tableBase: a base above a blank line or another bullet is not this table's", () => {
     const arm = "Arm , Elbow, Wrist or Ribs\t25%";
     for (const lines of [["Simple Fracture Benefit Limit: S$5,000", "", "Arm table", arm], ["Simple Fracture Benefit Limit: S$5,000", "\u2022\tOther Fracture", arm]]) {
