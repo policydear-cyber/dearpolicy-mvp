@@ -55,7 +55,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
       const row = (result.rows[0] ?? null) as Record<string, unknown> | null;
       if (row && await hasSexColumn(client)) {
         if (sex !== undefined) await client.query(`UPDATE family_members SET sex=$1 WHERE id=$2 AND account_id=$3`, [sex, id, ctx.householdId]);
-        row.sex = sex !== undefined ? sex : (await client.query<{ sex: string | null }>(`SELECT sex FROM family_members WHERE id=$1 AND account_id=$2`, [id, ctx.householdId])).rows[0]?.sex ?? null;
+        row.sex = sex !== undefined ? sex : (await client.query<{ sex: string | null }>(`SELECT sex FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [id, ctx.householdId])).rows[0]?.sex ?? null;
       }
       return row;
     });
