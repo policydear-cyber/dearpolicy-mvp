@@ -93,7 +93,7 @@ export default function DashboardPage(){
      :<div className="empty-card" data-testid="home-no-cards">{(active?.policy_count??0)>0?<>No cover card for {name??"this person"} yet. {active!.policy_count===1?"Their document is":`Their ${active!.policy_count} documents are`} on file: <Link href={`/chat?member=${encodeURIComponent(active!.id)}`} className="text-link">ask DearPolicy what {active!.policy_count===1?"it covers":"they cover"}</Link> or <Link href="/policies" className="text-link">open Documents</Link>.</>:<>No document for {name??"this person"} is on file yet. <Link href="/policies" className="text-link">Upload a policy</Link></>}</div>}
     {/* Gaps (DC 17 Nov): the main kinds of cover with no card, once the person has a card and nothing is still being read,
         so a gap is never shown for a document DearPolicy has not finished. Never "not covered". */}
-    {!loading&&!personEmpty&&covered.length>0&&!data?.reading&&<HomeNotFound categories={homeGaps(data?.coverages??[])} memberId={active?.id??""} name={name} note={data?.notFullyRead}/>}
+    {!loading&&!personEmpty&&covered.length>0&&!data?.reading&&<HomeNotFound {...homeGaps(data?.coverages??[],active?.relationship)} memberId={active?.id??""} name={name} note={data?.notFullyRead}/>}
    </section>
    <HomeAsk memberId={active?.id} name={name}/>
   </div>
