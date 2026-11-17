@@ -1799,7 +1799,13 @@ export function acrossPolicies(row: Pick<ChatRow, "source" | "figure">): boolean
     const figs = anyMoneyFigures(t);
     if (!figs.length || figs.some((f) => Math.abs(f.value - amount) >= 0.005)) return false;
     const pre = t.slice(0, Math.min(...figs.map((f) => f.index)));
-    return LIMIT_WORDS.test(pre) && !NOT_SHARED_LIMIT.test(pre) && (ACROSS_POLICIES.test(pre) || ALL_NAMED_POLICIES.test(pre) || SUBJECT_POLICIES.test(pre));
+    if (!LIMIT_WORDS.test(pre) || NOT_SHARED_LIMIT.test(pre)) return false;
+    if (SUBJECT_POLICIES.test(pre)) return true;
+    // Otherwise the limit word comes first too: "The most ... under this Policy and all Policies ...". A clause about other
+    // policies that opens the sentence ("Even if you claim under any other policy we have issued, the most we pay is ...")
+    // sets this policy apart from them (Critic on #523, round 5).
+    const group = [ACROSS_POLICIES.exec(pre), ALL_NAMED_POLICIES.exec(pre)].filter((m): m is RegExpExecArray => !!m).map((m) => m.index);
+    return group.length > 0 && LIMIT_WORDS.test(pre.slice(0, Math.min(...group)));
   });
 }
 
