@@ -24,7 +24,7 @@ import { coverVerdict } from "@/lib/coverage/cover-verdict";
 import { heldLines } from "@/lib/coverage/held-line";
 import { documentName } from "@/lib/policies/document-name";
 import { onFileDocumentName } from "@/lib/coverage/on-file-note";
-import { readablePolicyName } from "@/lib/coverage/home-card";
+import { pickCoverByName, readablePolicyName } from "@/lib/coverage/home-card";
 /** The document's own naming fields, read beside an on-file line or wording (documentName). */
 type OnFileDoc={doc_product:string|null;original_filename:string;doc_insurer:string|null;document_role:string|null;policy_number:string|null;doc_type:string|null};
 const ON_FILE_DOC_COLUMNS="p.product_name AS doc_product,p.original_filename,p.insurer AS doc_insurer,p.document_role,p.policy_number,p.policy_type AS doc_type";
@@ -89,11 +89,12 @@ export async function GET(request:NextRequest){
   // What pays each cover, by policy: each document's own product name where it reads as one, else the cover's name, else
   // the insurer (lib/coverage/home-card.ts readablePolicyName), so Home's card names the policy ("Business Single Trip"),
   // never only a benefit ("Business", "Death Benefit") or a file code. Names only: no figure goes in.
-  const docNames=new Map<string,{product:string|null;insurer:string|null}>();
-  for(const r of coverageRows.rows)docNames.set(r.policy_id,{product:r.document_product_name,insurer:r.insurer});
-  const sources=new Map<string,Set<string>>();
-  const addSource=(category:string,...names:(string|null|undefined)[])=>{const n=names.map(x=>(x??"").replace(/\s+/g," ").trim()).find(readablePolicyName);if(n)(sources.get(category)??sources.set(category,new Set()).get(category)!).add(n);};
-  const docSource=(category:string,documentId:string|null|undefined,...names:(string|null|undefined)[])=>{const d=documentId?docNames.get(documentId):undefined;addSource(category,d?.product,...names,d?.insurer);};
+  // `key`: the policy's printed number where it has one, so a policy's certificate and booklet name it once (Critic PR 525).
+  const docNames=new Map<string,{product:string|null;insurer:string|null;key:string}>();
+  for(const r of coverageRows.rows)docNames.set(r.policy_id,{product:r.document_product_name,insurer:r.insurer,key:r.policy_key});
+  const sources=new Map<string,Map<string,string>>();
+  const addSource=(category:string,key:string|null,...names:(string|null|undefined)[])=>{const n=names.map(x=>(x??"").replace(/\s+/g," ").trim()).find(readablePolicyName);if(!n)return;const m=sources.get(category)??sources.set(category,new Map()).get(category)!;const k=key??n.toLowerCase();if(!m.has(k))m.set(k,n);};
+  const docSource=(category:string,documentId:string|null|undefined,...names:(string|null|undefined)[])=>{const d=documentId?docNames.get(documentId):undefined;addSource(category,d?.key??null,d?.product,...names,d?.insurer);};
   for(const x of selected)docSource(x.category,x.policyId,x.productName);
   const coverageMap=new Map<string,{total:number|null;currency:string|null;count:number;policyNames:string[];displayAmount:string|null;derived:boolean;fromTable?:boolean;parts?:TilePart[];known?:KnownSum|null;planNote?:string|null}>();
   for(const category of new Set(selected.map(x=>x.category))){
@@ -126,9 +127,10 @@ export async function GET(request:NextRequest){
     if(await benefitTableLive(accountId)){
       const { tableFor }=await import("@/lib/benefit-table/service");
       const loaded=await tableFor(appDb,accountId);tableDocuments=loaded.documents;
-      for(const d of loaded.documents)if(!docNames.has(d.id))docNames.set(d.id,{product:d.file?.product_name??null,insurer:d.file?.insurer??null});
+      for(const d of loaded.documents)if(!docNames.has(d.id))docNames.set(d.id,{product:d.file?.product_name??null,insurer:d.file?.insurer??null,key:d.file?.policy_number??d.id});
       // A table cover's own document, for naming what pays.
-      const coverDoc=(name:string|null|undefined)=>{const k=(name??"").trim().toLowerCase();return (person?.covers??[]).find(c=>[c.cover,c.product].some(n=>!!n&&(n.trim().toLowerCase()===k||partName(n).toLowerCase()===k)));};
+      // One cover only: where two fit equally, none is named (lib/coverage/home-card.ts pickCoverByName).
+      const coverDoc=(name:string|null|undefined)=>{const covers=person?.covers??[];const i=pickCoverByName(name??"",covers.map(c=>[c.cover,c.product,c.cover?partName(c.cover):null,c.product?partName(c.product):null]));return i<0?undefined:covers[i];};
       const person=loaded.table.people.find(p=>p.id===active.id);
       tableCovers=person?.covers??[];
       // A page about the product (its wording, summary or guide) is never a second policy (lib/coverage/table-figures twinDocument).
@@ -148,14 +150,14 @@ export async function GET(request:NextRequest){
           entry.policyNames=[...new Set(parts.map(p=>p.name))]; coverageMap.set(category,entry);
           // The card names the policies of these parts only (a policy not listed among them is not named either).
           sources.delete(category);
-          for(const p of parts){const line=lines.find(l=>l.name===p.name);if(line){for(const id of line.documentIds)docSource(category,id,p.name);continue;}const c=coverDoc(p.name);docSource(category,c?.source?.documentId,c?.product,p.name);}
+          for(const p of parts){const same=lines.filter(l=>l.name===p.name);if(same.length){if(same.length===1)for(const id of same[0].documentIds)docSource(category,id,p.name);continue;}const c=coverDoc(p.name);if(c)docSource(category,c.source?.documentId,c.product,p.name);}
           continue;
         }
         // A whole-policy kind (travel, savings, investment) is decided by the cover, not by a benefit's name: the same rule
         // for every page (lib/coverage/table-figures personKinds). A held cover with no linked row still counts.
         const kind=kinds.get(category);
         if(kind&&!coverageMap.has(category)){
-          for(const label of kind.current){const c=(person?.covers??[]).find(c=>!!(c.cover||c.product)&&label.startsWith((c.cover||c.product)!));docSource(category,c?.source?.documentId,c?.product,label);}
+          for(const label of kind.current){const c=coverDoc(label);if(c)docSource(category,c.source?.documentId,c.product,label);}
           coverageMap.set(category,{total:null,currency:null,count:kind.current.length,policyNames:kind.current.slice(0,2),displayAmount:rows.length?tableDisplay(rows):null,derived:false,fromTable:true,planNote:kind.note});
           continue;
         }
@@ -213,10 +215,10 @@ export async function GET(request:NextRequest){
   const benefitUnmatched=unmatchedRows.rows.filter(r=>asBenefitLine(r,r.evidence_text));
   const held=await heldLines(query,accountId,active.id,benefitUnmatched);
   const heldCategories=new Map<string,number>();
-  benefitUnmatched.forEach((r,i)=>{const c=normalizeCoverageCategory(r.category);unmatchedLines.set(c,(unmatchedLines.get(c)??0)+1);noteDoc(c,r);if(held[i]){heldCategories.set(c,(heldCategories.get(c)??0)+1);if(!coverageMap.has(c))addSource(c,r.doc_product,r.doc_insurer);}});
+  benefitUnmatched.forEach((r,i)=>{const c=normalizeCoverageCategory(r.category);unmatchedLines.set(c,(unmatchedLines.get(c)??0)+1);noteDoc(c,r);if(held[i]){heldCategories.set(c,(heldCategories.get(c)??0)+1);if(!coverageMap.has(c))addSource(c,r.policy_number??r.policy_id,r.doc_product,r.doc_insurer);}});
   const statusOf=(category:string)=>({covered:"covered",on_file:"on_file",not_found:"not_covered"} as const)[coverVerdict({proven:coverageMap.has(category)?1:0,unmatchedLines:unmatchedLines.get(category)??0,referenceOnly:referenceOnly.get(category)??0,held:heldCategories.get(category)??0})];
   const partial=(category:string)=>(unmatchedLines.get(category)??0)>0;
-  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:statusOf(category),reviewRequired:conflictCategories.has(category),amount:partial(category)?null:row?.total??null,displayAmount:partial(category)?null:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,sources:statusOf(category)==="covered"?[...(sources.get(category)??[])]:[],onFileDocuments:statusOf(category)==="on_file"?[...(onFileDocs.get(category)??[])].sort():[]};});
+  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:statusOf(category),reviewRequired:conflictCategories.has(category),amount:partial(category)?null:row?.total??null,displayAmount:partial(category)?null:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,sources:statusOf(category)==="covered"?[...(sources.get(category)?.values()??[])]:[],onFileDocuments:statusOf(category)==="on_file"?[...(onFileDocs.get(category)??[])].sort():[]};});
 
   // The premiums Home counts, from the same computation Payments shows (lib/policies/counted-premiums.ts).
   const premiums=await countedPremiums(accountId,{id:active.id,display_name:active.display_name,preferred_name:null,relationship:active.relationship},tableCovers);

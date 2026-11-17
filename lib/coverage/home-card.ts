@@ -28,6 +28,25 @@ export function readablePolicyName(name: string | null | undefined): boolean {
   return words.some((w) => !GENERIC.has(w));
 }
 
+/** Which of several covers a name means, for naming its document (app/api/dashboard/route.ts): the one cover whose own
+ * name is exactly that name, else the one whose name is the longest start of it ("Travel Plus" for "Travel Plus Annual",
+ * never "Travel"). When two covers fit equally, it names none (fails closed): a card never names a policy that may not be
+ * behind it (Critic PR 525 M1). Returns the index, or -1. */
+export function pickCoverByName(label: string, covers: (string | null | undefined)[][]): number {
+  const k = clean(label).toLowerCase();
+  if (!k) return -1;
+  const names = covers.map((list) => list.map((n) => clean(n).toLowerCase()).filter(Boolean));
+  const exact = names.flatMap((list, i) => (list.includes(k) ? [i] : []));
+  if (exact.length) return exact.length === 1 ? exact[0] : -1;
+  let best = -1, bestLen = 0, tie = false;
+  names.forEach((list, i) => {
+    const len = Math.max(0, ...list.filter((n) => k.startsWith(n + " ") || k.startsWith(n + "\u00a0") || k.startsWith(n + " \u00b7")).map((n) => n.length));
+    if (!len) return;
+    if (len > bestLen) { best = i; bestLen = len; tie = false; } else if (len === bestLen) tie = true;
+  });
+  return tie ? -1 : best;
+}
+
 /** Short words kept in capitals when an all-capitals name is set in title case: likely initials ("AIA", "MHA", "CPF").
  * Common short words are not initials. */
 const SHORT_WORDS = new Set(["and", "of", "the", "for", "to", "in", "on", "at", "by", "or", "pro", "max", "new", "one", "two", "six", "ten", "all", "top", "my", "our", "plus", "care", "life", "term"]);

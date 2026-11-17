@@ -6,7 +6,7 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.te
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { homeAmountText, homeCardShowsAmount, homeCardSource, homeGridColumns, homePolicyName, readablePolicyName } from "@/lib/coverage/home-card";
+import { homeAmountText, homeCardShowsAmount, homeCardSource, homeGridColumns, homePolicyName, pickCoverByName, readablePolicyName } from "@/lib/coverage/home-card";
 
 let passed = 0; const failures: string[] = [];
 function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
@@ -65,6 +65,16 @@ test("a card names the policy, not a benefit or a file code (coordinator 17 Nov)
   for (const n of ["Group Term Life", "Business Single Trip", "READYBUILDER 10", "AIA PRO LIFETIME PROTECTOR - MAX", "PruLink Enhanced Protector (PW9)"]) assert.equal(readablePolicyName(n), true, n);
   // An unnamed held cover named by its document (Charmaine's Outpatient): a source alone is enough.
   assert.equal(homeCardSource({ policyNames: [], sources: ["PruFlexiCash Protection Plus (7th Series) (EJ7)"], count: 0 }), "PruFlexiCash Protection Plus");
+});
+test("which cover a name means: exact, else the longest start; two equal fits name none (Critic PR 525 M1)", () => {
+  // "Travel" (doc A) listed before "Travel Plus" (doc B): B's label "Travel Plus Annual" is B's, never A's.
+  assert.equal(pickCoverByName("Travel Plus Annual", [["Travel", "Travel"], ["Travel Plus", "Travel Plus"]]), 1);
+  assert.equal(pickCoverByName("Travel Plus \u00b7 Gold plan", [["Travel"], ["Travel Plus"]]), 1);
+  assert.equal(pickCoverByName("Travel", [["Travel Plus"], ["Travel"]]), 1, "exact wins over a longer name");
+  assert.equal(pickCoverByName("Death", [["Death", "Kite Term"], ["Death", "Oak Life"]]), -1, "two covers called Death: name none");
+  assert.equal(pickCoverByName("Business Single Trip", [["Business Single", null], ["Business Single", "Other"]]), -1, "equal prefixes: none");
+  assert.equal(pickCoverByName("Travelling Plan", [["Travel"]]), -1, "a word is matched whole");
+  assert.equal(pickCoverByName("", [["Travel"]]), -1);
 });
 test("readable names: all capitals in title case, initials kept; long names lose trailing codes; mixed case kept", () => {
   assert.equal(homePolicyName("MINDEF & MHA GROUP INSURANCE SCHEME"), "Mindef & MHA Group Insurance Scheme");
