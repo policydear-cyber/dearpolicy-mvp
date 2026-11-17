@@ -125,6 +125,9 @@ test.describe("round 5: the exploratory findings, fixed", () => {
     await page.goto("/family");
     await page.locator("#fm-new-name").fill(`${PREFIX} Future Child`);
     await page.locator("#fm-new-relationship").selectOption("child"); // PR #65: no relationship is pre-chosen any more
+    // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
+    await page.locator("#fm-new-dob").fill("1990-01-01");
+    if (await page.locator("#fm-new-sex").count()) await page.locator("#fm-new-sex").selectOption("unspecified");
     await page.locator("#fm-new-dob").fill(future);
     await page.getByRole("button", { name: "+ Add person" }).click();
     // Refused either by the browser (the field's max is today) or by the page's own check.

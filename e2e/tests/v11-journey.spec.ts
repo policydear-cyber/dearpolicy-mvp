@@ -239,6 +239,9 @@ test.describe.serial("V1.1 release journey", () => {
         const p = PEOPLE[key];
         await owner.locator("#fm-new-name").fill(p.fullName);
         await owner.locator("#fm-new-relationship").selectOption(p.relationship);
+        // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
+        await owner.locator("#fm-new-dob").fill("1990-01-01");
+        if (await owner.locator("#fm-new-sex").count()) await owner.locator("#fm-new-sex").selectOption("unspecified");
         await owner.locator("#fm-new-preferred").fill(p.preferred);
         await owner.getByRole("button", { name: "+ Add person" }).click();
         await expect(owner.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.", { timeout: 60_000 });
@@ -490,6 +493,9 @@ test.describe.serial("V1.1 release journey", () => {
       const p = PEOPLE.josephineB;
       await other.locator("#fm-new-name").fill(p.fullName);
       await other.locator("#fm-new-relationship").selectOption(p.relationship);
+      // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
+      await other.locator("#fm-new-dob").fill("1990-01-01");
+      if (await other.locator("#fm-new-sex").count()) await other.locator("#fm-new-sex").selectOption("unspecified");
       await other.locator("#fm-new-preferred").fill(p.preferred);
       await other.getByRole("button", { name: "+ Add person" }).click();
       await expect(other.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.", { timeout: 60_000 });
