@@ -70,9 +70,17 @@ export async function withdrawHouseholdCurrency(accountId: string, opts: { keep?
             notes=NULLIF(btrim(replace(replace(notes, ' · ' || $2, ''), $2, '')), '')
       WHERE account_id=$1 AND position($2 in coalesce(notes,''))>0
         AND ($3::text IS NULL OR currency IS DISTINCT FROM $3)
-        AND ($4::uuid[] IS NULL OR policy_id = ANY($4::uuid[]))`,
+        AND ($4::uuid[] IS NULL OR policy_id = ANY($4::uuid[]))
+      RETURNING id::text`,
     [accountId, HOUSEHOLD_CURRENCY_NOTE, opts.keep ?? null, opts.policyIds ?? null]);
-  return result.rowCount ?? 0;
+  const ids = (result.rows as { id: string }[]).map((r) => r.id);
+  // The Coverage ledger's machine rows seeded from those amounts carry the currency too: a row nobody edited is removed,
+  // and seeded again from the amount as it now stands (lib/ledger/store.ts seedLedger). A person's own row is kept.
+  if (ids.length) await query(
+    `DELETE FROM coverage_rules c WHERE c.account_id=$1 AND c.origin<>'person' AND c.status<>'rejected' AND c.updated_at=c.created_at
+       AND c.seed_key LIKE 'coverage:%' AND split_part(split_part(c.seed_key,'|',1),':',2) = ANY($2::text[])`,
+    [accountId, ids]).catch(() => undefined);
+  return ids.length;
 }
 
 /** The household's other documents of the same policy whose amounts took the household's currency: when this document

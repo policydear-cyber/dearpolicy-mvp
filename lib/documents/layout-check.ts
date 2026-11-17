@@ -8,7 +8,8 @@
  * label beside its figures (one reading of the pairing is not two), is "unchecked": its text stays searchable, but
  * nothing reads an amount from it, and the document says it was read in part. Nothing here uses a model. */
 
-import { currenciesIn, singleImageCurrency } from "@/lib/documents/image-currency";
+import { singleImageCurrency } from "@/lib/documents/image-currency";
+import { currenciesNamed } from "@/lib/documents/currency-names";
 
 /** "50,000.0050,000.00": a complete decimal amount with a second one straight after it. A rate or date with more
  * decimals ("1.235", "4.125%", "01.10.2026") is not glued (TE U-F3). */
@@ -1009,7 +1010,7 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
     // A page the image confirmed (in whole or in part) whose text layer prints no currency takes the one currency the image
     // prints, for its confirmed figures only (DC 11 Nov, option b; lib/documents/image-currency).
     const currency = check.text != null || check.agree ? singleImageCurrency(p.text, image!.text) : null;
-    const named = image && image.extractionMethod === "ocr" && !image.unreadable ? [...new Set(currenciesIn(image.text))] : [];
+    const named = image && image.extractionMethod === "ocr" && !image.unreadable ? [...new Set(currenciesNamed(image.text))] : [];
     const withCurrency = <T extends P>(x: T): T => (currency ? { ...x, imageCurrency: currency } : x);
     const withNamed = <T extends P>(x: T): T => (named.length ? { ...x, imageCurrencies: named } : x);
     if (check.agree) return withNamed(withCurrency(check.text && check.text !== p.text ? { ...p, text: check.text, checkLog: check.log } : p));

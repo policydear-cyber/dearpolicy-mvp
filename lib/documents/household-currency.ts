@@ -13,8 +13,9 @@
  * separators or two decimals) on the cover's own evidence line (image-currency moneyShapedFigure), never a plain number,
  * a percentage, days or years. Pure functions; no I/O.
  */
-import { currenciesIn } from "@/lib/documents/image-currency";
 import { UNCHECKED_PAGE } from "@/lib/documents/layout-check";
+import { currenciesNamed } from "@/lib/documents/currency-names";
+export { currenciesNamed };
 
 export { HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY, HOUSEHOLD_CURRENCY_LABELS, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
 import { HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
@@ -62,8 +63,8 @@ export function householdCurrencyPages(pages: Page[], household: string | null |
   const out = new Map<number, HouseholdPageCurrency>();
   const code = parseHouseholdCurrencySetting(household);
   if (!code || code === NO_HOUSEHOLD_CURRENCY) return out;
-  if (related.some((t) => currenciesIn(t).some((c) => !agrees(c, code)))) return out;
-  const namedOn = (p: Page) => [...currenciesIn(p.text), ...(p.imageCurrency ? [p.imageCurrency] : []), ...(p.imageCurrencies ?? [])];
+  if (related.some((t) => currenciesNamed(t).some((c) => !agrees(c, code)))) return out;
+  const namedOn = (p: Page) => [...currenciesNamed(p.text), ...(p.imageCurrency ? [p.imageCurrency] : []), ...(p.imageCurrencies ?? [])];
   const documentAgrees = pages.every((p) => !unknownPage(p) && namedOn(p).every((c) => agrees(c, code)));
   for (const p of pages) {
     if (unknownPage(p)) continue;

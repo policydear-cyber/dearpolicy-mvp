@@ -119,7 +119,7 @@ async function main() {
     assert.notDeepEqual(shown([cov], [{ pageNumber: 1, text: "Policy Currency: SGD" }, page], "SGD"), ["SGD 500000"]);
   });
   await test("T F1 a sentence with a bare $ is a bare $, not a code", async () => {
-    const { currenciesIn } = await import("@/lib/documents/image-currency");
+    const currenciesIn = HC.currenciesNamed;
     assert.deepEqual(currenciesIn("the cost is $500 and S$ 20 and US$30").sort(), ["$", "SGD", "USD"].sort());
     assert.ok(currenciesIn("the cost is $500").every((c) => c === "$"));
     assert.deepEqual(currenciesIn("S$100").filter((c) => c !== "$"), ["SGD"]);

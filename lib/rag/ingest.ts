@@ -30,7 +30,7 @@ import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { dismissedNameKeys, nameKey } from "@/lib/policies/name-dismissals";
 import { householdCurrencyPages } from "@/lib/documents/household-currency";
 import { householdCurrencyOf, relatedPolicyTexts, withdrawRelatedHouseholdCurrency } from "@/lib/household/currency";
-import { currenciesIn } from "@/lib/documents/image-currency";
+import { currenciesNamed } from "@/lib/documents/currency-names";
 
 export type ProcessPolicyArgs = {
   accountId: string;
@@ -742,7 +742,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // ... and the other way round: this document prints a currency, so another document of the same policy whose amounts
     // took the household's (another) currency gives them back until it is read again.
     {
-      const named = pages.flatMap((p) => [...currenciesIn(p.text), ...(p.imageCurrency ? [p.imageCurrency] : []), ...(p.imageCurrencies ?? [])]);
+      const named = pages.flatMap((p) => [...currenciesNamed(p.text), ...(p.imageCurrency ? [p.imageCurrency] : []), ...(p.imageCurrencies ?? [])]);
       if (named.length) await withdrawRelatedHouseholdCurrency(args.accountId, args.policyId, policyNumbersOf(extraction), named).catch(() => 0);
     }
     if (messyNotes.length) extraction.documentNotes = [...new Set([...extraction.documentNotes, ...messyNotes])];
