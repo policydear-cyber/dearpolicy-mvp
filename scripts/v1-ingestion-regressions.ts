@@ -77,6 +77,37 @@ async function partA() {
     assert.deepEqual(findFamilyMatchWithKind("TAN BOB", fam), { member: fam[2], kind: "exact" }, "order-insensitive");
     assert.deepEqual(findFamilyMatchWithKind("Josephine Tan", fam), { member: fam[0], kind: "partial" });
     assert.equal(findFamilyMatch("Marc Lim", fam)?.id, "m", "preferred name counts");
+    // #530 (preferred name required): main's matches stand, except a lone person found only through their preferred
+    // name when the printed name has a word that is none of theirs -- a stranger's longer name. Never a new match.
+    const pref = [{ id: "a", display_name: "Alex Tan", preferred_name: "Alex" }];
+    assert.equal(findFamilyMatch("Alex Chen", pref), null, "a one-word preferred name inside a stranger's name: no match");
+    assert.equal(findFamilyMatch("ALEX CHEN", pref), null);
+    assert.equal(findFamilyMatch("Alex", pref)?.id, "a", "the preferred name exactly, as on main");
+    assert.equal(findFamilyMatch("Alex Tan", pref)?.id, "a", "the full name still matches");
+    assert.equal(findFamilyMatch("Tan Alex Wei", pref)?.id, "a", "the full name's words still match (main)");
+    assert.equal(findFamilyMatch("Marc Lim Wei Ming", fam), null, "a preferred name's words plus words none of theirs");
+    const wj = [{ id: "1", display_name: "Lim Wei Jie", preferred_name: "Wei Jie" }, { id: "2", display_name: "Jay Lim", preferred_name: "Jay" }];
+    assert.equal(findFamilyMatch("Tan Wei Jie", wj), null, "preferred names' words never pick a person for a stranger");
+    assert.equal(findFamilyMatch("Chen Tan Ming", [{ id: "t", display_name: "Ah Kow", preferred_name: "Tan" }]), null);
+    assert.equal(findFamilyMatch("Wei Jie", wj)?.id, "1", "an exact preferred name still counts");
+    assert.equal(findFamilyMatch("Mary Tan Ah Moi", [{ id: "m", display_name: "Tan Siew Lan", preferred_name: "Mary Tan" }]), null);
+    // Main's right matches kept: only the person's own words, joiners and titles aside, initials of their own words.
+    const alexander = [{ id: "x", display_name: "Alexander Tan", preferred_name: "Alex" }];
+    assert.equal(findFamilyMatch("Alex Tan", alexander)?.id, "x");
+    assert.equal(findFamilyMatch("Alex S Tan", alexander), null, "a middle initial that is none of theirs");
+    assert.equal(findFamilyMatch("Nurul Aisyah Ahmad", [{ id: "n", display_name: "Nurul Aisyah binte Ahmad", preferred_name: "Aisyah" }])?.id, "n");
+    assert.equal(findFamilyMatch("Aisyah Ahmad", [{ id: "n", display_name: "Nurul Aisyah binte Ahmad", preferred_name: "Aisyah" }])?.id, "n");
+    const kevin = [{ id: "k", display_name: "Tan Wei Jie", preferred_name: "Kevin" }];
+    assert.equal(findFamilyMatch("Kevin Tan", kevin)?.id, "k");
+    assert.equal(findFamilyMatch("Kevin Tan W J", kevin)?.id, "k");
+    assert.equal(findFamilyMatch("Mr Kevin Tan", kevin)?.id, "k", "a title says nothing");
+    assert.equal(findFamilyMatch("Kevin Tan D J", kevin), null, "initials that are not theirs");
+    assert.equal(findFamilyMatch("Tan W J", kevin), null, "no match on main either");
+    // Two or more candidates stay ambiguous, as on main: never handed to the one the new rule leaves.
+    const two = [{ id: "x", display_name: "Alexander Tan", preferred_name: "Alex" }, { id: "b", display_name: "Tan Boon Huat", preferred_name: "Ben" }];
+    assert.equal(findFamilyMatch("Alex Tan Boon Huat", two), null);
+    assert.equal(findFamilyMatch("Ravi s/o Kumar", [{ id: "r", display_name: "Ravi Kumar", preferred_name: "Ravi" }])?.id, "r", "s/o is a joiner");
+    assert.equal(findFamilyMatch("Alex Tan", [{ id: "x", display_name: "Alexander Tan", preferred_name: "Alex" }, { id: "y", display_name: "Alex Tan" }])?.id, "y", "an exact full name beats a stand-in");
     assert.equal(findFamilyMatch("Alice Wong", fam), null);
     assert.equal(findFamilyMatch("Tan", fam), null, "a profile needs ALL its words printed");
     const twins = [{ id: "1", display_name: "Josephine" }, { id: "2", display_name: "Josephine Lee" }];

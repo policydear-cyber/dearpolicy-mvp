@@ -181,6 +181,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
       // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
       await owner.locator("#fm-new-dob").fill("1990-01-01");
       await owner.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
+      await owner.locator("#fm-new-preferred").fill(who); // required since DC 17 Nov; a later line may set the real one
       await owner.getByRole("button", { name: "+ Add person" }).click();
       await expect(owner.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
     }

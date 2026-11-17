@@ -29,6 +29,38 @@ function memberNames(member: FamilyCandidate) {
   return [member.display_name, member.preferred_name].filter((n): n is string => !!n && !!n.trim());
 }
 
+/** Words that join a name or address a person and say nothing about who it is ("binte", "Mr"; "s/o", "d/o", "a/l", "a/p"
+ * are taken out whole first, so a single letter is otherwise always a word of the name). */
+const NAME_FILLERS = new Set(["bin", "binte", "bte", "bt", "binti", "mr", "mrs", "ms", "miss", "mdm", "madam", "dr"]);
+const nameWords = (n: string | null | undefined) => normalizePersonName((n ?? "").replace(/(?<![\p{L}])(?:[sd]\s*\/\s*o|a\s*\/\s*[lp])(?![\p{L}])/giu, " "))
+  .split(" ").filter((w) => w && !NAME_FILLERS.has(w));
+
+/** Every word of a printed name is one of this person's own: a word of their full or preferred name, or the initial of a
+ * word of their full name the printed name leaves out. "Alex Chen" is not Alex Tan who goes by Alex; "Kevin Tan W J" is
+ * Tan Wei Jie who goes by Kevin. */
+export function onlyTheirWords(printedName: string, member: FamilyCandidate): boolean {
+  const printed = nameWords(printedName), full = nameWords(member.display_name);
+  const mine = new Set([...full, ...nameWords(member.preferred_name)]);
+  return printed.length > 0 && printed.every((w) => mine.has(w) || (w.length === 1 && full.some((f) => f.length > 1 && f[0] === w && !printed.includes(f))));
+}
+
+/** The family's candidates for a printed name by main's rule (exact on the full or preferred name; else every word of one
+ * of them printed), then -- #530, where the preferred name became required -- a lone candidate found only through their
+ * preferred name is dropped when the printed name has a word that is none of theirs ("Alex Chen" for Alex Tan who goes by
+ * Alex, "Mary Tan Ah Moi" for one who goes by Mary Tan). Never a match main did not make; two or more stay two or more. */
+function candidates<T extends FamilyCandidate>(name: string, family: T[]): { members: T[]; exact: boolean } {
+  const normalized = normalizePersonName(name);
+  if (!normalized) return { members: [], exact: false };
+  const exact = family.filter((member) => memberNames(member).some((n) => normalizePersonName(n) === normalized));
+  const printed = new Set(normalized.split(" "));
+  const fits = (n: string | null | undefined) => { const words = normalizePersonName(n ?? "").split(" ").filter((w) => w.length >= 2); return words.length > 0 && words.every((w) => printed.has(w)); };
+  const found = exact.length ? exact : family.filter((member) => memberNames(member).some(fits));
+  if (found.length !== 1) return { members: found, exact: exact.length > 0 };
+  const only = found[0];
+  const byFullName = exact.length ? normalizePersonName(only.display_name) === normalized : fits(only.display_name);
+  return byFullName || onlyTheirWords(name, only) ? { members: found, exact: exact.length > 0 } : { members: [], exact: false };
+}
+
 /** Which family member a name printed on a document is.
  *
  * An exact (order-insensitive) match on the display or preferred name wins.
@@ -37,32 +69,15 @@ function memberNames(member: FamilyCandidate) {
  * exactly one profile fits that way: two profiles that could both be the
  * printed person (two "Tan"s) is never guessed between. */
 export function findFamilyMatchWithKind<T extends FamilyCandidate>(name: string, family: T[]): { member: T; kind: "exact" | "partial" } | null {
-  const normalized = normalizePersonName(name);
-  if (!normalized) return null;
-  const exact = family.filter((member) => memberNames(member).some((n) => normalizePersonName(n) === normalized));
-  if (exact.length === 1) return { member: exact[0], kind: "exact" };
-  if (exact.length > 1) return null;
-  const printed = new Set(normalized.split(" "));
-  const partial = family.filter((member) => memberNames(member).some((n) => {
-    const words = normalizePersonName(n).split(" ").filter((w) => w.length >= 2);
-    return words.length > 0 && words.every((w) => printed.has(w));
-  }));
-  return partial.length === 1 ? { member: partial[0], kind: "partial" } : null;
+  const { members, exact } = candidates(name, family);
+  return members.length === 1 ? { member: members[0], kind: exact ? "exact" : "partial" } : null;
 }
 /** Everyone in the family a printed name could be, by the same rule as findFamilyMatchWithKind: every exact match, or
  * when none, every profile whose name words all appear in the printed name. Two or more means the name alone cannot
  * tell them apart; `exact` says they all carry the printed name itself (true namesakes), rather than each fitting part of
  * it ("Wei Jie" and "Wei" for "Tan Wei Jie"). The caller decides by the household's own records, never by guessing. */
 export function familyNameCandidates<T extends FamilyCandidate>(name: string, family: T[]): { members: T[]; exact: boolean } {
-  const normalized = normalizePersonName(name);
-  if (!normalized) return { members: [], exact: false };
-  const exact = family.filter((member) => memberNames(member).some((n) => normalizePersonName(n) === normalized));
-  if (exact.length) return { members: exact, exact: true };
-  const printed = new Set(normalized.split(" "));
-  return { members: family.filter((member) => memberNames(member).some((n) => {
-    const words = normalizePersonName(n).split(" ").filter((w) => w.length >= 2);
-    return words.length > 0 && words.every((w) => printed.has(w));
-  })), exact: false };
+  return candidates(name, family);
 }
 export function findFamilyMatch<T extends FamilyCandidate>(name: string, family: T[]): T | null {
   return findFamilyMatchWithKind(name, family)?.member ?? null;

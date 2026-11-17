@@ -242,6 +242,7 @@ test.describe.serial("V1.1 release journey", () => {
         // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
         await owner.locator("#fm-new-dob").fill("1990-01-01");
         await owner.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
+        await owner.locator("#fm-new-preferred").fill(p.fullName); // required since DC 17 Nov; a later line may set the real one
         await owner.locator("#fm-new-preferred").fill(p.preferred);
         await owner.getByRole("button", { name: "+ Add person" }).click();
         await expect(owner.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.", { timeout: 60_000 });
@@ -496,6 +497,7 @@ test.describe.serial("V1.1 release journey", () => {
       // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
       await other.locator("#fm-new-dob").fill("1990-01-01");
       await other.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
+      await other.locator("#fm-new-preferred").fill(p.fullName); // required since DC 17 Nov; a later line may set the real one
       await other.locator("#fm-new-preferred").fill(p.preferred);
       await other.getByRole("button", { name: "+ Add person" }).click();
       await expect(other.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.", { timeout: 60_000 });

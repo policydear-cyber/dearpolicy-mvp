@@ -40,10 +40,11 @@ async function partA() {
     assert.equal(parseSex(1), "invalid");
     assert.equal(genderOfSex("unspecified"), null);
   });
-  await check("missing details: date of birth always, sex only once it can be saved", () => {
-    assert.deepEqual(profileGaps({ date_of_birth: null, sex: null }, true), ["date of birth", "sex"]);
-    assert.deepEqual(profileGaps({ date_of_birth: null, sex: null }, false), ["date of birth"]);
-    assert.deepEqual(profileGaps({ date_of_birth: "2015-03-02", sex: "unspecified" }, true), []);
+  await check("missing details: relationship, date of birth and preferred name always, sex only once it can be saved", () => {
+    assert.deepEqual(profileGaps({ relationship: "child", date_of_birth: null, sex: null, preferred_name: null }, true), ["date of birth", "sex", "preferred name"]);
+    assert.deepEqual(profileGaps({ relationship: "child", date_of_birth: null, sex: null, preferred_name: "Sam" }, false), ["date of birth"]);
+    assert.deepEqual(profileGaps({ relationship: "", date_of_birth: "2015-03-02", sex: "female", preferred_name: "  " }, true), ["relationship", "preferred name"], "blank words are gaps");
+    assert.deepEqual(profileGaps({ relationship: "child", date_of_birth: "2015-03-02", sex: "unspecified", preferred_name: "Sam" }, true), [], "prefer not to say is an answer");
   });
   await check("sex on the profile settles a 'child' as a daughter; relation words still work without it", () => {
     assert.equal(memberRelation("child", null).gender, null);
