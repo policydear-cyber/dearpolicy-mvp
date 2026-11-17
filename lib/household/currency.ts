@@ -85,7 +85,8 @@ export async function withdrawHouseholdCurrency(accountId: string, opts: { keep?
   // A row a person edited keeps their words, but not the money figure the setting gave a currency to (Test engineer #526
   // N1): the ledger's currency column can't be empty, and an amount with no currency is never shown (DC's rule), so its
   // money figure is taken off instead. A percentage stays (it is not money). Only a row still in the currency the setting
-  // gave is touched: a currency a person set on the row themselves is theirs (Critic #526).
+  // gave, and still showing the document's own figure, is touched: a currency or a figure a person set on the row themselves
+  // is theirs (Critic #526).
   if (ids.length) {
     const seeded = `c.account_id=$1 AND c.seed_key LIKE 'coverage:%' AND split_part(split_part(c.seed_key,'|',1),':',2) = ANY($2::text[])`;
     await query(`DELETE FROM coverage_rules c WHERE ${seeded} AND c.origin<>'person' AND c.status<>'rejected' AND c.updated_at=c.created_at`, [accountId, ids])
@@ -95,10 +96,25 @@ export async function withdrawHouseholdCurrency(accountId: string, opts: { keep?
       await query(
         `UPDATE coverage_rules c SET amount = CASE WHEN c.pays_kind='percent_of_sum' THEN c.amount ELSE NULL END, sum_basis=NULL
            FROM unnest($2::text[], $3::text[]) AS w(id, currency)
+          JOIN policy_coverages pc ON pc.id::text = w.id AND pc.account_id = $1
           WHERE c.account_id=$1 AND c.seed_key LIKE 'coverage:%' AND split_part(split_part(c.seed_key,'|',1),':',2) = w.id
-            AND c.currency = w.currency`,
+            AND c.currency = w.currency
+            AND (c.pays_kind='percent_of_sum' OR c.amount IS NULL OR c.amount = pc.amount)
+            AND (c.sum_basis IS NULL OR c.sum_basis = pc.amount)`,
         [accountId, pairs.map((r) => r.id), pairs.map((r) => r.currency)])
         .catch((error) => console.warn("household currency: ledger amounts not cleared:", error instanceof Error ? error.message : error));
+      // A wording row whose benefit prints no currency took its cover's (lib/ledger/store.ts wordingSeeds): when that was
+      // the setting's, it goes too. Nobody edited it: removed (seeded again only once a currency is printed or chosen).
+      // Edited: its money figure is taken off as above.
+      const fromCover = `c.account_id=$1 AND c.seed_key LIKE 'benefit:%' AND c.status<>'rejected'
+            AND EXISTS (SELECT 1 FROM policy_benefits b WHERE b.id::text = split_part(split_part(c.seed_key,'|',1),':',2) AND b.currency IS NULL)
+            AND EXISTS (SELECT 1 FROM unnest($2::text[], $3::text[]) AS w(id, currency) JOIN policy_coverages pc ON pc.id::text = w.id AND pc.account_id = $1
+                         WHERE pc.policy_id = c.policy_id AND w.currency = c.currency)`;
+      const args = [accountId, pairs.map((r) => r.id), pairs.map((r) => r.currency)];
+      await query(`DELETE FROM coverage_rules c WHERE ${fromCover} AND c.origin<>'person' AND c.updated_at=c.created_at`, args)
+        .catch((error) => console.warn("household currency: wording rows not removed:", error instanceof Error ? error.message : error));
+      await query(`UPDATE coverage_rules c SET amount = CASE WHEN c.pays_kind='percent_of_sum' THEN c.amount ELSE NULL END, sum_basis=NULL WHERE ${fromCover}`, args)
+        .catch((error) => console.warn("household currency: wording amounts not cleared:", error instanceof Error ? error.message : error));
     }
   }
   return ids.length;
