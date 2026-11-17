@@ -1,0 +1,59 @@
+/**
+ * A household member's profile: what DearPolicy asks about each person, and why.
+ *
+ * Collected (each one changes an answer):
+ * - full name as the documents print it (display_name): matching a printed name to a person (lib/policies/linking.ts);
+ * - preferred name: what the household calls them in chat;
+ * - relationship to the account holder: "my wife", "my son", who is the policyholder, adult or child when nothing
+ *   printed says (lib/claims/person.ts personApplicability, lib/benefit-table/child-limit.ts);
+ * - date of birth: adult or child, age groups and child limits when the document prints no age for them;
+ * - sex: "my daughter" / "my son", "she" / "he" when the relationship word does not say (lib/claims/person.ts
+ *   memberRelation).
+ * Not collected, because nothing in the answer pipeline uses them: ID numbers (NRIC, passport), occupation class, smoker
+ * status, address, contact details. A printed document always wins over the profile.
+ */
+
+export const SEX_VALUES = ["female", "male", "unspecified"] as const;
+export type MemberSex = (typeof SEX_VALUES)[number];
+
+/** The sex a request sent: a value, null (cleared), undefined (not sent: keep what is stored), or "invalid". */
+export function parseSex(input: unknown): MemberSex | null | undefined | "invalid" {
+  if (input === undefined) return undefined;
+  if (input === null || input === "") return null;
+  if (typeof input !== "string") return "invalid";
+  const v = input.trim().toLowerCase();
+  return (SEX_VALUES as readonly string[]).includes(v) ? (v as MemberSex) : "invalid";
+}
+
+/** The gender words read for a stored sex ("unspecified" and unanswered say nothing). */
+export function genderOfSex(sex: string | null | undefined): "f" | "m" | null {
+  const v = (sex ?? "").trim().toLowerCase();
+  return v === "female" ? "f" : v === "male" ? "m" : null;
+}
+
+/** What a member's profile still lacks, in the words the Family page uses. `sexField`: whether the database can store a
+ * sex yet (sql/member-profile.sql applied); before it is, sex is never asked for. */
+export function profileGaps(m: { date_of_birth?: string | null; sex?: string | null }, sexField: boolean): string[] {
+  const gaps: string[] = [];
+  if (!m.date_of_birth) gaps.push("date of birth");
+  if (sexField && !m.sex) gaps.push("sex");
+  return gaps;
+}
+
+type Queryable = { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
+let sexColumnSeen = false;
+let lastChecked = 0;
+/** Whether family_members.sex exists (sql/member-profile.sql applied). Remembered once seen; while absent, checked again
+ * at most once a minute, so applying the migration takes effect without a redeploy. */
+export async function hasSexColumn(client: Queryable): Promise<boolean> {
+  if (sexColumnSeen) return true;
+  if (Date.now() - lastChecked < 60_000) return false;
+  lastChecked = Date.now();
+  try {
+    const { rows } = await client.query(`SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='family_members' AND column_name='sex'`);
+    sexColumnSeen = rows.length > 0;
+  } catch { sexColumnSeen = false; }
+  return sexColumnSeen;
+}
+/** Test hook: forget what hasSexColumn saw. */
+export function resetSexColumnCache() { sexColumnSeen = false; lastChecked = 0; }

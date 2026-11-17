@@ -383,11 +383,16 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .policy-main span, .policy-meta span { color: var(--muted); font-size: var(--fs-xs); }
 .policy-meta { text-align: right; display: grid; gap: 4px; justify-items: end; }
 .row-error { grid-column: 2 / -1; color: var(--critical); font-size: var(--fs-xs); }
-.profile-add-grid { display: grid; grid-template-columns: 1.5fr .8fr .9fr 1fr auto; gap: 10px; align-items: end; }
+.profile-add-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: end; }
+.profile-add-grid .field.wide { grid-column: span 2; }
+.profile-add-why { grid-column: 1 / -1; margin: 0; font-size: var(--fs-sm); color: var(--muted); }
+.profile-add-grid .button { grid-column: 1 / -1; justify-self: start; }
+.profile-missing { color: var(--ink-2); }
+.profile-missing button.text-link { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-weight: 600; color: var(--brand-ink); }
 .profile-list { display: grid; gap: 12px; }
 .profile-card { background: var(--surface); border: 1px solid var(--edge); border-radius: var(--r-lg); padding: 16px; display: grid; grid-template-columns: 46px 1fr auto; gap: 14px; align-items: center; }
 .profile-avatar { width: 44px; height: 44px; }
-.profile-fields { display: grid; grid-template-columns: 1.5fr .8fr 1fr 1fr; gap: 10px; }
+.profile-fields { display: grid; grid-template-columns: 1.5fr .8fr 1fr .9fr 1fr; gap: 10px; }
 .profile-actions { display: grid; gap: 8px; justify-items: end; }
 .profile-actions span { font-size: var(--fs-xs); color: var(--muted); }
 /* Family card: summary and glance on top, editable details below, actions last. */
@@ -800,6 +805,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
   .coverage-grid { grid-template-columns: 1fr 1fr; }
   .records-upload { grid-template-columns: 1fr; }
   .profile-add-grid { grid-template-columns: 1fr; }
+  .profile-add-grid .field.wide { grid-column: auto; }
   .profile-card { grid-template-columns: 1fr; }
   .profile-avatar { display: none; }
   .profile-actions { grid-column: 1; }

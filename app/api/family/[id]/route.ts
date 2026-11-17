@@ -3,6 +3,7 @@ import { isUuid, isValidDateString } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { hasSexColumn, parseSex } from "@/lib/household/member-profile";
 import {
   DeletionValidationError,
   HasLinkedActivityError,
@@ -20,7 +21,10 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const ctx = await requireHouseholdContext(request);
     const { id } = await context.params;
     if (!isUuid(id)) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
-    const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null; notes?: string | null };
+    const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null; notes?: string | null; sex?: unknown };
+    // Not sent (an older page): what is stored is kept.
+    const sex = parseSex(body.sex);
+    if (sex === "invalid") return NextResponse.json({ error: "Choose female, male or prefer not to say." }, { status: 400 });
     if (!body.displayName?.trim() || !body.relationship?.trim()) return NextResponse.json({ error: "Full name and relationship are required" }, { status: 400 });
     if (body.displayName.trim().length > 200) return NextResponse.json({ error: "That name is too long." }, { status: 400 });
     if (body.relationship.trim().length > 100) return NextResponse.json({ error: "That relationship is too long." }, { status: 400 });
@@ -46,7 +50,12 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
           RETURNING id,display_name,relationship,date_of_birth::text,preferred_name,notes`,
         [body.displayName!.trim(), body.relationship!.trim(), body.dateOfBirth || null, body.preferredName?.trim() || null, body.notes?.trim() || null, id, ctx.householdId],
       );
-      return result.rows[0] ?? null;
+      const row = (result.rows[0] ?? null) as Record<string, unknown> | null;
+      if (row && await hasSexColumn(client)) {
+        if (sex !== undefined) await client.query(`UPDATE family_members SET sex=$1 WHERE id=$2 AND account_id=$3`, [sex, id, ctx.householdId]);
+        row.sex = sex !== undefined ? sex : (await client.query<{ sex: string | null }>(`SELECT sex FROM family_members WHERE id=$1 AND account_id=$2`, [id, ctx.householdId])).rows[0]?.sex ?? null;
+      }
+      return row;
     });
     if (!member) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
     return NextResponse.json({ member });

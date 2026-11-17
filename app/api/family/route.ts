@@ -3,18 +3,20 @@ import { isValidDateString } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { hasSexColumn, parseSex } from "@/lib/household/member-profile";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
-type FamilyRow = { id: string; display_name: string; relationship: string; date_of_birth: string | null; preferred_name: string | null; notes: string | null; policy_count: number };
+type FamilyRow = { id: string; display_name: string; relationship: string; date_of_birth: string | null; preferred_name: string | null; notes: string | null; sex: string | null; policy_count: number };
 
 export async function GET(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
-    const result = await createUserSupabaseClient(ctx.userId, (client) =>
+    const { result, sexField } = await createUserSupabaseClient(ctx.userId, async (client) => ({ sexField: await hasSexColumn(client), result: await
       client.query<FamilyRow>(
-        `SELECT f.id, f.display_name, f.relationship, f.date_of_birth::text, f.preferred_name, f.notes,
+        // sex through to_jsonb: the column exists only once sql/member-profile.sql is applied (null before).
+        `SELECT f.id, f.display_name, f.relationship, f.date_of_birth::text, f.preferred_name, f.notes, to_jsonb(f)->>'sex' AS sex,
                 count(DISTINCT p.id)::int AS policy_count
            FROM family_members f
            LEFT JOIN policy_members pm ON pm.family_member_id=f.id AND pm.account_id=f.account_id
@@ -24,9 +26,10 @@ export async function GET(request: NextRequest) {
           GROUP BY f.id
           ORDER BY CASE WHEN f.relationship='self' THEN 0 ELSE 1 END, f.created_at`,
         [ctx.householdId],
-      ),
+      ) }),
     );
-    return NextResponse.json({ family: result.rows });
+    // sexField: whether a sex can be saved yet, so the Family page asks for it only then.
+    return NextResponse.json({ family: result.rows, profile: { sexField } });
   } catch (error) {
     return routeErrorResponse(error);
   }
@@ -35,7 +38,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
-    const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null };
+    const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null; sex?: unknown };
+    const sex = parseSex(body.sex);
+    if (sex === "invalid") return NextResponse.json({ error: "Choose female, male or prefer not to say." }, { status: 400 });
     if (!body.displayName?.trim() || !body.relationship?.trim()) {
       return NextResponse.json({ error: "Full name and relationship are required" }, { status: 400 });
     }
@@ -67,7 +72,13 @@ export async function POST(request: NextRequest) {
          RETURNING id,display_name,relationship,date_of_birth::text,preferred_name`,
         [ctx.householdId, body.displayName!.trim(), body.relationship!.trim(), body.dateOfBirth || null, body.preferredName?.trim() || null],
       );
-      return result.rows[0];
+      const row = result.rows[0] as Record<string, unknown>;
+      // Before sql/member-profile.sql is applied there is nowhere to keep it: the person is still added, without it.
+      if (sex !== undefined && row && await hasSexColumn(client)) {
+        await client.query(`UPDATE family_members SET sex=$1 WHERE id=$2 AND account_id=$3`, [sex, row.id, ctx.householdId]);
+        row.sex = sex;
+      }
+      return row;
     });
     return NextResponse.json({ member }, { status: 201 });
   } catch (error) {

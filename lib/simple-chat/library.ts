@@ -59,7 +59,9 @@ export type HouseholdDocument = {
 };
 export type Household = {
   accountId: string;
-  members: { name: string; relationship: string }[];
+  /** date_of_birth: the profile's (YYYY-MM-DD), read by the verifier's child-limit checks (householdLife) only, never sent to
+   * the model. */
+  members: { name: string; relationship: string; date_of_birth?: string | null }[];
   documents: HouseholdDocument[];
 };
 
@@ -73,7 +75,7 @@ const text = (v: unknown) => (v == null ? null : v instanceof Date ? v.toISOStri
  * person the household removed from a document is not listed as linked to it. */
 export async function readHousehold(accountId: string, run: ReadOnlyQuery, notExcluded = "", prototype = false): Promise<Household> {
   const members = await run(
-    "SELECT account_id, display_name, preferred_name, relationship FROM family_members WHERE account_id=$1 AND lifecycle_state='active' ORDER BY created_at",
+    "SELECT account_id, display_name, preferred_name, relationship, to_char(date_of_birth, 'YYYY-MM-DD') AS date_of_birth FROM family_members WHERE account_id=$1 AND lifecycle_state='active' ORDER BY created_at",
     [accountId]);
   const docs = await run(
     `SELECT p.account_id, p.id, p.original_filename, p.insurer, p.product_name, p.policy_number, p.policy_type, p.document_role,
@@ -98,6 +100,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
     members: members.map((m) => ({
       name: m.preferred_name && m.preferred_name !== m.display_name ? `${m.display_name} (${m.preferred_name})` : String(m.display_name),
       relationship: String(m.relationship),
+      date_of_birth: m.date_of_birth == null ? null : text(m.date_of_birth),
     })),
     documents: docs.map((d) => ({
       policyId: String(d.id),
