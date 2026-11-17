@@ -726,9 +726,9 @@ export async function processPolicy(args: ProcessPolicyArgs) {
         }
       }
     }
-    // A cover amount still held only because the document prints no currency is read in the household's own currency, after
+    // A cover amount still held, or confirmed with no currency of its own, only because the document prints none is read in the household's own currency, after
     // the page image has had its say: a currency any page or image prints always decides (lib/documents/household-currency).
-    if (extraction.insuredPeople.some((p) => p.coverages.some((c) => c.amount != null && !c.evidenceVerified))) {
+    if (extraction.insuredPeople.some((p) => p.coverages.some((c) => c.amount != null && (!c.evidenceVerified || !c.currency)))) {
       const householdCurrency = await householdCurrencyOf(args.accountId);
       if (householdCurrency) extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle, allPages: pages, householdCurrency });
     }

@@ -104,6 +104,8 @@ async function main() {
   await test("C H3 ... but a page that names S$ itself still uses it", () =>
     assert.deepEqual(shown([death], [{ pageNumber: 1, text: "" }, p2("Currency : Singapore Dollar\n" + BARE)], "SGD"), ["SGD 100000"]));
 
+  await test("C 'real' as an ordinary word does not block", () => assert.deepEqual(shown([death], [{ pageNumber: 1, text: "This is a real policy schedule." }, p2(BARE)], "SGD"), ["SGD 100000"]));
+
   // ---- I: the page image
   await test("I the page image names RM: held", () => assert.deepEqual(shown([death], [p2(BARE, { imageCurrencies: ["MYR"] })], "SGD"), ["held"]));
   await test("I another page's image names US$: a bare page is held", () => assert.deepEqual(shown([death], [{ pageNumber: 1, text: "Cover", imageCurrencies: ["USD"] }, p2(BARE)], "SGD"), ["held"]));
