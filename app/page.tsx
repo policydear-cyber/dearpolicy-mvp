@@ -29,8 +29,6 @@ export default function DashboardPage(){
  const seq=useRef(0),want=useRef<string|undefined>(undefined);
  // Whether Home's ask box is on screen, so the phone's floating Ask button can step aside instead of covering it.
  const [askInView,setAskInView]=useState(false);
- useEffect(()=>{if(typeof IntersectionObserver==="undefined")return;let io:IntersectionObserver|null=null;const watch=()=>{const box=document.getElementById("ask");if(!box)return false;io=new IntersectionObserver(([e])=>setAskInView(!!e?.isIntersecting),{threshold:.15});io.observe(box);return true;};
-  if(watch())return()=>io?.disconnect();let tries=0;const t=window.setInterval(()=>{if(watch()||++tries>=20)window.clearInterval(t);},500);return()=>{window.clearInterval(t);io?.disconnect();};},[]);
  async function load(memberId?:string,quiet=false){const n=++seq.current;if(!quiet)setLoading(true);const params=new URLSearchParams();if(memberId)params.set("familyMemberId",memberId);if(quiet)params.set("poll","1");
   const q=params.toString()?`?${params}`:"";let payload:Dashboard;
   try{
@@ -72,6 +70,9 @@ export default function DashboardPage(){
  // the household's page, and says so for that person, with any premium already found for them.
  const view=homeView({personDocs:documentCount-(data?.unclaimed?.length??0),family:data?.family??[],unclaimed:data?.unclaimed?.length??0,covered:confirmed.length,premiums:data?.premiums?.items??[]});
  const emptyPortfolio=!loading&&!data?.error&&!!data&&view.empty;
+ // Re-run when the empty view gives way to Home, whose ask box is a new element.
+ useEffect(()=>{if(typeof IntersectionObserver==="undefined")return;let io:IntersectionObserver|null=null;const watch=()=>{const box=document.getElementById("ask");if(!box)return false;io=new IntersectionObserver(([e])=>setAskInView(!!e?.isIntersecting),{threshold:.15});io.observe(box);return true;};
+  if(watch())return()=>io?.disconnect();let tries=0;const t=window.setInterval(()=>{if(watch()||++tries>=20)window.clearInterval(t);},500);return()=>{window.clearInterval(t);io?.disconnect();};},[emptyPortfolio]);
  const returning=!!data&&!data.error&&!view.empty;
  const personEmpty=returning&&view.personEmpty;
  const name=active?.display_name??null;

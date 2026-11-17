@@ -71,7 +71,7 @@
   --scrim: rgba(14, 22, 18, .28);
 
   --shadow-float: 0 4px 12px rgba(22, 33, 28, .10), 0 1px 2px rgba(22, 33, 28, .06);
-  --focus: 0 0 0 3px #2563eb;
+  --focus: 0 0 0 3px #2563eb; --focus-ring: #2563eb;
 
   --r-sm: 10px; --r-md: 14px; --r-lg: 20px;
   --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 22px; --fs-2xl: 28px; --fs-3xl: 36px;
@@ -112,7 +112,7 @@
     --unresolved: #93a7bb; --unresolved-text: #b7c7d7; --unresolved-tint: #1f262d; --unresolved-line: #6a7d90;
     --scrim: rgba(0, 0, 0, .5);
     --shadow-float: 0 4px 14px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .3);
-    --focus: 0 0 0 3px rgba(147, 180, 255, .5);
+    --focus: 0 0 0 3px rgba(147, 180, 255, .5); --focus-ring: rgba(147, 180, 255, .5);
     --brand: #eef0f3;
     --on-brand: #0f1216;
     --accent: #eef0f3;
@@ -1138,7 +1138,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .upload-file-input { position: absolute; inset: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .upload-drop { display: grid; gap: 2px; min-height: 88px; align-content: center; padding: 14px 16px; border: 2px dashed var(--line-strong); border-radius: var(--r-md); background: var(--surface-2); cursor: pointer; }
 .upload-drop.chosen { border-style: solid; border-color: var(--brand); }
-.upload-file-input:focus-visible + .upload-drop { outline: 3px solid var(--focus, var(--brand)); outline-offset: 2px; }
+.upload-file-input:focus-visible + .upload-drop { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .upload-drop .upload-drop-title { font-size: var(--fs-xs); font-weight: 650; color: var(--ink-2); }
 .upload-drop .upload-drop-cta { font-size: var(--fs-md); font-weight: 650; color: var(--brand-ink); }
 .upload-drop .upload-drop-file { font-size: var(--fs-md); font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
@@ -1849,4 +1849,8 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 .answer-card-amount { border-radius: 6px 0 0 0; }
 .answer-chip { background: var(--paper); border: 1px solid var(--paper-line); border-bottom-width: 2px; border-radius: 4px 4px 2px 2px; padding: 2px 8px; }
 .message.assistant .message-body > p, .message.assistant .message-body .answer-bottom-line, .message.assistant .message-body .next-steps li, .message.assistant .message-body .answer-cards > p { max-width: 72ch; }
+
+/* Keys and sheets that draw their own shadow show the focus ring as an outline instead, so the shadow (a secondary key's
+   edge, a cover sheet's stacked pages) never hides it. */
+:root .button.secondary:focus-visible, :root .coverage-card:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 
