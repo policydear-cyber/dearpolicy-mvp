@@ -1340,7 +1340,9 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
     : life!.relationship ? `page ${bf.page} prints ${person} as "${life!.relationship}"`
     : life!.household && life!.householdBirth && life!.household !== "spouse" ? `${person}'s date of birth in your family details is ${life!.householdBirth}`
     : life!.household === "spouse" ? `${person} is recorded in your family details as your spouse`
-    : `${person} is recorded in your family details as you`;
+    : life!.household === "self" ? `${person} is recorded in your family details as you`
+    : life!.birth ? `${person}'s date of birth on page ${bf.page} is ${life!.birth}`
+    : `page ${bf.page} prints ${person}'s line`;
   const childLine = !child ? "" : sf.child!.status === "child"
     ? `. The policy (page ${rf.page}) says: "${child.words.replace(/[.;]+$/, "")}", and ${lifeWords}`
     : `. The policy (page ${rf.page}) pays ${child.percent}% for ${childCase(child)}, which ${person} is not: ${lifeWords}`;
