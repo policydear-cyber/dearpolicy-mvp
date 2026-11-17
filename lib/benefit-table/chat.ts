@@ -850,6 +850,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   const fractureKinds = new Map<string, Set<string>>();
   // The rows shown as one kind of fracture among others (above), with their kind: named on their cards' points.
   const kindRows = new Map<string, string>();
+  // Each row's own card statement, by row id: cards for the same bones may carry the same label.
+  const cardOf = new Map<string, Record<string, unknown>>();
   const away = new Map<string, Record<string, unknown>>();
   const said = [(json as { bottomLine?: unknown }).bottomLine, ...((json as { statements: Record<string, unknown>[] }).statements ?? []).filter((x) => x && x.kind !== "amount").map((x) => x.text)]
     .filter((x): x is string => typeof x === "string").join(" ");
@@ -912,13 +914,16 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     const kind = rowFractureKind(fullName(row));
     if (kind) {
       const said = kindsSaid([question, ...earlier].join(" "));
-      const others = new Set([...namedKinds(fullName(row)), ...rows.filter((o) => o.personId === row.personId && /\bfractures?\b/i.test(fullName(o)))
+      // The kinds printed for the same bones: the row's own name's, and the person's other rows for those bones.
+      const others = new Set([...namedKinds(fullName(row)), ...rows.filter((o) => o.personId === row.personId && bones(o) === bones(row))
         .map((o) => rowFractureKind(fullName(o))).filter((k): k is string => !!k)]);
       others.delete(kind);
       const who = baseName(row.person);
       // Only a kind the documents print counts as said: "it was compound" says nothing about "Simple" or "Other Fracture".
+      // Two printed kinds said ("simple or other?") settle nothing.
       const printedSaid = [...said].filter((k) => k === kind || others.has(k));
-      if (others.size && printedSaid.length && !said.has(kind)) {
+      if (printedSaid.length > 1) printedSaid.length = 0;
+      if (others.size && printedSaid.length && !printedSaid.includes(kind)) {
         given.add(row.id); given.add(named.id);
         const fact = `${bareName(row)} is for what the policy calls ${kindName(kind)}, not the kind of fracture you described, so no amount is given for it.`;
         if (!statements.some((x) => (x as { text?: unknown }).text === fact))
@@ -927,7 +932,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
         continue;
       }
       if (others.size && !printedSaid.length) {
-        const group = `fracture kinds ${who}`;
+        const group = `fracture kinds ${who}: ${bones(row)}`;
         raw.alternativeGroup = group;
         const ask = fractureKinds.get(who) ?? new Set<string>();
         for (const k of [kind, ...others]) ask.add(k);
@@ -1055,7 +1060,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       const printed = facts ? r.conditions.find((c) => sameNote(noteSaid, c)) : undefined;
       const times = facts && printed ? noteMultiple(printed, facts) : null;
       if (st) {
-        statements.push(st); report.labels.push(String(st.text));
+        statements.push(st); report.labels.push(String(st.text)); cardOf.set(r.id, st);
         const sf = (times && serverFigureOf(r, st, household, times, facts)) || serverFigureOf(r, st, household);
         if (sf) (report.figures ??= []).push(sf);
         report.cards![r.id] = { text: String(st.text), person: baseName(r.person) };
@@ -1093,11 +1098,16 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   // The kinds' cards, smaller amount first, each followed by what kind it is for: never the larger alone at the top.
   if (kindRows.size) {
     const cardRow = new Map<unknown, ChatRow>();
-    for (const [id, c] of Object.entries(report.cards!)) { const st = statements.find((x) => (x as { kind?: unknown; text?: unknown }).kind === "amount" && (x as { text?: unknown }).text === c.text); const r = byId.get(id); if (st && r && kindRows.has(id)) cardRow.set(st, r); }
-    const at = statements.map((x, k) => cardRow.has(x) ? k : -1).filter((k) => k >= 0);
+    for (const id of kindRows.keys()) { const st = cardOf.get(id), r = byId.get(id); if (st && r && statements.includes(st)) cardRow.set(st, r); }
     const amountOf = (r: ChatRow) => r.figure.kind === "printed" || r.figure.kind === "worked_out" ? r.figure.amount : Number.POSITIVE_INFINITY;
-    const sorted = at.map((k) => statements[k]).sort((a, b) => amountOf(cardRow.get(a)!) - amountOf(cardRow.get(b)!));
-    at.forEach((k, n) => { statements[k] = sorted[n]; });
+    // Each group of the same bones in its own places, smaller amount first.
+    const sorted: Record<string, unknown>[] = [];
+    for (const g of new Set([...cardRow.keys()].map((st) => (st as { alternativeGroup?: unknown }).alternativeGroup))) {
+      const at = statements.map((x, k) => cardRow.has(x) && (x as { alternativeGroup?: unknown }).alternativeGroup === g ? k : -1).filter((k) => k >= 0);
+      const order = at.map((k) => statements[k] as Record<string, unknown>).sort((a, b) => amountOf(cardRow.get(a)!) - amountOf(cardRow.get(b)!));
+      at.forEach((k, n) => { statements[k] = order[n]; });
+      sorted.push(...order);
+    }
     for (const st of sorted) {
       const r = cardRow.get(st)!;
       const fact = `${bareName(r)}: this amount is for what the policy calls ${kindName(kindRows.get(r.id)!)}.`;

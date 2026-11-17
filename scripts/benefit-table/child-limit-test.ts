@@ -504,7 +504,7 @@ test("household record: self or spouse settles not a child only when the schedul
   const spouse = householdLife({ birth: null, relationship: null }, { relationship: "Spouse" }).life;
   assert.equal(personStatus(self, { belowAge: 18 }, [day]), "not_child");
   assert.equal(personStatus(spouse, { belowAge: 21 }, [day]), "not_child");
-  assert.equal(provenAdult(self, 25, [day]).adult, true);
+  assert.equal(provenAdult(self, 18, [day]).adult, true);
   // A child, parent or any other household relationship adds nothing.
   for (const rel of ["child", "parent", "other", "", null]) assert.deepEqual(householdLife(undefined, { relationship: rel }), {}, String(rel));
   // What the schedule prints still wins: a child relationship, or a date of birth under the age.
@@ -516,6 +516,19 @@ test("household record: self or spouse settles not a child only when the schedul
   assert.equal(provenAdult(young, 18, [day]).adult, false);
   // No day to settle on: still not settled.
   assert.equal(personStatus(self, { belowAge: 18 }, []), null);
+  // Critic #518 H4: "self" under a limit above 18 needs the household's date of birth at or over it; with an ageless
+  // limit, a household date of birth under 26 proves nothing (a dependent child may be a student up to 25).
+  assert.equal(personStatus(self, { belowAge: 25 }, [day]), null);
+  assert.equal(provenAdult(self, 21, [day]).adult, false);
+  const self21 = householdLife(undefined, { relationship: "self", date_of_birth: "2005-01-01" }).life;
+  assert.equal(personStatus(self21, { belowAge: null }, [day]), null);
+  assert.equal(personStatus(self21, { belowAge: 25 }, [day]), null);
+  assert.equal(provenAdult(self21, null, [day]).adult, false);
+  const self40 = householdLife(undefined, { relationship: "self", date_of_birth: "1986-01-01" }).life;
+  assert.equal(personStatus(self40, { belowAge: 25 }, [day]), "not_child");
+  assert.equal(provenAdult(self40, 23, [day]).adult, true);
+  // A spouse is never insured as a child, whatever the age in the limit.
+  assert.equal(personStatus(spouse, { belowAge: 25 }, [day]), "not_child");
 });
 test("household record: Self and Spouse keep a group scheme's figures when the schedule prints no relationship or date of birth", () => {
   const bare = (name: string, rel: string, sum: string, value: number) => P(name, rel, "", sum, value, [name, sum]);

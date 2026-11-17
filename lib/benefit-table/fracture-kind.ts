@@ -30,8 +30,14 @@ export function rowFractureKind(benefit: string): string | null {
 /** The kinds of fracture said in the household's words ("a simple fracture", "it was compound", "closed break"). */
 export function kindsSaid(text: string): Set<string> {
   const out = new Set<string>();
+  // Words before the kind that deny it or leave it open ("not a simple fracture", "I don't know if it was simple",
+  // "whether it was a compound break"): that kind is not said (Critic on #518, NEW-HIGH 2, 3).
+  const open = /\b(?:not|never|no|n't|isn't|wasn't|unsure|whether|if|maybe|perhaps|might|possibly|or|than|unless)\b[^.?!]{0,30}$/i;
+  const add = (kind: string, before: string, after: string) => { if (!open.test(before) && !/^\s*(?:fractures?|breaks?|broken)?\s*(?:,\s*)?or\b/i.test(after)) out.add(kind.toLowerCase()); };
   // Only a kind word said of the fracture itself: "other" or "simple" alone ("any other benefits?") says nothing.
-  for (const m of text.matchAll(new RegExp(String.raw`\b(${KIND_WORDS})\s+(?:fractures?|breaks?|broken)\b`, "gi"))) out.add(m[1].toLowerCase());
-  for (const m of text.matchAll(new RegExp(String.raw`\b(?:fracture|break)\s+(?:was|is|is\s+a|was\s+a)\s+(${KIND_WORDS})\b`, "gi"))) out.add(m[1].toLowerCase());
+  for (const m of text.matchAll(new RegExp(String.raw`\b(${KIND_WORDS})\s+(?:fractures?|breaks?|broken)\b`, "gi")))
+    add(m[1], text.slice(Math.max(0, m.index! - 40), m.index!), text.slice(m.index! + m[1].length));
+  for (const m of text.matchAll(new RegExp(String.raw`\b(?:fracture|break)\s+(?:was|is|is\s+a|was\s+a)\s+(${KIND_WORDS})\b`, "gi")))
+    add(m[1], text.slice(Math.max(0, m.index! - 40), m.index!) + m[0].slice(0, m[0].length - m[1].length), text.slice(m.index! + m[0].length));
   return out;
 }

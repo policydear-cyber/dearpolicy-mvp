@@ -99,6 +99,32 @@ test("a kind the documents do not print says nothing: both as alternatives", () 
   const a = answer(both(), "Rowan had a compound fracture of his arm. What can he claim?", [/Other Fracture/]);
   assert.deepEqual(a.amounts, ["S$1,250", "S$120,000"]);
 });
+test("Critic #518 H1: same-label cards keep their own kind's point, smaller first", () => {
+  const h = household(["Simple Fracture: Arm\tS$1,000", "Other Fracture: Arm\tS$5,000"], [
+    ben({ section: "Simple Fracture", benefit: "Arm", pays: "amount", value: 1000, currency: "SGD", quote: "Simple Fracture: Arm\tS$1,000" }),
+    ben({ section: "Other Fracture", benefit: "Arm", pays: "amount", value: 5000, currency: "SGD", quote: "Other Fracture: Arm\tS$5,000" })]);
+  const a = answer(h, "Rowan broke his arm. What can he claim?", [/^Other Fracture: /]);
+  assert.deepEqual(a.amounts, ["S$1,000", "S$5,000"]);
+  const kinds = a.points.filter((t) => /this amount is for/.test(t)).map((t) => /"(\w+) Fracture"/.exec(t)![1]);
+  assert.deepEqual(kinds, ["Simple", "Other"]);
+});
+test("Critic #518 H2, H3: a denied or unsure kind is not said", () => {
+  for (const q of ["It was not a simple fracture.", "It was not just a simple break.", "I don't know if it was a simple fracture or not.",
+    "Not sure whether it was a simple fracture.", "Was it a simple fracture or an other fracture?"]) {
+    assert.deepEqual([...kindsSaid(q)], [], q);
+    assert.deepEqual(answer(both(), `Rowan broke his arm. ${q}`, [/Other Fracture/]).amounts, ["S$1,250", "S$120,000"], q);
+  }
+});
+test("Critic #518 M1, M2: kinds and alternatives are per bones", () => {
+  const h = household([OTHER, SIMPLE, "Compound Fracture: Skull\tS$50,000"], [
+    ben({ section: "Simple Fracture or Other Fracture", benefit: "Arm, Elbow, Wrist or Ribs (Other Fracture)", pays: "percent", value: 20, percentOf: "sum_insured", quote: OTHER }),
+    ben({ section: "Simple Fracture", benefit: "Arm, Elbow, Wrist or Ribs", pays: "amount", value: 1250, currency: "SGD", quote: SIMPLE }),
+    ben({ section: "Compound Fracture", benefit: "Skull", pays: "amount", value: 50000, currency: "SGD", quote: "Compound Fracture: Skull\tS$50,000" })]);
+  const a = answer(h, "Rowan broke his arm and fractured his skull. What can he claim?", [/Other Fracture/, /Skull/]);
+  assert.ok(a.amounts.includes("S$50,000"), a.amounts.join(" "));
+  assert.doesNotMatch(a.question, /Compound/);
+  assert.match(a.question, /"Simple Fracture" or "Other Fracture"/);
+});
 test("one kind printed only: the amount as before", () => {
   const h = household([OTHER.replace("(Other Fracture)", "")], [ben({ section: "Fracture", benefit: "Arm, Elbow, Wrist or Ribs", pays: "percent", value: 20, percentOf: "sum_insured", quote: OTHER.replace("(Other Fracture)", "") })]);
   assert.deepEqual(answer(h, "Rowan broke his arm. What can he claim?", [/Arm/]).amounts, ["S$120,000"]);
