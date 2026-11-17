@@ -67,10 +67,45 @@ export function kindsForInjury(messages: string[]): Set<string> {
 /** A message that is only an answer giving the kind: "Simple", "It was a simple fracture.", "Just a simple one". No
  * question, denial, doubt or person can be in it, since nothing else is. */
 const KIND_ANSWER = new RegExp(String.raw`^\s*(?:(?:it|that|this)\s+(?:was|is)\s+|it's\s+|its\s+|was\s+)?(?:(?:just|only)\s+)?(?:an?\s+)?(${KIND_WORDS})(?:\s+(?:one|fracture|break))?\s*[.!]?\s*$`, "i");
-/** The one kind the household settled for the injury the conversation is on now: said as a whole answer (KIND_ANSWER)
- * after it was told, and never another kind after it. Only this rules other kinds' amounts out (Critic on #520, NEW-HIGH 3). */
-export function kindSettled(messages: string[]): string | null {
-  const kinds = new Set<string>();
-  for (const m of sinceInjury(messages)) { const a = KIND_ANSWER.exec(m); if (a) { kinds.clear(); kinds.add(a[1].toLowerCase()); } else for (const k of kindsSaid(m)) if (!kinds.has(k) && kinds.size) kinds.add(k); }
-  return kinds.size === 1 ? [...kinds][0] : null;
+/** The household members a message names: by a word of their name that no other member's name has. */
+function namedIn(text: string, members: string[]): Set<string> {
+  const words = (n: string) => n.toLowerCase().replace(/\([^)]*\)/g, " ").split(/[^\p{L}]+/u).filter((w) => w.length > 2);
+  const owners = new Map<string, Set<string>>();
+  for (const m of members) for (const w of words(m)) owners.set(w, (owners.get(w) ?? new Set()).add(m));
+  const said = new Set(words(text)), out = new Set<string>();
+  for (const [w, ms] of owners) if (ms.size === 1 && said.has(w)) out.add([...ms][0]);
+  return out;
+}
+/** Words that take back or doubt what was said ("Sorry, I meant other", "Wait, no", "not sure actually"). */
+const TAKE_BACK = /\b(?:no|not|nope|meant|mean|actually|wait|sorry|instead|correction|unsure|sure|maybe|perhaps|possibly|probably|could|might|think|thought|seems?|said)\b|n't\b|\?/i;
+/** A message that only moves the injury from one person to another: "it was Charmaine, not Desmond", "I meant Amy". */
+const SWAP = /\b(?:it\s+was|it's|i\s+meant|meant|actually)\b/i;
+/** The one kind the household settled for the injury the conversation is on now, and whose injury it is:
+ * - settled only by a message that is the kind alone (KIND_ANSWER), after the injury was told;
+ * - taken back by any later message about it that names a kind or a kind word, takes back or doubts ("Sorry, I meant
+ *   other", "Wait, no", "could be other"), unless that message only moves the injury to another person ("Sorry, actually
+ *   it was Charmaine, not Desmond"), which carries the kind to them;
+ * - kept only for the person the injury was told of: a person added later ("And Rowan? Same accident.") is not settled.
+ * `whose` is null when no member is named (the injury is the one person's the chat is about) (Critic on #520). */
+export function kindSettled(messages: string[], members: string[] = []): { kind: string; whose: Set<string> | null } | null {
+  const told = sinceInjury(messages);
+  let whose: Set<string> | null = told.length ? namedIn(told[0], members) : null;
+  if (whose && !whose.size) whose = null;
+  let kind: string | null = null;
+  for (const m of told) {
+    const a = KIND_ANSWER.exec(m);
+    if (a) { kind = a[1].toLowerCase(); continue; }
+    if (!kind) continue;
+    const named = namedIn(m, members);
+    const kindWord = new RegExp(String.raw`\b(?:${KIND_WORDS})\b`, "i").test(m);
+    const fresh = [...named].filter((n) => !whose?.has(n));
+    if (SWAP.test(m) && fresh.length && !kindWord && !/\b(?:unsure|sure|maybe|perhaps|possibly|probably|could|might|think|thought)\b|\?/i.test(m)) {
+      whose = new Set(fresh); continue;
+    }
+    if (kindWord || TAKE_BACK.test(m)) { kind = null; continue; }
+    // A person named only now, when the injury was told of no one by name, may be someone added: whose kind it was is
+    // not told.
+    if (!whose && named.size) kind = null;
+  }
+  return kind ? { kind, whose } : null;
 }

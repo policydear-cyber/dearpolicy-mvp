@@ -106,13 +106,24 @@ test("live shape: the two documents' kinds side by side, S$1,250 worked out from
   assert.deepEqual(said.amounts, ["S$1,250"]);
   assert.doesNotMatch(said.question, /Which kind/);
 });
-test("a settled kind is for this injury only: a new injury, even with no break word, starts again (Critic on #520)", () => {
-  assert.equal(kindSettled(["Rowan broke his arm.", "It was a simple fracture."]), "simple");
-  assert.equal(kindSettled(["Rowan broke his arm.", "It was a simple fracture.", "Sorry, it was Amy, not Rowan."]), "simple");
-  assert.equal(kindSettled(["Rowan broke his arm.", "It was a simple fracture.", "He also hurt his wrist in the fall."]), null);
-  assert.equal(kindSettled(["Rowan broke his arm.", "It was a simple fracture.", "Rowan broke his arm too."]), null);
-  assert.equal(kindSettled(["Rowan had a simple fracture last year. Now Amy broke her arm."]), null);
-  assert.equal(kindSettled(["Rowan broke his arm.", "Simple", "or maybe an other fracture"]), null);
+test("a settled kind is for this injury and person only, and is taken back by any doubt or other kind (Critic on #520)", () => {
+  const M = ["Rowan Hartley", "Amy Hartley-Lim", "Charmaine Ong", "Desmond Tan"];
+  const k = (msgs: string[]) => kindSettled(msgs, M)?.kind ?? null;
+  assert.equal(k(["Rowan broke his arm.", "It was a simple fracture."]), "simple");
+  assert.equal(k(["Desmond broke his arm.", "It was a simple fracture.", "Sorry, actually it was Charmaine, not Desmond."]), "simple");
+  assert.deepEqual([...kindSettled(["Desmond broke his arm.", "It was a simple fracture.", "Sorry, actually it was Charmaine, not Desmond."], M)!.whose!], ["Charmaine Ong"]);
+  for (const later of ["He also hurt his wrist in the fall.", "Desmond broke his arm too.", "Sorry, I meant other.", "Actually the doctor now says it's compound.",
+    "Not sure actually, could be other.", "Wait, no."]) assert.equal(k(["Desmond broke his arm.", "Simple", later]), null, later);
+  assert.equal(k(["Rowan had a simple fracture last year. Now Amy broke her arm."]), null);
+  // A person added later is not settled: the kind stays the told person's.
+  assert.deepEqual([...kindSettled(["Amy broke her arm.", "Simple", "Rowan was in the same accident."], M)!.whose!], ["Amy Hartley-Lim"]);
+});
+test("a settled kind leaves another person's amounts alone", () => {
+  const a = answer(both(), "And Rowan? Same accident.", [/Other Fracture/], null, ["Amy broke her arm.", "Simple"]);
+  assert.deepEqual(a.amounts, ["S$1,250", "S$120,000"]);
+  assert.match(a.question, /Which kind/);
+  const b = answer(both(), "Rowan was in the same accident.", [/Other Fracture/], null, ["Amy broke her arm.", "Simple"]);
+  assert.deepEqual(b.amounts, ["S$1,250", "S$120,000"]);
 });
 test("bones under different headings stay apart: a leg's simple fracture is never the arm's (Critic on #520, NEW-HIGH 2)", () => {
   const h = household(["Fracture of Leg: Simple Fracture: Lump sum\tS$2,000", "Fracture of Arm: Other Fracture: Lump sum\t20% of the Sum Insured"], [
@@ -168,7 +179,7 @@ test("a kind said in passing only puts its card first; a kind given as the answe
   }
 });
 test("a kind said carries across a correction of who it was, not to a new injury (live 17 Nov)", () => {
-  const earlier = ["Rowan broke his arm in an accident. What can he claim?", "It was a simple fracture."];
+  const earlier = ["My brother broke his arm in an accident. What can he claim?", "It was a simple fracture."];
   assert.deepEqual(answer(both(), "Sorry, actually it was Rowan, not his brother.", [/Other Fracture/], null, earlier).amounts, ["S$1,250"]);
   const again = answer(both(), "Rowan broke his arm too in the same accident.", [/Other Fracture/], null, [...earlier, "Sorry, actually it was his brother."]);
   assert.deepEqual(again.amounts, ["S$1,250", "S$120,000"]);

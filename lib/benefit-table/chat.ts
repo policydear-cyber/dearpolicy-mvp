@@ -918,7 +918,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     const kind = rowFractureKind(fullName(row));
     if (kind) {
       const told = [...earlier].reverse().concat(question);
-      const said = kindsForInjury(told), settled = kindSettled(told);
+      const said = kindsForInjury(told), settled = kindSettled(told, household.members.map((m) => m.name));
       // The kinds printed for the same bones: the row's own name's, and the person's other rows for those bones.
       const others = new Set([...namedKinds(fullName(row)), ...rows.filter((o) => o.personId === row.personId && bones(o) === bones(row))
         .map((o) => rowFractureKind(fullName(o))).filter((k): k is string => !!k)]);
@@ -929,7 +929,8 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       // settled as a whole answer ("It was a simple fracture.") rules the others' amounts out (kindSettled).
       const printedSaid = [...said].filter((k) => k === kind || others.has(k));
       if (printedSaid.length > 1) printedSaid.length = 0;
-      const settledKind = settled && (settled === kind || others.has(settled)) ? settled : null;
+      // Only for the person whose injury it is (kindSettled's whose; none named: the person the chat is about).
+      const settledKind = settled && (settled.kind === kind || others.has(settled.kind)) && (!settled.whose || [...settled.whose].some((n) => baseName(n) === baseName(row.person))) ? settled.kind : null;
       if (others.size) {
         // One group per person, bones and policy: a second policy's amounts for the same bones are not its alternatives.
         const group = `fracture kinds ${who}: ${bones(row)}: ${row.holding ?? row.coverKey}`;

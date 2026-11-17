@@ -894,7 +894,8 @@ export function headlineSumShare(cell: string, value: number, next = "", words =
  * S$5,000)" was shown as "25% of the figure its table prints", with no amount). Every one of these must hold, else null:
  * - the row's own line is a label, then the bare share and nothing after it ("25%"): a row that names its own base
  *   ("80% of reasonable expenses", "200% of the daily benefit") is never settled here;
- * - the block above the row (up to the nearest bullet or blank line) prints its base once, with a stated currency, as a
+ * - the block above the row (its share rows, then its heading lines up to the nearest bullet, blank line or another
+ *   table's share row) prints its base once, with a stated currency, as a
  *   column heading "(% of S$5,000)" or a "<name> Benefit Limit: S$5,000" line whose name's words are all in the row's
  *   section or benefit name, or the bullet heading the block opens with ("Simple Fracture" for "Simple Fracture due to
  *   Accident");
@@ -910,9 +911,15 @@ export function tableBase(text: string, rowStart: number, names = ""): { amount:
   const above = text.slice(0, lineStart).split("\n");
   above.pop();
   const block: string[] = [];
+  // The table's own rows run up to its heading lines; a share row above a heading line is another table's (Critic on
+  // #520: a Burns table's "(% of S$10,000)" above a "Fracture due to Accident" title was used for the arm).
+  let heading = false;
   for (let i = above.length - 1; i >= 0 && block.length < 30; i--) {
     const line = above[i];
     if (!line.trim()) break;
+    const shareRow = /\d+(?:\.\d+)?\s*%\s*[#*^†‡]?\s*$/.test(line) && !/\(\s*%\s*of\b/i.test(line) || /^\s*[#*^†‡]\s*$/.test(line);
+    if (shareRow && heading) break;
+    if (!shareRow) heading = true;
     block.unshift(line);
     if (/^\s*[•▪●◦·\u2022\u25aa\u25cf]/.test(line)) break;
   }

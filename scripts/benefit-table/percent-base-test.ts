@@ -164,6 +164,8 @@ async function main() {
       ["a next table with a non-money base", ["\u2022\tSimple Fracture", "(% of S$5,000)", "Hip\t75%", "Dislocation\t(% of Medical Expenses Limit)"], "Shoulder\t30%", 30],
       ["an overall yearly limit", ["\u2022\tSimple Fracture", "Simple Fracture Benefit Limit: S$20,000 per policy year"], "Arm\t25%", 25],
       ["a plan footnote", ["\u2022\tSimple Fracture", "(% of S$5,000)", "^ Plan A only"], "Arm\t25%", 25],
+      ["another table's heading above a title", ["Burns due to Accident", "Body surface (% of S$10,000)", "Head\t10%", "Fracture due to Accident"], "Arm\t25%", 25],
+      ["another table's bare heading above a title", ["(% of S$10,000)", "Head\t10%", "Fracture due to Accident"], "Arm\t25%", 25],
     ];
     for (const [why, head, line, value] of cases) {
       const rows = table({ cover: "PA Cover", sum: 600000, sumText: "S$600,000", lines: [...head, line], benefits: [{ benefit: line.split("\t")[0], value, quote: line, percentOf: "other" }] });
