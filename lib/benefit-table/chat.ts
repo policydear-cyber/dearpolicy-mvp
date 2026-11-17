@@ -1779,6 +1779,10 @@ const NOT_SHARED_LIMIT = /\b(?:in\s+addition\s+to|irrespective\s+of|regardless\s
 /** The other policies as the sentence's subject, at its start: "All Kestrel policies on the same life ...", "In total, all
  * plans issued by the Company ...", "This policy and all other policies we have issued on the same life ...". */
 const SUBJECT_POLICIES = /^\s*(?:(?:[Ii]n\s+total|[Oo]verall|[Ii]n\s+aggregate),?\s+)?(?:(?:[Tt]his|[Tt]he)\s+(?:[Pp]olicy|[Pp]lan|[Cc]ertificate|[Cc]ontract)\s+(?:and|together\s+with)\s+)?(?:[Aa]ll|[Ee]very)\s+(?:other\s+)?(?:[A-Z][\w&'-]*\s+){0,3}(?:policies|plans|certificates|contracts|Policies|Plans|Certificates|Contracts)\b/;
+/** A limit on all the policies together, said after them. */
+const JOINT_LIMIT = /\b(?:(?:shall|will|must|does|do|is|are)\s+not\s+exceed|not\s+exceed(?:ing)?|no\s+more\s+than|not\s+more\s+than|limited\s+to|capped\s+at|in\s+total|together|combined|in\s+aggregate|aggregate)\b/i;
+/** Words that give each policy its own limit. */
+const OWN_LIMIT_WORDS = /\b(?:this\s+(?:policy|plan|one|certificate|contract)|separate(?:ly)?|independent(?:ly)?|each|own)\b/i;
 const LIMIT_WORDS = /\b(?:no\s+more\s+than|not\s+more\s+than|most|maximum|max\.|not\s+exceed|exceed|limit(?:ed|s)?|in\s+total|total|aggregate\w*|up\s+to|capped)\b/i;
 export const SHARED_POLICIES_WORDS = "the most the insurer pays for these claims under this and all its other policies on the same person together, not this policy's own cover";
 /** Whether a row's printed words say its limit is shared with the insurer's other policies on the same life (ACROSS_POLICIES). */
@@ -1788,7 +1792,8 @@ export function acrossPolicies(row: Pick<ChatRow, "source" | "figure">): boolean
   // Only the sentence of the row's own words that prints the row's own figure counts: another clause of the excerpt, the
   // row's name or its conditions about other policies say nothing about this figure (Critic on #523, NEW-HIGH).
   const text = row.source.excerpt.replace(/\s+/g, " ");
-  const sentences = text.split(/(?<=[.;])\s+(?=[A-Z("“])/);
+  // A ";" parts clauses whatever follows it ("... are separate; the most this policy pays is ...", Critic on #523, round 6).
+  const sentences = text.split(/(?<=\.)\s+(?=[A-Z("“])|;\s*/);
   // The row's figure is the sentence's only money figure: a sentence that also prints another sum ("benefit of S$500,000,
   // provided that the total under this and all other policies shall not exceed S$3,000,000") is not about one figure.
   // Order (Critic on #523, round 4): a limit word and the other-policies group both come before the figure, in its sentence
@@ -1800,12 +1805,19 @@ export function acrossPolicies(row: Pick<ChatRow, "source" | "figure">): boolean
     if (!figs.length || figs.some((f) => Math.abs(f.value - amount) >= 0.005)) return false;
     const pre = t.slice(0, Math.min(...figs.map((f) => f.index)));
     if (!LIMIT_WORDS.test(pre) || NOT_SHARED_LIMIT.test(pre)) return false;
-    if (SUBJECT_POLICIES.test(pre)) return true;
+    // Between the policies and the figure, nothing that gives each policy its own limit ("separate", "each", "this policy").
+    const apart = (between: string) => OWN_LIMIT_WORDS.test(between);
+    // The policies as the subject: only a limit on all of them together ("shall not exceed", "no more than", "limited to",
+    // "in total") counts (Critic on #523, round 6).
+    const subject = SUBJECT_POLICIES.exec(pre);
+    if (subject) { const between = pre.slice(subject[0].length); return JOINT_LIMIT.test(between) && !apart(between); }
     // Otherwise the limit word comes first too: "The most ... under this Policy and all Policies ...". A clause about other
     // policies that opens the sentence ("Even if you claim under any other policy we have issued, the most we pay is ...")
     // sets this policy apart from them (Critic on #523, round 5).
-    const group = [ACROSS_POLICIES.exec(pre), ALL_NAMED_POLICIES.exec(pre)].filter((m): m is RegExpExecArray => !!m).map((m) => m.index);
-    return group.length > 0 && LIMIT_WORDS.test(pre.slice(0, Math.min(...group)));
+    const group = [ACROSS_POLICIES.exec(pre), ALL_NAMED_POLICIES.exec(pre)].filter((m): m is RegExpExecArray => !!m);
+    if (!group.length) return false;
+    const first = group.reduce((a, b) => (b.index < a.index ? b : a));
+    return LIMIT_WORDS.test(pre.slice(0, first.index)) && !apart(pre.slice(first.index + first[0].length));
   });
 }
 
