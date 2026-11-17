@@ -12,11 +12,12 @@ export type HomeCardInput = { policyNames?: string[] | null; parts?: { name?: st
 
 /** Whether Home may show the card's amount: only when the cover rests on one line, so the figure is never a sum of
  * several schedules, policies or benefits. */
-export const homeCardShowsAmount = (c: { count?: number | null; parts?: unknown[] | null; policyNames?: string[] | null }) =>
-  Math.max(c.count ?? 0, c.parts?.length ?? 0, new Set((c.policyNames ?? []).map((n) => clean(n).toLowerCase()).filter(Boolean)).size) <= 1;
+export const homeCardShowsAmount = (c: { count?: number | null; parts?: unknown[] | null; policyNames?: string[] | null; reviewRequired?: boolean | null }) =>
+  // reviewRequired: the dashboard kept one of a policy's several lines for this cover (TE PR 519 A7), so the figure is a part.
+  c.reviewRequired !== true && Math.max(c.count ?? 0, c.parts?.length ?? 0, new Set((c.policyNames ?? []).map((n) => clean(n).toLowerCase()).filter(Boolean)).size) <= 1;
 
 /** What pays for this cover, in a few words: one policy's name, two names joined, or "N policies"; one policy with several
- * benefits for this cover says how many ("Group Term Life · 2 benefits"). Null when nothing is named and there is one line. */
+ * benefits for this cover says how many ("Group Term Life · 2 covers"). Null when nothing is named and there is one line. */
 export function homeCardSource(c: HomeCardInput): string | null {
   const seen = new Map<string, string>();
   for (const n of [...(c.policyNames ?? []), ...(c.parts ?? []).map((p) => p?.name ?? "")]) {
@@ -28,7 +29,7 @@ export function homeCardSource(c: HomeCardInput): string | null {
   }
   const names = [...seen.values()];
   const lines = Math.max(c.count ?? 0, c.parts?.length ?? 0);
-  if (names.length <= 1 && lines > 1) return names.length ? `${names[0]} \u00b7 ${lines} benefits` : `${lines} benefits`;
+  if (names.length <= 1 && lines > 1) return names.length ? `${names[0]} \u00b7 ${lines} covers` : `${lines} covers`;
   if (!names.length) return null;
   if (names.length === 1) return names[0];
   if (names.length === 2) return `${names[0]} + ${names[1]}`;

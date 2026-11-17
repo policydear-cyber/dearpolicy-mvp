@@ -25,13 +25,16 @@ test("several lines or policies: no total on Home (different schedules are never
   assert.equal(homeCardShowsAmount(two), false); assert.equal(homeCardSource(two), "Oakridge Term 80 + Oakridge Whole Life");
   // One plan paying two Death benefits (S$1,000,000 + S$5,000): no total either, and the card says how many.
   const onePlan = { policyNames: ["Group Term Life"], parts: [{ name: "Group Term Life" }, { name: "Group Term Life" }], count: 2 };
-  assert.equal(homeCardShowsAmount(onePlan), false); assert.equal(homeCardSource(onePlan), "Group Term Life \u00b7 2 benefits");
-  assert.equal(homeCardSource({ policyNames: [], count: 3 }), "3 benefits");
+  assert.equal(homeCardShowsAmount(onePlan), false); assert.equal(homeCardSource(onePlan), "Group Term Life \u00b7 2 covers");
+  assert.equal(homeCardSource({ policyNames: [], count: 3 }), "3 covers");
   // One line: its own confirmed amount is shown.
   assert.equal(homeCardShowsAmount({ count: 1 }), true);
   assert.equal(homeCardShowsAmount({ count: 1, policyNames: ["Term Life", "term  life"] }), true, "the same policy named twice is one");
   // Fails closed (Critic, e57bfdc): one line by count, but two policies named, never shows a figure that may be their sum.
   assert.equal(homeCardShowsAmount({ count: 1, policyNames: ["A Plan", "B Plan"] }), false);
+  // One policy, two confirmed Death lines (S$300,000 + a S$50,000 rider): the dashboard keeps the top line and flags the
+  // cover for review, so the card shows no amount (TE A7).
+  assert.equal(homeCardShowsAmount({ count: 1, policyNames: ["Kite Term 60"], reviewRequired: true }), false);
   assert.equal(homeCardShowsAmount({ count: 0 }), true, "a derived cover with no line has no amount to sum");
 });
 test("three or more: a count, never a list that overflows the card", () => {
@@ -40,7 +43,7 @@ test("three or more: a count, never a list that overflows the card", () => {
 test("nothing named, or only the dashboard's 'Policy' stand-in: no line, never an invented name", () => {
   assert.equal(homeCardSource({ policyNames: [] }), null);
   assert.equal(homeCardSource({ policyNames: null, parts: [{ name: "Policy" }] }), null);
-  assert.equal(homeCardSource({ policyNames: null, parts: [{ name: "Policy" }, { name: null }] }), "2 benefits", "unnamed, but how many is still said");
+  assert.equal(homeCardSource({ policyNames: null, parts: [{ name: "Policy" }, { name: null }] }), "2 covers", "unnamed, but how many is still said");
   assert.equal(homeCardSource({ policyNames: ["Owned policy"] }), null);
 });
 test("the source line never carries an amount: only names go in", () => {
@@ -68,6 +71,8 @@ test("the page shows the amount only when there is one, names the source, and se
   const css = readFileSync("app/globals.css", "utf8");
   // Columns follow the width the cards get, not the screen (Test engineer #519 F2): 2 until 3 or 4 fit card-sized.
   assert.match(css, /\.home-cards \{ container-type: inline-size; \}/);
+  // An amount with a period ("US$1,250,000 a year") wraps at its spaces, never spills out of the card (TE A6).
+  assert.doesNotMatch(css.slice(css.indexOf("Home cards are compact sheets"), css.indexOf("Gaps to consider (DC 17 Nov)")), /coverage-amount[^}]*nowrap/);
   assert.match(css, /@container \(min-width: 820px\) \{\s*\.home-cards \.coverage-grid\[data-cols="4"\] \{ grid-template-columns: repeat\(4,/);
   assert.match(css, /@container \(min-width: 600px\) \{\s*\.home-cards \.coverage-grid\[data-cols="3"\] \{ grid-template-columns: repeat\(3,/);
   assert.doesNotMatch(css.slice(css.indexOf("Home cards are compact sheets"), css.indexOf("Gaps to consider (DC 17 Nov)")), /overflow-wrap: anywhere/, "a cover name never breaks mid-word");
