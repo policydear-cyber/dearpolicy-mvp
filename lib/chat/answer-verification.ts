@@ -313,7 +313,7 @@ export async function attachProvenance(answer: ChatAnswer, accountId?: string, f
     const members = (await query<{ policy_id: string; member: string }>(`SELECT policy_id::text AS policy_id, family_member_id::text AS member FROM policy_members WHERE account_id=$1 AND policy_id::text=ANY($2::text[])`, [accountId, ids]).catch(() => ({ rows: [] }))).rows;
     const pages = (await query<{ policy_id: string; page_number: number; text: string }>(`SELECT policy_id::text AS policy_id, page_number, text FROM policy_pages WHERE account_id=$1 AND policy_id::text=ANY($2::text[])`, [accountId, ids]).catch(() => ({ rows: [] }))).rows;
     const people = (await query<{ id: string; display_name: string | null; preferred_name: string | null; relationship: string | null }>(`SELECT f.id::text AS id, f.display_name, f.preferred_name, f.relationship FROM family_members f WHERE f.account_id=$1 AND ${activePredicate("f")}`, [accountId]).catch(() => ({ rows: [] }))).rows;
-    // A person's names to find them by in an answer or on a card: the full name, and a preferred name only when it is a
+    // A person's names to find them by on a card (the owner a document prints): the full name, and a preferred name only when it is a
     // name of two words or more. A one-word preferred name ("Alex") also fits a stranger ("Alex Chen"); it never binds a
     // figure to anyone (same rule as lib/policies/linking.ts memberNames, #530).
     const namesOf = (p: { display_name: string | null; preferred_name: string | null }) => [p.display_name,
@@ -326,7 +326,9 @@ export async function attachProvenance(answer: ChatAnswer, accountId?: string, f
       for (const s of sentencesOf(h.text)) {
         if (!sentences.has(norm(s))) continue;
         const lower = " " + s.toLowerCase().replace(/['’]s\b/g, " ").replace(/[^\p{L}\p{N} ]+/gu, " ") + " ";
-        const named = people.filter((p) => who.has(p.id) && namesOf(p).some((n) => !!n && n.trim().length >= 3 && lower.includes(" " + n.toLowerCase().trim() + " ")));
+        // Our own answer names people by their preferred name (calledName), so here a one-word one counts; only the
+        // document's own people (who) are looked at.
+        const named = people.filter((p) => who.has(p.id) && [p.display_name, p.preferred_name].some((n) => !!n && n.trim().length >= 3 && lower.includes(" " + n.toLowerCase().trim() + " ")));
         const subjectId = h.subjectId ?? named[0]?.id ?? doc.owner;
         for (const f of moneyFiguresIn(s)) for (let p = from; p <= to; p++) {
           const pageText = pages.find((x) => x.policy_id === h.policyId && x.page_number === p)?.text;
