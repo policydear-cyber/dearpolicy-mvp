@@ -1752,6 +1752,22 @@ function dailyRateRule(row: ChatRow, household: Household): StayRule | null {
   return readStayRule(page.text, found.offset, found.excerpt, row.figure.amount, household.members.map((m) => m.name), documentOwnWords(household.documents[found.docIndex]));
 }
 
+/** Words that make a limit one shared by the insurer's other policies on the same life, not one policy's own: "this Policy
+ * and all Policies We have issued", "all policies issued covering the same Life Assured", "across all policies", "combined
+ * with any other policy". Closed list; anything else is read as the policy's own limit, as before. */
+const ACROSS_POLICIES = new RegExp([
+  String.raw`\b(?:this|the)\s+(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:and|or|together\s+with)\s+(?:all|any|every)\s+(?:other\s+)?(?:polic(?:y|ies)|plans?|certificates?|contracts?)\b`,
+  String.raw`\b(?:all|any|every)\s+(?:other\s+)?(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:(?:that|which)\s+)?(?:we|the\s+(?:company|insurer))\s+(?:have\s+|has\s+)?issued\b`,
+  String.raw`\b(?:all|any|every)\s+(?:other\s+)?(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:issued\s+)?(?:covering|on|for|in\s+respect\s+of)\s+the\s+same\s+(?:life|person|insured)`,
+  String.raw`\bacross\s+(?:all|any|every)\s+(?:(?:of\s+)?(?:our|the\s+insurer'?s|its)\s+)?(?:polic(?:y|ies)|plans?)\b`,
+  String.raw`\b(?:combined|together)\s+with\s+(?:all|any|every)\s+(?:other\s+)?(?:polic(?:y|ies)|plans?)\b`,
+].join("|"), "i");
+export const SHARED_POLICIES_WORDS = "the most the insurer pays for these claims under this and all its other policies on the same person together, not this policy's own cover";
+/** Whether a row's printed words say its limit is shared with the insurer's other policies on the same life (ACROSS_POLICIES). */
+export function acrossPolicies(row: Pick<ChatRow, "source" | "conditions" | "benefit">): boolean {
+  return ACROSS_POLICIES.test([row.source.excerpt, row.benefit, ...row.conditions].join("\n").replace(/\s+/g, " "));
+}
+
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is
  * a projection. The model's own sentence is not used for an amount, so a figure is never labelled as another benefit. */
 export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (row: ChatRow) => string): string {
@@ -1769,7 +1785,12 @@ export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (ro
   // A table's row letter or number ("J, ", "D. ") is the document's layout, not the benefit's name.
   // A figure its quote prints "per child (up to 2 children)" is that, never a sum for the family (release-set H10).
   const per = f.kind === "printed" && f.unit !== "per_day" && f.unit !== "per_period" ? perUnit(row.source.excerpt, f.amount) : null;
-  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, ${qualifierText(row.qualifier)} only` : ""}${how ? `: ${how}` : ""}${per ? `${how ? "," : ":"} ${per}` : ""}.`;
+  // A limit its words say is shared with the insurer's other policies on the same life ("under this Policy and all Policies We
+  // have issued covering the same Life Assured shall not exceed S$1,050,000") is never this policy's own cover: its card says
+  // so, in place of "up to this limit" (launch checklist C2, release-candidate run 17 Nov).
+  const shared = f.kind === "printed" && f.unit !== "per_day" && f.unit !== "per_period" && acrossPolicies(row);
+  const said = shared ? SHARED_POLICIES_WORDS : how;
+  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, ${qualifierText(row.qualifier)} only` : ""}${said ? `: ${said}` : ""}${per && !shared ? `${said ? "," : ":"} ${per}` : ""}.`;
 }
 
 /** A row whose printed figure is paid per child ("S$5,000 per child (up to 2 children)"). */
