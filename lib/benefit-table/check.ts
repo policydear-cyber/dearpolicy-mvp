@@ -1751,6 +1751,17 @@ function unescaped(v: unknown): unknown {
  * cover's own printed line is its row (below). `notesKind`: the kind of the document a part's reading is merged into
  * (checkStored), so a later part stored with its own kind ("other", none) still works out the document's notes, which
  * mergeReadings intersects (#474 perf gate, P474-H1). */
+/** Words that make a figure the most cover a plan offers: "be insured up to (a maximum coverage of)", "insured for up to",
+ * "maximum coverage/cover/sum insured (of)", "sum insured/assured/coverage amount of up to", "choose/apply for (cover of) up
+ * to", straight before the figure in its own clause. A limit on a claim ("Ambulance cost up to S$500", "coverage up to
+ * S$350,000 against 37 critical illnesses") names no such words and is kept. */
+const OFFER_LEAD = /(?:\b(?:be|get|stay|are|is)\s+(?:insured|covered)\s+(?:for\s+)?up\s+to\b|\binsured\s+for\s+up\s+to\b|\bmaximum\s+(?:coverage|cover|sum\s+(?:insured|assured)|insured\s+amount)\b|\b(?:sum\s+(?:insured|assured)|coverage\s+amounts?|cover\s+amounts?)\s+(?:of\s+)?up\s+to\b|\b(?:choose|select|apply\s+for|buy|purchase)\b[^.;,]{0,30}\bup\s+to\b)[^.;\d]{0,40}$/i;
+function offerFigure(line: string, value: number): boolean {
+  const text = plainText(line);
+  const spans = anyMoneyFigures(text).filter((f) => Math.abs(f.value - value) < 0.005);
+  return spans.length > 0 && spans.every((f) => OFFER_LEAD.test(text.slice(Math.max(0, text.lastIndexOf("\n", f.index) + 1), f.index).replace(/(?:S\$|US\$|SGD|RM|MYR|\$|£|€)\s?$/i, "")));
+}
+
 export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: boolean; notesKind?: CheckedReading["kind"] } = {}): CheckedReading {
   const r = (unescaped(raw) ?? {}) as Partial<Reading>;
   const d = (r.document ?? {}) as Partial<Reading["document"]>;
@@ -2165,6 +2176,12 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // projection is not this benefit's: the row stays, paid as its words say, with no figure (lib/documents/own-figure).
     const valueWhy = OWN_FIGURE_CHECKS.on && value != null && pays !== "percent" ? amountOnlyInContext(source.excerpt, value, { title: pageText(source.page) }) : null;
     if (valueWhy) { out.dropped.push({ what: label, why: `figure ${value} is printed only as ${figureContextWords(valueWhy)}; kept the row without it` }); pays = "words"; value = null; }
+    // The most cover a plan offers, on a document that names no one's own cover ("Be insured up to a maximum coverage of
+    // S$1,000,000 at S$1.37 per day"): the most anyone may buy, not what this person holds or a limit on a claim. The row
+    // is no benefit and is left out; the person's own sum is on their certificate or schedule (live 17 Nov).
+    if (value != null && out.kind !== "personal_proof" && offerFigure(ownRow.text ?? source.excerpt, value)) {
+      out.dropped.push({ what: label, why: `figure ${value} is the most cover the plan offers, not anyone's own cover` }); continue;
+    }
     // A row read from a premium-waiver rider's own cover line that prints the figure the rider waives: that figure is a
     // premium, never an amount paid out, so the row stays with no figure. Only that line: a benefit that describes a waiver in its own words ("Waiver
     // of Premium Benefit up to S$5,000 of future premiums") keeps them.

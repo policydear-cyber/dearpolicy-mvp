@@ -44,6 +44,10 @@ function fakeDb(opts: { tables?: boolean } = {}) {
       if (!old || old.account_id === p[1]) s.readings.set(p[0] as string, { account_id: p[1] as string, reading: p[2] as string, model: p[3] as string, prompt_version: p[4] as string });
       return [];
     }
+    if (q.startsWith("SELECT reading FROM benefit_readings WHERE policy_id=$1 AND account_id=$2")) {
+      const r = s.readings.get(p[0] as string);
+      return r && r.account_id === p[1] ? [{ reading: r.reading }] : [];
+    }
     if (q.startsWith("SELECT policy_id, reading FROM benefit_readings"))
       return [...s.readings].filter(([, r]) => r.account_id === p[0]).map(([policy_id, r]) => ({ policy_id, reading: r.reading }));
     if (q.startsWith("SELECT section_key, cover_key, why, chosen_by FROM benefit_links")) return [...s.links.values()].filter((l) => l.account_id === p[0]);
@@ -157,6 +161,59 @@ async function main() {
     assert.doesNotMatch(m.calls[1].user, /Ambulance/);
     const { table } = await tableFor(f.db, A);
     assert.ok(table.unlinkedSections.some((u) => u.section.key === accident));
+  });
+  // Live 17 Nov: a Read again of a long summary read every line of a page but its hospital cash line, and a page's limit
+  // line, and both figures left the table for both people. Synthetic pages, the same shapes.
+  const keepPages = (f: ReturnType<typeof household>) => {
+    f.s.pages.push({ policy_id: "summary", account_id: A, page_number: 5, text: "1. Group Term Life\n•\tDeath\t100% of Sum Insured\n•\tDaily Hospital Cash Benefit\tS$30 per day from the 11\tday onwards.\nMax: 30 days of continuous hospitalisation" },
+      { policy_id: "summary", account_id: A, page_number: 13, text: "2. Group Personal Accident\nSimple Fracture\nHip\t75%\nArm, Elbow, Wrist or Ribs\t25%\nSimple Fracture Benefit Limit: S$5,000\nAmbulance Cost\tUp to S$500" });
+    f.s.policies.push({ id: "summary", account_id: A, original_filename: "Summary.pdf", processing_status: "ready", lifecycle_state: "active", superseded_at: null });
+  };
+  // The summary's pages have few rows for their figures, so a page may be read again on its own: it reads nothing new here.
+  const readSummary = (a: (() => unknown)[]) => scriptedModel([...a, ...Array.from({ length: 4 }, () => () => doc("product_summary", [], []))]);
+  const death = benefit({ section: "1. Group Term Life", benefit: "Death", pays: "percent", value: 100, percentOf: "sum_insured", quote: "Death\t100% of Sum Insured", page: 5 });
+  const cash = benefit({ section: "Group Term Life", benefit: "Daily Hospital Cash Benefit", pays: "per_day", value: 30, fromDay: 11, maxDays: 30, quote: "Daily Hospital Cash Benefit\tS$30 per day from the 11\tday onwards.", page: 5 });
+  const limit = benefit({ section: "Group Personal Accident", benefit: "Simple Fracture Benefit Limit", pays: "up_to", value: 5000, quote: "Simple Fracture Benefit Limit: S$5,000", page: 13 });
+  const ambulance = benefit({ section: "Group Personal Accident", benefit: "Ambulance Cost", pays: "up_to", value: 500, quote: "Ambulance Cost\tUp to S$500", page: 13 });
+  const rowsOf = (f: ReturnType<typeof household>) => { const r = JSON.parse(f.s.readings.get("summary")!.reading) as { document: { benefits: { benefit: string }[] }; pages: { json: { benefits: { benefit: string; value: unknown }[] } }[] };
+    return [...r.document.benefits, ...r.pages.flatMap((p) => p.json.benefits)]; };
+  await test("a re-read never loses a row the earlier reading had and still prints (live 17 Nov: S$30 a day, S$5,000 limit)", async () => {
+    const f = household(); keepPages(f);
+    await readDocument(f.db, readSummary([() => doc("product_summary", [], [death, cash, limit, ambulance])]).model, A, "summary");
+    // The new reading leaves out the hospital cash and the limit lines, and names its sections afresh.
+    const r = await readDocument(f.db, readSummary([() => doc("product_summary", [], [death, { ...ambulance, section: "2. Group Personal Accident" }])]).model, A, "summary");
+    const names = rowsOf(f).map((b) => b.benefit).sort();
+    assert.deepEqual(names, ["Ambulance Cost", "Daily Hospital Cash Benefit", "Death", "Simple Fracture Benefit Limit"]);
+    assert.equal((r as { keptEarlier?: number }).keptEarlier, 2);
+  });
+  await test("a row the new reading reads again, renamed or corrected, is the new reading's: never two rows for one line", async () => {
+    const f = household(); keepPages(f);
+    await readDocument(f.db, readSummary([() => doc("product_summary", [], [death, cash, ambulance])]).model, A, "summary");
+    // Renamed: the same line, a new name.
+    await readDocument(f.db, readSummary([() => doc("product_summary", [], [death, { ...cash, benefit: "Hospital cash" }, ambulance])]).model, A, "summary");
+    assert.deepEqual(rowsOf(f).map((b) => b.benefit).sort(), ["Ambulance Cost", "Death", "Hospital cash"]);
+    // A quote of part of the line, or of the line and the next, is the same line read again.
+    await readDocument(f.db, readSummary([() => doc("product_summary", [], [death, { ...cash, quote: "Daily Hospital Cash Benefit\tS$30 per day from the 11\tday onwards.\nMax: 30 days of continuous hospitalisation" }, ambulance])]).model, A, "summary");
+    assert.equal(rowsOf(f).filter((b) => /hospital cash/i.test(b.benefit)).length, 1);
+  });
+  await test("an earlier row that no longer checks against today's pages is not kept", async () => {
+    const f = household(); keepPages(f);
+    await readDocument(f.db, readSummary([() => doc("product_summary", [], [death, cash, ambulance])]).model, A, "summary");
+    // The page now prints another figure (a replaced document's pages): the earlier S$30 row is not printed any more.
+    f.s.pages.find((p) => p.policy_id === "summary" && p.page_number === 5)!.text = "1. Group Term Life\n•\tDeath\t100% of Sum Insured\n•\tDaily Hospital Cash Benefit\tS$40 per day from the 11\tday onwards.";
+    await readDocument(f.db, readSummary([() => doc("product_summary", [], [death, ambulance])]).model, A, "summary");
+    assert.deepEqual(rowsOf(f).map((b) => b.benefit).sort(), ["Ambulance Cost", "Death"]);
+    // A figure the earlier reading misread (not printed in its quote) is never kept either.
+    const g = household(); keepPages(g);
+    await readDocument(g.db, readSummary([() => doc("product_summary", [], [death, { ...cash, value: 300 }, ambulance])]).model, A, "summary");
+    await readDocument(g.db, readSummary([() => doc("product_summary", [], [death, ambulance])]).model, A, "summary");
+    assert.ok(!rowsOf(g).some((b) => /hospital cash/i.test(b.benefit)));
+  });
+  await test("the first reading of a document keeps nothing extra, and another household's reading is never used", async () => {
+    const f = household(); keepPages(f);
+    f.s.readings.set("summary", { account_id: B, reading: JSON.stringify({ document: doc("product_summary", [], [cash]), pages: [] }), model: "m", prompt_version: "v" });
+    const r = await readDocument(f.db, readSummary([() => doc("product_summary", [], [death])]).model, A, "summary");
+    assert.equal((r as { keptEarlier?: number }).keptEarlier, undefined);
   });
   await test("a read that does not finish stores nothing and keeps the earlier reading", async () => {
     const f = household();
