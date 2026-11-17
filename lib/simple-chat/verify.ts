@@ -33,6 +33,7 @@ import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
+import { COVER_NOTE } from "@/lib/chat/cover-note";
 
 export const LEFT_OUT_AMOUNT = "I left out an amount I couldn’t find printed in your documents.";
 export const LEFT_OUT_FACT = "I left out a point I couldn’t find in your documents.";
@@ -3576,7 +3577,6 @@ const andList = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -
  * added, or null. */
 /** The note as noteCoverNotCounted writes it, for any person and documents: a bottom line the model wrote may repeat an
  * earlier turn's note (the history it is sent carries it), which is taken out before this turn's note is said (TE #402). */
-const COVER_NOTE = /\s*(?:This may not be all of [^:.]{1,200}?(?:’|')s cover: [\s\S]*?, so any cover in (?:it|them) is not counted here and the amounts shown are not a total\.|The cover shown from [^.]{1,300}? may be incomplete \([^)]{1,200}\), so the amounts shown may not be a total\.)/g;
 export function noteCoverNotCounted(answer: StructuredAnswer, household: Household, tableStates: ReadonlyMap<string, string> | null = null, charged: ReadonlySet<string> = new Set()): string | null {
   // An earlier note the model repeated is never kept: this turn's note (or none) is the one that holds now.
   const repeated = (answer.bottomLine ?? answer.summary ?? "");
