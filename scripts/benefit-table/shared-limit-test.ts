@@ -82,7 +82,7 @@ test("acrossPolicies: only the sentence printing the row's own figure, as a shar
   const row = (x: string, amount = Number(/S\$([\d,]+)/.exec(x)![1].replace(/,/g, ""))) =>
     ({ source: { excerpt: x } as never, figure: { kind: "printed", amount, currency: "SGD", unit: "up_to", period: null } as never });
   for (const yes of [SHARED, "Limit across all policies: S$2,000,000", "the total under this plan and any other plan covering the same life is limited to S$500,000",
-    "The most we pay for all policies issued on the same life assured, in total, is S$1,000,000.", "combined with any other policy, up to S$800,000",
+    "The most we pay under all policies issued on the same life assured, in total, is S$1,000,000.",
     "The total payable under all policies issued by the Company on the life of the Life Assured shall not exceed S$1,050,000.",
     "The maximum under all policies with us is S$1,050,000.", "The most payable under all Kestrel policies on the life of the Life Assured is S$1,050,000.",
     "The aggregate limit under all policies issued by us is S$1,050,000.", "Maximum S$1,050,000 per Life Assured for all plans in force with the Company."]) assert.ok(acrossPolicies(row(yes)), yes);
@@ -94,7 +94,12 @@ test("acrossPolicies: only the sentence printing the row's own figure, as a shar
     "We will pay a lump sum of S$300,000 under this policy. The most under this policy and all other policies we have issued on the same life shall not exceed S$3,000,000.",
     // A policy's own limit, in words close to the shared ones (Critic on #523, round 2).
     "The maximum payable for any claim under this policy issued by the Company is S$100,000.", "The maximum for any claim under this policy on the life of the Life Assured is S$200,000.",
-    "The most we pay for any benefit under this plan with us is S$150,000 in total.", "The maximum payable under any policy we have issued for this benefit is S$90,000."])
+    "The most we pay for any benefit under this plan with us is S$150,000 in total.", "The maximum payable under any policy we have issued for this benefit is S$90,000.",
+    // Wording that keeps the policy's own limit apart from other policies (Critic on #523, round 3).
+    "This benefit of up to S$100,000 is payable in addition to any other policy we have issued.", "We will pay up to S$100,000 irrespective of all other policies with us.",
+    "The maximum benefit is S$100,000, regardless of any other policy issued by the Company on the life of the Life Assured.",
+    "The most we pay under this policy is S$100,000; any other policy we have issued may also pay.", "The total payable is S$100,000, separate from all other plans with the Company.",
+    "Up to S$100,000 in total, combined with any other policy."])
     assert.ok(!acrossPolicies(row(no)), no);
   // One sentence printing the own sum and the shared cap: the own sum is never labelled (Critic on #523, round 2).
   for (const t of ["Total Permanent Disability benefit of S$500,000, provided that the total payable under this policy and all other policies issued by us on the same life shall not exceed S$3,000,000.",

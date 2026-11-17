@@ -1758,20 +1758,23 @@ function dailyRateRule(row: ChatRow, household: Household): StayRule | null {
 /** Other policies of the insurer, as a group: "all (other) policies", "every (other) policy", "any other policy". A lone
  * "any policy" or "this policy" is the policy itself (Critic on #523, round 2). */
 const OTHER_POLICIES = String.raw`(?:all\s+(?:other\s+)?(?:policies|plans|certificates|contracts)|every\s+(?:other\s+)?(?:policy|plan|certificate|contract)|any\s+other\s+(?:polic(?:y|ies)|plans?|certificates?|contracts?))`;
+/** The word before the group that puts the figure under the other policies too: "under / for / across / in respect of all
+ * policies ...". Any other link ("in addition to", "regardless of", "separate from") keeps the limit the policy's own
+ * (Critic on #523, round 3). */
+const UNDER = String.raw`(?:under|for|across|in\s+respect\s+of|from)\s+`;
 const ACROSS_POLICIES = new RegExp([
   String.raw`\b(?:this|the)\s+(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:and|or|together\s+with)\s+${OTHER_POLICIES}\b`,
-  String.raw`\b${OTHER_POLICIES}\s+(?:(?:that|which)\s+)?(?:we|the\s+(?:company|insurer))\s+(?:have\s+|has\s+)?issued\b`,
-  String.raw`\b${OTHER_POLICIES}\s+(?:in\s+force\s+)?(?:issued\s+)?(?:(?:by|with)\s+(?:us|the\s+(?:company|insurer))\s+)?(?:covering|on|for|in\s+respect\s+of)\s+the\s+(?:same\s+(?:life|person|insured)|life\s+of)`,
-  String.raw`\b${OTHER_POLICIES}\s+(?:in\s+force\s+)?(?:issued\s+by|with)\s+(?:us|the\s+(?:company|insurer))\b`,
+  String.raw`\b${UNDER}${OTHER_POLICIES}\s+(?:(?:that|which)\s+)?(?:we|the\s+(?:company|insurer))\s+(?:have\s+|has\s+)?issued\b`,
+  String.raw`\b${UNDER}${OTHER_POLICIES}\s+(?:in\s+force\s+)?(?:issued\s+)?(?:(?:by|with)\s+(?:us|the\s+(?:company|insurer))\s+)?(?:covering|on|for|in\s+respect\s+of)\s+the\s+(?:same\s+(?:life|person|insured)|life\s+of)`,
+  String.raw`\b${UNDER}${OTHER_POLICIES}\s+(?:in\s+force\s+)?(?:issued\s+by|with)\s+(?:us|the\s+(?:company|insurer))\b`,
   String.raw`\bacross\s+(?:all|every|any\s+other)\s+(?:(?:of\s+)?(?:our|the\s+insurer'?s|its)\s+)?(?:polic(?:y|ies)|plans?)\b`,
-  String.raw`\b(?:combined|together)\s+with\s+${OTHER_POLICIES}\b`,
 ].join("|"), "i");
 /** "all Kestrel policies ...": an insurer's or brand's name between "all" and "policies", in capitals as printed. */
-const ALL_NAMED_POLICIES = /\b(?:[Aa]ll|[Ee]very)\s+(?:[Oo]ther\s+)?(?:[A-Z][\w&'-]*\s+){1,3}(?:[Pp]olicies|[Pp]lans|[Cc]ertificates|[Cc]ontracts)\s+(?:in\s+force\s+)?(?:(?:issued\s+by|with)\s+(?:us|the\s+(?:[Cc]ompany|[Ii]nsurer))|(?:issued\s+)?on\s+the\s+(?:life\s+of|same\s+life))\b/;
+const ALL_NAMED_POLICIES = /\b(?:[Uu]nder|[Ff]or|[Aa]cross|[Ii]n\s+respect\s+of)\s+(?:[Aa]ll|[Ee]very)\s+(?:[Oo]ther\s+)?(?:[A-Z][\w&'-]*\s+){1,3}(?:[Pp]olicies|[Pp]lans|[Cc]ertificates|[Cc]ontracts)\s+(?:in\s+force\s+)?(?:(?:issued\s+by|with)\s+(?:us|the\s+(?:[Cc]ompany|[Ii]nsurer))|(?:issued\s+)?on\s+the\s+(?:life\s+of|same\s+life))\b/;
 /** Words that make a sentence about other policies something other than a shared limit: an exclusion, an offset or a
  * condition ("No benefit is payable if a claim has been paid under any other policy", "less any amount paid under any other
  * policy", "not combined with any other policy"). */
-const NOT_SHARED_LIMIT = /\b(?:no\s+benefits?|not\s+(?:be\s+)?(?:payable|paid|combined)|less\s+(?:any|the)|minus|deduct\w*|reduced\s+by|offset|if\s+(?:a|any)\s+claim\s+(?:has\s+been|is|was)\s+(?:paid|made|admitted))\b/i;
+const NOT_SHARED_LIMIT = /\b(?:in\s+addition\s+to|irrespective\s+of|regardless\s+of|separate(?:ly)?\s+from|independent(?:ly)?\s+of|apart\s+from|may\s+also\s+pay|no\s+benefits?|not\s+(?:be\s+)?(?:payable|paid|combined)|less\s+(?:any|the)|minus|deduct\w*|reduced\s+by|offset|if\s+(?:a|any)\s+claim\s+(?:has\s+been|is|was)\s+(?:paid|made|admitted))\b/i;
 /** Words that make a sentence a limit on what is paid. */
 const LIMIT_WORDS = /\b(?:most|maximum|max\.|not\s+exceed|exceed|limit(?:ed|s)?|in\s+total|total|aggregate\w*|up\s+to|capped)\b/i;
 export const SHARED_POLICIES_WORDS = "the most the insurer pays for these claims under this and all its other policies on the same person together, not this policy's own cover";
