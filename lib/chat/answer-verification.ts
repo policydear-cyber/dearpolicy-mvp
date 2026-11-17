@@ -32,6 +32,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { nameAccountsForMember } from "@/lib/policies/linking";
 import type { BoundFigure, CalculationRecord, CalcOperand, ChatAnswer, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { recomputeCalculation } from "@/lib/claims/calc-record";
 import { dayEdgeExceptionsFromWording, dayRuleFromWording, distinctDayEdges } from "@/lib/claims/day-count";
@@ -313,11 +314,23 @@ export async function attachProvenance(answer: ChatAnswer, accountId?: string, f
     const members = (await query<{ policy_id: string; member: string }>(`SELECT policy_id::text AS policy_id, family_member_id::text AS member FROM policy_members WHERE account_id=$1 AND policy_id::text=ANY($2::text[])`, [accountId, ids]).catch(() => ({ rows: [] }))).rows;
     const pages = (await query<{ policy_id: string; page_number: number; text: string }>(`SELECT policy_id::text AS policy_id, page_number, text FROM policy_pages WHERE account_id=$1 AND policy_id::text=ANY($2::text[])`, [accountId, ids]).catch(() => ({ rows: [] }))).rows;
     const people = (await query<{ id: string; display_name: string | null; preferred_name: string | null; relationship: string | null }>(`SELECT f.id::text AS id, f.display_name, f.preferred_name, f.relationship FROM family_members f WHERE f.account_id=$1 AND ${activePredicate("f")}`, [accountId]).catch(() => ({ rows: [] }))).rows;
-    // A person's names to find them by on a card (the owner a document prints): the full name, and a preferred name only when it is a
-    // name of two words or more. A one-word preferred name ("Alex") also fits a stranger ("Alex Chen"); it never binds a
-    // figure to anyone (same rule as lib/policies/linking.ts memberNames, #530).
-    const namesOf = (p: { display_name: string | null; preferred_name: string | null }) => [p.display_name,
-      (p.preferred_name ?? "").trim().split(/\s+/).filter(Boolean).length >= 2 ? p.preferred_name : null];
+    // Names on a card or in our answer find a person among the document's own people only (who), and never through a word
+    // of a stranger's longer name: "Alex" in "Alex Chen" is not Alex Tan (#530, where the preferred name became required).
+    const wordsOf = (p: { display_name: string | null; preferred_name: string | null }) =>
+      new Set(`${p.display_name ?? ""} ${p.preferred_name ?? ""}`.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+    /** "Alex" inside "Alex Chen's death benefit": a capitalised word straight after the name that is none of this person's
+     * names makes it someone else's longer name, so it never names them (TE on #530). */
+    const insideLongerName = (sentence: string, name: string, p: { display_name: string | null; preferred_name: string | null }) => {
+      const mine = wordsOf(p), esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // Only the word straight after counts ("Alex Chen"): after a possessive ("Alex's Hospital Cash") it is the benefit.
+      for (const m of sentence.matchAll(new RegExp(`(?<![\\p{L}])${esc}(?![\\p{L}])(['’]s\\b)?[ \\t]*(\\p{L}+)?`, "giu"))) {
+        const after = m[1] ? undefined : m[2];
+        if (!(after && /^\p{Lu}/u.test(after) && !mine.has(after.toLowerCase()))) return false;
+      }
+      return true;
+    };
+    /** A card's owner words, besides this person's own, that say nothing about who it is. */
+    const TITLE_WORDS = new Set(["mr", "mrs", "ms", "miss", "mdm", "madam", "dr", "the", "insured", "life", "assured", "policyholder", "policy", "holder", "person", "main", "covered"]);
     const classOfPerson = (id: string) => { const r = people.find((p) => p.id === id)?.relationship ?? ""; return classOf(r) ?? (/^self$/i.test(r) ? "self" : null); };
     for (const h of live) {
       const doc = docs.get(h.policyId); if (!doc) continue;
@@ -328,7 +341,8 @@ export async function attachProvenance(answer: ChatAnswer, accountId?: string, f
         const lower = " " + s.toLowerCase().replace(/['’]s\b/g, " ").replace(/[^\p{L}\p{N} ]+/gu, " ") + " ";
         // Our own answer names people by their preferred name (calledName), so here a one-word one counts; only the
         // document's own people (who) are looked at.
-        const named = people.filter((p) => who.has(p.id) && [p.display_name, p.preferred_name].some((n) => !!n && n.trim().length >= 3 && lower.includes(" " + n.toLowerCase().trim() + " ")));
+        const named = people.filter((p) => who.has(p.id) && [p.display_name, p.preferred_name].some((n) => !!n && n.trim().length >= 3 && lower.includes(" " + n.toLowerCase().trim() + " ")
+          && !insideLongerName(s, n.trim(), p)));
         const subjectId = h.subjectId ?? named[0]?.id ?? doc.owner;
         for (const f of moneyFiguresIn(s)) for (let p = from; p <= to; p++) {
           const pageText = pages.find((x) => x.policy_id === h.policyId && x.page_number === p)?.text;
@@ -354,9 +368,11 @@ export async function attachProvenance(answer: ChatAnswer, accountId?: string, f
       const tokens = (n: string | null) => (n ?? "").toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 2);
       const own = new Set(tokens(owner));
       const subjectId = !owner ? doc.owner
-        : people.find((p) => who.has(p.id) && namesOf(p).some((n) => !!n && n.trim().toLowerCase() === owner))?.id
+        : people.find((p) => who.has(p.id) && [p.display_name, p.preferred_name].some((n) => !!n && n.trim().toLowerCase() === owner))?.id
         ?? people.find((p) => who.has(p.id) && [p.display_name].some((n) => { const t = tokens(n); return t.length > 0 && t.every((w) => own.has(w)); }))?.id
-        ?? (who.size === 1 ? doc.owner : undefined);
+        ?? people.find((p) => who.has(p.id) && nameAccountsForMember(owner, { id: p.id, display_name: p.display_name ?? "", preferred_name: p.preferred_name }))?.id
+        // One person on the document: theirs, unless the owner it prints has a word that is none of theirs ("Alex Chen").
+        ?? (who.size === 1 && [...own].every((w) => TITLE_WORDS.has(w) || people.some((p) => p.id === doc.owner && wordsOf(p).has(w))) ? doc.owner : undefined);
       if (!subjectId) continue;
       for (let p = c.citation.pageStart!; p <= Math.max(c.citation.pageStart!, c.citation.pageEnd ?? 0); p++) {
         const pageText = pages.find((x) => x.policy_id === doc.id && x.page_number === p)?.text;

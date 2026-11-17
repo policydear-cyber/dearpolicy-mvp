@@ -89,6 +89,17 @@ async function partA() {
     assert.equal(findFamilyMatch("Tan Wei Jie", wj), null, "preferred names' words never pick a person for a stranger");
     assert.equal(findFamilyMatch("Chen Tan Ming", [{ id: "t", display_name: "Ah Kow", preferred_name: "Tan" }]), null);
     assert.equal(findFamilyMatch("Wei Jie", wj)?.id, "1", "an exact two-word preferred name still counts");
+    // Main's right matches kept: a printed name made only of the person's own words, with the preferred name standing in
+    // for a word of the full name, joiners (binte) left out, or initials.
+    assert.equal(findFamilyMatch("Alex Tan", [{ id: "x", display_name: "Alexander Tan", preferred_name: "Alex" }])?.id, "x");
+    assert.equal(findFamilyMatch("Nurul Aisyah Ahmad", [{ id: "n", display_name: "Nurul Aisyah binte Ahmad", preferred_name: "Aisyah" }])?.id, "n");
+    assert.equal(findFamilyMatch("Kevin Tan W J", [{ id: "k", display_name: "Tan Wei Jie", preferred_name: "Kevin Tan" }])?.id, "k");
+    // ...and no stranger: a word that is none of theirs, or a word of theirs left out with nothing standing in for it.
+    assert.equal(findFamilyMatch("Mary Tan Ah Moi", [{ id: "m", display_name: "Tan Siew Lan", preferred_name: "Mary Tan" }]), null);
+    assert.equal(findFamilyMatch("Tan Wei", [{ id: "w", display_name: "Tan Wei Jie", preferred_name: "Kevin Tan" }]), null);
+    assert.equal(findFamilyMatch("Alex Chen", [{ id: "x", display_name: "Alexander Tan", preferred_name: "Alex" }]), null);
+    assert.equal(findFamilyMatch("Alex", [{ id: "x", display_name: "Alexander Tan", preferred_name: "Alex" }]), null);
+    assert.equal(findFamilyMatch("Alex Tan", [{ id: "x", display_name: "Alexander Tan", preferred_name: "Alex" }, { id: "y", display_name: "Alex Tan" }])?.id, "y", "an exact full name beats a stand-in");
     assert.equal(findFamilyMatch("Alice Wong", fam), null);
     assert.equal(findFamilyMatch("Tan", fam), null, "a profile needs ALL its words printed");
     const twins = [{ id: "1", display_name: "Josephine" }, { id: "2", display_name: "Josephine Lee" }];
