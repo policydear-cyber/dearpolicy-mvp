@@ -41,6 +41,8 @@ export type PdfPage = {
   partChecked?: boolean;
   /** The one currency the page image prints when its text layer prints none: read in memory at intake only (lib/documents/image-currency). */
   imageCurrency?: string;
+  /** Every currency the page's image reading names (lib/documents/household-currency): read in memory at intake only. */
+  imageCurrencies?: string[];
   /** What kind of difference the two readings had (counts, shapes and positions of the figures, never a figure or a
    * word): kept for the processing history only. */
   checkLog?: string;

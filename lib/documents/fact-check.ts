@@ -10,6 +10,7 @@
  * the verbatim page they cite. Pure functions; no I/O.
  */
 import { moneyShapedFigure } from "@/lib/documents/image-currency";
+import { HOUSEHOLD_CURRENCY_NOTE } from "@/lib/documents/household-currency";
 import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, namePrinted as nameWordsOnLine, personOnlyInExample, specimenHeading, specimenPage } from "@/lib/documents/own-figure";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
@@ -18,7 +19,7 @@ import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
 import { NOT_CHECKED } from "@/lib/documents/layout-check";
 import { amountAppears, documentDateFrom, locatePassage, looksLikeInjectedInstruction, nameAppears, parsePrintedDate, printedDateMatches, printedDates } from "@/lib/documents/evidence";
 
-type Page = { pageNumber: number; text: string; imageCurrency?: string };
+type Page = { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[] };
 const norm = (value: string) => String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 const nameKey = (value: string) => norm(value).replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -313,7 +314,9 @@ export type FactCheckResult = { extraction: PolicyExtraction; dropped: string[] 
 
 /** Re-finds every fact of a policy extraction in the document's pages.
  * `roleFromReader`: the role was the reader's choice (no wording rule decided it), so it must be plausible. */
-export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: { roleFromReader?: boolean; documentTitle?: string | null } = {}): FactCheckResult {
+/** `householdCurrency`: the pages whose bare figures may be read in the household's own currency
+ * (lib/documents/household-currency householdCurrencyPages, decided on the whole document). */
+export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: { roleFromReader?: boolean; documentTitle?: string | null; householdCurrency?: Map<number, string> } = {}): FactCheckResult {
   const fullText = pages.map((p) => p.text).join("\n");
   const pageText = new Map(pages.map((p) => [p.pageNumber, p.text]));
   const pageCurrency = new Map(pages.flatMap((p) => p.imageCurrency ? [[p.pageNumber, p.imageCurrency] as const] : []));
@@ -380,7 +383,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
     const hint = person.relationshipHint && hintNearName(pages, person.name, person.relationshipHint) ? person.relationshipHint : null;
     const coverages = person.coverages.map((c) => checkCoverage({ ...c,
       productName: c.productName && namePrinted(fullText, c.productName) ? c.productName : null,
-      policyNumber: c.policyNumber && printedNumber(c.policyNumber) ? c.policyNumber : null }, person.name, pageText, pageCurrency));
+      policyNumber: c.policyNumber && printedNumber(c.policyNumber) ? c.policyNumber : null }, person.name, pageText, pageCurrency, opts.householdCurrency));
     if (same) { same.coverages.push(...coverages); same.relationshipHint ??= hint; }
     else people.push({ ...person, relationshipHint: hint, coverages });
   }
@@ -599,10 +602,11 @@ function hintNearName(pages: Page[], name: string, hint: string) {
  * page, and the amount is printed as money in the evidence (or on the line
  * that carries it). Anything less is kept as unverified, which the chat never
  * states as a figure. */
-function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["coverages"][number]>(coverage: C, person: string, pageText: Map<number, string>, imageCurrency: Map<number, string> = new Map()): C {
+function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["coverages"][number]>(coverage: C, person: string, pageText: Map<number, string>, imageCurrency: Map<number, string> = new Map(), householdCurrency: Map<number, string> = new Map()): C {
   const text = coverage.sourcePage != null ? pageText.get(coverage.sourcePage) ?? "" : "";
   const evidence = String(coverage.evidenceText ?? "");
   let ok = !!text && evidence.trim().length >= 3 && !looksLikeInjectedInstruction(evidence) && personPrinted(text, person);
+  let fromHousehold: string | null = null;
   if (ok) {
     const span = locatePassage(text, evidence);
     const lines = text.split("\n");
@@ -618,6 +622,13 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
       // a money-shaped figure on the evidence line is confirmed only in exactly that currency (Critic #417 C1, C2).
       const code = coverage.sourcePage != null ? imageCurrency.get(coverage.sourcePage) : undefined;
       if (!ok && code && (coverage.currency ?? "").toUpperCase() === code) ok = onEvidence((line) => moneyShapedFigure(line, Number(coverage.amount)));
+      // A document that names no other currency anywhere (text or image), on a page whose image gave none: the household's
+      // own currency, on the same terms -- a money-shaped figure on the cover's own evidence line, and a reading that gave
+      // no currency or that same one (lib/documents/household-currency).
+      const own = coverage.sourcePage != null && !code ? householdCurrency.get(coverage.sourcePage) : undefined;
+      if (!ok && own && (!coverage.currency || coverage.currency.toUpperCase() === own) && onEvidence((line) => moneyShapedFigure(line, Number(coverage.amount)))) {
+        ok = true; fromHousehold = own;
+      }
     }
   }
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;
@@ -635,6 +646,8 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
   // line with no amount: the cover is held, its figure is never a cover amount (Home, Coverage, chat, claims).
   if (coverage.amount != null && printsNotionalSum(text) && !RIDER_NAME.test(`${coverage.productName ?? ""} ${coverage.evidenceText ?? ""}`))
     return { ...coverage, amount: null, notes: [notes, NOTIONAL_SUM_NOTE].filter(Boolean).join(" · "), evidenceVerified: ok && coverage.evidenceVerified === true };
+  if (fromHousehold && ok && coverage.evidenceVerified === true)
+    return { ...coverage, currency: fromHousehold, notes: [notes, HOUSEHOLD_CURRENCY_NOTE].filter(Boolean).join(" · "), evidenceVerified: true };
   return { ...coverage, notes, evidenceVerified: ok && coverage.evidenceVerified === true };
 }
 /** A label's own words, in order: no figures, and no "[amount not checked]" the page check left where it could not confirm

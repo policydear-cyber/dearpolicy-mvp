@@ -6,6 +6,7 @@ import { HouseholdExportPanel } from "./export-panel";
 import { AccountTabs } from "@/components/account-tabs";
 import { Icon } from "@/components/icons";
 import { customerMessage } from "@/components/customer-text";
+import { HOUSEHOLD_CURRENCIES, HOUSEHOLD_CURRENCY_LABELS, NO_HOUSEHOLD_CURRENCY } from "@/lib/documents/household-currency";
 
 type Member = { householdId: string; userId: string; role: "owner" | "member"; createdAt: string; email?: string | null; isSelf?: boolean };
 
@@ -16,6 +17,10 @@ export default function HouseholdPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("");
+  // The household's own currency: what is stored ("" = not chosen, shown as the default) and what is picked.
+  const [currencySaved, setCurrencySaved] = useState("");
+  const [currencyInput, setCurrencyInput] = useState("");
+  const [currencyStatus, setCurrencyStatus] = useState("");
 
 
 
@@ -29,6 +34,9 @@ export default function HouseholdPage() {
     const activeId: string | null = householdRes.activeHouseholdId ?? null;
     setHouseholdName(householdRes.activeHouseholdName ?? null);
     setNameInput(householdRes.activeHouseholdName ?? "");
+    const currency = householdRes.activeHouseholdCurrency ?? householdRes.defaultHouseholdCurrency ?? "";
+    setCurrencySaved(householdRes.activeHouseholdCurrency ?? "");
+    setCurrencyInput(currency);
     // Every entry in `memberships` belongs to the caller (listMemberships()
     // is scoped by the caller's own user id), so the entry for the active
     // household names the caller's own user id too -- no separate
@@ -60,6 +68,20 @@ export default function HouseholdPage() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) return setStatus(customerMessage(payload.error, "Could not rename the household. Please try again in a moment."));
     setStatus("Household name saved.");
+    await refresh();
+  }
+
+  async function saveCurrency(event: FormEvent) {
+    event.preventDefault();
+    setCurrencyStatus("");
+    const response = await fetch("/api/household", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ currency: currencyInput }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return setCurrencyStatus(customerMessage(payload.error, "Could not save the currency. Please try again in a moment."));
+    setCurrencyStatus("Saved. Documents you upload from now on use it. For a document already uploaded, choose Read again on the Documents page.");
     await refresh();
   }
 
@@ -114,6 +136,21 @@ export default function HouseholdPage() {
             </form>
             {!isOwner && <p className="lead" style={{ marginTop: 8 }}>Only an owner of this household can change its name.</p>}
             {status && <div className="upload-status">{status}</div>}
+          </section>
+
+          <section className="section" data-testid="household-currency">
+            <div className="section-heading"><div><h2>Policy currency</h2></div></div>
+            <p className="lead">When a document prints amounts without a currency, DearPolicy shows them in this currency. A currency printed in the document always comes first.</p>
+            <form onSubmit={saveCurrency} className="profile-add-grid">
+              <div className="field"><label htmlFor="hh-currency">Currency</label>
+                <select id="hh-currency" value={currencyInput} onChange={(e) => setCurrencyInput(e.target.value)} disabled={!isOwner}>
+                  {[...HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY].map((c) => <option key={c} value={c}>{HOUSEHOLD_CURRENCY_LABELS[c]}</option>)}
+                </select>
+              </div>
+              {isOwner && <button className="button primary" type="submit" disabled={!currencyInput || currencyInput === currencySaved}>Save currency</button>}
+            </form>
+            {!isOwner && <p className="lead" style={{ marginTop: 8 }}>Only an owner of this household can change its currency.</p>}
+            {currencyStatus && <div className="upload-status">{currencyStatus}</div>}
           </section>
 
           {isOwner && <HouseholdExportPanel />}

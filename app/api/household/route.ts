@@ -5,6 +5,8 @@ import { listMemberships, renameHousehold } from "@/lib/household/repo";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { requestHouseholdDeletion } from "@/lib/lifecycle/coordinator";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { HouseholdCurrencyNotAvailable, setHouseholdCurrency, storedHouseholdCurrency } from "@/lib/household/currency";
+import { DEFAULT_HOUSEHOLD_CURRENCY, parseHouseholdCurrencySetting } from "@/lib/documents/household-currency";
 
 export const runtime = "nodejs";
 // "authenticated" rather than "household-member": a brand-new user with no
@@ -24,6 +26,8 @@ export async function GET(request: NextRequest) {
     const memberships = await listMemberships(user.id);
     let activeHouseholdId: string | null = null;
     let activeHouseholdName: string | null = null;
+    // The household's own currency (lib/documents/household-currency): null = not chosen, which reads as the default.
+    let activeHouseholdCurrency: string | null = null;
     try {
       activeHouseholdId = (await requireHouseholdContext(request)).householdId;
       const active = await createUserSupabaseClient(user.id, (client) =>
@@ -33,10 +37,11 @@ export async function GET(request: NextRequest) {
         ),
       );
       activeHouseholdName = active.rows[0]?.name ?? null;
+      activeHouseholdCurrency = await storedHouseholdCurrency(user.id, activeHouseholdId).catch(() => null);
     } catch {
       // No household yet -- memberships is simply [] in that case.
     }
-    return NextResponse.json({ memberships, activeHouseholdId, activeHouseholdName });
+    return NextResponse.json({ memberships, activeHouseholdId, activeHouseholdName, activeHouseholdCurrency, defaultHouseholdCurrency: DEFAULT_HOUSEHOLD_CURRENCY });
   } catch (error) {
     if (error instanceof UnauthenticatedError) return routeErrorResponse(error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
@@ -52,6 +57,18 @@ export async function PATCH(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
     const body = await request.json().catch(() => ({}));
+    // The household's own currency (owner-only, like the name): saved on its own.
+    if (body.currency !== undefined && body.name === undefined) {
+      const setting = parseHouseholdCurrencySetting(body.currency);
+      if (!setting) return NextResponse.json({ error: "Choose one of the listed currencies." }, { status: 400 });
+      try {
+        await setHouseholdCurrency(ctx.userId, ctx.householdId, setting);
+      } catch (error) {
+        if (error instanceof HouseholdCurrencyNotAvailable) return NextResponse.json({ error: "The currency setting is not available yet. Please try again later." }, { status: 503 });
+        throw error;
+      }
+      return NextResponse.json({ ok: true, currency: setting });
+    }
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name || name.length > 200) {
       return NextResponse.json({ error: "Enter a household name up to 200 characters." }, { status: 400 });

@@ -28,6 +28,8 @@ import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { dismissedNameKeys, nameKey } from "@/lib/policies/name-dismissals";
+import { householdCurrencyPages } from "@/lib/documents/household-currency";
+import { householdCurrencyOf } from "@/lib/household/currency";
 
 export type ProcessPolicyArgs = {
   accountId: string;
@@ -248,12 +250,14 @@ async function previousReading(args: ProcessPolicyArgs): Promise<PolicyExtractio
 /** Round 9: a reading as it may be stored -- roles by the document's own
  * wording, people and cover re-found on their pages, and every name, figure,
  * unit, date, number and role checked against the printed text. */
-export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string; imageCurrency?: string }[], opts: { documentTitle?: string | null; allPages?: { pageNumber: number; text: string }[] } = {}): PolicyExtraction {
+export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[] }[], opts: { documentTitle?: string | null; allPages?: { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[] }[]; householdCurrency?: string | null } = {}): PolicyExtraction {
   // A page left out because it could not be checked gives no fact, but it is still part of the document: the kind of
   // document is decided on every page, as it is when every page could be checked.
   const rolePages = opts.allPages ?? pages;
   const roleFromReader = deterministicDocumentRole(rolePages, null) == null;
-  const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages, rolePages), pages), pages, { roleFromReader, documentTitle: opts.documentTitle }).extraction;
+  // The household's own currency is decided on every page of the document, a page left out included (DC 17 Nov).
+  const householdCurrency = householdCurrencyPages(rolePages, opts.householdCurrency);
+  const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages, rolePages), pages), pages, { roleFromReader, documentTitle: opts.documentTitle, householdCurrency }).extraction;
   return crossCheckPrintedFacts(checked, pages);
 }
 
@@ -721,6 +725,12 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           }
         }
       }
+    }
+    // A cover amount still held only because the document prints no currency is read in the household's own currency, after
+    // the page image has had its say: a currency any page or image prints always decides (lib/documents/household-currency).
+    if (extraction.insuredPeople.some((p) => p.coverages.some((c) => c.amount != null && !c.evidenceVerified))) {
+      const householdCurrency = await householdCurrencyOf(args.accountId);
+      if (householdCurrency) extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle, allPages: pages, householdCurrency });
     }
     if (messyNotes.length) extraction.documentNotes = [...new Set([...extraction.documentNotes, ...messyNotes])];
     // Read again, a document keeps its earlier type unless this reading is personal proof of cover (DC 5 Nov).
