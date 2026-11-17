@@ -1033,6 +1033,27 @@ test("the fold decides on all of a parent's child rows together, in any order, a
     assert.deepEqual(death(fam({ "Grace Okafor": "1996-04-09" }), kid).amounts, [], "the household's child is never made an adult by the profile alone");
     assert.deepEqual(death(fam({ "Ngozi Okafor": "1817-01-01" }), gran).amounts, [], "an age over 100 settles nothing");
   });
+  // Test engineer A1 on #527: a limit over 18 ("under 21") took a shortcut before the child and typo guards.
+  const CELL21 = "100% of the Sum Insured. For an insured child under 21, limited to 25% of the Sum Insured.";
+  const fam21 = (dob: Record<string, string>, rel: Record<string, string> = { "Grace Okafor": "child", "Ngozi Okafor": "parent" }) =>
+    family([gran, kid], CELL21, { header: "Insured person\tSum Insured", condition: "For an insured child under 21, limited to 25% of the Sum Insured.", relationships: rel, familyDob: dob });
+  test("profile under an 'under 21' limit: the household's child (typo or 30) and a sibling with a typo get no amount; a parent of 66 gets the row", () => {
+    assert.deepEqual(death(fam21({ "Grace Okafor": "1917-04-09" }), kid).amounts, []);
+    assert.deepEqual(death(fam21({ "Grace Okafor": "1996-04-09" }), kid).amounts, []);
+    assert.deepEqual(death(fam21({ "Grace Okafor": "1917-04-09" }, { "Grace Okafor": "sibling", "Ngozi Okafor": "parent" }), kid).amounts, []);
+    assert.deepEqual(death(fam21({ "Ngozi Okafor": "1960-01-01" }), gran).amounts, ["£100,000"]);
+  });
+  test("profile: a member with a preferred name is matched by the verifier too (Test engineer C1)", () => {
+    const h = fam({ "Ngozi Okafor": "1960-01-01" });
+    h.house.members = h.house.members.map((m) => m.name === "Ngozi Okafor" ? { ...m, name: "Ngozi Okafor (Gran)" } : m);
+    assert.deepEqual(death(h, gran).amounts, ["£100,000"]);
+  });
+  test("profile: the Benefits table names the family details as the reason, never 'your spouse' for a parent (Test engineer W1)", () => {
+    const h = fam({ "Ngozi Okafor": "1960-01-01" });
+    const text = JSON.stringify(h.table);
+    assert.match(text, /date of birth 1960-01-01, in your family details/);
+    assert.doesNotMatch(text, /recorded in your family as your spouse/);
+  });
 }
 
 console.log(`${passed} passed, ${failures.length} failed`);

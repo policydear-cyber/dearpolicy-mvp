@@ -66,7 +66,7 @@ test.describe.serial("keyboard-only critical path", () => {
     // Member profile (#527): date of birth and sex, by keyboard too.
     await tabTo(page, (f) => f.id === "fm-new-dob", "the date of birth field");
     await page.keyboard.type("01011990");
-    if (await page.locator("#fm-new-sex").count()) { await tabTo(page, (f) => f.id === "fm-new-sex", "the sex field"); await page.keyboard.press("Home"); }
+    await tabTo(page, (f) => f.id === "fm-new-sex", "the sex field"); await page.keyboard.press("Home");
     await tabTo(page, (f) => f.text === "+ Add person", "the Add person button");
     await page.keyboard.press("Enter");
     await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
@@ -88,7 +88,7 @@ test.describe.serial("keyboard-only critical path", () => {
     // Member profile (#527): date of birth and sex, by keyboard too.
     await tabTo(page, (f) => f.id === "fm-new-dob", "the date of birth field");
     await page.keyboard.type("01011990");
-    if (await page.locator("#fm-new-sex").count()) { await tabTo(page, (f) => f.id === "fm-new-sex", "the sex field"); await page.keyboard.press("Home"); }
+    await tabTo(page, (f) => f.id === "fm-new-sex", "the sex field"); await page.keyboard.press("Home");
     await tabTo(page, (f) => f.text === "+ Add person", "the Add person button");
     await page.keyboard.press("Enter");
     await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");

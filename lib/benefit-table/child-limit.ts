@@ -576,13 +576,14 @@ export function householdAdult(life: PrintedLife | null | undefined, age: number
   if (!life?.household || life.birth || relationClass(life.relationship) === "child" || !days.length) return false;
   if (life.household === "spouse") return true;
   const own = life.householdBirth ?? null;
-  if (age != null && age > 18) return !!own && ageSide(own, days, age) === "over";
-  // Anyone else the household entered a date of birth for (its parent, sibling ...): the same ages as the account holder's,
-  // and only from a plausible date of birth (member profile, sql/member-profile.sql). A member recorded as the household's
-  // child is never settled as an adult by the profile alone: a mistyped year ("1917" for "2017") would otherwise pay the
-  // adult share for a child (Critic on #527, H1). No amount is the safe side.
+  // A member recorded as the household's child is never settled as an adult by the profile alone, under any limit: a
+  // mistyped year ("1917" for "2017") would otherwise pay the adult share for a child (Critic on #527 H1; Test engineer
+  // A1, an "under 21" limit). No amount is the safe side.
   if (life.household === "child") return false;
+  // Anyone else the household entered a date of birth for (its parent, sibling ...): the same ages as the account holder's,
+  // and only from a plausible date of birth (profileSide: over 100 settles nothing).
   if (life.household !== "self") return !!own && profileSide(own, days, age != null && age > 18 ? age : 26) === "over";
+  if (age != null && age > 18) return !!own && profileSide(own, days, age) === "over";
   return !own || ageSide(own, days, 26) === "over";
 }
 /** ageSide for a date of birth the household typed: a date giving an age over 100 on any day settles nothing (a mistyped

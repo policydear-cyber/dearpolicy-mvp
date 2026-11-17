@@ -1243,7 +1243,8 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   // own line proves they are not a child (read again below).
   const rpage = household.documents[rf.docIndex].pages.find((p) => p.page === rf.page)!.text, rrow = rowLine(rpage, rf.offset);
   const rpages = household.documents[rf.docIndex].pages, rown = { page: rf.page, from: rrow.start, to: rrow.start + rowText.length };
-  const members = household.members.map((m) => m.name);
+  // Names as the documents print them: a preferred name is listed in brackets after it (Test engineer C1 on #527).
+  const members = household.members.map((m) => baseName(m.name));
   const notes = childLimitNotes(rpages, rown, members);
   const childNote = notes.found;
   // A child's share only when nothing else in the document speaks of children or ages (gate R6-H1).
@@ -1293,8 +1294,9 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   // Whom the child's share is for, read again from the person's own line on the base's page.
   // The household's record of the account holder or their spouse joins it (householdLife): never an insured child, unless
   // the printed line says otherwise.
-  const own = household.members.find((m) => m.name === person);
-  const lifeAt = () => householdLife(printedLife(bpage.text.split("\n"), at, person, household.members.map((m) => m.name)), own ?? {}).life ?? null;
+  // Members are listed as "Full Name (Preferred)" when they have a preferred name: match the name either way (Test engineer C1).
+  const own = household.members.find((m) => m.name === person) ?? household.members.find((m) => m.name.replace(/\s*\([^)]*\)\s*$/, "") === person);
+  const lifeAt = () => householdLife(printedLife(bpage.text.split("\n"), at, person, members), own ?? {}).life ?? null;
   const life = child ? lifeAt() : null;
   if (child && (!sf.child!.days.length || personStatus(life, child, sf.child!.days) !== sf.child!.status)) return no("whom the child's share is for is not settled by the person's own printed line");
   if (childNote && !provenAdult(lifeAt(), notes.age, sf.adult!.days).adult) return no("the person's own printed line does not prove them past the child-limit note's age");

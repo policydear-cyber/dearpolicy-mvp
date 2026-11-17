@@ -55,6 +55,8 @@ export default function FamilyPage() {
   const [sex, setSex] = useState("");
   /** Whether a sex can be saved yet (the database update for it is in place). Until then it is not asked for. */
   const [sexField, setSexField] = useState(false);
+  /** The family list (and whether a sex can be saved) has loaded: until then the form can't know which fields it needs. */
+  const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
   /** The person the last save or removal was about, so its outcome is also shown on their card (not only at the top). */
@@ -70,6 +72,7 @@ export default function FamilyPage() {
     const members: Member[] = data.family ?? [];
     setFamily(members);
     setSexField(data.profile?.sexField === true);
+    setLoaded(true);
     setBaseline(Object.fromEntries(members.map((m) => [m.id, m])));
     // A household on the benefit table: its rows say what each person is covered for (its Coverage rows stopped updating).
     // Optional, like the Coverage rows: the page works without it.
@@ -87,7 +90,7 @@ export default function FamilyPage() {
   useEffect(() => { void refresh(); }, []);
 
   async function add(event: FormEvent) {
-    event.preventDefault(); setStatus("");
+    event.preventDefault(); setStatus(""); setStatusFor(null); setStatusIsError(false);
     if (!dob) return setStatus("Add their date of birth.");
     if (dob > todayIso()) return setStatus("A date of birth can't be in the future.");
     if (dob < "1900-01-01") return setStatus("Check the year of that date of birth.");
@@ -160,7 +163,7 @@ export default function FamilyPage() {
                 {/* Details still missing (people added before they were asked for): one plain line and a way to add them. */}
                 {(() => { const gaps = missingDetails(baseline[member.id] ?? member, sexField); if (!gaps.length || editing === member.id) return null;
                   const who = baseline[member.id]?.display_name ?? member.display_name;
-                  return <p className="profile-missing" data-testid="profile-missing">Add {who}&rsquo;s {gaps.join(" and ")}. {[gaps.includes("date of birth") ? "A date of birth tells adult cover from child cover" : null, gaps.includes("sex") ? "sex tells \u201cmy son\u201d from \u201cmy daughter\u201d" : null].filter(Boolean).join(", and ").replace(/^s/, "S")}. <button type="button" className="text-link" onClick={() => setEditing(member.id)}>Add now</button></p>; })()}
+                  return <p className="profile-missing" data-testid="profile-missing">Add {who}&rsquo;s {gaps.join(" and ")}. {[gaps.includes("date of birth") ? "A date of birth tells adult cover from child cover" : null, gaps.includes("sex") ? "sex tells \u201cmy son\u201d from \u201cmy daughter\u201d" : null].filter(Boolean).join(", and ").replace(/^s/, "S")}. <button type="button" className="text-link" onClick={() => { setEditing(member.id); setTimeout(() => document.getElementById(`fm-${member.id}-${member.date_of_birth ? "sex" : "dob"}`)?.focus(), 0); }}>Add now</button></p>; })()}
                 <p>{member.policy_count ? <Link className="text-link" href={`/policies?person=${member.id}`}><b>{member.policy_count === 1 ? "1 document" : `${member.policy_count} documents`}</b>&nbsp;linked →</Link> : <>No documents linked yet. <Link className="text-link" href="/policies">Link one on Documents →</Link></>}</p>
                 {/* Never "Covered for Other": only named kinds are listed, and cover whose kind nothing names yet is said in
                     words, as on Documents (namedCoverKinds). */}
@@ -203,14 +206,16 @@ export default function FamilyPage() {
       {/* The people come first: a returning household opens this page to see or change them, and adds someone rarely. */}
       <section className="profile-add-panel" aria-label="Add a family member">
         {family.length ? <h3>Add a family member</h3> : null}
-        <form onSubmit={add} className="profile-add-grid">
+        <form onSubmit={add} className="profile-add-grid" onChange={() => { if (status) { setStatus(""); setStatusFor(null); } }}>
           <div className="field wide"><label htmlFor="fm-new-name">Full name, as on their policies</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen" autoComplete="off" required /></div>
           <div className="field"><label htmlFor="fm-new-relationship">Relationship to you</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
           <div className="field"><label htmlFor="fm-new-dob">Date of birth</label><input id="fm-new-dob" type="date" min="1900-01-01" max={today} value={dob} onChange={(e) => setDob(e.target.value)} required /></div>
           {sexField ? <div className="field"><label htmlFor="fm-new-sex">Sex</label><select id="fm-new-sex" value={sex} onChange={(e) => setSex(e.target.value)} required><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div> : null}
           <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="For example, Alex" autoComplete="off" /></div>
           <p className="profile-add-why">The date of birth tells adult cover from child cover, and sex tells &ldquo;my son&rdquo; from &ldquo;my daughter&rdquo; in Ask DearPolicy. What a policy prints always comes first.</p>
-          <button className="button primary" type="submit" disabled={!name.trim() || !relationship || !dob || (sexField && !sex)}>+ Add person</button>
+          <button className="button primary" type="submit" disabled={!loaded || !name.trim() || !relationship || !dob || (sexField && !sex)} aria-describedby="fm-new-needs">+ Add person</button>
+          {loaded && (name.trim() || relationship || dob || sex) && (!name.trim() || !relationship || !dob || (sexField && !sex))
+            ? <p id="fm-new-needs" className="profile-add-why">Still needed: {[!name.trim() ? "full name" : null, !relationship ? "relationship" : null, !dob ? "date of birth" : null, sexField && !sex ? "sex" : null].filter(Boolean).join(", ")}.</p> : null}
         </form>
         {status && <div className="upload-status" role="status">{status}</div>}
       </section>

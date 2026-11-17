@@ -76,7 +76,7 @@ test.describe.serial("synthetic household journey", () => {
       await page.locator("#fm-new-relationship").selectOption(relationship);
       // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
       await page.locator("#fm-new-dob").fill(relationship === "child" ? "2015-06-01" : "1960-06-01");
-      if (await page.locator("#fm-new-sex").count()) await page.locator("#fm-new-sex").selectOption("unspecified");
+      await page.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
       await page.getByRole("button", { name: "+ Add person" }).click();
       await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Family member added.");
     }
