@@ -6,7 +6,7 @@ import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { requestHouseholdDeletion } from "@/lib/lifecycle/coordinator";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { HouseholdCurrencyNotAvailable, setHouseholdCurrency, storedHouseholdCurrency } from "@/lib/household/currency";
-import { DEFAULT_HOUSEHOLD_CURRENCY, parseHouseholdCurrencySetting } from "@/lib/documents/household-currency";
+import { parseHouseholdCurrencySetting } from "@/lib/documents/household-currency";
 
 export const runtime = "nodejs";
 // "authenticated" rather than "household-member": a brand-new user with no
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const memberships = await listMemberships(user.id);
     let activeHouseholdId: string | null = null;
     let activeHouseholdName: string | null = null;
-    // The household's own currency (lib/documents/household-currency): null = not chosen, which reads as the default.
+    // The household's own currency (lib/documents/household-currency): null = not chosen (nothing is assumed).
     let activeHouseholdCurrency: string | null = null;
     try {
       activeHouseholdId = (await requireHouseholdContext(request)).householdId;
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     } catch {
       // No household yet -- memberships is simply [] in that case.
     }
-    return NextResponse.json({ memberships, activeHouseholdId, activeHouseholdName, activeHouseholdCurrency, defaultHouseholdCurrency: DEFAULT_HOUSEHOLD_CURRENCY });
+    return NextResponse.json({ memberships, activeHouseholdId, activeHouseholdName, activeHouseholdCurrency });
   } catch (error) {
     if (error instanceof UnauthenticatedError) return routeErrorResponse(error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

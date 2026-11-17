@@ -1,7 +1,7 @@
 /**
  * The household's own currency setting (Account settings; lib/documents/household-currency). Stored in
  * accounts.currency (sql/household-currency.sql). Code deployed before that file is applied keeps working: the column is
- * read through to_jsonb, so a database without it reads as "not chosen" (the default), and saving says the setting is not
+ * read through to_jsonb, so a database without it reads as "not chosen" (nothing assumed), and saving says the setting is not
  * available yet.
  */
 import { query } from "@/lib/db/client";
@@ -17,7 +17,7 @@ export async function storedHouseholdCurrency(userId: string, householdId: strin
   });
 }
 
-/** The currency a document reading may use for this household's bare amounts, or null for "Don't assume". A failed read
+/** The currency a document reading may use for this household's bare amounts, or null when it chose "Don't assume" or has not chosen. A failed read
  * gives null: nothing is assumed when the setting cannot be read. */
 export async function householdCurrencyOf(accountId: string): Promise<HouseholdCurrency | null> {
   try {

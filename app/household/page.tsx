@@ -34,9 +34,8 @@ export default function HouseholdPage() {
     const activeId: string | null = householdRes.activeHouseholdId ?? null;
     setHouseholdName(householdRes.activeHouseholdName ?? null);
     setNameInput(householdRes.activeHouseholdName ?? "");
-    const currency = householdRes.activeHouseholdCurrency ?? householdRes.defaultHouseholdCurrency ?? "";
     setCurrencySaved(householdRes.activeHouseholdCurrency ?? "");
-    setCurrencyInput(currency);
+    setCurrencyInput(householdRes.activeHouseholdCurrency ?? "");
     // Every entry in `memberships` belongs to the caller (listMemberships()
     // is scoped by the caller's own user id), so the entry for the active
     // household names the caller's own user id too -- no separate
@@ -140,10 +139,11 @@ export default function HouseholdPage() {
 
           <section className="section" data-testid="household-currency">
             <div className="section-heading"><div><h2>Policy currency</h2></div></div>
-            <p className="lead">When a document prints amounts without a currency, DearPolicy shows them in this currency. A currency printed in the document always comes first.</p>
+            <p className="lead">When a document prints amounts without a currency, DearPolicy shows them in the currency you choose here. A currency printed in the document always comes first. Until you choose, those amounts are shown without a figure.</p>
             <form onSubmit={saveCurrency} className="profile-add-grid">
               <div className="field"><label htmlFor="hh-currency">Currency</label>
                 <select id="hh-currency" value={currencyInput} onChange={(e) => setCurrencyInput(e.target.value)} disabled={!isOwner}>
+                  {!currencySaved && <option value="" disabled>Choose your currency…</option>}
                   {[...HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY].map((c) => <option key={c} value={c}>{HOUSEHOLD_CURRENCY_LABELS[c]}</option>)}
                 </select>
               </div>

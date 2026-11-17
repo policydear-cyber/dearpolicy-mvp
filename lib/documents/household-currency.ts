@@ -1,6 +1,7 @@
 /**
  * The household's own currency (Account settings, DC 17 Nov): the currency a household says its policies are in. It
- * stands for the currency of a cover amount ONLY when the document itself does not say otherwise:
+ * stands for the currency of a cover amount ONLY once the household has chosen it (nothing is assumed before; DC 17 Nov)
+ * and ONLY when the document itself does not say otherwise:
  * - a currency the document prints (on the line, in a header, once for the whole schedule, or in its page image) always
  *   decides, and the household's choice never relabels it;
  * - the household's currency is used for a page only when nothing that page prints names any OTHER currency (its text
@@ -15,8 +16,8 @@
 import { currenciesIn } from "@/lib/documents/image-currency";
 import { UNCHECKED_PAGE } from "@/lib/documents/layout-check";
 
-export { HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY, DEFAULT_HOUSEHOLD_CURRENCY, HOUSEHOLD_CURRENCY_LABELS, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
-import { HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY, DEFAULT_HOUSEHOLD_CURRENCY, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
+export { HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY, HOUSEHOLD_CURRENCY_LABELS, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
+import { HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
 
 const DOLLARS = new Set<string>(["SGD", "USD", "HKD", "AUD"]);
 
@@ -26,11 +27,12 @@ export function parseHouseholdCurrencySetting(value: unknown): HouseholdCurrency
   return v === NO_HOUSEHOLD_CURRENCY || (HOUSEHOLD_CURRENCIES as readonly string[]).includes(v) ? (v as HouseholdCurrencySetting) : null;
 }
 
-/** The currency the household's setting gives, or null for "Don't assume". Not chosen (or unreadable) is the default. */
+/** The currency the household chose, or null when it chose "Don't assume" or has not chosen: nothing is assumed until a
+ * household chooses (DC 17 Nov). */
 export function effectiveHouseholdCurrency(stored: unknown): HouseholdCurrency | null {
   const s = parseHouseholdCurrencySetting(stored);
   if (s === NO_HOUSEHOLD_CURRENCY) return null;
-  return s ?? DEFAULT_HOUSEHOLD_CURRENCY;
+  return s;
 }
 
 /** Whether a currency the document names is consistent with the household's: the same code, or a bare dollar beside a

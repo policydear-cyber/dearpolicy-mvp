@@ -43,7 +43,7 @@ async function main() {
   // ---- S: the setting itself
   await test("S parse: listed codes, any case", () => { assert.equal(HC.parseHouseholdCurrencySetting("sgd"), "SGD"); assert.equal(HC.parseHouseholdCurrencySetting(" NONE "), "NONE"); });
   await test("S parse: anything else is not a setting", () => { for (const v of ["XYZ", "S$", "", null, 5, {}, "SGD;drop"]) assert.equal(HC.parseHouseholdCurrencySetting(v), null); });
-  await test("S not chosen reads as S$ (DC 17 Nov)", () => { assert.equal(HC.effectiveHouseholdCurrency(null), "SGD"); assert.equal(HC.effectiveHouseholdCurrency(undefined), "SGD"); });
+  await test("S not chosen assumes nothing (DC 17 Nov)", () => { assert.equal(HC.effectiveHouseholdCurrency(null), null); assert.equal(HC.effectiveHouseholdCurrency(undefined), null); assert.equal(HC.effectiveHouseholdCurrency(""), null); });
   await test("S Don't assume gives none", () => assert.equal(HC.effectiveHouseholdCurrency("NONE"), null));
   await test("S a chosen currency is that currency", () => assert.equal(HC.effectiveHouseholdCurrency("MYR"), "MYR"));
   await test("S every choice has a label", () => { for (const c of [...HC.HOUSEHOLD_CURRENCIES, HC.NO_HOUSEHOLD_CURRENCY]) assert.ok(HC.HOUSEHOLD_CURRENCY_LABELS[c]); });

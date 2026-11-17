@@ -4,8 +4,6 @@ export const HOUSEHOLD_CURRENCIES = ["SGD", "USD", "HKD", "AUD", "MYR", "GBP", "
 export type HouseholdCurrency = (typeof HOUSEHOLD_CURRENCIES)[number];
 export const NO_HOUSEHOLD_CURRENCY = "NONE" as const;
 export type HouseholdCurrencySetting = HouseholdCurrency | typeof NO_HOUSEHOLD_CURRENCY;
-/** A household that has not chosen: launch is for Singapore households (DC 17 Nov, "default S$ for now"). */
-export const DEFAULT_HOUSEHOLD_CURRENCY: HouseholdCurrency = "SGD";
 
 export const HOUSEHOLD_CURRENCY_LABELS: Record<HouseholdCurrencySetting, string> = {
   SGD: "Singapore dollar (S$)", USD: "US dollar (US$)", HKD: "Hong Kong dollar (HK$)", AUD: "Australian dollar (A$)",
