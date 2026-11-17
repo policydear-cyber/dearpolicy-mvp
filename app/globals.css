@@ -1841,3 +1841,12 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 /* Document rows are panels like every other one: told apart by tone and a soft lift, not a drawn border. */
 .rows .document-card:not(.needs-review) { border-color: transparent; box-shadow: var(--lift); }
 
+/* Ask: an answer's benefit cards are policy sheets too (square top-right corner with its folded dog-ear), and the page a
+   figure comes from is a small paper tab rather than a pale pill. Prose in an answer stops at a readable line length. */
+.answer-card { position: relative; border-radius: 6px 0 14px 14px; }
+.answer-card::after { content: ""; position: absolute; top: 0; right: 0; width: 16px; height: 16px; border-radius: 0 0 0 3px; pointer-events: none;
+  background: linear-gradient(225deg, var(--surface) 50%, var(--paper-line) 50%); box-shadow: -1px 1px 2px var(--paper-fold); }
+.answer-card-amount { border-radius: 6px 0 0 0; }
+.answer-chip { background: var(--paper); border: 1px solid var(--paper-line); border-bottom-width: 2px; border-radius: 4px 4px 2px 2px; padding: 2px 8px; }
+.message.assistant .message-body > p, .message.assistant .message-body .answer-bottom-line, .message.assistant .message-body .next-steps li, .message.assistant .message-body .answer-cards > p { max-width: 72ch; }
+
