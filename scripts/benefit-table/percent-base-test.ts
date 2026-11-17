@@ -128,6 +128,41 @@ async function main() {
     assert.equal(death.figure.kind, "worked_out");
     assert.equal((death.figure as { amount: number }).amount, 100000);
   });
+  // A share whose reading left the base unsettled, under a table that prints its own fixed base (check.ts tableBase).
+  const fracture = (head: string[], value: number, percentOf: string | null = "other") => {
+    const arm = "Arm , Elbow, Wrist or Ribs\t25%";
+    const lines = ["\u2022\tSimple Fracture due to Accident", "If an Insured Person sustains a Simple Fracture, we pay the amount below:", ...head, "Hip\t75%", "#", arm];
+    const rows = table({ cover: "PA Cover", sum: 600000, sumText: "S$600,000", lines, benefits: [{ benefit: "Arm, Elbow, Wrist or Ribs", value, quote: arm, percentOf }] });
+    return rows.find((r) => /Arm/.test(r.benefit))!;
+  };
+  test("tableBase: a share under 'Benefit Limit: S$5,000' and '(% of S$5,000)' is 25% of S$5,000", () => {
+    const r = fracture(["Simple Fracture Benefit Limit: S$5,000", "Schedule\tCompensation", "(% of S$5,000)", "Neck, Skull or Spine (Full Break)\t100%"], 25);
+    assert.equal(r.figure.kind, "worked_out");
+    assert.equal((r.figure as { amount: number }).amount, 1250);
+    assert.doesNotMatch(JSON.stringify(r.figure), /150,000/);
+  });
+  test("tableBase: the reading's null base is settled the same way; a heading alone is enough", () => {
+    const r = fracture(["Schedule\tCompensation (% of S$5,000)"], 25, null);
+    assert.equal(r.figure.kind, "worked_out");
+    assert.equal((r.figure as { amount: number }).amount, 1250);
+  });
+  for (const [why, head] of [
+    ["two different bases", ["Simple Fracture Benefit Limit: S$5,000", "(% of S$8,000)"]],
+    ["a bare $ base", ["Simple Fracture Benefit Limit: $5,000"]],
+    ["the block names the sum insured", ["Simple Fracture Benefit Limit: S$5,000", "Compensation (% of Sum Insured)"]],
+    ["no base printed", ["Schedule\tCompensation"]],
+  ] as const) test(`tableBase: ${why} leaves the share with no amount`, () => {
+    const r = fracture([...head], 25);
+    assert.equal(r.figure.kind, "none");
+    assert.doesNotMatch(JSON.stringify(r.figure), /1,250|150,000|2,000/);
+  });
+  test("tableBase: a base above a blank line or another bullet is not this table's", () => {
+    const arm = "Arm , Elbow, Wrist or Ribs\t25%";
+    for (const lines of [["Simple Fracture Benefit Limit: S$5,000", "", "Arm table", arm], ["Simple Fracture Benefit Limit: S$5,000", "\u2022\tOther Fracture", arm]]) {
+      const rows = table({ cover: "PA Cover", sum: 600000, sumText: "S$600,000", lines, benefits: [{ benefit: "Arm, Elbow, Wrist or Ribs", value: 25, quote: arm, percentOf: "other" }] });
+      assert.equal(rows.find((r) => /Arm/.test(r.benefit))!.figure.kind, "none");
+    }
+  });
   console.log(`benefit-table percent base: ${passed} passed, 0 failed`);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

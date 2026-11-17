@@ -27,18 +27,37 @@ export function rowFractureKind(benefit: string): string | null {
   return kinds.size === 1 ? [...kinds][0] : null;
 }
 
-/** The kinds of fracture said in the household's words ("a simple fracture", "it was compound", "closed break"). Used only
- * to put that kind's amount first, never to withhold another kind's: a misread costs nothing. */
+/** The kinds of fracture said in the household's words ("a simple fracture", "it was compound", "closed break", or a
+ * reply that is only the kind: "Simple", "It was simple."). Words that deny it or leave it open never say it. */
 export function kindsSaid(text: string): Set<string> {
   const out = new Set<string>();
   // Words before the kind that deny it or leave it open ("not a simple fracture", "I don't know if it was simple",
   // "whether it was a compound break"): that kind is not said (Critic on #518, NEW-HIGH 2, 3).
-  const open = /(?:\b(?:not|never|no|unsure|whether|if|maybe|perhaps|might|could|possibly|probably|hardly|ruled|suspects?|suspected|thought|or|than|unless)\b|n't\b)[^.?!]{0,30}$/i;
+  // So do words that put it in another time or on someone else ("last year he had a simple fracture", "his sister had a
+  // simple fracture"): a kind said only counts for the injury asked about.
+  const open = /(?:\b(?:not|never|no|unsure|whether|if|maybe|perhaps|might|could|possibly|probably|hardly|ruled|suspects?|suspected|thought|or|than|unless|last|previous(?:ly)?|before|earlier|ago|once|used\s+to|history|(?:his|her|their)\s+\w+)\b|n't\b)[^.?!]{0,30}$/i;
   const add = (kind: string, before: string, after: string) => { if (!open.test(before) && !/^\s*(?:fractures?|breaks?|broken)?\s*(?:,\s*)?or\b/i.test(after)) out.add(kind.toLowerCase()); };
   // Only a kind word said of the fracture itself: "other" or "simple" alone ("any other benefits?") says nothing.
   for (const m of text.matchAll(new RegExp(String.raw`\b(${KIND_WORDS})\s+(?:fractures?|breaks?|broken)\b`, "gi")))
     add(m[1], text.slice(Math.max(0, m.index! - 40), m.index!), text.slice(m.index! + m[1].length));
   for (const m of text.matchAll(new RegExp(String.raw`\b(?:fracture|break)\s+(?:was|is|is\s+a|was\s+a)\s+(${KIND_WORDS})\b`, "gi")))
     add(m[1], text.slice(Math.max(0, m.index! - 40), m.index!) + m[0].slice(0, m[0].length - m[1].length), text.slice(m.index! + m[0].length));
+  const only = new RegExp(String.raw`^\s*(?:(?:it\s+was|it's|its|was)\s+)?(?:an?\s+)?(${KIND_WORDS})(?:\s+(?:one|fracture|break))?\s*[.!]?\s*$`, "i").exec(text);
+  if (only) out.add(only[1].toLowerCase());
+  return out;
+}
+
+/** Words that tell of a break: a new injury, or the same one told again. */
+const BREAK = /\b(?:broke|broken|break(?:s|ing)?|fractur(?:e|es|ed|ing)|cracked)\b/i;
+/** The kinds said about the injury the conversation is on now. `messages` are the household's own, oldest first, the
+ * question last. A kind said counts from the latest message that tells of a break without saying a kind ("Desmond broke
+ * his arm", "Desmond broke his arm too"): a kind said for an earlier injury, or another person's, is not this one's (live
+ * 17 Nov). A message that only moves the injury to another person ("actually it was Charmaine") tells of no break, so
+ * the kind said before it stays. */
+export function kindsForInjury(messages: string[]): Set<string> {
+  let from = 0;
+  messages.forEach((m, i) => { if (BREAK.test(m) && kindsSaid(m).size === 0) from = i; });
+  const out = new Set<string>();
+  for (const m of messages.slice(from)) for (const k of kindsSaid(m)) out.add(k);
   return out;
 }

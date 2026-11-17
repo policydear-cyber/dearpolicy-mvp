@@ -889,6 +889,46 @@ export function headlineSumShare(cell: string, value: number, next = "", words =
   const from = all.slice(pcts[0].index!).replace(/\s+/g, " ").trim();
   return HEADLINE_CELL.test(from);
 }
+/** A share's fixed base printed over its own table, for a row whose reading left the base unsettled: the block the row
+ * sits in (from the nearest line above it that opens a section, a bullet or a blank line, down to the row's own line)
+ * prints exactly one money figure, with its currency, as a column heading "(% of S$5,000)" or a "<name> Benefit Limit:
+ * S$5,000" line, and nothing in the block or on the row's own line names the policy's headline sum (live walk 17 Nov:
+ * the Product Summary's "Arm, Elbow, Wrist or Ribs 25%" under "Simple Fracture Benefit Limit: S$5,000" and "(% of
+ * S$5,000)" was shown as "25% of the figure its table prints", with no amount). Returns that figure and the line that
+ * prints it, or null. */
+export function tableBase(text: string, rowStart: number): { amount: number; currency: string; line: string } | null {
+  const lineStart = text.lastIndexOf("\n", rowStart - 1) + 1;
+  const lineEnd = (() => { const e = text.indexOf("\n", rowStart); return e < 0 ? text.length : e; })();
+  const own = text.slice(lineStart, lineEnd);
+  const sumName = new RegExp(HEADLINE_SUM_NAME, "i");
+  if (sumName.test(own)) return null;
+  const above = text.slice(0, lineStart).split("\n");
+  above.pop();
+  const block: string[] = [];
+  for (let i = above.length - 1; i >= 0 && block.length < 30; i--) {
+    const line = above[i];
+    if (!line.trim()) break;
+    block.unshift(line);
+    if (/^\s*[•▪●◦·\u2022\u25aa\u25cf]/.test(line)) break;
+  }
+  const HEADING = new RegExp(String.raw`\(\s*%\s*of\s+(${CELL_MONEY})\s*\)`, "giu");
+  const LIMIT = new RegExp(String.raw`\bbenefit\s+limit\s*:?\s*(${CELL_MONEY})`, "giu");
+  const found: { amount: number; currency: string; line: string }[] = [];
+  for (const line of block) {
+    if (sumName.test(line)) return null;
+    for (const re of [HEADING, LIMIT]) for (const m of line.normalize("NFKC").matchAll(re)) {
+      const currency = statedCurrencyCode(m[1]);
+      const amount = Number(m[1].replace(/^[^\d]*/, "").replace(/,/g, ""));
+      if (!currency || !Number.isFinite(amount) || amount <= 0) return null;
+      found.push({ amount, currency, line: line.trim() });
+    }
+  }
+  if (!found.length) return null;
+  const amounts = new Set(found.map((f) => f.amount)), currencies = new Set(found.map((f) => f.currency));
+  if (amounts.size !== 1 || currencies.size !== 1) return null;
+  // The limit line names the base; a heading line alone is enough when no limit line is printed.
+  return found.find((f) => /benefit\s+limit/i.test(f.line)) ?? found[0];
+}
 /** Whether the row leaves its percentage's base unsettled (anything but the sum insured, a neutral continuation or the
  * row's end follows it). False when no percentage equal to the value is printed. */
 function percentBaseUnsettled(row: string, value: number): boolean {
@@ -2125,6 +2165,12 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
         out.dropped.push({ what: label, why: "fixed base not printed on the row's page; kept the row with no amount" });
         percentOf = null; baseAmount = null; baseSource = null;
       }
+    }
+    // A share whose base the reading left unsettled, under a table that prints its own fixed base (tableBase).
+    if (pays === "percent" && value != null && (percentOf === "other" || percentOf == null) && placed.has(source)) {
+      const t = tableBase(pageText(source.page), placed.get(source)!.start);
+      const at = t ? find(t.line, source.page) : null;
+      if (t && at && at.page === source.page && printedIn(at, t.amount)) { percentOf = "fixed_amount"; baseAmount = t.amount; baseSource = at; }
     }
     const currency = pays === "percent"
       ? (baseSource ? statedCurrencyCode(baseSource.excerpt) ?? declaredCurrency(pageText(source.page)) : null)

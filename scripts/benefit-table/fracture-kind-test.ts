@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
-import { kindsSaid, rowFractureKind } from "@/lib/benefit-table/fracture-kind";
+import { kindsForInjury, kindsSaid, rowFractureKind } from "@/lib/benefit-table/fracture-kind";
 import type { Household } from "@/lib/simple-chat/library";
 import { readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
 
@@ -50,7 +50,8 @@ const both = () => household([OTHER, SIMPLE], [
   ben({ section: "Simple Fracture or Other Fracture", benefit: "Arm, Elbow, Wrist or Ribs (Other Fracture)", pays: "percent", value: 20, percentOf: "sum_insured", quote: OTHER }),
   ben({ section: "Simple Fracture", benefit: "Arm, Elbow, Wrist or Ribs", pays: "amount", value: 1250, currency: "SGD", quote: SIMPLE }),
 ]);
-function answer(h: ReturnType<typeof household>, question: string, rowsAsked: RegExp[], modelQuestion: string | null = null) {
+/** `earlier`: the household's earlier messages, oldest first. */
+function answer(h: ReturnType<typeof household>, question: string, rowsAsked: RegExp[], modelQuestion: string | null = null, earlier: string[] = []) {
   const statements = rowsAsked.map((re) => {
     const row = h.rows.find((r) => re.test([r.section, r.benefit].filter(Boolean).join(": ")));
     assert.ok(row, `no row ${re}: ${h.rows.map((r) => r.benefit).join(" | ")}`);
@@ -58,12 +59,53 @@ function answer(h: ReturnType<typeof household>, question: string, rowsAsked: Re
       row: row.id, rowBenefit: row.benefit, eventFit: "on_list", waiting: null, period: { from: "", to: "", eventOn: "" }, multiplierNote: "" };
   });
   const raw = { bottomLine: `${NAME}'s broken arm is covered by the fracture benefit.`, nextSteps: [], question: modelQuestion, statements };
-  const fromRows = amountsFromRows(raw, h.rows, h.house, NOW, question, [], false);
+  const fromRows = amountsFromRows(raw, h.rows, h.house, NOW, question, [...earlier].reverse(), false);
   const { answer: a } = verifyAnswer(h.house, readModelAnswer(fromRows.json)!, [question], new Set(fromRows.report.labels), fromRows.report.figures ?? []);
   const { kept } = keepLabelledAmounts(a.statements ?? [], fromRows.report);
   return { amounts: kept.filter((s) => s.amount).map((s) => s.amount!.text), points: kept.filter((s) => !s.amount).map((s) => s.text), question: a.questions?.map((q) => q.text).join(" ") ?? "", report: fromRows.report };
 }
 
+/** The live shape (17 Nov): the "Other Fracture" row in the certificate's Benefit Summary, under a numbered section heading,
+ * and the simple-fracture row in a separate Product Summary, as a share of the table's own printed limit that the reading
+ * left unsettled. */
+function twoDocuments() {
+  const product = "Group Personal Accident", DOC2 = "eeeeeeee-0000-4000-8000-000000000092";
+  const otherLine = "Arm, Elbow, Wrist or Ribs (Other Fracture)\t20%";
+  const certPages = [`Kestrel Assurance Ltd\n${product.toUpperCase()} - CERTIFICATE\nInsured person\tSum Insured\n${NAME}\tS$600,000`,
+    `BENEFIT 2: GROUP PERSONAL ACCIDENT\nE. Simple Fracture or Other Fracture\tCompensation (% of Sum Insured)\n${otherLine}`];
+  const armLine = "Arm , Elbow, Wrist or Ribs\t25%";
+  const psPages = ["Product Summary", ["Insurance Benefits (continued)", "\u2022\tSimple Fracture due to Accident", "If an Insured Person sustains a Simple Fracture, we will pay the amount below:",
+    "Simple Fracture Benefit Limit: S$5,000", "Schedule\tCompensation", "(% of S$5,000)", "Hip\t75%", "#", armLine].join("\n")];
+  const doc = (id: string, name: string, role: string, pages: string[]): Household["documents"][number] => ({ policyId: id, name, insurer: "Kestrel Assurance Ltd", productName: product,
+    policyNumber: null, documentType: null, documentRole: role as never, effectiveDate: null, expiryDate: null, uploadedAt: "2026-10-01", uploadedFor: null, linkedPeople: [NAME],
+    supersededAt: null, processingStatus: "ready", pages: pages.map((text, i) => ({ page: i + 1, text })) });
+  const cert = doc(DOC, "Benefit Summary.pdf", "personal_schedule", certPages), ps = doc(DOC2, "Product Summary.pdf", "product_summary", psPages);
+  const house: Household = { accountId: ACC, members: [{ name: NAME, relationship: "self" }], documents: [cert, ps] };
+  const family: FamilyMember[] = [{ id: "m0", display_name: NAME, relationship: "self" }];
+  const meta = { product, insurer: "Kestrel Assurance Ltd", namedPeople: [NAME], plan: null, periodFrom: null, periodTo: null };
+  const a = checkReading({ id: DOC, name: cert.name, readable: true, pages: cert.pages }, { document: { kind: "personal_proof", ...meta },
+    covers: [{ person: NAME, product, cover: product, plan: null, riderOf: null, policyNumber: null, premium: null, premiumFrequency: null, asOf: null,
+      startDate: null, endDate: null, page: 1, sumInsured: 600000, quote: `${NAME}\tS$600,000` }],
+    benefits: [ben({ section: "BENEFIT 2: GROUP PERSONAL ACCIDENT: E. Simple Fracture or Other Fracture", benefit: "Arm, Elbow, Wrist or Ribs (Other Fracture)", pays: "percent", value: 20, percentOf: "sum_insured", quote: otherLine })] } as never);
+  const b = checkReading({ id: DOC2, name: ps.name, readable: true, pages: ps.pages }, { document: { kind: "scheme_terms", ...meta, namedPeople: [] }, covers: [],
+    benefits: [ben({ section: "Simple Fracture due to Accident", benefit: "Arm, Elbow, Wrist or Ribs", pays: "percent", value: 25, percentOf: "other", quote: armLine })] } as never);
+  const key = coverKeyOf({ product, cover: product, plan: null, riderOf: null });
+  const links = [...a.benefits.map((x) => sectionKeyOf(DOC, x)), ...b.benefits.map((x) => sectionKeyOf(DOC2, x))].map((section) => ({ section, cover: key, why: "the scheme's benefits" }));
+  const table = assembleTable([a, b], family, links, [], NOW);
+  return { house, rows: chatRows(table, house) };
+}
+test("live shape: the two documents' kinds side by side, S$1,250 worked out from the table's own limit, smaller first", () => {
+  const h = twoDocuments();
+  const simple = h.rows.find((r) => /Simple Fracture due to Accident/.test(r.section ?? ""));
+  assert.ok(simple, h.rows.map((r) => `${r.section}: ${r.benefit}`).join(" | "));
+  assert.equal(simple.figure.kind, "worked_out");
+  const a = answer(h, "Rowan broke his arm in an accident and was in hospital for 5 days. What can he claim?", [/Other Fracture\)/]);
+  assert.deepEqual(a.amounts, ["S$1,250", "S$120,000"]);
+  assert.match(a.question, /Which kind of fracture did Rowan Hartley have: "Simple Fracture" or "Other Fracture"\?/);
+  const said = answer(h, "It was a simple fracture.", [/Other Fracture\)/], null, ["Rowan broke his arm in an accident and was in hospital for 5 days. What can he claim?"]);
+  assert.deepEqual(said.amounts, ["S$1,250"]);
+  assert.doesNotMatch(said.question, /Which kind/);
+});
 test("rowFractureKind: a closing kind bracket, or one kind in the name; two kinds with no bracket is none", () => {
   assert.equal(rowFractureKind("Simple Fracture or Other Fracture: Arm, Elbow, Wrist or Ribs (Other Fracture)"), "other");
   assert.equal(rowFractureKind("Simple Fracture due to Accident: Arm, Elbow, Wrist or Ribs"), "simple");
@@ -88,16 +130,29 @@ test("live walk 17 Nov shape: no kind said, two kinds printed: both amounts as a
     assert.match(a.question, /Which kind of fracture did Rowan Hartley have: "Simple Fracture" or "Other Fracture"\?/);
   }
 });
-test("the kind said: every kind still shown, the said kind first and named so, no question (Critic #518 round 2)", () => {
+test("the kind said for this injury: only that kind's amount, named so, no question (live 17 Nov)", () => {
   const simple = answer(both(), "Rowan had a simple fracture of his arm. What can he claim?", [/Other Fracture/, /^Simple Fracture: /]);
-  assert.deepEqual(simple.amounts, ["S$1,250", "S$120,000"]);
+  assert.deepEqual(simple.amounts, ["S$1,250"]);
   assert.ok(simple.points.some((t) => /"Simple Fracture", the kind you described/.test(t)), simple.points.join(" | "));
   assert.doesNotMatch(simple.question, /Which kind/);
+  // The model gave only the other kind's card: the said kind's card is brought in, the other's left out.
+  assert.deepEqual(answer(both(), "Rowan had a simple fracture of his arm. What can he claim?", [/Other Fracture/]).amounts, ["S$1,250"]);
   const other = answer(both(), "Rowan had an other fracture of his arm. What can he claim?", [/Other Fracture/]);
-  assert.deepEqual(other.amounts, ["S$120,000", "S$1,250"]);
+  assert.deepEqual(other.amounts, ["S$120,000"]);
+  // A reply that is only the kind says it.
+  for (const q of ["Simple", "It was simple.", "simple fracture"]) assert.deepEqual(answer(both(), q, [/Other Fracture/], null, ["Rowan broke his arm. What can he claim?"]).amounts, ["S$1,250"], q);
   // Misread kinds cost nothing: both amounts stay.
-  for (const q of ["The X-ray doesn't look like a simple fracture.", "The doctor ruled out a simple fracture.", "Last year he had a simple fracture of his leg."])
+  for (const q of ["The X-ray doesn't look like a simple fracture.", "The doctor ruled out a simple fracture.", "Last year he had a simple fracture of his leg.", "His sister had a simple fracture once."])
     assert.equal(answer(both(), `Rowan broke his arm. ${q}`, [/Other Fracture/]).amounts.length, 2, q);
+});
+test("a kind said carries across a correction of who it was, not to a new injury (live 17 Nov)", () => {
+  const earlier = ["Rowan broke his arm in an accident. What can he claim?", "It was a simple fracture."];
+  assert.deepEqual(answer(both(), "Sorry, actually it was Rowan, not his brother.", [/Other Fracture/], null, earlier).amounts, ["S$1,250"]);
+  const again = answer(both(), "Rowan broke his arm too in the same accident.", [/Other Fracture/], null, [...earlier, "Sorry, actually it was his brother."]);
+  assert.deepEqual(again.amounts, ["S$1,250", "S$120,000"]);
+  assert.match(again.question, /Which kind of fracture/);
+  assert.deepEqual([...kindsForInjury([...earlier, "Rowan broke his arm too."])], []);
+  assert.deepEqual([...kindsForInjury(earlier)], ["simple"]);
 });
 test("a kind the documents do not print says nothing: both as alternatives", () => {
   const a = answer(both(), "Rowan had a compound fracture of his arm. What can he claim?", [/Other Fracture/]);
