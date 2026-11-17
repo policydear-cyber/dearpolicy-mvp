@@ -1492,7 +1492,8 @@ test("a card whose copied benefit name is not its row's is left out: the id slip
     percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null, row: row.id, rowBenefit, eventFit: "any_event", waiting: null, period: { from: "", to: "", eventOn: "" } }] }, [...rows, simple, compound], HOUSE, new Date("2026-10-23T02:00:00Z")).report.labels.length;
   assert.equal(fracture(compound, "Wrist"), 0);
   assert.equal(fracture(compound, "Simple Fracture: Wrist"), 0);
-  assert.equal(fracture(compound, "Compound Fracture: Wrist"), 1);
+  // The row's own name: its card is given, with the other kind's card for the same bones beside it (fracture kinds).
+  assert.equal(fracture(compound, "Compound Fracture: Wrist"), 2);
   // An answer recorded before the field existed is not checked.
   assert.equal(run(cef.id, undefined).labels.length, 1);
 });
