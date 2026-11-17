@@ -6,7 +6,7 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.te
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { homeCardSource, homeGridColumns } from "@/lib/coverage/home-card";
+import { homeCardShowsAmount, homeCardSource, homeGridColumns } from "@/lib/coverage/home-card";
 
 let passed = 0; const failures: string[] = [];
 function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
@@ -19,12 +19,25 @@ test("two policies: both names; the same name twice (any case) counts once", () 
   assert.equal(homeCardSource({ policyNames: ["Group Term Life"], parts: [{ name: "Group Term Life" }, { name: "Funeral Benefit" }] }), "Group Term Life + Funeral Benefit");
   assert.equal(homeCardSource({ policyNames: ["Term Life", "TERM LIFE"] }), "Term Life");
 });
+test("several lines or policies: no total on Home (different schedules are never added without support, 17 Nov)", () => {
+  // Two confirmed Death policies S$200,000 + S$100,000: the dashboard's S$300,000 is not shown; the card names both.
+  const two = { policyNames: ["Oakridge Term 80", "Oakridge Whole Life"], count: 2 };
+  assert.equal(homeCardShowsAmount(two), false); assert.equal(homeCardSource(two), "Oakridge Term 80 + Oakridge Whole Life");
+  // One plan paying two Death benefits (S$1,000,000 + S$5,000): no total either, and the card says how many.
+  const onePlan = { policyNames: ["Group Term Life"], parts: [{ name: "Group Term Life" }, { name: "Group Term Life" }], count: 2 };
+  assert.equal(homeCardShowsAmount(onePlan), false); assert.equal(homeCardSource(onePlan), "Group Term Life \u00b7 2 benefits");
+  assert.equal(homeCardSource({ policyNames: [], count: 3 }), "3 benefits");
+  // One line: its own confirmed amount is shown.
+  assert.equal(homeCardShowsAmount({ count: 1 }), true);
+  assert.equal(homeCardShowsAmount({ count: 0 }), true, "a derived cover with no line has no amount to sum");
+});
 test("three or more: a count, never a list that overflows the card", () => {
   assert.equal(homeCardSource({ policyNames: ["A Plan", "B Plan", "C Plan"] }), "3 policies");
 });
 test("nothing named, or only the dashboard's 'Policy' stand-in: no line, never an invented name", () => {
   assert.equal(homeCardSource({ policyNames: [] }), null);
-  assert.equal(homeCardSource({ policyNames: null, parts: [{ name: "Policy" }, { name: null }] }), null);
+  assert.equal(homeCardSource({ policyNames: null, parts: [{ name: "Policy" }] }), null);
+  assert.equal(homeCardSource({ policyNames: null, parts: [{ name: "Policy" }, { name: null }] }), "2 benefits", "unnamed, but how many is still said");
   assert.equal(homeCardSource({ policyNames: ["Owned policy"] }), null);
 });
 test("the source line never carries an amount: only names go in", () => {
@@ -45,7 +58,7 @@ test("columns: the last row is never one card alone where 3 or 4 columns avoid i
 });
 test("the page shows the amount only when there is one, names the source, and sets the columns", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(page, /const amount=c\.amount!=null\?money\(c\.amount,c\.currency\):c\.displayAmount;const source=homeCardSource\(c\);/);
+  assert.match(page, /const amount=!homeCardShowsAmount\(c\)\?null:c\.amount!=null\?money\(c\.amount,c\.currency\):c\.displayAmount;const source=homeCardSource\(c\);/);
   assert.match(page, /\{source&&<span className="coverage-source" title=\{source\}>\{source\}<\/span>\}/);
   assert.match(page, /\{amount&&<span className="coverage-amount">\{amount\}<\/span>\}/);
   assert.match(page, /data-cols=\{homeGridColumns\(covered\.length\)\}/);
