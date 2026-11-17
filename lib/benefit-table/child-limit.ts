@@ -82,10 +82,11 @@ export function withoutChildLimit(text: string, limit: Pick<ChildLimit, "words">
 
 /** What the schedule prints about one person, from their own line of its people table. */
 export type PrintedLife = { birth: string | null; relationship: string | null;
-  /** The household's own record of who the person is, when it says the account holder or their spouse ("self", "spouse"),
-   * and the date of birth it entered (YYYY-MM-DD), if any. Set only by the household (householdLife), never read from a
-   * document; a printed relationship or date of birth that says otherwise still wins (householdAdult). */
-  household?: "self" | "spouse" | null; householdBirth?: string | null };
+  /** The household's own record of who the person is: "self" or "spouse" (the account holder or their spouse), "child"
+   * (recorded as their child), or "other" (any other relationship, kept only with a date of birth), and the date of birth
+   * it entered on the profile (YYYY-MM-DD), if any. Set only by the household (householdLife), never read from a document;
+   * a printed relationship or date of birth that says otherwise still wins (householdAdult). A profile date of birth never settles a member as the insured child. */
+  household?: "self" | "spouse" | "child" | "other" | null; householdBirth?: string | null };
 const BIRTH_HEAD = /^(?:date\s+of\s+birth|birth\s*date|d\.?\s?o\.?\s?b\.?|born)$/i;
 const RELATION_HEAD = /^(?:relationship(?:\s+to\s+(?:the\s+)?(?:policyholder|proposer|insured|policy\s+owner))?|relation)$/i;
 const DATE = String.raw`\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\.?,?\s+\d{4}`;
@@ -553,12 +554,16 @@ export function provenAdult(life: PrintedLife | null | undefined, age: number | 
   if (householdAdult(life, age, days)) return { adult: true };
   return { adult: false, why: rel === "adult" ? `does not print a date of birth to show they are ${over} or over` : "does not print a date of birth" };
 }
-/** The cover's printed life with the household's record of the account holder or their spouse added (PrintedLife.household,
- * householdBirth). Any other relationship (child, parent, other) adds nothing; the printed line is never replaced. */
+/** The cover's printed life with the household's own record added (PrintedLife.household, householdBirth): the account
+ * holder or their spouse always; anyone else only when the household entered their date of birth on the profile (a
+ * relationship alone, child or parent or other, proves nothing about an insured child). The printed line is never
+ * replaced. */
 export function householdLife(life: PrintedLife | undefined, member: { relationship?: string | null; date_of_birth?: string | null }): { life?: PrintedLife } {
   const rel = (member.relationship ?? "").trim().toLowerCase();
-  if (rel !== "self" && rel !== "spouse") return life ? { life } : {};
-  return { life: { birth: life?.birth ?? null, relationship: life?.relationship ?? null, household: rel, householdBirth: member.date_of_birth ?? null } };
+  const birth = member.date_of_birth && /^\d{4}-\d{2}-\d{2}$/.test(member.date_of_birth.slice(0, 10)) ? member.date_of_birth.slice(0, 10) : null;
+  const household = rel === "self" || rel === "spouse" ? rel : !birth ? null : CHILD_RELATION.test(rel) ? "child" : "other";
+  if (!household) return life ? { life } : {};
+  return { life: { birth: life?.birth ?? null, relationship: life?.relationship ?? null, household, householdBirth: rel === "self" || rel === "spouse" ? member.date_of_birth ?? null : birth } };
 }
 /** Whether the household's own record proves a person is not a scheme's insured child, when the schedule's line prints
  * nothing against it (no child relationship, no date of birth):
@@ -571,8 +576,21 @@ export function householdAdult(life: PrintedLife | null | undefined, age: number
   if (!life?.household || life.birth || relationClass(life.relationship) === "child" || !days.length) return false;
   if (life.household === "spouse") return true;
   const own = life.householdBirth ?? null;
-  if (age != null && age > 18) return !!own && ageSide(own, days, age) === "over";
+  // A member recorded as the household's child is never settled as an adult by the profile alone, under any limit: a
+  // mistyped year ("1917" for "2017") would otherwise pay the adult share for a child (Critic on #527 H1; Test engineer
+  // A1, an "under 21" limit). No amount is the safe side.
+  if (life.household === "child") return false;
+  // Anyone else the household entered a date of birth for (its parent, sibling ...): the same ages as the account holder's,
+  // and only from a plausible date of birth (profileSide: over 100 settles nothing).
+  if (life.household !== "self") return !!own && profileSide(own, days, age != null && age > 18 ? age : 26) === "over";
+  if (age != null && age > 18) return !!own && profileSide(own, days, age) === "over";
   return !own || ageSide(own, days, 26) === "over";
+}
+/** ageSide for a date of birth the household typed: a date giving an age over 100 on any day settles nothing (a mistyped
+ * year, Critic on #527 H1). */
+function profileSide(birth: string, days: number[], age: number): "under" | "over" | null {
+  for (const [y, mo, d] of birthReadings(birth)) for (const day of days) if (yearsOn(y, mo, d, day) > 100) return null;
+  return ageSide(birth, days, age);
 }
 
 /** The relationships that make a person an insured child, a closed list: never a step, grand or in-law form, "adult child"
@@ -640,7 +658,8 @@ export function personStatusWhy(life: PrintedLife | null | undefined, limit: Pic
     if (!side) return no(`prints a date of birth (${birth}) that does not settle whether they are under 18 on every day of the period of insurance`);
     if ((rel === "child") !== (side === "under")) return no(`prints a relationship ("${life!.relationship!.trim()}") and a date of birth (${birth}) that do not agree`);
   }
-  // The household's record of the account holder or their spouse, with nothing printed against it: not a child.
+  // The household's record (the account holder, their spouse, or a profile date of birth), with nothing printed against
+  // it: not a child.
   if (householdAdult(life, limit.belowAge, days)) return { status: "not_child" };
   if (limit.belowAge != null) {
     if (!birth) return no("does not print a date of birth");

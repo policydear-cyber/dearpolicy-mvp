@@ -56,6 +56,9 @@ test("live ingestion journey", async ({ page }) => {
     if (found) { members[m.displayName] = found.id; continue; }
     await page.locator("#fm-new-name").fill(m.displayName);
     await page.locator("#fm-new-relationship").selectOption(m.relationship);
+    // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
+    await page.locator("#fm-new-dob").fill("1990-01-01");
+    await page.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
     if (m.dateOfBirth) await page.locator("#fm-new-dob").fill(m.dateOfBirth);
     if (m.preferredName) await page.locator("#fm-new-preferred").fill(m.preferredName);
     await page.getByRole("button", { name: "+ Add person" }).click();

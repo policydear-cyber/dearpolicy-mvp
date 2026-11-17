@@ -430,7 +430,8 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
     if (b.childLimit && !child) return { kind: "none", why: `${b.value}% of the sum insured, or ${b.childLimit.percent}% for ${childCase(b.childLimit)}; ${cover.person}'s own line of the schedule ${childWhyOf(b, cover, today) ?? "does not settle which"}: see the document` };
     const percent = child === "child" ? b.childLimit!.percent : b.value!;
     const life = cover.life?.birth ? `date of birth ${cover.life.birth}, p${cover.source.page}` : cover.life?.relationship ? `relationship "${cover.life.relationship}", p${cover.source.page}`
-      : cover.life?.household ? `recorded in your family as ${cover.life.household === "self" ? "you" : "your spouse"}` : `p${cover.source.page}`;
+      : cover.life?.household === "self" || cover.life?.household === "spouse" ? `recorded in your family as ${cover.life.household === "self" ? "you" : "your spouse"}`
+      : cover.life?.householdBirth ? `date of birth ${cover.life.householdBirth}, in your family details` : `p${cover.source.page}`;
     const childWords = !b.childLimit ? "" : child === "child" ? ` for ${childCase(b.childLimit)} (${life})`
       : `; its ${b.childLimit.percent}% for ${childCase(b.childLimit)} is not for this person (${life})`;
     return capped(cents(percent * cover.sumInsured / 100), cover.currency,

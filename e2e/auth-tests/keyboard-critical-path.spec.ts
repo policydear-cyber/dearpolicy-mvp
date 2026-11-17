@@ -63,6 +63,10 @@ test.describe.serial("keyboard-only critical path", () => {
     await page.keyboard.type(person);
     await tabTo(page, (f) => f.id === "fm-new-relationship", "the relationship field");
     await page.keyboard.press("Home");
+    // Member profile (#527): date of birth and sex, by keyboard too.
+    await tabTo(page, (f) => f.id === "fm-new-dob", "the date of birth field");
+    await page.keyboard.type("01011990");
+    await tabTo(page, (f) => f.id === "fm-new-sex", "the sex field"); await page.keyboard.press("Home");
     await tabTo(page, (f) => f.text === "+ Add person", "the Add person button");
     await page.keyboard.press("Enter");
     await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
@@ -81,6 +85,10 @@ test.describe.serial("keyboard-only critical path", () => {
     // PR #65: no relationship is pre-chosen, and Add person stays disabled until one is.
     await tabTo(page, (f) => f.id === "fm-new-relationship", "the relationship field");
     await page.keyboard.press("Home");
+    // Member profile (#527): date of birth and sex, by keyboard too.
+    await tabTo(page, (f) => f.id === "fm-new-dob", "the date of birth field");
+    await page.keyboard.type("01011990");
+    await tabTo(page, (f) => f.id === "fm-new-sex", "the sex field"); await page.keyboard.press("Home");
     await tabTo(page, (f) => f.text === "+ Add person", "the Add person button");
     await page.keyboard.press("Enter");
     await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");

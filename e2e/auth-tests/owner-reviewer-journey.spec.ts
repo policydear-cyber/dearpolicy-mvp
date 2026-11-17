@@ -178,6 +178,9 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     for (const [who, relationship] of [[self, "self"], [child, "child"]] as const) {
       await owner.getByLabel("Full name").first().fill(who);
       await owner.locator("#fm-new-relationship").selectOption(relationship);
+      // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
+      await owner.locator("#fm-new-dob").fill("1990-01-01");
+      await owner.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
       await owner.getByRole("button", { name: "+ Add person" }).click();
       await expect(owner.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
     }

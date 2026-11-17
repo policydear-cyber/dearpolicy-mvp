@@ -15,6 +15,7 @@ const FILES = [
   "sql/processing-failure-diagnostics.sql",
   "sql/storage-purge.sql",
   "sql/infrastructure-rls.sql", "sql/v11-ingestion-evidence.sql",
+  "sql/member-profile.sql",
 ];
 
 async function main() {

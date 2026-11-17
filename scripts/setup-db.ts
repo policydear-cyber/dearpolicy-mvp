@@ -42,6 +42,7 @@ const MIGRATIONS = [
   "sql/detected-name-dismissals.sql",
   "sql/benefit-table.sql",
   "sql/benefit-figure-confirmations.sql",
+  "sql/member-profile.sql",
 ];
 
 async function main() {

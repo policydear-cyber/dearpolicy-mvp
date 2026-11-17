@@ -72,8 +72,11 @@ test.describe.serial("synthetic household journey", () => {
   test("3-4. add two synthetic family members through the Family page", async () => {
     await page.goto("/family");
     for (const [who, relationship] of [[parent, "parent"], [child, "child"]] as const) {
-      await page.locator(".profile-add-panel input[required]").fill(who);
-      await page.locator(".profile-add-panel select").selectOption(relationship);
+      await page.locator("#fm-new-name").fill(who);
+      await page.locator("#fm-new-relationship").selectOption(relationship);
+      // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
+      await page.locator("#fm-new-dob").fill(relationship === "child" ? "2015-06-01" : "1960-06-01");
+      await page.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
       await page.getByRole("button", { name: "+ Add person" }).click();
       await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Family member added.");
     }

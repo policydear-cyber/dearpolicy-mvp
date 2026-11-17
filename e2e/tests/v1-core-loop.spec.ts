@@ -108,6 +108,9 @@ async function addPerson(page: Page, fullName: string, preferred: string, relati
   if (found) return found.id;
   await page.locator("#fm-new-name").fill(fullName);
   await page.locator("#fm-new-relationship").selectOption(relationship);
+  // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
+  await page.locator("#fm-new-dob").fill("1990-01-01");
+  await page.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
   if (preferred && preferred !== fullName) await page.locator("#fm-new-preferred").fill(preferred);
   await page.getByRole("button", { name: "+ Add person" }).click();
   await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Family member added.", { timeout: 60_000 });
