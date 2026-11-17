@@ -44,9 +44,9 @@ function fakeDb(opts: { tables?: boolean } = {}) {
       if (!old || old.account_id === p[1]) s.readings.set(p[0] as string, { account_id: p[1] as string, reading: p[2] as string, model: p[3] as string, prompt_version: p[4] as string });
       return [];
     }
-    if (q.startsWith("SELECT reading FROM benefit_readings WHERE policy_id=$1 AND account_id=$2")) {
+    if (q.startsWith("SELECT reading, prompt_version FROM benefit_readings WHERE policy_id=$1 AND account_id=$2")) {
       const r = s.readings.get(p[0] as string);
-      return r && r.account_id === p[1] ? [{ reading: r.reading }] : [];
+      return r && r.account_id === p[1] ? [{ reading: r.reading, prompt_version: r.prompt_version }] : [];
     }
     if (q.startsWith("SELECT policy_id, reading FROM benefit_readings"))
       return [...s.readings].filter(([, r]) => r.account_id === p[0]).map(([policy_id, r]) => ({ policy_id, reading: r.reading }));
@@ -208,6 +208,30 @@ async function main() {
     await readDocument(g.db, readSummary([() => doc("product_summary", [], [death, { ...cash, value: 300 }, ambulance])]).model, A, "summary");
     await readDocument(g.db, readSummary([() => doc("product_summary", [], [death, ambulance])]).model, A, "summary");
     assert.ok(!rowsOf(g).some((b) => /hospital cash/i.test(b.benefit)));
+  });
+  await test("an earlier reading whose quote opens with a heading never stands beside the new reading's correction (Critic #528 NEW-HIGH 2)", async () => {
+    const f = household(); keepPages(f);
+    // Earlier: the heading line, then the row, read as from day 1 with no cap; and read as a lump sum.
+    const led = "1. Group Term Life\n•\tDeath\t100% of Sum Insured\n•\tDaily Hospital Cash Benefit\tS$30 per day from the 11\tday onwards.";
+    await readDocument(f.db, readSummary([() => doc("product_summary", [], [death, { ...cash, quote: led, fromDay: null, maxDays: null }, { ...cash, benefit: "Hospital cash", pays: "amount", quote: led }, ambulance])]).model, A, "summary");
+    // New: the row read right, from its own line.
+    await readDocument(f.db, readSummary([() => doc("product_summary", [], [death, cash, ambulance])]).model, A, "summary");
+    const rows = rowsOf(f).filter((b) => /hospital cash/i.test(b.benefit)) as unknown as { fromDay: unknown; pays: unknown }[];
+    assert.deepEqual(rows.map((r) => [r.pays, r.fromDay]), [["per_day", 11]]);
+  });
+  await test("kept rows are checked with the new reading's document kind; a changed reading prompt keeps nothing (Critic #528 MEDIUMs)", async () => {
+    const f = household(); keepPages(f);
+    f.s.pages.push({ policy_id: "summary", account_id: A, page_number: 3, text: "Key Features\n•\tBe insured up to a maximum coverage of S$800,000 at S$1.10 per day" });
+    const offer = benefit({ section: "1. Group Term Life", benefit: "Maximum coverage", pays: "up_to", value: 800000, quote: "Be insured up to a maximum coverage of S$800,000 at S$1.10 per day", page: 3 });
+    // Earlier, wrongly read as a personal schedule: the offer row passed. Now read as a summary: it is not kept.
+    await readDocument(f.db, readSummary([() => doc("personal_proof", [], [death, offer])]).model, A, "summary");
+    await readDocument(f.db, readSummary([() => doc("product_summary", [], [death])]).model, A, "summary");
+    assert.ok(!rowsOf(f).some((b) => b.benefit === "Maximum coverage"));
+    const g = household(); keepPages(g);
+    await readDocument(g.db, readSummary([() => doc("product_summary", [], [death, cash])]).model, A, "summary");
+    g.s.readings.get("summary")!.prompt_version = "an older prompt";
+    const r = await readDocument(g.db, readSummary([() => doc("product_summary", [], [death])]).model, A, "summary");
+    assert.equal((r as { keptEarlier?: number }).keptEarlier, undefined);
   });
   await test("the first reading of a document keeps nothing extra, and another household's reading is never used", async () => {
     const f = household(); keepPages(f);

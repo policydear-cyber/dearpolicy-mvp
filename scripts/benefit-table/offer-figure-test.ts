@@ -17,6 +17,14 @@ const page = [
   "Key Features",
   "•\tBe insured up to a maximum coverage of S$800,000 at S$1.10 per day",
   "•\tGet covered for up to RM 250,000 with no medical check-up",
+  "Hospital cash: maximum cover of S$30 a day",
+  "Outpatient treatment - maximum coverage S$1,000 per policy year",
+  "Medical expenses (maximum cover S$5,000 per accident)",
+  "Get covered for up to S$200 per day while in hospital",
+  "Simple Fracture: maximum cover of S$5,000 per accident",
+  "Overseas medical expenses: you are covered up to S$250,000 per trip",
+  "Funeral expenses: insured for up to S$7,000",
+  "•\tMaximum coverage S$90 per day for each stay",
   "•\tChoose a sum insured of up to $500,000",
   "•\tMaximum sum assured: S$2,000,000",
   "•\tReceive 100% Advance Payment Benefit up to S$300,000 if diagnosed with Terminal Illness",
@@ -29,7 +37,6 @@ const row = (benefit: string, pays: string, value: number, quote: string, extra:
   period: null, basis: null, percentOf: null, baseAmount: null, baseQuote: null, cap: null, capQuote: null, conditions: [], fromDay: null, maxDays: null, ...extra });
 const offers = [
   row("Maximum coverage", "up_to", 800000, "Be insured up to a maximum coverage of S$800,000 at S$1.10 per day"),
-  row("Cover without check-up", "up_to", 250000, "Get covered for up to RM 250,000 with no medical check-up"),
   row("Sum insured", "up_to", 500000, "Choose a sum insured of up to $500,000"),
   row("Maximum sum assured", "amount", 2000000, "Maximum sum assured: S$2,000,000"),
 ];
@@ -38,6 +45,16 @@ const limits = [
   row("Critical illness cover", "up_to", 250000, "Coverage up to S$250,000 against 37 critical illnesses"),
   row("Ambulance cost", "up_to", 500, "Ambulance cost up to S$500 per accident"),
   row("Daily hospital cash", "per_day", 40, "Daily hospital cash S$40 per day from the 11th day", { fromDay: 11 }),
+  // A benefit named before the words, or a rate after the figure, is a limit on a claim (Critic #528 NEW-HIGH 1).
+  row("Hospital cash", "per_day", 30, "Hospital cash: maximum cover of S$30 a day"),
+  row("Outpatient treatment", "up_to", 1000, "Outpatient treatment - maximum coverage S$1,000 per policy year"),
+  row("Medical expenses", "up_to", 5000, "Medical expenses (maximum cover S$5,000 per accident)"),
+  row("Hospital stay", "per_day", 200, "Get covered for up to S$200 per day while in hospital"),
+  row("Simple Fracture", "up_to", 5000, "Simple Fracture: maximum cover of S$5,000 per accident"),
+  row("Overseas medical expenses", "up_to", 250000, "Overseas medical expenses: you are covered up to S$250,000 per trip"),
+  row("Funeral expenses", "up_to", 7000, "Funeral expenses: insured for up to S$7,000"),
+  row("Daily stay", "per_day", 90, "Maximum coverage S$90 per day for each stay"),
+  row("Cover without check-up", "up_to", 250000, "Get covered for up to RM 250,000 with no medical check-up"),
 ];
 const read = (kind: string, benefits: unknown[]) => checkReading(src, { document: { kind, product: "Group Term Life", insurer: null, namedPeople: [] }, covers: [], benefits });
 

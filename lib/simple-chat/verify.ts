@@ -45,7 +45,13 @@ export const ALTERNATIVES_NOTE = "These are alternatives under one benefit in th
 export const DISCLAIMER = GENERIC_DISCLAIMER;
 
 // ------------------------------------------------------------------ finding a quote in the stored pages
-/** Text for matching: case, spacing, quote marks and dashes do not count. `at[i]` is where character i came from. */
+/** An ordinal's letters right after its number ("11th", "2nd", "1ST"), not followed by another letter. A page's text layer
+ * often lifts them out as a superscript onto a line of their own ("th" above, "the 11\tday onwards" here), while a reader
+ * copies the line as it reads ("the 11th day onwards"): live 17 Nov, a hospital cash row's quote was "not found" and the
+ * row left the table. So the letters never count, on the page or in the quote. */
+const ORDINAL_AT = (s: string, i: number) => /^(?:st|nd|rd|th)(?![a-z])/i.test(s.slice(i + 1, i + 4));
+/** Text for matching: case, spacing, quote marks, dashes and an ordinal's letters do not count. `at[i]` is where character
+ * i came from. */
 function squash(s: string): { text: string; at: Int32Array } {
   // Characters are joined once and positions kept in a typed array: a cached page then holds a flat string and 4 bytes a
   // character, not a rope and a boxed array (Critic R445 M1).
@@ -57,6 +63,7 @@ function squash(s: string): { text: string; at: Int32Array } {
     if (code < 128) {
       if (code === 32 || (code >= 9 && code <= 13)) continue;
       chars.push(code === 96 ? "'" : code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : s[i]); at[n++] = i;
+      if (code >= 48 && code <= 57 && ORDINAL_AT(s, i)) i += 2;
       continue;
     }
     let c = s[i];
