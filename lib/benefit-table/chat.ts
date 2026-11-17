@@ -1761,11 +1761,27 @@ const ACROSS_POLICIES = new RegExp([
   String.raw`\b(?:all|any|every)\s+(?:other\s+)?(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:issued\s+)?(?:covering|on|for|in\s+respect\s+of)\s+the\s+same\s+(?:life|person|insured)`,
   String.raw`\bacross\s+(?:all|any|every)\s+(?:(?:of\s+)?(?:our|the\s+insurer'?s|its)\s+)?(?:polic(?:y|ies)|plans?)\b`,
   String.raw`\b(?:combined|together)\s+with\s+(?:all|any|every)\s+(?:other\s+)?(?:polic(?:y|ies)|plans?)\b`,
+  // "all policies issued by us / the Company", "all policies with us", "all Kestrel policies on the life of the Life Assured",
+  // "per Life Assured for all plans in force with the Company" (Critic on #523).
+  String.raw`\b(?:all|any|every)\s+(?:other\s+)?(?:[A-Z][\w&'-]*\s+){0,3}(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:(?:in\s+force\s+)?(?:issued\s+by|with)\s+(?:us|the\s+(?:company|insurer))|(?:issued\s+)?on\s+the\s+life\s+of)\b`,
 ].join("|"), "i");
+/** Words that make a sentence about other policies something other than a shared limit: an exclusion, an offset or a
+ * condition ("No benefit is payable if a claim has been paid under any other policy", "less any amount paid under any other
+ * policy", "not combined with any other policy"). */
+const NOT_SHARED_LIMIT = /\b(?:no\s+benefits?|not\s+(?:be\s+)?(?:payable|paid|combined)|less\s+(?:any|the)|minus|deduct\w*|reduced\s+by|offset|if\s+(?:a|any)\s+claim\s+(?:has\s+been|is|was)\s+(?:paid|made|admitted))\b/i;
+/** Words that make a sentence a limit on what is paid. */
+const LIMIT_WORDS = /\b(?:most|maximum|max\.|not\s+exceed|exceed|limit(?:ed|s)?|in\s+total|total|aggregate\w*|up\s+to|capped)\b/i;
 export const SHARED_POLICIES_WORDS = "the most the insurer pays for these claims under this and all its other policies on the same person together, not this policy's own cover";
 /** Whether a row's printed words say its limit is shared with the insurer's other policies on the same life (ACROSS_POLICIES). */
-export function acrossPolicies(row: Pick<ChatRow, "source" | "conditions" | "benefit">): boolean {
-  return ACROSS_POLICIES.test([row.source.excerpt, row.benefit, ...row.conditions].join("\n").replace(/\s+/g, " "));
+export function acrossPolicies(row: Pick<ChatRow, "source" | "figure">): boolean {
+  if (row.figure.kind !== "printed") return false;
+  const amount = row.figure.amount;
+  // Only the sentence of the row's own words that prints the row's own figure counts: another clause of the excerpt, the
+  // row's name or its conditions about other policies say nothing about this figure (Critic on #523, NEW-HIGH).
+  const text = row.source.excerpt.replace(/\s+/g, " ");
+  const sentences = text.split(/(?<=[.;])\s+(?=[A-Z("“])/);
+  return sentences.some((t) => anyMoneyFigures(t).some((f) => Math.abs(f.value - amount) < 0.005)
+    && ACROSS_POLICIES.test(t) && LIMIT_WORDS.test(t) && !NOT_SHARED_LIMIT.test(t));
 }
 
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is

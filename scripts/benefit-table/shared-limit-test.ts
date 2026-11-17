@@ -78,12 +78,28 @@ test("a policy's own limit keeps its card as before", () => {
   assert.ok(cards.some((c) => c.startsWith("S$300,000")), cards.join(" || "));
   for (const c of cards.filter((c) => /150,000/.test(c))) assert.doesNotMatch(c, /other policies/, c);
 });
-test("acrossPolicies: closed list of shared-limit wordings", () => {
-  const row = (x: string) => ({ source: { excerpt: x } as never, conditions: [] as string[], benefit: "" });
-  for (const yes of [SHARED, "Limit across all policies: S$2,000,000", "the total under this plan and any other plan covering the same life is S$500,000",
-    "all policies issued on the same life assured, in total, up to S$1,000,000", "combined with any other policy, up to S$800,000"]) assert.ok(acrossPolicies(row(yes)), yes);
+test("acrossPolicies: only the sentence printing the row's own figure, as a shared limit (Critic on #523)", () => {
+  const row = (x: string, amount = Number(/S\$([\d,]+)/.exec(x)![1].replace(/,/g, ""))) =>
+    ({ source: { excerpt: x } as never, figure: { kind: "printed", amount, currency: "SGD", unit: "up_to", period: null } as never });
+  for (const yes of [SHARED, "Limit across all policies: S$2,000,000", "the total under this plan and any other plan covering the same life is limited to S$500,000",
+    "The most we pay for all policies issued on the same life assured, in total, is S$1,000,000.", "combined with any other policy, up to S$800,000",
+    "The total payable under all policies issued by the Company on the life of the Life Assured shall not exceed S$1,050,000.",
+    "The maximum under all policies with us is S$1,050,000.", "The most payable under all Kestrel policies on the life of the Life Assured is S$1,050,000.",
+    "The aggregate limit under all policies issued by us is S$1,050,000.", "Maximum S$1,050,000 per Life Assured for all plans in force with the Company."]) assert.ok(acrossPolicies(row(yes)), yes);
   for (const no of ["The most we pay for all claims under this benefit is S$500,000 in total.", "Aggregate limit per policy year S$100,000",
-    "This policy does not cover claims paid under any other policy.", "Overall limit for all early stage claims: S$100,000"]) assert.ok(!acrossPolicies(row(no)), no);
+    "This policy does not cover claims paid under any other policy. Limit S$5,000.", "Overall limit for all early stage claims: S$100,000",
+    "We will pay S$200,000. No benefit is payable under this policy if a claim has been paid under any other policy we have issued on the same life.",
+    "Medical expenses up to S$5,000, less any amount paid under this policy or any other policy we have issued.",
+    "Hospital income S$20,000 in total; benefits are not combined with any other policy.",
+    "We will pay a lump sum of S$300,000 under this policy. The most under this policy and all other policies we have issued on the same life shall not exceed S$3,000,000."])
+    assert.ok(!acrossPolicies(row(no)), no);
+  // The own sum in an excerpt that also prints a shared limit stays the policy's own.
+  assert.ok(!acrossPolicies(row("Total Permanent Disability Benefit S$500,000. This policy and all other policies we have issued on the same life shall not exceed S$3,000,000.", 500000)));
+  assert.ok(acrossPolicies(row("Total Permanent Disability Benefit S$500,000. This policy and all other policies we have issued on the same life shall not exceed S$3,000,000.", 3000000)));
+});
+test("a condition about other policies never relabels the row's own figure", () => {
+  const h = household("The most We will pay in total for all Early Stage Critical Illness claims under this Policy shall not exceed S$150,000. Benefits are not combined with any other policy we have issued.");
+  for (const c of answer(h, "What critical illness cover does Rowan have?")) assert.doesNotMatch(c, /other policies/, c);
 });
 
 console.log(`benefit-table shared limit: ${passed} passed, ${failures.length} failed`);
