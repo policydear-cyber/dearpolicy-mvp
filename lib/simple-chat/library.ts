@@ -42,6 +42,12 @@ export type HouseholdDocument = {
   /** For a document whose reading failed: why, and the one next step, in the Documents page's own fixed words
    * (lib/documents/failure-advice.ts, an allow-list over the stored reasons), never the stored processing_error itself. */
   failure?: FailedDocumentChatAdvice | null;
+  /** Whether some details read from it could not be matched to the page they came from (policies.needs_review): the
+   * Documents page and Home say so, and they are not used in answers. */
+  needsReview?: boolean;
+  /** Its benefit-table state (lib/benefit-table/service.ts documentState), when the table is on: "read", "no_table",
+   * "read_in_part:23,24", ... Set by the chat hook before an answer is checked. */
+  tableState?: string | null;
   /** Pages the upload check could not check against the page image: no amount on them is used. */
   uncheckedPages?: number[];
   /** Pages on which some lines could not be checked against the page image: those lines show "[amount not checked]". */
@@ -71,7 +77,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
     [accountId]);
   const docs = await run(
     `SELECT p.account_id, p.id, p.original_filename, p.insurer, p.product_name, p.policy_number, p.policy_type, p.document_role,
-            p.effective_date, p.renewal_or_expiry_date, p.created_at, p.superseded_at, p.processing_status, p.processing_error, p.page_count, p.quarantine_status, f.display_name AS uploaded_for,
+            p.effective_date, p.renewal_or_expiry_date, p.created_at, p.superseded_at, p.processing_status, p.processing_error, p.page_count, p.quarantine_status, to_jsonb(p)->>'needs_review' AS needs_review, f.display_name AS uploaded_for,
             ${policyJobLive("p")} AS reading_live, ${scanJobLive("p")} AS scan_live, p.scan_result_detail
        FROM policies p LEFT JOIN family_members f ON f.id=p.family_member_id AND f.account_id=p.account_id
       WHERE p.account_id=$1 AND p.lifecycle_state='active' ORDER BY p.created_at`,
@@ -101,6 +107,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       effectiveDate: text(d.effective_date), expiryDate: text(d.renewal_or_expiry_date),
       uploadedAt: text(d.created_at), uploadedFor: text(d.uploaded_for), supersededAt: text(d.superseded_at), processingStatus: text(d.processing_status), quarantineStatus: text(d.quarantine_status), readingLive: d.reading_live === true,
       scanLive: d.scan_live === true,
+      needsReview: d.needs_review === true || d.needs_review === "true",
       // Only the advice is kept: the stored reason is mapped onto fixed words here and goes no further.
       failure: text(d.processing_status) === "failed" ? failedDocumentChatAdvice(text(d.processing_error), { hasPages: Number(d.page_count) > 0 }) : null,
       holdLabel: holdLabel(text(d.quarantine_status), text(d.scan_result_detail), prototype),

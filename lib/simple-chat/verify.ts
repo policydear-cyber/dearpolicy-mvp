@@ -2897,6 +2897,8 @@ const ABOUT_DOCUMENTS = /\b(?:documents?|files|uploads?|uploaded|paperwork)\b|\b
  * unless it also asks what was uploaded or linked (TE #104 L9). */
 const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
+/** A question about whether files were read ("which documents haven't been fully read?", "could all my files be read?"). */
+const READ_STATUS = /\b(?:read|readable|unreadable|scanned|failed)\b/i;
 /** What a document is called in a point about the file: its product, or, when it has none and its file name says nothing
  * ("scan_20260101090000.pdf", a hash), what the app takes it to be ("Example Insurance endorsement, uploaded 1 Jan 2026"), with the
  * file name after it so it can be found on the Documents page (overnight run 23 Oct, N195, N282). A name a person gave the
@@ -2919,8 +2921,29 @@ export function libraryFact(household: Household, d: HouseholdDocument): string 
       // A page checked line by line: only its unconfirmed amounts are left out (Critic R211-4).
       + `${d.partCheckedPages?.length ? ` Some amounts on ${pageList(d.partCheckedPages)} couldn't be checked against the page image, so they are not used.` : ""}`
     : `${named} was read.`;
-  const linked = d.linkedPeople.length ? ` It is linked to ${d.linkedPeople.map(baseName).join(" and ")} in DearPolicy.` : " It is not linked to anyone in DearPolicy; it can be linked on the Documents page.";
-  return `${read}${linked}${uploadedApart(d) ? ` It was uploaded for ${baseName(d.uploadedFor!)}.` : ""}`;
+  // What the benefit table records of it, in the words other answers use ("has not had its benefits read"), and details
+  // not matched to their page, in the Documents page's words (launch checklist C10, 17 Nov).
+  const table = tableWords(d);
+  const fileRead = !unreadable(d) && !(d.unreadablePages?.length && !d.pages.length);
+  const benefits = fileRead && table ? table.startsWith("page") || table.startsWith("some pages")
+    ? ` Its benefits were read in part: ${table}, so any cover printed only there is not counted.`
+    : ` It ${table}, so no cover or amount from it is counted in answers.` : "";
+  const review = fileRead && d.needsReview ? " Some details in it could not be matched to the page they came from, so DearPolicy does not use them in answers yet." : "";
+  // A linked file uploaded for someone else says it as one contrast, as libraryGroups does ("It is linked to Mei, but it
+  // was uploaded for Rowan"), never as two flat sentences that read as a contradiction (launch checklist C10).
+  const apart = uploadedApart(d);
+  const linked = d.linkedPeople.length ? ` It is linked to ${d.linkedPeople.map(baseName).join(" and ")} in DearPolicy${apart ? `, but it was uploaded for ${baseName(d.uploadedFor!)}` : ""}.`
+    : ` It is not linked to anyone in DearPolicy; it can be linked on the Documents page.${apart ? ` It was uploaded for ${baseName(d.uploadedFor!)}.` : ""}`;
+  return `${read}${benefits}${review}${linked}`;
+}
+/** What the benefit table records of a document that holds cover, when it is not read in full: TABLE_STATE_WORDS, or the
+ * pages read past (readPastWords). Null when read, unknown, or a document that holds no cover (a receipt). */
+function tableWords(d: HouseholdDocument): string | null {
+  const state = d.tableState;
+  if (!state || state === "read") return null;
+  if (NO_COVER_READING_ROLES.includes(d.documentRole ?? "") && !MISFILED_STATES.has(state)) return null;
+  if (TABLE_STATE_WORDS[state]) return TABLE_STATE_WORDS[state];
+  return readPastWords(d, new Map([[d.policyId, state]]));
 }
 /** Why a failed document could not be read and what to do, as the Documents page says it (lib/documents/failure-advice.ts):
  * fixed words only, never the stored reason. Empty for any other document. */
@@ -2928,7 +2951,7 @@ const failedWhy = (d: HouseholdDocument) => { const f = failureAdvice(d); return
 /** Who a file was uploaded for, when that is news: someone it is not linked to. Said of a file linked to the same person,
  * it only repeats the line before it (live 7e6d50e, E1). */
 const uploadedApart = (d: HouseholdDocument) => !!d.uploadedFor && !d.linkedPeople.some((p) => baseName(p) === baseName(d.uploadedFor!));
-const readInFull = (d: HouseholdDocument) => !unreadable(d) && !d.uncheckedPages?.length && !d.partCheckedPages?.length && !d.unreadablePages?.length;
+const readInFull = (d: HouseholdDocument) => !unreadable(d) && !d.uncheckedPages?.length && !d.partCheckedPages?.length && !d.unreadablePages?.length && !tableWords(d) && !d.needsReview;
 
 /** Points about several files, for a question about the documents: the files read in full, listed together under the
  * people each is linked to, then one sentence for each file that is news on its own (read in part, unreadable, linked to
@@ -3310,6 +3333,18 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   const filePoints = checked.filter((c) => c.libraryDoc != null);
   // A failed file's reason and next step are said once: in its own point when the answer has one, else in the count.
   for (const c of checked) if (c.libraryCount) c.s = { ...c.s, text: libraryCount(household, new Set(filePoints.map((f) => f.libraryDoc!))) };
+  // A question about which files were (not) read gets every file not read in full, from the record, beside the ones the
+  // model named: one it left out never reads as fully read (launch checklist C10: the unread booklet was missing).
+  if (aboutLibrary(written[0] ?? "") && READ_STATUS.test(written[0] ?? "")) {
+    const named = new Set(filePoints.map((c) => c.libraryDoc!));
+    const template = filePoints[0] ?? null;
+    household.documents.forEach((d, di) => {
+      if (d.supersededAt || named.has(di) || readInFull(d)) return;
+      const base = (template?.s ?? { kind: "fact", text: "", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null }) as Checked["s"];
+      const point = { s: { ...base, kind: "fact", text: libraryFact(household, d), person: null, conditions: [], alternativeGroup: null }, found: null, amount: null, person: null, note: null, libraryDoc: di } as Checked;
+      checked.push(point); filePoints.push(point); aboutFiles.add(di);
+    });
+  }
   if (aboutLibrary(written[0] ?? "") && filePoints.length) {
     const listed = new Set(checked.flatMap((c) => (c.libraryPerson ? [c.libraryPerson] : [])));
     const texts = libraryGroups(household, filePoints.map((c) => household.documents[c.libraryDoc!]), listed);
