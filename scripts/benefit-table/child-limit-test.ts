@@ -7,12 +7,12 @@
  * Made-up households only. No model, database or network.
  *   npm run benefit-table:child-limit-test */
 import assert from "node:assert/strict";
-import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
+import { assembleTable, coverKeyOf, householdLife, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, foldChildColumns, type SourceDoc } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
 import { readModelAnswer, verifyAnswer, type ServerFigure } from "@/lib/simple-chat/verify";
-import { childColumn, childLimitIn, childLimitNotes, childShareAllowed, childWordsElsewhere, personStatus, printedLife } from "@/lib/benefit-table/child-limit";
+import { childColumn, childLimitIn, childLimitNotes, childShareAllowed, childWordsElsewhere, personStatus, printedLife, provenAdult } from "@/lib/benefit-table/child-limit";
 import { printedDay } from "@/lib/benefit-table/dates";
 
 let passed = 0;
@@ -30,7 +30,7 @@ const ACC = "55555555-5555-4555-8555-555555555555";
 const DOC = "eeeeeeee-0000-4000-8000-000000000081";
 const ben = (o: Record<string, unknown>) => ({ section: null, column: null, pays: "amount", value: null, period: null, basis: null, asOf: null, percentOf: null, baseAmount: null, baseQuote: null,
   cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 2, ...o });
-function schedule(people: Person[], tableLines: string[], benefits: Record<string, unknown>[], o: { product?: string; header?: string; period?: string | null; familyDob?: Record<string, string>; page3?: string } = {}) {
+function schedule(people: Person[], tableLines: string[], benefits: Record<string, unknown>[], o: { product?: string; header?: string; period?: string | null; familyDob?: Record<string, string>; page3?: string; relationships?: Record<string, string> } = {}) {
   const product = o.product ?? "Family Personal Accident";
   const page1 = `Example Assurance plc\n${product.toUpperCase()} - SCHEDULE${o.period === null ? "" : `\nPeriod of insurance: ${o.period ?? "1 March 2026 to 28 February 2027"}`}\n${o.header ?? "Insured person\tRelationship\tDate of birth\tSum Insured"}\n${people.map((p) => p.line).join("\n")}`;
   const page2 = `TABLE OF BENEFITS\nSection\tBenefit\tAmount payable\n${tableLines.join("\n")}`;
@@ -38,7 +38,7 @@ function schedule(people: Person[], tableLines: string[], benefits: Record<strin
     documentRole: "personal_schedule", effectiveDate: null, expiryDate: null, uploadedAt: "2026-10-01", uploadedFor: null, linkedPeople: people.map((p) => p.name), supersededAt: null,
     processingStatus: "ready", pages: [page1, page2, ...(o.page3 ? [o.page3] : [])].map((text, i) => ({ page: i + 1, text })) };
   const house: Household = { accountId: ACC, members: people.map((p) => ({ name: p.name, relationship: p.relationship })), documents: [d] };
-  const family: FamilyMember[] = people.map((p, i) => ({ id: `m${i}`, display_name: p.name, relationship: p.relationship, date_of_birth: o.familyDob?.[p.name] ?? null }));
+  const family: FamilyMember[] = people.map((p, i) => ({ id: `m${i}`, display_name: p.name, relationship: o.relationships?.[p.name] ?? p.relationship, date_of_birth: o.familyDob?.[p.name] ?? null }));
   const src: SourceDoc = { id: d.policyId, name: d.name, readable: true, pages: d.pages };
   const reading = checkReading(src, { document: { kind: "personal_proof", product, insurer: d.insurer, namedPeople: people.map((p) => p.name), plan: null,
       periodFrom: o.period === null ? null : (o.period ?? "1 March 2026 to 28 February 2027").split(" to ")[0], periodTo: o.period === null ? null : (o.period ?? "1 March 2026 to 28 February 2027").split(" to ")[1] },
@@ -234,18 +234,21 @@ test("not proven: no amount for anyone unproven, and the printed condition is qu
   // An age in the condition but no date of birth printed (relationship only).
   const noDob = (p: Person) => ({ ...p, line: p.line.split("\t").filter((_, i) => i !== 2).join("\t") });
   const h = family([noDob(NGOZI), noDob(GRACE)], CELL, { header: "Insured person\tRelationship\tSum Insured" });
-  for (const p of [NGOZI, GRACE]) {
-    const a = death(h, p.name === NGOZI.name ? noDob(NGOZI) : noDob(GRACE));
-    assert.deepEqual(a.amounts, [], p.name);
+  {
+    const a = death(h, noDob(GRACE));
+    assert.deepEqual(a.amounts, [], GRACE.name);
     assert.deepEqual(a.others, []);
     assert.ok(a.points.some((t) => t.includes('the policy says: "For an insured child under 18, limited to 25% of the Sum Insured"') && t.includes("does not print a date of birth")), a.points.join(" | "));
   }
-  // A date of birth the household entered on the Family page is not the schedule's: still no amount.
+  // The household records Ngozi as the account holder ("self"): never an insured child, so the row's own share (live
+  // walk 17 Nov: Self and Spouse lost every figure of a group scheme whose schedule prints no date of birth).
+  assert.deepEqual(death(h, noDob(NGOZI)).amounts, ["£100,000"]);
+  // A date of birth the household entered on the Family page is not the schedule's: still no amount for the child.
   const fam = family([noDob(NGOZI), noDob(GRACE)], CELL, { header: "Insured person\tRelationship\tSum Insured", familyDob: { "Grace Okafor": "2017-04-09", "Ngozi Okafor": "1984-06-14" } });
   assert.deepEqual(death(fam, noDob(GRACE)).amounts, []);
-  assert.deepEqual(death(fam, noDob(NGOZI)).amounts, []);
+  assert.deepEqual(death(fam, noDob(NGOZI)).amounts, ["£100,000"]);
   // No relationship column, no age in the condition.
-  const noRel = family([P("Ngozi Okafor", "", "", "GBP 100,000", 100000, ["Ngozi Okafor", "GBP 100,000"]), P("Grace Okafor", "", "", "GBP 20,000", 20000, ["Grace Okafor", "GBP 20,000"])],
+  const noRel = family([P("Ngozi Okafor", "Policyholder", "", "GBP 100,000", 100000, ["Ngozi Okafor", "GBP 100,000"]), P("Grace Okafor", "Child", "", "GBP 20,000", 20000, ["Grace Okafor", "GBP 20,000"])],
     "100% of the Sum Insured. For a dependent child, limited to 20% of the Sum Insured.", { header: "Insured person\tSum Insured", condition: null });
   assert.deepEqual(death(noRel, GRACE).amounts, []);
 });
@@ -482,7 +485,8 @@ test("gate R5-M1, R5-L1: a printed date of birth at or over the note's age prove
   const note = "Insured children under 21: 50% of the Sum Insured.";
   const dan = (rel: string, dob: string) => P("Daniel Okafor", rel, dob, "GBP 80,000", 80000);
   for (const [rel, dob, want] of [["Main life", "02/11/1982", 80000], ["", "02/11/1982", 80000], ["Partner", "02/11/1982", 80000],
-    ["Spouse", "01/06/2006", null], ["Policyholder", "01/06/2006", null], ["Spouse", "", null], ["Daughter", "02/11/1982", null]] as [string, string, number | null][]) {
+    // A spouse with no printed date of birth: the household records them as the spouse, never an insured child (live walk 17 Nov).
+    ["Spouse", "01/06/2006", null], ["Policyholder", "01/06/2006", null], ["Spouse", "", 80000], ["Daughter", "02/11/1982", null]] as [string, string, number | null][]) {
     const d = dan(rel, dob);
     const k = r5([note], { plain: true, people: [NGOZI, d, GRACE] });
     assert.equal(k.ad(d), want, `${rel} ${dob}`);
@@ -493,6 +497,54 @@ test("gate R5-M1, R5-L1: a printed date of birth at or over the note's age prove
   const k = r5(["Note: for an insured child the death benefit is limited to GBP 3,000."], { plain: true, people: [NGOZI, spouse, GRACE] });
   assert.equal(k.ad(spouse), 80000);
   assert.equal(k.ad(GRACE), null);
+});
+test("household record: self or spouse settles not a child only when the schedule prints nothing against it", () => {
+  const day = Math.floor(NOW.getTime() / 86_400_000);
+  const self = householdLife(undefined, { relationship: "self" }).life;
+  const spouse = householdLife({ birth: null, relationship: null }, { relationship: "Spouse" }).life;
+  assert.equal(personStatus(self, { belowAge: 18 }, [day]), "not_child");
+  assert.equal(personStatus(spouse, { belowAge: 21 }, [day]), "not_child");
+  assert.equal(provenAdult(self, 18, [day]).adult, true);
+  // A child, parent or any other household relationship adds nothing.
+  for (const rel of ["child", "parent", "other", "", null]) assert.deepEqual(householdLife(undefined, { relationship: rel }), {}, String(rel));
+  // What the schedule prints still wins: a child relationship, or a date of birth under the age.
+  const printedChild = householdLife({ birth: null, relationship: "Daughter" }, { relationship: "self" }).life;
+  assert.equal(personStatus(printedChild, { belowAge: null }, [day]), "child");
+  assert.equal(provenAdult(printedChild, 18, [day]).adult, false);
+  const young = householdLife({ birth: "01/06/2015", relationship: null }, { relationship: "spouse" }).life;
+  assert.equal(personStatus(young, { belowAge: 18 }, [day]), "child");
+  assert.equal(provenAdult(young, 18, [day]).adult, false);
+  // No day to settle on: still not settled.
+  assert.equal(personStatus(self, { belowAge: 18 }, []), null);
+  // Critic #518 H4: "self" under a limit above 18 needs the household's date of birth at or over it; with an ageless
+  // limit, a household date of birth under 26 proves nothing (a dependent child may be a student up to 25).
+  assert.equal(personStatus(self, { belowAge: 25 }, [day]), null);
+  assert.equal(provenAdult(self, 21, [day]).adult, false);
+  const self21 = householdLife(undefined, { relationship: "self", date_of_birth: "2005-01-01" }).life;
+  assert.equal(personStatus(self21, { belowAge: null }, [day]), null);
+  assert.equal(personStatus(self21, { belowAge: 25 }, [day]), null);
+  assert.equal(provenAdult(self21, null, [day]).adult, false);
+  const self40 = householdLife(undefined, { relationship: "self", date_of_birth: "1986-01-01" }).life;
+  assert.equal(personStatus(self40, { belowAge: 25 }, [day]), "not_child");
+  assert.equal(provenAdult(self40, 23, [day]).adult, true);
+  // A spouse is never insured as a child, whatever the age in the limit.
+  assert.equal(personStatus(spouse, { belowAge: 25 }, [day]), "not_child");
+});
+test("household record: Self and Spouse keep a group scheme's figures when the schedule prints no relationship or date of birth", () => {
+  const bare = (name: string, rel: string, sum: string, value: number) => P(name, rel, "", sum, value, [name, sum]);
+  const me = bare("Ngozi Okafor", "Policyholder", "GBP 100,000", 100000), wife = bare("Daniel Okafor", "Spouse", "GBP 80,000", 80000), kid = bare("Grace Okafor", "Child", "GBP 20,000", 20000);
+  const h = family([me, wife, kid], CELL, { header: "Insured person\tSum Insured" });
+  assert.deepEqual(death(h, me).amounts, ["£100,000"]);
+  assert.deepEqual(death(h, wife).amounts, ["£80,000"]);
+  assert.deepEqual(death(h, kid).amounts, []);
+});
+test("household record: Self is no proof of an adult on a document that also insures a member recorded as a parent", () => {
+  const bare = (name: string, rel: string, sum: string, value: number) => P(name, rel, "", sum, value, [name, sum]);
+  const mum = { ...bare("Ngozi Okafor", "Policyholder", "GBP 100,000", 100000) };
+  const student = { ...bare("Daniel Okafor", "Policyholder", "GBP 80,000", 80000) };
+  const fam = (rel: Record<string, string>) => family([mum, student], "100% of the Sum Insured. For a dependent child, limited to 20% of the Sum Insured.", { header: "Insured person\tSum Insured", condition: null, relationships: rel });
+  assert.deepEqual(death(fam({ "Daniel Okafor": "self", "Ngozi Okafor": "parent" }), student).amounts, []);
+  assert.deepEqual(death(fam({ "Daniel Okafor": "self", "Ngozi Okafor": "spouse" }), student).amounts, ["£80,000"]);
 });
 // ---------- Gate round 6: giving a child's share needs a document with no other child or age words ----------
 test("gate R6-H1: any other child or age wording in the document, however laid out, gives the child no share", () => {

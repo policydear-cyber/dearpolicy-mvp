@@ -27,12 +27,13 @@ import { moneyFiguresIn, sentencesOf, type StatedFigure } from "@/lib/chat/answe
 import { MONEY_SIGN } from "@/lib/format/currency";
 import { GENERIC_DISCLAIMER } from "@/lib/chat/generic-disclaimer";
 import { keepsCapIn, noteMultiple, timesWords } from "@/lib/benefit-table/multiplier";
-import { childCase, childLimitIn, childLimitNotes, childShareAllowed, personStatus, provenAdult, printedLife, withoutChildLimit } from "@/lib/benefit-table/child-limit";
+import { childCase, childLimitIn, childLimitNotes, childShareAllowed, householdLife, personStatus, provenAdult, printedLife, withoutChildLimit } from "@/lib/benefit-table/child-limit";
 import { documentId, failureAdvice, offersTryAgain, onHold, onHoldWords, pageList, readInPart, sentence, stillReading, unreadable, type Household, type HouseholdDocument } from "./library";
 import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
+import { COVER_NOTE } from "@/lib/chat/cover-note";
 
 export const LEFT_OUT_AMOUNT = "I left out an amount I couldn’t find printed in your documents.";
 export const LEFT_OUT_FACT = "I left out a point I couldn’t find in your documents.";
@@ -1290,9 +1291,13 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   // must name them (the one-life waiver above never settles whom a child's share is for).
   if ((child || childNote) && !namesPerson(have)) return no("a child's share or a child-limit note needs the person's own named line, and the sum's line does not name them");
   // Whom the child's share is for, read again from the person's own line on the base's page.
-  const life = child ? printedLife(bpage.text.split("\n"), at, person, household.members.map((m) => m.name)) : null;
+  // The household's record of the account holder or their spouse joins it (householdLife): never an insured child, unless
+  // the printed line says otherwise.
+  const own = household.members.find((m) => m.name === person);
+  const lifeAt = () => householdLife(printedLife(bpage.text.split("\n"), at, person, household.members.map((m) => m.name)), own ?? {}).life ?? null;
+  const life = child ? lifeAt() : null;
   if (child && (!sf.child!.days.length || personStatus(life, child, sf.child!.days) !== sf.child!.status)) return no("whom the child's share is for is not settled by the person's own printed line");
-  if (childNote && !provenAdult(printedLife(bpage.text.split("\n"), at, person, household.members.map((m) => m.name)), notes.age, sf.adult!.days).adult) return no("the person's own printed line does not prove them past the child-limit note's age");
+  if (childNote && !provenAdult(lifeAt(), notes.age, sf.adult!.days).adult) return no("the person's own printed line does not prove them past the child-limit note's age");
   // Two sums for the person are doubt. When the row and the sum are printed in the same document, that document settles it
   // and only its own lines count (a renewal schedule's table and its own sums, whatever last year's schedule printed).
   // Otherwise every live document of the same policy counts (a wording's table with a sum from one of two schedules).
@@ -3572,7 +3577,6 @@ const andList = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -
  * added, or null. */
 /** The note as noteCoverNotCounted writes it, for any person and documents: a bottom line the model wrote may repeat an
  * earlier turn's note (the history it is sent carries it), which is taken out before this turn's note is said (TE #402). */
-const COVER_NOTE = /\s*(?:This may not be all of [^:.]{1,200}?(?:’|')s cover: [\s\S]*?, so any cover in (?:it|them) is not counted here and the amounts shown are not a total\.|The cover shown from [^.]{1,300}? may be incomplete \([^)]{1,200}\), so the amounts shown may not be a total\.)/g;
 export function noteCoverNotCounted(answer: StructuredAnswer, household: Household, tableStates: ReadonlyMap<string, string> | null = null, charged: ReadonlySet<string> = new Set()): string | null {
   // An earlier note the model repeated is never kept: this turn's note (or none) is the one that holds now.
   const repeated = (answer.bottomLine ?? answer.summary ?? "");

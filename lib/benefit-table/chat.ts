@@ -15,6 +15,7 @@ import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSa
 import { CAP_WORDS } from "./check";
 import { noteMultiple, sameNote, type Multiplier, type RowFacts } from "./multiplier";
 import { withoutChildLimit } from "./child-limit";
+import { kindsSaid, namedKinds, rowFractureKind } from "./fracture-kind";
 import { printedDay, singaporeDay } from "./dates";
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { MONEY_SIGN, anyMoneyFigures, statedCurrencyCode } from "@/lib/format/currency";
@@ -37,7 +38,10 @@ export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: n
   premium?: true };
 /** `labels`: the server's own wording of each statement it wrote. The chat's checks keep exactly these words (verifyAnswer's
  * serverWords), and an amount whose statement does not read exactly one of them is refused (keepLabelledAmounts). */
-export type RowReport = { dropped: { why: string; text: string; notFit?: boolean; row?: string;
+export type RowReport = {
+  /** The question asked because a fracture row's amount waits on which kind of fracture it was (amountsFromRows). */
+  fractureQuestion?: string;
+  dropped: { why: string; text: string; notFit?: boolean; row?: string;
   /** The amount is a row's that its document prints for more than one person without saying whose (WithheldRow): the
    * household hears where it is printed (noteLeftOutAmounts), never that it could not be found. */
   withheld?: { note: string } }[]; labels: string[];
@@ -842,6 +846,14 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
   // Limit cards given for an event (asksOverallMost), with the statement each is: kept only beside a card of the same
   // person's own per-claim amount on the same policy, so the limit is never the only figure (Critic #312 M1).
   const limitsOnEvent: { row: ChatRow; st: Record<string, unknown> }[] = [];
+  // Each person's kinds of fracture whose amounts wait on which kind it was (rowFractureKind): asked about once at the end.
+  const fractureKinds = new Map<string, Set<string>>();
+  // The rows shown as one kind of fracture among others (above), with their kind: named on their cards' points.
+  const kindRows = new Map<string, string>();
+  // Each group's kind the household said (a printed one): its card comes first.
+  const saidKinds = new Map<string, string>();
+  // Each row's own card statement, by row id: cards for the same bones may carry the same label.
+  const cardOf = new Map<string, Record<string, unknown>>();
   const away = new Map<string, Record<string, unknown>>();
   const said = [(json as { bottomLine?: unknown }).bottomLine, ...((json as { statements: Record<string, unknown>[] }).statements ?? []).filter((x) => x && x.kind !== "amount").map((x) => x.text)]
     .filter((x): x is string => typeof x === "string").join(" ");
@@ -895,6 +907,45 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     if (raw.eventFit === "not_on_list" || ruledOut.has(row.id) || ruledOut.has(named.id)) { report.dropped.push({ why: ruledOut.get(named.id) ?? ruledOut.get(row.id) ?? `the event is not on ${names(row)}'s list`, text, notFit: namesRow(said, row, rows) }); continue; }
     const person = matchMember(household, typeof raw.person === "string" ? raw.person : null);
     if (!person || person !== baseName(row.person)) { report.dropped.push({ why: `the row is ${row.person}'s, not ${raw.person ?? "nobody's"}`, text }); continue; }
+    // A row that pays for one kind of fracture ("(Other Fracture)", "Simple Fracture due to Accident: Arm"), when the
+    // person's documents pay another kind differently and the household has not said which kind it was: each kind's card
+    // is shown as an alternative (never a total), the smaller first, each named for its kind, and the answer asks which
+    // kind it was (live walk 17 Nov: "broke his arm" led with S$120,000 for an "Other Fracture" alone, while the
+    // simple-fracture row for the same bones paid far less). The other kinds' rows for the same bones come with it even
+    // when the model gave only one. A kind the household said rules the others out: theirs get no amount.
+    const kind = rowFractureKind(fullName(row));
+    if (kind) {
+      const said = kindsSaid([question, ...earlier].join(" "));
+      // The kinds printed for the same bones: the row's own name's, and the person's other rows for those bones.
+      const others = new Set([...namedKinds(fullName(row)), ...rows.filter((o) => o.personId === row.personId && bones(o) === bones(row))
+        .map((o) => rowFractureKind(fullName(o))).filter((k): k is string => !!k)]);
+      others.delete(kind);
+      const who = baseName(row.person);
+      // Only a kind the documents print counts as said: "it was compound" says nothing about "Simple" or "Other Fracture".
+      // Two printed kinds said ("simple or other?") settle nothing. A said kind never withholds another kind's amount (it
+      // may be misread: "ruled out a simple fracture", "his sister had a simple fracture"): its card only comes first, and
+      // no question is asked (Critic on #518 round 2).
+      const printedSaid = [...said].filter((k) => k === kind || others.has(k));
+      if (printedSaid.length > 1) printedSaid.length = 0;
+      if (others.size) {
+        // One group per person, bones and policy: a second policy's amounts for the same bones are not its alternatives.
+        const group = `fracture kinds ${who}: ${bones(row)}: ${row.holding ?? row.coverKey}`;
+        raw.alternativeGroup = group;
+        if (!printedSaid.length) {
+          const ask = fractureKinds.get(who) ?? new Set<string>();
+          for (const k of [kind, ...others]) ask.add(k);
+          fractureKinds.set(who, ask);
+        } else saidKinds.set(group, printedSaid[0]);
+        kindRows.set(row.id, kind);
+        // The same bones' rows of the other kinds on the same policy, when the model did not give them.
+        for (const o of rows) {
+          const k = rowFractureKind(fullName(o));
+          if (!k || k === kind || o.personId !== row.personId || !samePolicy(o, row) || given.has(o.id) || ruledOut.has(o.id) || bones(o) !== bones(row)) continue;
+          if (pointed.some((x) => x && typeof x.row === "string" && x.row.trim().toUpperCase() === o.id)) continue;
+          pointed.push({ ...raw, text: o.benefit, row: o.id, rowBenefit: o.benefit, quote: null, conditions: [], multiplierNote: "", alternativeGroup: group });
+        }
+      }
+    }
     // A label carries the row's names past the money filter, so a name that states money is never labelled (Critic R92-2).
     if (nameStatesMoney(row.benefit) || nameStatesMoney(row.qualifier ?? "") || nameStatesMoney(row.product, "product") || nameStatesMoney(row.cover, "product") || nameStatesMoney(row.plan ?? "", "plan")) {
       report.dropped.push({ why: `row ${row.id}'s name states money`, text }); continue;
@@ -1008,7 +1059,7 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       const printed = facts ? r.conditions.find((c) => sameNote(noteSaid, c)) : undefined;
       const times = facts && printed ? noteMultiple(printed, facts) : null;
       if (st) {
-        statements.push(st); report.labels.push(String(st.text));
+        statements.push(st); report.labels.push(String(st.text)); cardOf.set(r.id, st);
         const sf = (times && serverFigureOf(r, st, household, times, facts)) || serverFigureOf(r, st, household);
         if (sf) (report.figures ??= []).push(sf);
         report.cards![r.id] = { text: String(st.text), person: baseName(r.person) };
@@ -1043,13 +1094,55 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
     delete report.cards![r.id]; given.delete(r.id);
     report.dropped.push({ why: `${names(r)} is the most paid for several benefits together, not what this event pays`, text: label, row: r.id });
   }
+  // The kinds' cards, smaller amount first, each followed by what kind it is for: never the larger alone at the top.
+  if (kindRows.size) {
+    const cardRow = new Map<unknown, ChatRow>();
+    for (const id of kindRows.keys()) { const st = cardOf.get(id), r = byId.get(id); if (st && r && statements.includes(st)) cardRow.set(st, r); }
+    const amountOf = (r: ChatRow) => r.figure.kind === "printed" || r.figure.kind === "worked_out" ? r.figure.amount : Number.POSITIVE_INFINITY;
+    // Each group of the same bones in its own places, smaller amount first.
+    const sorted: Record<string, unknown>[] = [];
+    for (const g of new Set([...cardRow.keys()].map((st) => (st as { alternativeGroup?: unknown }).alternativeGroup))) {
+      const at = statements.map((x, k) => cardRow.has(x) && (x as { alternativeGroup?: unknown }).alternativeGroup === g ? k : -1).filter((k) => k >= 0);
+      const first = saidKinds.get(String(g));
+      const rank = (st: Record<string, unknown>) => kindRows.get(cardRow.get(st)!.id) === first ? 0 : 1;
+      const order = at.map((k) => statements[k] as Record<string, unknown>).sort((a, b) => rank(a) - rank(b) || amountOf(cardRow.get(a)!) - amountOf(cardRow.get(b)!));
+      at.forEach((k, n) => { statements[k] = order[n]; });
+      sorted.push(...order);
+    }
+    for (const st of sorted) {
+      const r = cardRow.get(st)!;
+      const g = String((st as { alternativeGroup?: unknown }).alternativeGroup);
+      const fact = `${bareName(r)}: this amount is for what the policy calls ${kindName(kindRows.get(r.id)!)}${saidKinds.get(g) === kindRows.get(r.id) ? ", the kind you described" : ""}.`;
+      const k = statements.indexOf(st);
+      if (!statements.some((x) => (x as { text?: unknown; document?: unknown }).text === fact && (x as { document?: unknown }).document === documentId(r.docIndex)))
+        statements.splice(k + 1, 0, { kind: "fact", text: fact, person: baseName(r.person), document: documentId(r.docIndex), quote: r.source.excerpt, amount: null, percentOf: null,
+          conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
+    }
+  }
   report.dropped = report.dropped.filter((d) => !d.row || !given.has(d.row));
+  // One question for the kinds of fracture held back, unless the answer already asks one.
+  let ask: string | null = null;
+  if (fractureKinds.size) {
+    const [who, kinds] = [...fractureKinds.entries()][0];
+    const list = [...kinds].sort((a, b) => (a === "other" ? 1 : 0) - (b === "other" ? 1 : 0)).map(kindName);
+    ask = `Which kind of fracture did ${fractureKinds.size > 1 ? "each person" : who} have: ${list.slice(0, -1).join(", ")} or ${list[list.length - 1]}? The policy pays a different amount for each kind.`;
+    report.fractureQuestion = ask;
+  }
   // A label also given for a row that is not a premium is not a premium's.
   report.premiumLabels = [...charges].filter((l) => !benefits.has(l));
   if (!rows.length && report.dropped.length)
     statements.push({ kind: "uncertainty", text: NO_ROWS_YET, person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
-  return { json: { ...(json as object), statements }, report };
+  const asked = (json as { question?: unknown }).question;
+  return { json: { ...(json as object), statements, ...(ask && !(typeof asked === "string" && asked.trim()) ? { question: ask } : {}) }, report };
 }
+/** A row's section and benefit together: "Simple Fracture or Other Fracture: Arm, Elbow, Wrist or Ribs (Other Fracture)". */
+const fullName = (r: ChatRow) => [r.section, r.benefit].filter(Boolean).join(": ");
+/** A fracture row's name without its kind: the closing bracket and a leading "... Fracture ...:" heading go. */
+const bareName = (r: ChatRow) => fullName(r).replace(/\s*\([^()]*\)\s*$/, "").replace(/^[^:]*\bfractures?\b[^:]*:\s*/i, "").trim() || r.benefit;
+/** The bones a fracture row pays for, compared without case or punctuation. */
+const bones = (r: ChatRow) => bareName(r).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+/** A kind of fracture as the policy names it: "Simple Fracture", "Other Fracture", in quotes. */
+const kindName = (kind: string) => `"${kind.charAt(0).toUpperCase()}${kind.slice(1)} Fracture"`;
 
 /** Words that promise the printed figure is shown with the answer ("the daily figure is quoted below as the policy prints
  * it", "the amount quoted here", "the daily rate quoted below"). Only the server shows what a document prints, on a card or

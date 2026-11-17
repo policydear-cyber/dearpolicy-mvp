@@ -147,6 +147,14 @@ export async function tableReady(db: Db): Promise<boolean> {
 async function family(db: Db, accountId: string): Promise<FamilyMember[]> {
   const people = (await db("SELECT id, display_name, preferred_name FROM family_members WHERE account_id=$1 AND lifecycle_state='active' ORDER BY created_at", [accountId]))
     .map((r) => ({ id: String(r.id), display_name: String(r.display_name), preferred_name: r.preferred_name == null ? null : String(r.preferred_name) }) as FamilyMember);
+  // Who the household says each person is (Family page): "self" or "spouse" settles that they are not a scheme's insured
+  // child when their schedule line prints nothing to say (child-limit.ts householdLife). Read on its own, so a failure only
+  // leaves that unsettled (no amount), never the table unbuilt.
+  try {
+    const rel = new Map((await db("SELECT id, relationship FROM family_members WHERE account_id=$1 AND lifecycle_state='active' AND relationship IS NOT NULL", [accountId]))
+      .map((r) => [String(r.id), String(r.relationship)]));
+    for (const p of people) p.relationship = rel.get(p.id) ?? null;
+  } catch { /* no relationships: a child limit stays unsettled for anyone the schedule does not settle */ }
   // The dates of birth the household entered (Family page): they tell which of a wording's age groups is the person's
   // (assemble.ts tierProblem). Read on their own, so a failure only leaves the age groups unsettled (shown with no amount),
   // never the table unbuilt.

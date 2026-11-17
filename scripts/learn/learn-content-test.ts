@@ -16,6 +16,7 @@ import { searchLearn } from "@/components/learn/search";
 import { percentOf, plainNumber, splitBill } from "@/lib/learn/try-it";
 import { PICTOGRAMS } from "@/components/learn/pictogram";
 import { MAX_LEARN_LINKS, learnTermsIn } from "@/lib/learn/match";
+import { COVER_NOTE } from "@/lib/chat/cover-note";
 import { LearnLinks } from "@/components/learn-links";
 import LearnIndex from "@/app/learn/page";
 import LearnGuidePage, { generateStaticParams } from "@/app/learn/[slug]/page";
@@ -259,6 +260,12 @@ async function main() {
     assert.match(chat, /import \{ LearnLinks \} from "@\/components\/learn-links";/);
     assert.match(chat, /message\.role==="assistant"&&message\.answer&&!isStopped\(message\.answer,message\.content\)\?<LearnLinks texts=\{/);
     assert.equal((chat.match(/<LearnLinks /g) ?? []).length, 1);
+    // A term only in the note naming documents not counted is no topic of the answer (live walk 17 Nov: a fracture
+    // answer offered "Critical illness" from a document's name): the page leaves the note out of what it matches.
+    assert.match(chat, /<LearnLinks texts=\{\[message\.content\.replace\(COVER_NOTE," "\),/);
+    const note = "Rowan's broken arm is covered by his accident cover. This may not be all of Rowan Hartley’s cover: Kestrel Critical Illness Plus was read only in part (pages 3 to 9 not read), so any cover in it is not counted here and the amounts shown are not a total.";
+    assert.deepEqual(learnTermsIn([note.replace(COVER_NOTE, " ")]).map((x) => x.id), []);
+    assert.deepEqual(learnTermsIn([`${note} Critical illness cover pays on diagnosis.`.replace(COVER_NOTE, " ")]).map((x) => x.id), ["critical-illness"]);
   });
 
   await t("wiring: one Learn nav item, not a phone tab (goes in More)", () => {
