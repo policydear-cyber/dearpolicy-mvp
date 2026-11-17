@@ -16,7 +16,7 @@ type KnownSum={amount:number;currency:string;without:string[];otherTile?:string[
 type PremiumItem={id:string;insurer:string|null;product_name:string|null;amount:number;currency:string;currencyStated?:boolean;frequency:string|null;annual:number;monthly:number;shared:boolean;fromTable?:boolean;detail?:string|null;source?:string|null};
 type Reminder={kind:string;title:string;detail:string;href:string};
 type Unclaimed={id:string;original_filename:string;product_name:string|null;insurer:string|null;document_role:string|null};
-type Dashboard={family:Member[];activeMember:Member|null;coverages:Coverage[];reading?:number;premiums:{monthly:number|null;annual:number|null;currency?:string|null;note?:string|null;totals?:{currency:string;monthly:number;annual:number}[];items:PremiumItem[]};reminders:Reminder[];unclaimed:Unclaimed[];quality:{needsReview:number;referenceDocs:number;personalDocs:number};notFullyRead?:string|null;error?:string};
+type Dashboard={family:Member[];activeMember:Member|null;coverages:Coverage[];reading?:number;premiums:{monthly:number|null;annual:number|null;currency?:string|null;note?:string|null;totals?:{currency:string;monthly:number;annual:number}[];items:PremiumItem[]};reminders:Reminder[];unclaimed:Unclaimed[];quality:{needsReview:number;referenceDocs:number;personalDocs:number};notFullyRead?:string|null;gapsPending?:boolean;error?:string};
 // A card shows a figure only in the currency its document states, never a default (RM180 is not S$180).
 const money=(v:number,c:string|null|undefined)=>formatMoney(v,c);
 // A heading with its icon in front, in place of the uppercase label that used to sit above it.
@@ -93,7 +93,7 @@ export default function DashboardPage(){
      :<div className="empty-card" data-testid="home-no-cards">{(active?.policy_count??0)>0?<>No cover card for {name??"this person"} yet. {active!.policy_count===1?"Their document is":`Their ${active!.policy_count} documents are`} on file: <Link href={`/chat?member=${encodeURIComponent(active!.id)}`} className="text-link">ask DearPolicy what {active!.policy_count===1?"it covers":"they cover"}</Link> or <Link href="/policies" className="text-link">open Documents</Link>.</>:<>No document for {name??"this person"} is on file yet. <Link href="/policies" className="text-link">Upload a policy</Link></>}</div>}
     {/* Gaps (DC 17 Nov): the main kinds of cover with no card, once the person has a card and nothing is still being read,
         so a gap is never shown for a document DearPolicy has not finished. Never "not covered". */}
-    {!loading&&!personEmpty&&covered.length>0&&!data?.reading&&<HomeNotFound {...homeGaps(data?.coverages??[],active?.relationship)} memberId={active?.id??""} name={name} note={data?.notFullyRead}/>}
+    {!loading&&!personEmpty&&covered.length>0&&!data?.reading&&<HomeNotFound {...homeGaps(data?.coverages??[],active?.relationship)} memberId={active?.id??""} name={name} note={data?.notFullyRead} pending={data?.gapsPending===true}/>}
    </section>
    <HomeAsk memberId={active?.id} name={name}/>
   </div>

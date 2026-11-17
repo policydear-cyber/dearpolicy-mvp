@@ -21,19 +21,24 @@ export function homeGaps(coverages: { category: string; status: string }[], rela
 }
 
 /** Home's gaps, under the cards: "No cover of these kinds was found", never "not covered", since a policy not uploaded
- * may hold it (missing information is not an exclusion). `note`: said when some of the person's documents were not fully
- * read (lib/policies/not-fully-read.ts). Each gap links to its own Coverage answer, which names anything on file for it.
- * No product or insurer is suggested; the Learn guide explains what each kind is for. */
-export function HomeNotFound({missing,onFile=[],memberId,name,note}:{missing:string[];onFile?:string[];memberId:string;name?:string|null;note?:string|null}){
+ * may hold it (missing information is not an exclusion), and the box says so. `note`: the whole line said when some of
+ * the person's documents were not fully read (lib/policies/not-fully-read.ts). `pending`: some of them may hold a kind of
+ * cover nothing shows yet (an unread travel schedule), so no kind is named as a gap until they are read; one line says
+ * when gaps show instead (design review 2, Critic finding 2). Each gap links to its own Coverage answer, which names
+ * anything on file for it. No product or insurer is suggested; the Learn guide explains what each kind is for. */
+export function HomeNotFound({missing,onFile=[],memberId,name,note,pending=false}:{missing:string[];onFile?:string[];memberId:string;name?:string|null;note?:string|null;pending?:boolean}){
   if(!missing.length&&!onFile.length)return null;
   const whose=name?`${name}\u2019s documents`:"your documents";
   const own=name?`${name}\u2019s own policy`:"your own policy";
   const chips=(list:string[])=><ul className="home-gap-list">{list.map(c=><li key={c}><Link className="home-gap" href={`/coverage?member=${encodeURIComponent(memberId)}&category=${encodeURIComponent(c)}`}><Icon name={coverIcon(c)}/>{c}</Link></li>)}</ul>;
   return <section className="home-gaps" data-testid="home-gaps" aria-labelledby="home-gaps-title">
     <h2 id="home-gaps-title">Gaps to consider</h2>
-    {!!missing.length&&<><p>{note?`No cover of these kinds was found in what DearPolicy could read of ${whose}.`:`No cover of these kinds was found in ${whose}.`}</p>{chips(missing)}</>}
-    {!!onFile.length&&<><p>{`Found only in a booklet or wording, not yet shown on ${own}:`}</p>{chips(onFile)}</>}
+    {pending?<p data-testid="home-gaps-pending">{`Gaps show once DearPolicy has read all of ${whose}.`}</p>:<>
+      {!!missing.length&&<><p>{note?`No cover of these kinds was found in what DearPolicy could read of ${whose}.`:`No cover of these kinds was found in ${whose}.`}</p>{chips(missing)}</>}
+      {!!onFile.length&&<><p>{`Found only in a booklet or wording, not yet shown on ${own}:`}</p>{chips(onFile)}</>}
+      {!!missing.length&&<small>A policy that is not uploaded may still cover these.</small>}
+    </>}
     {note&&<small>{note}</small>}
-    <p className="home-gaps-foot"><Link className="text-link" href="/learn/types-of-cover">What each type of cover is for</Link><span aria-hidden="true"> · </span><Link className="text-link" href="/policies">Have one of these? Upload it</Link></p>
+    <p className="home-gaps-foot"><Link className="text-link" href="/learn/types-of-cover">What each type of cover is for</Link>{!pending&&<><span aria-hidden="true"> · </span><Link className="text-link" href="/policies">Have one of these? Upload it</Link></>}</p>
   </section>;
 }

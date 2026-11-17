@@ -248,7 +248,8 @@ export async function GET(request:NextRequest){
   if(Number(unmatched.rows[0]?.count??0)>0)reminders.push({kind:"family",title:"Match the people we found",detail:"A personalised document contains named insured people that are not linked to a family profile yet.",href:"/policies"});
   // A failed or partly read document of this person may hold cover the tiles cannot show: say so, never "not found" alone.
   const notRead=await notFullyRead(accountId,active.id,tableDocuments);
-  const notReadNote=notFullyReadNote(notRead,active.display_name,true);
+  // The whole note, with "so cover in them may be missing here" (design review 2: the short form dropped it).
+  const notReadNote=notFullyReadNote(notRead,active.display_name);
   // A "Not sure" upload nobody is linked to is no one's, so no person's count holds it. One whose reading failed or
   // stalled is not in "Say whose" (ready documents only) either: name it once for the household so it never vanishes.
   const claimable=new Set(unclaimed.rows.map((r)=>String(r.id)));
@@ -264,7 +265,7 @@ export async function GET(request:NextRequest){
   if(!selected.length)reminders.push({kind:"coverage",title:"Upload personal proof",detail:"DearPolicy needs at least one certificate or policy schedule before it can say what is covered or not covered.",href:"/policies"});
 
   // ID numbers in document names and notes are masked as chat masks them; ids are left as stored.
-  return NextResponse.json(maskShownText({family:familyResult.rows,activeMember:active,coverages:categories,reading,premiums,reminders,notFullyRead:notReadNote,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}}));
+  return NextResponse.json(maskShownText({family:familyResult.rows,activeMember:active,coverages:categories,reading,premiums,reminders,notFullyRead:notReadNote,gapsPending:notRead.coverUnknown>0,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}}));
  }catch(error){
   const authResponse=routeErrorResponse(error);
   if(authResponse.status===500)return NextResponse.json({error:"Dashboard error"},{status:500});

@@ -13,6 +13,7 @@ globalThis.fetch = (async () => { throw new Error("no network in this test"); })
 
 const ACCOUNT = "00000000-0000-0000-0000-0000000f0001", OTHER = "00000000-0000-0000-0000-0000000f0002";
 const ADA = "70000000-0000-4000-8000-000000000001", BEN = "70000000-0000-4000-8000-000000000002", ZOE = "70000000-0000-4000-8000-000000000003";
+const CAL = "70000000-0000-4000-8000-000000000004", DEE = "70000000-0000-4000-8000-000000000005";
 let n = 0;
 const id = () => "71000000-0000-4000-8000-" + String(++n).padStart(12, "0");
 
@@ -20,7 +21,7 @@ test("only a person's failed, partly read or cover-stopped documents count, and 
   const db = await installDatabase();
   await db.exec("ALTER TABLE policies ADD COLUMN IF NOT EXISTS reading_cache jsonb");
   for (const [a, name] of [[ACCOUNT, "Made-up household"], [OTHER, "Other household"]]) await db.query("INSERT INTO accounts(id,name) VALUES($1,$2)", [a, name]);
-  for (const [p, a, name] of [[ADA, ACCOUNT, "Ada Okafor"], [BEN, ACCOUNT, "Ben Okafor"], [ZOE, OTHER, "Zoe Lim"]])
+  for (const [p, a, name] of [[ADA, ACCOUNT, "Ada Okafor"], [BEN, ACCOUNT, "Ben Okafor"], [ZOE, OTHER, "Zoe Lim"], [CAL, ACCOUNT, "Cal Okafor"], [DEE, ACCOUNT, "Dee Okafor"]])
     await db.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,$3,'self')", [p, a, name]);
   const add = async (o: { account?: string; member?: string | null; link?: string; status: string; message?: string | null; role?: string | null; product?: string | null; cache?: object; superseded?: boolean; deleted?: boolean; pages?: number; quarantine?: string; age?: string }) => {
     const pid = id();
@@ -69,10 +70,27 @@ test("only a person's failed, partly read or cover-stopped documents count, and 
   const pack = await add({ member: BEN, link: BEN, status: "ready", role: "insurer_letter", product: "Example Pack" });
   const receipt = await add({ member: BEN, link: BEN, status: "failed", role: "premium_receipt" });
   const tableDocs = [{ id: pack, state: "table_unread" }, { id: receipt, state: "not_readable" }];
+  // Cal (design review 2): four schedules whose Coverage read rests until its retry time (the Documents page's "Benefits
+  // not read yet"), one of them a travel schedule: all four count, and their kinds of cover are not known.
+  const later = new Date(Date.now() + 86_400_000).toISOString();
+  for (const product of ["Example Single Trip Travel", "Example Term", "Example Shield", "Example CI"])
+    await add({ member: CAL, link: CAL, status: "ready", message: "Ready.", role: "personal_schedule", product, cache: { ledger_read_failure: { attempts: 3, reasonCode: "reader_unavailable", retryAfter: later } } });
+  // Dee: a schedule whose cover was read and only some amounts could not be checked: counted, kinds known.
+  await add({ member: DEE, link: DEE, status: "ready", message: "Read in part. Some amounts on page 2 could not be checked against the page image, so they are shown as not checked and not used.", role: "personal_schedule", product: "Example Life" });
+  // A Ready document whose page could not be read may hold a cover only there: kinds not known.
+  await add({ member: DEE, link: DEE, status: "ready", message: "Ready. Page 4 could not be read, so anything printed only there is not available.", role: "personal_schedule", product: "Example Accident" });
 
   const { notFullyRead, notFullyReadNote } = await import("@/lib/policies/not-fully-read");
   const ada = await notFullyRead(ACCOUNT, ADA);
   assert.equal(ada.count, 5, JSON.stringify(ada));
+  // All but the schedule read in part (its cover was read, some amounts were not checked) may hold an unknown kind of cover.
+  assert.equal(ada.coverUnknown, 4, JSON.stringify(ada));
+  const cal = await notFullyRead(ACCOUNT, CAL);
+  assert.equal(cal.count, 4, "every resting read counts, not one of four (design review 2)");
+  assert.equal(cal.coverUnknown, 4);
+  const dee = await notFullyRead(ACCOUNT, DEE);
+  assert.equal(dee.count, 2, JSON.stringify(dee));
+  assert.equal(dee.coverUnknown, 1, "only the page that could not be read leaves a kind unknown");
   assert.equal(ada.ids.length, 5);
   assert.equal(new Set(ada.ids).size, 5, "one id per document, so Home names a document once");
   assert.ok(ada.names.includes("Example Saver Plan") && ada.names.includes("Example Shield") && ada.names.includes("Example Travel"), JSON.stringify(ada.names));
