@@ -649,7 +649,7 @@ export function planCoverName(cover: string | null | undefined, plan: string | n
   return (" " + key(productName) + " ").includes(" " + key(plan) + " ") ? productName : productName + ", " + planName;
 }
 /** A cover's name as a tile shows it: without a policy number printed into it ("GROUP TERM LIFE(POLICY NO.123)"). */
-const partName = (n: string) => n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi, "").trim() || n;
+export const partName = (n: string) => n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi, "").trim() || n;
 const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !limits(r);
 /** What each of a person's covers gives in a lump-sum category, and their total (DC 27 Oct: show what each person is
  * covered for). Each confirmed schedule line is one part. A table cover is that line's when it shares the line's document

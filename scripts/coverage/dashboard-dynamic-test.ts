@@ -132,6 +132,9 @@ async function main() {
         const t = tile(await tiles(m.account, self), "Death");
         assert.equal(t.amount, m.a + m.b);
         assert.deepEqual((t.parts ?? []).map((p) => [p.name, p.amount]).sort(), [["Harbour Life Plan", m.a], ["Lighthouse Term Plan", m.b]]);
+        // Home names what pays by each policy's own name (coordinator 17 Nov): the two documents, never a figure.
+        assert.deepEqual([...((t as Tile & { sources?: string[] }).sources ?? [])].sort(), ["Harbour Life Plan", "Lighthouse Term Plan"]);
+        assert.deepEqual((tile(await tiles(m.account, self), "Hospitalisation") as Tile & { sources?: string[] }).sources, [], "a cover not held names nothing");
       });
       await test(`${m.cur}: the second policy removed: the tile is back to the first`, async () => {
         await query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1 AND account_id=$2", [second, m.account]);

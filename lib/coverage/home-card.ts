@@ -8,7 +8,47 @@
 
 const clean = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
 
-export type HomeCardInput = { policyNames?: string[] | null; parts?: { name?: string | null }[] | null; count?: number | null };
+export type HomeCardInput = { policyNames?: string[] | null; parts?: { name?: string | null }[] | null; count?: number | null; sources?: string[] | null };
+
+/** Words that name only a kind of cover, a benefit or a document, never which policy it is ("Business", "Death Benefit",
+ * "Travel insurance"): a name made only of them says nothing on a card (coordinator 17 Nov). An allow-list; "Group",
+ * "Term" and brand words are not on it, so "Group Term Life" stays a name. */
+const GENERIC = new Set(["a", "an", "the", "and", "of", "for", "&", "death", "benefit", "benefits", "cover", "covers", "coverage", "insurance",
+  "travel", "plan", "policy", "business", "basic", "rider", "critical", "illness", "accident", "accidental", "personal", "hospital", "hospitalisation",
+  "hospitalization", "medical", "outpatient", "total", "permanent", "disability", "income", "cash", "early", "savings", "investment", "trip",
+  "schedule", "certificate", "summary", "wording", "booklet", "document", "owned", "main", "supplementary", "protection"]);
+/** A name a person can read as a policy's name: not a file or system code ("SGGRP_COI_APP", "1105 CD-594 COI_SAF"), and
+ * not made only of generic words. The dashboard picks each source's first such name (app/api/dashboard/route.ts). */
+export function readablePolicyName(name: string | null | undefined): boolean {
+  const n = clean(name);
+  if (!n || /_/.test(n)) return false;
+  const words = n.toLowerCase().split(/[^\p{L}\p{N}&]+/u).filter(Boolean);
+  // A word of 3 or more letters is needed: "CD-594" or "EJ7" alone is a code.
+  if (!words.some((w) => /\p{L}{3,}/u.test(w))) return false;
+  return words.some((w) => !GENERIC.has(w));
+}
+
+/** Short words kept in capitals when an all-capitals name is set in title case: likely initials ("AIA", "MHA", "CPF").
+ * Common short words are not initials. */
+const SHORT_WORDS = new Set(["and", "of", "the", "for", "to", "in", "on", "at", "by", "or", "pro", "max", "new", "one", "two", "six", "ten", "all", "top", "my", "our", "plus", "care", "life", "term"]);
+const LOWER_WORDS = new Set(["and", "of", "the", "for", "to", "in", "on", "at", "by", "or"]);
+/** A policy's name as a card shows it: an all-capitals name in title case ("MINDEF & MHA GROUP INSURANCE SCHEME" ->
+ * "Mindef & MHA Group Insurance Scheme"), and a long name without its trailing codes in brackets ("PruFlexiCash Protection
+ * Plus (7th Series) (EJ7)" -> "PruFlexiCash Protection Plus"), so it fits two lines and is never cut mid-name. A name
+ * in mixed case keeps the insurer's own capitals. */
+export function homePolicyName(name: string): string {
+  let n = clean(name);
+  if (n.length > 26) { const bare = n.replace(/(?:\s*\([^()]*\))+\s*$/, "").trim(); if (bare.length >= 4) n = bare; }
+  if (/\p{Lu}{2}/u.test(n) && !/\p{Ll}/u.test(n)) {
+    n = n.replace(/\p{L}[\p{L}'’]*/gu, (w, i: number) => {
+      const lower = w.toLowerCase();
+      if (w.length <= 3 && !SHORT_WORDS.has(lower)) return w;
+      if (i > 0 && LOWER_WORDS.has(lower)) return lower;
+      return lower[0].toUpperCase() + lower.slice(1);
+    });
+  }
+  return n;
+}
 
 /** Whether Home may show the card's amount: only when the cover rests on one line, so the figure is never a sum of
  * several schedules, policies or benefits. */
@@ -22,10 +62,16 @@ export const homeAmountText = (amount: string) => amount.replace(/\b(a|an|per|ea
 
 /** What pays for this cover, in a few words: one policy's name, two names joined, or "N policies"; one policy with several
  * benefits for this cover says how many ("Group Term Life · 2 covers"). Null when nothing is named and there is one line. */
+/** About what two lines of a card's source line hold on a narrow card: longer joined names are not joined. */
+const HOME_SOURCE_CHARS = 38;
 export function homeCardSource(c: HomeCardInput): string | null {
   const seen = new Map<string, string>();
-  for (const n of [...(c.policyNames ?? []), ...(c.parts ?? []).map((p) => p?.name ?? "")]) {
-    const name = clean(n);
+  // The policies behind the cover, by their documents' names, where the dashboard gives them; else its cover names, less
+  // any made only of generic words ("Death Benefit") while another names the policy.
+  let pool = (c.sources?.length ? c.sources : [...(c.policyNames ?? []), ...(c.parts ?? []).map((p) => p?.name ?? "")]).map((n) => clean(n));
+  if (!c.sources?.length && pool.some(readablePolicyName)) pool = pool.filter(readablePolicyName);
+  for (const raw of pool) {
+    const name = homePolicyName(raw);
     // "Policy" and "Owned policy" are the dashboard's stand-ins for a cover with no product name: they name nothing.
     if (!name || /^(?:owned\s+)?policy$/i.test(name)) continue;
     const key = name.toLowerCase();
@@ -36,7 +82,8 @@ export function homeCardSource(c: HomeCardInput): string | null {
   if (names.length <= 1 && lines > 1) return names.length ? `${names[0]} \u00b7 ${lines} covers` : `${lines} covers`;
   if (!names.length) return null;
   if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]} + ${names[1]}`;
+  // Two names fit a card's lines together only when short; else the first and how many more, so no name is cut.
+  if (names.length === 2) return names[0].length + names[1].length <= HOME_SOURCE_CHARS ? `${names[0]} + ${names[1]}` : names[0].length <= HOME_SOURCE_CHARS ? `${names[0]} +\u00a01\u00a0more` : "2 policies";
   return `${names.length} policies`;
 }
 
