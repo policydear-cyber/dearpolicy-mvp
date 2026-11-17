@@ -896,7 +896,8 @@ export function headlineSumShare(cell: string, value: number, next = "", words =
  *   ("80% of reasonable expenses", "200% of the daily benefit") is never settled here;
  * - the block above the row (its share rows, then its heading lines up to the nearest bullet, blank line or another
  *   table's share row) prints its base once, with a stated currency, as a
- *   column heading "(% of S$5,000)" or a "<name> Benefit Limit: S$5,000" line whose name's words are all in the row's
+ *   column heading "(% of S$5,000)", which must be printed (TE on #520: a limit line alone may be what a co-payment is
+ *   taken off), and any "<name> Benefit Limit: S$5,000" line, whose name's words must all be in the row's
  *   section or benefit name, or the bullet heading the block opens with ("Simple Fracture" for "Simple Fracture due to
  *   Accident");
  * - nothing in the block names another base or limit ("(% of Medical Expenses Limit)", the sum insured), an overall,
@@ -952,7 +953,9 @@ export function tableBase(text: string, rowStart: number, names = ""): { amount:
     if (!currency || !Number.isFinite(amount) || amount <= 0) return null;
     found.push({ amount, currency, line });
   }
-  if (!found.length) return null;
+  // The column heading "(% of S$N)" is what says the shares are of that figure; a limit line alone may be what a
+  // co-payment, deductible or reimbursement rate is taken off, never their base (TE on #520).
+  if (!found.some((f) => !/benefit\s+limit/i.test(f.line))) return null;
   if (new Set(found.map((f) => f.amount)).size !== 1 || new Set(found.map((f) => f.currency)).size !== 1) return null;
   return found.find((f) => /benefit\s+limit/i.test(f.line)) ?? found[0];
 }

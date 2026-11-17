@@ -168,6 +168,8 @@ async function main() {
       ["another table's bare heading above a title", ["(% of S$10,000)", "Head\t10%", "Fracture due to Accident"], "Arm\t25%", 25],
       ["another table's rows with words after the share", ["Body surface (% of S$10,000)", "Head\t10% S$1,000", "Fracture due to Accident"], "Arm\t25%", 25],
       ["another table's rows with a note after the share", ["Body surface (% of S$10,000)", "Head\t10% (see note 2)", "Fracture due to Accident"], "Arm\t25%", 25],
+      ["a co-insurance under a limit line alone", ["\u2022\tAccidental Medical Reimbursement", "Medical Reimbursement Benefit Limit: S$5,000"], "Co-insurance\t20%", 20],
+      ["a reimbursement rate under a limit line alone", ["\u2022\tTraditional Chinese Medicine", "Traditional Chinese Medicine Benefit Limit: S$500"], "Reimbursement\t80%", 80],
       ["another table's heading right above a title", ["Burns due to Accident (% of S$10,000)", "Fracture due to Accident"], "Arm\t25%", 25],
     ];
     for (const [why, head, line, value] of cases) {
