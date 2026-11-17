@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
 import { AccountTabs } from "@/components/account-tabs";
@@ -11,11 +11,29 @@ import { kindsOfTable, ledgerKindsByPerson, namedCoverKinds, type KindRow, type 
 type Member = {
   id: string; display_name: string; relationship: string; date_of_birth: string | null;
   preferred_name: string | null; notes: string | null; policy_count: number;
+  /** female, male or unspecified (chose not to say); null when not answered yet. */
+  sex?: string | null;
 };
 
 const RELATIONSHIPS = ["self","spouse","parent","child","sibling","grandparent","dependant","other"];
 /** How a relationship reads on screen ("self" is the person using DearPolicy). */
 const relationshipLabel = (r: string) => r === "self" ? "Me" : r.charAt(0).toUpperCase() + r.slice(1);
+const SEXES: [string, string][] = [["female", "Female"], ["male", "Male"], ["unspecified", "Prefer not to say"]];
+const sexLabel = (s: string | null | undefined) => SEXES.find(([v]) => v === s)?.[1] ?? null;
+/** Whole years old today, from a YYYY-MM-DD date of birth (null when there is none). */
+function ageToday(dob: string | null, today: string | undefined): number | null {
+  if (!dob || !today) return null;
+  const [y, m, d] = dob.split("-").map(Number), [Y, M, D] = today.split("-").map(Number);
+  const age = Y - y - (M < m || (M === m && D < d) ? 1 : 0);
+  return age >= 0 && age < 130 ? age : null;
+}
+/** What a family member's details still lack (the same list as lib/household/member-profile.ts profileGaps). */
+function missingDetails(m: Pick<Member, "date_of_birth" | "sex">, sexField: boolean): string[] {
+  const gaps: string[] = [];
+  if (!m.date_of_birth) gaps.push("date of birth");
+  if (sexField && !m.sex) gaps.push("sex");
+  return gaps;
+}
 
 /** Today as YYYY-MM-DD in the person's own time zone (a birth date can't be later). */
 function todayIso() {
@@ -34,6 +52,11 @@ export default function FamilyPage() {
   const [relationship, setRelationship] = useState("");
   const [dob, setDob] = useState("");
   const [preferred, setPreferred] = useState("");
+  const [sex, setSex] = useState("");
+  /** Whether a sex can be saved yet (the database update for it is in place). Until then it is not asked for. */
+  const [sexField, setSexField] = useState(false);
+  /** The family list (and whether a sex can be saved) has loaded: until then the form can't know which fields it needs. */
+  const [loaded, setLoaded] = useState(false);
   const [status, setStatus] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
   /** The person the last save or removal was about, so its outcome is also shown on their card (not only at the top). */
@@ -43,39 +66,58 @@ export default function FamilyPage() {
   const [editing, setEditing] = useState<string | null>(null);
   /** What each person is covered for, by kind, from the Coverage rows. Optional: the page works without it. */
   const [kinds, setKinds] = useState<Record<string, string[]>>({});
+  /** Whether the cover list has answered yet. Until it has, no card may say "No cover found": that would be a guess,
+      and it flipped to "Covered for …" seconds later on a real household. "failed" says nothing about cover at all. */
+  const [coverState, setCoverState] = useState<"loading" | "loaded" | "failed">("loading");
+  const coverTurn = useRef(0);
 
   async function refresh() {
     const data = await fetch("/api/family").then((r) => r.json());
     const members: Member[] = data.family ?? [];
     setFamily(members);
+    setSexField(data.profile?.sexField === true);
+    setLoaded(true);
     setBaseline(Object.fromEntries(members.map((m) => [m.id, m])));
     // A household on the benefit table: its rows say what each person is covered for (its Coverage rows stopped updating).
     // Optional, like the Coverage rows: the page works without it.
-    void fetch("/api/benefit-table", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null)
+    // A failed or hung (30 s) cover list shows nothing about cover, never the last list: it may be out of date after a save.
+    // Only the latest refresh may change it: an older one answering late (after a save) is dropped.
+    const turn = ++coverTurn.current;
+    // Older browsers (before Safari 16, Chrome 103) have no AbortSignal.timeout: no time limit there rather than a throw.
+    const coverTimeout = () => typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(30_000) : undefined;
+    const coverFailed = () => { if (turn !== coverTurn.current) return; setKinds({}); setCoverState("failed"); };
+    void fetch("/api/benefit-table", { cache: "no-store", signal: coverTimeout() }).then((r) => r.ok ? r.json() : null).catch(() => null)
       .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[]; covers?: TableKindCover[]; scheduleLines?: { policyId: string; category: string }[] }[] } | null) => {
         // Not loaded (an error, offline): nothing is shown, never the stale Coverage rows (Critic R199-3).
-        if (!table) return;
-        if (table.enabled) { return setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [], p.scheduleLines ?? [])]))); }
-        return fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[]; scheduleLines?: ScheduleLine[] } | null) => {
-          if (!l) return;
+        if (!table) return coverFailed();
+        if (turn !== coverTurn.current) return;
+        if (table.enabled) { setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [], p.scheduleLines ?? [])]))); return setCoverState("loaded"); }
+        return fetch("/api/ledger", { cache: "no-store", signal: coverTimeout() }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[]; scheduleLines?: ScheduleLine[] } | null) => {
+          if (!l) return coverFailed();
+          if (turn !== coverTurn.current) return;
           setKinds(ledgerKindsByPerson(l.rows ?? [], l.scheduleLines ?? []));
+          setCoverState("loaded");
         });
-      }).catch(() => undefined);
+      }).catch(() => coverFailed());
   }
   useEffect(() => { void refresh(); }, []);
 
   async function add(event: FormEvent) {
-    event.preventDefault(); setStatus("");
-    if (dob && dob > todayIso()) return setStatus("A date of birth can't be in the future.");
-    const response = await fetch("/api/family", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: name, relationship, dateOfBirth: dob || null, preferredName: preferred || null }) });
+    event.preventDefault(); setStatus(""); setStatusFor(null); setStatusIsError(false);
+    if (!dob) return setStatus("Add their date of birth.");
+    if (dob > todayIso()) return setStatus("A date of birth can't be in the future.");
+    if (dob < "1900-01-01") return setStatus("Check the year of that date of birth.");
+    if (sexField && !sex) return setStatus("Choose female, male or prefer not to say.");
+    const response = await fetch("/api/family", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: name, relationship, dateOfBirth: dob, preferredName: preferred || null, ...(sexField ? { sex } : {}) }) });
     const payload = await response.json();
     if (!response.ok) return setStatus(customerMessage(payload.error, "This family member couldn't be added. Try again in a moment."));
-    setName(""); setDob(""); setPreferred(""); setStatus("Family member added."); await refresh();
+    setName(""); setDob(""); setPreferred(""); setSex(""); setRelationship(""); setStatus("Family member added."); await refresh();
   }
 
   async function save(member: Member) {
     if (member.date_of_birth && member.date_of_birth > todayIso()) return setStatus("A date of birth can't be in the future.");
-    const response = await fetch(`/api/family/${member.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: member.display_name, relationship: member.relationship, dateOfBirth: member.date_of_birth, preferredName: member.preferred_name, notes: member.notes }) });
+    if (member.date_of_birth && member.date_of_birth < "1900-01-01") return setStatus("Check the year of that date of birth.");
+    const response = await fetch(`/api/family/${member.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: member.display_name, relationship: member.relationship, dateOfBirth: member.date_of_birth, preferredName: member.preferred_name, notes: member.notes, ...(sexField ? { sex: member.sex ?? null } : {}) }) });
     const payload = await response.json();
     setStatusFor(member.id);
     setStatusIsError(!response.ok);
@@ -92,7 +134,8 @@ export default function FamilyPage() {
     const original = baseline[member.id];
     if (!original) return false;
     return original.display_name !== member.display_name || original.relationship !== member.relationship ||
-      (original.date_of_birth ?? null) !== (member.date_of_birth ?? null) || (original.preferred_name ?? null) !== (member.preferred_name ?? null);
+      (original.date_of_birth ?? null) !== (member.date_of_birth ?? null) || (original.preferred_name ?? null) !== (member.preferred_name ?? null) ||
+      (original.sex ?? null) !== (member.sex ?? null);
   }
 
   async function remove(member: Member) {
@@ -124,9 +167,16 @@ export default function FamilyPage() {
               {/* At a glance: who, how they are linked to documents, and what they are covered for. */}
               <div className="profile-summary">
                 <div className="avatar profile-avatar">{(baseline[member.id]?.display_name ?? member.display_name).slice(0,1).toUpperCase()}</div>
-                <div><strong>{baseline[member.id]?.display_name ?? member.display_name}</strong><small>{relationshipLabel(baseline[member.id]?.relationship ?? member.relationship)}{baseline[member.id]?.preferred_name ? ` · goes by ${baseline[member.id]?.preferred_name}` : ""}</small></div>
+                <div><strong>{baseline[member.id]?.display_name ?? member.display_name}</strong><small>{[relationshipLabel(baseline[member.id]?.relationship ?? member.relationship),
+                  ((a) => a == null ? null : `${a} ${a === 1 ? "year" : "years"} old`)(ageToday(baseline[member.id]?.date_of_birth ?? null, today)),
+                  baseline[member.id]?.sex === "unspecified" ? null : sexLabel(baseline[member.id]?.sex),
+                  baseline[member.id]?.preferred_name ? `goes by ${baseline[member.id]?.preferred_name}` : null].filter(Boolean).join(" · ")}</small></div>
               </div>
               <div className="profile-glance">
+                {/* Details still missing (people added before they were asked for): one plain line and a way to add them. */}
+                {(() => { const gaps = missingDetails(baseline[member.id] ?? member, sexField); if (!gaps.length || editing === member.id) return null;
+                  const who = baseline[member.id]?.display_name ?? member.display_name;
+                  return <p className="profile-missing" data-testid="profile-missing">Add {who}&rsquo;s {gaps.join(" and ")}. {[gaps.includes("date of birth") ? "A date of birth tells adult cover from child cover" : null, gaps.includes("sex") ? "sex tells \u201cmy son\u201d from \u201cmy daughter\u201d" : null].filter(Boolean).join(", and ").replace(/^s/, "S")}. <button type="button" className="text-link" onClick={() => { setEditing(member.id); setTimeout(() => document.getElementById(`fm-${member.id}-${member.date_of_birth ? "sex" : "dob"}`)?.focus(), 0); }}>Add now</button></p>; })()}
                 <p>{member.policy_count ? <Link className="text-link" href={`/policies?person=${member.id}`}><b>{member.policy_count === 1 ? "1 document" : `${member.policy_count} documents`}</b>&nbsp;linked →</Link> : <>No documents linked yet. <Link className="text-link" href="/policies">Link one on Documents →</Link></>}</p>
                 {/* Never "Covered for Other": only named kinds are listed, and cover whose kind nothing names yet is said in
                     words, as on Documents (namedCoverKinds). */}
@@ -135,12 +185,16 @@ export default function FamilyPage() {
                   return named.length ? <p data-testid="family-covered-for"><b>Covered for</b> {named.join(" · ")}. {see}</p>
                     : unknownOnly ? <p data-testid="family-covered-for"><b>Found</b> cover for {name}, but not yet what kind of cover it is. {see}</p>
                     : unknownToConfirm ? <p data-testid="family-covered-for"><b>Possible cover</b> for {name}, still to confirm: not yet what kind of cover it is. {see}</p>
-                    : null; })() ?? (member.policy_count ? <p>No cover found in {member.policy_count === 1 ? "this document" : "these documents"} yet. You can still ask about {member.policy_count === 1 ? "it" : "them"} in <Link className="text-link" href="/chat">Ask DearPolicy</Link>.</p> : null)}
+                    : null; })() ?? (!member.policy_count ? null
+                    : coverState === "loading" ? <p className="muted" data-testid="family-cover-loading" aria-busy="true">Checking what {baseline[member.id]?.display_name ?? member.display_name} is covered for&hellip;</p>
+                    : coverState === "failed" ? null
+                    : <p data-testid="family-no-cover">No cover found in {member.policy_count === 1 ? "this document" : "these documents"} yet. You can still ask about {member.policy_count === 1 ? "it" : "them"} in <Link className="text-link" href="/chat">Ask DearPolicy</Link>.</p>)}
               </div>
               <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>
                 <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name</label><input id={`fm-${member.id}-name`} value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} /></div>
                 <div className="field"><label htmlFor={`fm-${member.id}-relationship`}>Relationship</label><select id={`fm-${member.id}-relationship`} value={member.relationship} onChange={(e) => update(member.id,{ relationship:e.target.value })}>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
-                <div className="field"><label htmlFor={`fm-${member.id}-dob`}>Date of birth</label><input id={`fm-${member.id}-dob`} type="date" max={today} value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} /></div>
+                <div className="field"><label htmlFor={`fm-${member.id}-dob`}>Date of birth</label><input id={`fm-${member.id}-dob`} type="date" min="1900-01-01" max={today} value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} /></div>
+                {sexField ? <div className="field"><label htmlFor={`fm-${member.id}-sex`}>Sex</label><select id={`fm-${member.id}-sex`} value={member.sex ?? ""} onChange={(e) => update(member.id,{ sex:e.target.value || null })}><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div> : null}
                 <div className="field"><label htmlFor={`fm-${member.id}-preferred`}>Preferred name</label><input id={`fm-${member.id}-preferred`} value={member.preferred_name ?? ""} onChange={(e) => update(member.id,{ preferred_name:e.target.value || null })} /></div>
               </div>
               {/* Removing someone says what happens before it is confirmed: a person still on a document can't be
@@ -168,12 +222,16 @@ export default function FamilyPage() {
       {/* The people come first: a returning household opens this page to see or change them, and adds someone rarely. */}
       <section className="profile-add-panel" aria-label="Add a family member">
         {family.length ? <h3>Add a family member</h3> : null}
-        <form onSubmit={add} className="profile-add-grid">
-          <div className="field"><label htmlFor="fm-new-name">Full name</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen" required /></div>
-          <div className="field"><label htmlFor="fm-new-relationship">Relationship</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
-          <div className="field"><label htmlFor="fm-new-dob">Date of birth (optional)</label><input id="fm-new-dob" type="date" max={today} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
-          <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="For example, Alex" /></div>
-          <button className="button primary" type="submit" disabled={!name.trim() || !relationship}>+ Add person</button>
+        <form onSubmit={add} className="profile-add-grid" onChange={() => { if (status) { setStatus(""); setStatusFor(null); } }}>
+          <div className="field wide"><label htmlFor="fm-new-name">Full name, as on their policies</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen" autoComplete="off" required /></div>
+          <div className="field"><label htmlFor="fm-new-relationship">Relationship to you</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
+          <div className="field"><label htmlFor="fm-new-dob">Date of birth</label><input id="fm-new-dob" type="date" min="1900-01-01" max={today} value={dob} onChange={(e) => setDob(e.target.value)} required /></div>
+          {sexField ? <div className="field"><label htmlFor="fm-new-sex">Sex</label><select id="fm-new-sex" value={sex} onChange={(e) => setSex(e.target.value)} required><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div> : null}
+          <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="For example, Alex" autoComplete="off" /></div>
+          <p className="profile-add-why">The date of birth tells adult cover from child cover, and sex tells &ldquo;my son&rdquo; from &ldquo;my daughter&rdquo; in Ask DearPolicy. What a policy prints always comes first.</p>
+          <button className="button primary" type="submit" disabled={!loaded || !name.trim() || !relationship || !dob || (sexField && !sex)} aria-describedby="fm-new-needs">+ Add person</button>
+          {loaded && (name.trim() || relationship || dob || sex) && (!name.trim() || !relationship || !dob || (sexField && !sex))
+            ? <p id="fm-new-needs" className="profile-add-why">Still needed: {[!name.trim() ? "full name" : null, !relationship ? "relationship" : null, !dob ? "date of birth" : null, sexField && !sex ? "sex" : null].filter(Boolean).join(", ")}.</p> : null}
         </form>
         {status && <div className="upload-status" role="status">{status}</div>}
       </section>

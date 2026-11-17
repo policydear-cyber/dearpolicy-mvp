@@ -326,10 +326,29 @@ test("a bare sign restating the same cover's figure does not block it; it is nev
   // A different amount, or different days, on the bare-sign row: no figure.
   assert.equal(tableDisplay([scheme[0], keyed("gtl", perDay(35, null))]), null);
   assert.equal(tableDisplay([scheme[0], keyed("gtl", perDay(30, null, { maxDays: 40 }))]), null);
-  // Only bare-sign rows: shown as printed, with the currency not stated, never as S$.
-  assert.match(tableDisplay([keyed("gtl", perDay(30, null))]) ?? "", /^\$30 \(currency not stated\) a day/);
+  // Only bare-sign rows: never a card amount, and never S$ (DC: amount only if confirmed; live 4a263298 showed
+  // "$30 (currency not stated) a day" as the card's amount).
+  assert.equal(tableDisplay([keyed("gtl", perDay(30, null))]), null);
   // A row whose currency is printed is never dropped for a bare-sign row.
   assert.equal(tableDisplay([keyed("gtl", perDay(30, "MYR")), keyed("gtl", perDay(30, "SGD"))]), null);
+});
+
+test("a card never shows a figure without its currency, or a clause, as its amount (live 4a263298)", () => {
+  const live = ["No Benefit shall be payable for hospitalisation directly or indirectly due to self-inflicted injuries (including due to suicide/ attempted suicide) and/or pregnancy/ maternity reason.",
+    "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme."];
+  // The live tile: the summary's "S$30" row gone after a re-read, the certificate's bare "$30" row alone, with its two clauses.
+  assert.equal(tableDisplay([keyed("gtl", perDay(30, null, { conditions: live }))]), null);
+  // A worked-out or up-to figure without its currency is no card amount either.
+  assert.equal(tableDisplay([row("Hospital Income", { pays: "up_to", figure: { kind: "printed", amount: 500, currency: null, unit: "up_to" } })]), null);
+  // The same clauses on a figure with its currency: the exclusion is never on the card, and a limit that is a sentence
+  // leaves the card without an amount rather than show it.
+  assert.equal(tableDisplay([keyed("gtl", perDay(30, "SGD", { conditions: live }))]), null);
+  assert.equal(tableDisplay([keyed("gtl", perDay(30, "SGD", { conditions: [live[0]] }))]), "S$30 a day · from day 11 · up to 30 days");
+  // A limit with a colon in it is still a short limit (TE #528).
+  assert.equal(tableDisplay([keyed("gtl", perDay(30, "SGD", { conditions: ["Limit: 30 days per year"] }))]), "S$30 a day · from day 11 · up to 30 days · Limit: 30 days per year");
+  // A short limit stays on the card with its figure.
+  assert.equal(tableDisplay([keyed("gtl", perDay(30, "SGD", { conditions: [live[0], "Max 6 claims per policy year"] }))]),
+    "S$30 a day · from day 11 · up to 30 days · Max 6 claims per policy year");
 });
 
 test("a limit printed only as a condition must agree across rows; it is never dropped (Critic R238)", () => {

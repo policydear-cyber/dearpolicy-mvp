@@ -482,14 +482,25 @@ function restatedWithCurrency(r: SummaryRow & { coverKey?: string }, rows: (Summ
  * Coverage page lists each row with its own figure. */
 export function tableDisplay(all: (SummaryRow & { coverKey?: string })[]): string | null {
   const rows = all.filter((r) => !restatedWithCurrency(r, all));
+  // Home gives an amount only when it is confirmed: a figure whose page prints no currency ("$30", a bare sign) is never a
+  // card amount, whatever the rows agree on; the card says Covered and the Coverage page shows the row as printed (DC
+  // 16 Nov, live 4a263298).
+  if (rows.some((r) => { const m = moneyOf(r); return !!m && !m.currency; })) return null;
   const figure = (r: SummaryRow) => r.figure.kind === "none" && r.pays !== "as_charged" ? null
     : [shortFigure(r).text, rowDetail({ ...r, conditions: [] })].filter(Boolean).join(" · ");
   const texts = new Set(rows.map(figure));
   if (texts.size !== 1 || [...texts][0] == null || new Set(rows.map(limits)).size > 1) return null;
-  const conditions = new Set(rows.map((r) => r.conditions.join(" · ")));
-  // Differing wording still shows the limits, which every row prints alike (Critic R239).
-  return [[...texts][0], conditions.size === 1 ? [...conditions][0] : rows[0].conditions.filter(isLimit).join(" · ")].filter(Boolean).join(" · ");
+  // Only the limits go on the card, every row printing them alike (Critic R239); wording that limits no amount (an
+  // exclusion, who may claim) is left to the Coverage page. A limit longer than a short phrase is a clause, not a card
+  // line: the card then gives no amount rather than a sentence (live 4a263298).
+  const shown = rows[0].conditions.filter(isLimit);
+  if (shown.some((c) => !shortLimit(c))) return null;
+  return [[...texts][0], ...shown].filter(Boolean).join(" · ");
 }
+
+/** A limit short enough for a card line: one phrase of at most eight words, with no sentence break inside it ("Max 6 claims
+ * per policy year", "after 2 nights"). */
+const shortLimit = (c: string) => { const t = c.trim().replace(/[.;]\s*$/, ""); return !/[.;]\s/.test(t) && t.split(/\s+/).length <= 8; };
 
 /** One confirmed schedule line (a sum insured) of a tile's category: the documents of its policy, and its amount. */
 export type ConfirmedLine = { documentIds: string[]; amount: number | null; currency: string | null };
@@ -649,7 +660,7 @@ export function planCoverName(cover: string | null | undefined, plan: string | n
   return (" " + key(productName) + " ").includes(" " + key(plan) + " ") ? productName : productName + ", " + planName;
 }
 /** A cover's name as a tile shows it: without a policy number printed into it ("GROUP TERM LIFE(POLICY NO.123)"). */
-const partName = (n: string) => n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi, "").trim() || n;
+export const partName = (n: string) => n.replace(/\s*\((?:group\s+)?policy\s+no\.?[^)]*\)/gi, "").trim() || n;
 const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figure.kind === "printed" && r.figure.unit === "lump_sum")) && !limits(r);
 /** What each of a person's covers gives in a lump-sum category, and their total (DC 27 Oct: show what each person is
  * covered for). Each confirmed schedule line is one part. A table cover is that line's when it shares the line's document

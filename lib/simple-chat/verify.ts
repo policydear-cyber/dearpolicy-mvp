@@ -45,7 +45,13 @@ export const ALTERNATIVES_NOTE = "These are alternatives under one benefit in th
 export const DISCLAIMER = GENERIC_DISCLAIMER;
 
 // ------------------------------------------------------------------ finding a quote in the stored pages
-/** Text for matching: case, spacing, quote marks and dashes do not count. `at[i]` is where character i came from. */
+/** An ordinal's letters right after its number ("11th", "2nd", "1ST"), not followed by another letter. A page's text layer
+ * often lifts them out as a superscript onto a line of their own ("th" above, "the 11\tday onwards" here), while a reader
+ * copies the line as it reads ("the 11th day onwards"): live 17 Nov, a hospital cash row's quote was "not found" and the
+ * row left the table. So the letters never count, on the page or in the quote. */
+const ORDINAL_AT = (s: string, i: number) => /^(?:st|nd|rd|th)(?![a-z])/i.test(s.slice(i + 1, i + 4));
+/** Text for matching: case, spacing, quote marks, dashes and an ordinal's letters do not count. `at[i]` is where character
+ * i came from. */
 function squash(s: string): { text: string; at: Int32Array } {
   // Characters are joined once and positions kept in a typed array: a cached page then holds a flat string and 4 bytes a
   // character, not a rope and a boxed array (Critic R445 M1).
@@ -57,6 +63,8 @@ function squash(s: string): { text: string; at: Int32Array } {
     if (code < 128) {
       if (code === 32 || (code >= 9 && code <= 13)) continue;
       chars.push(code === 96 ? "'" : code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : s[i]); at[n++] = i;
+      // The letters go; a number after them stays apart from this one ("1st 30 days" is never "130 days"; Critic #528).
+      if (code >= 48 && code <= 57 && ORDINAL_AT(s, i)) { i += 2; if (/^\s*\d/.test(s.slice(i + 1, i + 8))) { chars.push("~"); at[n++] = i; } }
       continue;
     }
     let c = s[i];
@@ -1243,7 +1251,8 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   // own line proves they are not a child (read again below).
   const rpage = household.documents[rf.docIndex].pages.find((p) => p.page === rf.page)!.text, rrow = rowLine(rpage, rf.offset);
   const rpages = household.documents[rf.docIndex].pages, rown = { page: rf.page, from: rrow.start, to: rrow.start + rowText.length };
-  const members = household.members.map((m) => m.name);
+  // Names as the documents print them: a preferred name is listed in brackets after it (Test engineer C1 on #527).
+  const members = household.members.map((m) => baseName(m.name));
   const notes = childLimitNotes(rpages, rown, members);
   const childNote = notes.found;
   // A child's share only when nothing else in the document speaks of children or ages (gate R6-H1).
@@ -1293,8 +1302,9 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   // Whom the child's share is for, read again from the person's own line on the base's page.
   // The household's record of the account holder or their spouse joins it (householdLife): never an insured child, unless
   // the printed line says otherwise.
-  const own = household.members.find((m) => m.name === person);
-  const lifeAt = () => householdLife(printedLife(bpage.text.split("\n"), at, person, household.members.map((m) => m.name)), own ?? {}).life ?? null;
+  // Members are listed as "Full Name (Preferred)" when they have a preferred name: match the name either way (Test engineer C1).
+  const own = household.members.find((m) => m.name === person) ?? household.members.find((m) => m.name.replace(/\s*\([^)]*\)\s*$/, "") === person);
+  const lifeAt = () => householdLife(printedLife(bpage.text.split("\n"), at, person, members), own ?? {}).life ?? null;
   const life = child ? lifeAt() : null;
   if (child && (!sf.child!.days.length || personStatus(life, child, sf.child!.days) !== sf.child!.status)) return no("whom the child's share is for is not settled by the person's own printed line");
   if (childNote && !provenAdult(lifeAt(), notes.age, sf.adult!.days).adult) return no("the person's own printed line does not prove them past the child-limit note's age");
@@ -1334,7 +1344,15 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const money = (v: number) => formatMoney(cur.sign, v);
   const where = `${docLabel(household, bdoc)}, page ${bf.page}`;
   // The child's share with its printed words and what settles it: 'Grace Okafor's date of birth on page 1 is 09/04/2017.'
-  const lifeWords = child ? (life!.birth && child.belowAge != null ? `${person}'s date of birth on page ${bf.page} is ${life!.birth}` : `page ${bf.page} prints ${person} as "${life!.relationship}"`) : "";
+  // When the schedule's line printed neither, the status came from the household's own record (householdLife): say so,
+  // never cite the page for it (Critic on #527, H2).
+  const lifeWords = !child ? "" : life!.birth && child.belowAge != null ? `${person}'s date of birth on page ${bf.page} is ${life!.birth}`
+    : life!.relationship ? `page ${bf.page} prints ${person} as "${life!.relationship}"`
+    : life!.household && life!.householdBirth && life!.household !== "spouse" ? `${person}'s date of birth in your family details is ${life!.householdBirth}`
+    : life!.household === "spouse" ? `${person} is recorded in your family details as your spouse`
+    : life!.household === "self" ? `${person} is recorded in your family details as you`
+    : life!.birth ? `${person}'s date of birth on page ${bf.page} is ${life!.birth}`
+    : `page ${bf.page} prints ${person}'s line`;
   const childLine = !child ? "" : sf.child!.status === "child"
     ? `. The policy (page ${rf.page}) says: "${child.words.replace(/[.;]+$/, "")}", and ${lifeWords}`
     : `. The policy (page ${rf.page}) pays ${child.percent}% for ${childCase(child)}, which ${person} is not: ${lifeWords}`;

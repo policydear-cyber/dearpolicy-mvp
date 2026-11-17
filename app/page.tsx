@@ -10,7 +10,7 @@ import { Icon, coverCard, coverIcon, type IconName } from "@/components/icons";
 import { homeAmountText, homeCardShowsAmount, homeCardSource, homeGridColumns } from "@/lib/coverage/home-card";
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
-type Coverage={category:string;status:"covered"|"on_file"|"not_covered";reviewRequired:boolean;amount:number|null;displayAmount:string|null;currency:string|null;count:number;policyNames:string[];derived:boolean;parts?:TilePart[]|null;known?:KnownSum|null;planNote?:string|null;onFileDocuments?:string[]};
+type Coverage={category:string;status:"covered"|"on_file"|"not_covered";reviewRequired:boolean;amount:number|null;displayAmount:string|null;currency:string|null;count:number;policyNames:string[];sources?:string[];derived:boolean;parts?:TilePart[]|null;known?:KnownSum|null;planNote?:string|null;onFileDocuments?:string[]};
 type TilePart={name:string;amount:number|null;currency:string|null;accelerates?:boolean;conditional?:boolean;period?:string|null;noFigure?:boolean};
 type KnownSum={amount:number;currency:string;without:string[];otherTile?:string[]};
 type PremiumItem={id:string;insurer:string|null;product_name:string|null;amount:number;currency:string;currencyStated?:boolean;frequency:string|null;annual:number;monthly:number;shared:boolean;fromTable?:boolean;detail?:string|null;source?:string|null};

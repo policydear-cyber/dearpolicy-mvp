@@ -38,6 +38,9 @@ test.describe.serial("mobile critical path", () => {
     await page.goto("/family");
     await page.getByLabel("Full name").first().fill(person);
     await page.locator("#fm-new-relationship").selectOption("self");
+    // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
+    await page.locator("#fm-new-dob").fill("1990-01-01");
+    await page.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
     await page.getByRole("button", { name: "+ Add person" }).tap();
     await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
 

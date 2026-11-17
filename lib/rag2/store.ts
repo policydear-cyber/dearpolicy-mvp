@@ -17,7 +17,9 @@ export type DocRow = {
   /** Lifecycle version + last-update stamp of the document row: any change to the row (reprocess, relink, supersede, restore) changes it. */
   rev?: string | null;
 };
-export type MemberRow = { id: string; displayName: string; preferredName: string | null; relationship: string; notes: string | null; dateOfBirth: string | null };
+export type MemberRow = { id: string; displayName: string; preferredName: string | null; relationship: string; notes: string | null; dateOfBirth: string | null;
+  /** The sex the household entered (female / male / unspecified), null when unanswered or before sql/member-profile.sql. */
+  sex?: string | null };
 export type LinkRow = { policyId: string; memberId: string; source: string | null; tier: string | null };
 export type PageRow = { policyId: string; page: number; text: string };
 
@@ -73,7 +75,7 @@ export async function derivedFingerprint(accountId: string): Promise<string | nu
   // deleted or reversed changes what a policy's terms are even though it is no longer a readable document).
   if (t.metaDigest == null) t.metaDigest = (await loadDocMeta(accountId)).map((m) => [m.id, m.role ?? "", m.policyNumber ?? "", m.groupPolicyNumber ?? "", m.active ? 1 : 0, m.superseded ? 1 : 0, m.supersededById ?? "", m.removedOn ?? "", m.effectiveDate ?? "", m.documentDate ?? ""].join(":")).sort().join(",");
   return [docs.map((d) => JSON.stringify([d.id, d.ownerId, d.insurer, d.productName, d.policyNumber, d.groupPolicyNumber, d.policyType, d.documentRole, d.personalCoverageConfirmed, d.status, d.fileHash, d.effectiveDate, d.expiryDate, d.documentDate, d.createdAt, d.pageCount, d.rev ?? null])).join(","),
-    members.map((m) => JSON.stringify([m.id, m.displayName, m.preferredName, m.relationship, m.notes, m.dateOfBirth])).join(","),
+    members.map((m) => JSON.stringify([m.id, m.displayName, m.preferredName, m.relationship, m.notes, m.dateOfBirth, m.sex ?? null])).join(","),
     links.map((l) => JSON.stringify([l.policyId, l.memberId, l.tier, l.source])).sort().join(","), t.metaDigest].join("#");
 }
 /** A result derived from ONE document version (its parsed tables, say), kept for the turn: independent of who it is read for. */
@@ -140,9 +142,9 @@ export async function loadMembers(accountId: string): Promise<MemberRow[]> {
 }
 async function queryMembers(accountId: string): Promise<MemberRow[]> {
   const rows = (await query<Record<string, unknown>>(
-    `SELECT f.id::text AS id, f.display_name, f.preferred_name, f.relationship, f.notes, f.date_of_birth
+    `SELECT f.id::text AS id, f.display_name, f.preferred_name, f.relationship, f.notes, f.date_of_birth, to_jsonb(f)->>'sex' AS sex
        FROM family_members f WHERE f.account_id=$1 AND ${activePredicate("f")} ORDER BY f.created_at, f.id`, [accountId])).rows;
-  return rows.map((r) => ({ id: String(r.id), displayName: String(r.display_name ?? ""), preferredName: (r.preferred_name as string) ?? null, relationship: String(r.relationship ?? ""), notes: (r.notes as string) ?? null, dateOfBirth: iso(r.date_of_birth) }));
+  return rows.map((r) => ({ id: String(r.id), displayName: String(r.display_name ?? ""), preferredName: (r.preferred_name as string) ?? null, relationship: String(r.relationship ?? ""), notes: (r.notes as string) ?? null, dateOfBirth: iso(r.date_of_birth), sex: (r.sex as string) ?? null }));
 }
 
 /** Who each readable document is linked to (policy_members), with the column / tier recorded for them. */

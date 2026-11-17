@@ -86,8 +86,8 @@ const THIRD = /^(?:he|him|his|she|her|hers|they|them|their|theirs)$/i;
 const GROUP = /^(?:we|us|our|ours|everyone|the family|family|all of us)$/i;
 
 /** The fine relation of a stored member: relationship plus what their notes say ("mother-in-law", "stepson", "helper"). */
-export function relationOf(m: Pick<MemberRow, "relationship" | "notes">): { relation: RelationClass; gender: Gender } {
-  return memberRelation(m.relationship, m.notes);
+export function relationOf(m: Pick<MemberRow, "relationship" | "notes"> & { sex?: string | null }): { relation: RelationClass; gender: Gender } {
+  return memberRelation(m.relationship, m.notes, m.sex);
 }
 
 const REL_LABEL: Record<RelationClass, [string, string, string]> = {

@@ -14,7 +14,8 @@ const FILES = [
   "sql/lifecycle.sql", "sql/claim-reviewers.sql", "sql/model-provenance.sql", "sql/household-rls.sql", "sql/policy-member-exclusions.sql", "sql/detected-name-dismissals.sql",
   "sql/processing-failure-diagnostics.sql",
   "sql/storage-purge.sql",
-  "sql/infrastructure-rls.sql", "sql/v11-ingestion-evidence.sql", "sql/household-currency.sql",
+  "sql/infrastructure-rls.sql", "sql/v11-ingestion-evidence.sql",
+  "sql/member-profile.sql", "sql/household-currency.sql",
 ];
 
 async function main() {

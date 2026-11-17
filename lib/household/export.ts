@@ -55,6 +55,8 @@ export interface HouseholdExportSnapshot {
     dateOfBirth: string | null;
     preferredName: string | null;
     notes: string | null;
+    /** female / male / unspecified as the household entered it; null when unanswered or before sql/member-profile.sql. */
+    sex: string | null;
     createdAt: string;
   }[];
   policies: {
@@ -177,9 +179,10 @@ export async function buildHouseholdExportSnapshot(client: ScopedDbClient, house
       date_of_birth: string | null;
       preferred_name: string | null;
       notes: string | null;
+      sex: string | null;
       created_at: string;
     }>(
-      `SELECT id, display_name, relationship, date_of_birth, preferred_name, notes, created_at
+      `SELECT id, display_name, relationship, date_of_birth, preferred_name, notes, to_jsonb(family_members)->>'sex' AS sex, created_at
          FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at ASC, id ASC`,
       [householdId],
     );
@@ -317,6 +320,7 @@ export async function buildHouseholdExportSnapshot(client: ScopedDbClient, house
         dateOfBirth: r.date_of_birth,
         preferredName: r.preferred_name,
         notes: r.notes,
+        sex: r.sex ?? null,
         createdAt: r.created_at,
       })),
       policies: policies.rows.map((r) => ({

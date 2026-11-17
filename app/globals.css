@@ -383,11 +383,16 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .policy-main span, .policy-meta span { color: var(--muted); font-size: var(--fs-xs); }
 .policy-meta { text-align: right; display: grid; gap: 4px; justify-items: end; }
 .row-error { grid-column: 2 / -1; color: var(--critical); font-size: var(--fs-xs); }
-.profile-add-grid { display: grid; grid-template-columns: 1.5fr .8fr .9fr 1fr auto; gap: 10px; align-items: end; }
+.profile-add-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: end; }
+.profile-add-grid .field.wide { grid-column: span 2; }
+.profile-add-why { grid-column: 1 / -1; margin: 0; font-size: var(--fs-sm); color: var(--muted); }
+.profile-add-grid .button { grid-column: 1 / -1; justify-self: start; }
+.profile-missing { color: var(--ink-2); }
+.profile-missing button.text-link { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-weight: 600; color: var(--brand-ink); }
 .profile-list { display: grid; gap: 12px; }
 .profile-card { background: var(--surface); border: 1px solid var(--edge); border-radius: var(--r-lg); padding: 16px; display: grid; grid-template-columns: 46px 1fr auto; gap: 14px; align-items: center; }
 .profile-avatar { width: 44px; height: 44px; }
-.profile-fields { display: grid; grid-template-columns: 1.5fr .8fr 1fr 1fr; gap: 10px; }
+.profile-fields { display: grid; grid-template-columns: 1.5fr .8fr 1fr .9fr 1fr; gap: 10px; }
 .profile-actions { display: grid; gap: 8px; justify-items: end; }
 .profile-actions span { font-size: var(--fs-xs); color: var(--muted); }
 /* Family card: summary and glance on top, editable details below, actions last. */
@@ -800,6 +805,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
   .coverage-grid { grid-template-columns: 1fr 1fr; }
   .records-upload { grid-template-columns: 1fr; }
   .profile-add-grid { grid-template-columns: 1fr; }
+  .profile-add-grid .field.wide { grid-column: auto; }
   .profile-card { grid-template-columns: 1fr; }
   .profile-avatar { display: none; }
   .profile-actions { grid-column: 1; }
@@ -1318,7 +1324,7 @@ div.answer-point { display: grid; gap: 4px; }
 .home-cards .coverage-card.covered .coverage-top { gap: 12px; margin-bottom: 4px; padding-right: 18px; }
 .home-cards .coverage-card.covered .coverage-icon { flex: none; width: 34px; height: 34px; border-radius: 10px; }
 .home-cards .coverage-card.covered .coverage-name { margin: 0; line-height: 1.25; overflow-wrap: break-word; min-width: 0; }
-.home-cards .coverage-source { font-size: var(--fs-xs); line-height: 1.35; color: var(--on-cover-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: break-word; }
+.home-cards .coverage-source { font-size: var(--fs-xs); line-height: 1.35; color: var(--on-cover-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow-wrap: break-word; }
 .home-cards .coverage-card.covered .coverage-amount { margin-top: auto; padding-top: 8px; font-size: clamp(16px, 12.5cqi, 26px); line-height: 1.15; }
 .home-cards .coverage-card.covered:not(:has(.coverage-amount)) .coverage-status { margin-top: auto; }
 /* A narrow card (a small phone) puts the icon above the name, so the name has the card's whole width. */
@@ -1536,8 +1542,6 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
   /* Long names: the title gets its own line, the Coverage/Benefits links sit under it. */
   .section-heading:has(> .section-links) { flex-wrap: wrap; align-items: flex-start; }
   .section-heading > .section-links { width: 100%; justify-content: flex-start; }
-  /* Person chips scroll sideways: fade the edge so a clipped name reads as "more this way". */
-  .member-pills { mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%); -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%); padding-right: 24px; }
 }
 @media (max-width: 480px) {
   /* The ask field gets the full width so its example question isn't cut off; Ask goes underneath. */
@@ -1710,6 +1714,13 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 @media (max-width: 620px) {
   .coverage-grid { grid-template-columns: minmax(0, 1fr); }
   .member-strip { grid-template-columns: minmax(0, 1fr); }
+  /* People on a phone: the keys wrap onto rows, each as wide as its name needs (a long name takes the row), so a name
+     breaks only between its words; nothing scrolls sideways or is cut (coordinator 17 Nov, TE PR 525 R1). */
+  .member-pills { display: flex; flex-wrap: wrap; width: auto; overflow: visible; }
+  .member-pill { flex: 1 1 auto; max-width: 100%; white-space: normal; min-width: 0; padding: 8px; gap: 6px; }
+  .member-pill > span:last-child { min-width: 0; }
+  .member-pill .member-dot { flex-shrink: 0; }
+  .member-pill b, .member-pill small { display: block; min-width: 0; overflow-wrap: break-word; line-height: 1.25; }
 }
 
 /* Insurer contact details under an answer's next steps (components/insurer-contacts.tsx). */
