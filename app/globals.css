@@ -1703,6 +1703,8 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 .rows .document-head { align-items: start; }
 .rows .document-head > .status { font-style: normal; text-transform: none; white-space: nowrap; align-self: start; }
 .rows .document-title .document-numbers { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; }
+/* A long unbroken number or name wraps inside the row instead of widening the page on a phone. */
+.rows .document-title span, .rows .document-for, .rows .document-names { overflow-wrap: anywhere; }
 .rows .document-main .covers-summary { margin-top: 0; }
 .rows .document-card > .detail-panel { grid-column: 1 / -1; }
 @media (max-width: 480px) {
