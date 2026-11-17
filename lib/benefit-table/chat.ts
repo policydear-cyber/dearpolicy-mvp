@@ -1755,16 +1755,19 @@ function dailyRateRule(row: ChatRow, household: Household): StayRule | null {
 /** Words that make a limit one shared by the insurer's other policies on the same life, not one policy's own: "this Policy
  * and all Policies We have issued", "all policies issued covering the same Life Assured", "across all policies", "combined
  * with any other policy". Closed list; anything else is read as the policy's own limit, as before. */
+/** Other policies of the insurer, as a group: "all (other) policies", "every (other) policy", "any other policy". A lone
+ * "any policy" or "this policy" is the policy itself (Critic on #523, round 2). */
+const OTHER_POLICIES = String.raw`(?:all\s+(?:other\s+)?(?:policies|plans|certificates|contracts)|every\s+(?:other\s+)?(?:policy|plan|certificate|contract)|any\s+other\s+(?:polic(?:y|ies)|plans?|certificates?|contracts?))`;
 const ACROSS_POLICIES = new RegExp([
-  String.raw`\b(?:this|the)\s+(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:and|or|together\s+with)\s+(?:all|any|every)\s+(?:other\s+)?(?:polic(?:y|ies)|plans?|certificates?|contracts?)\b`,
-  String.raw`\b(?:all|any|every)\s+(?:other\s+)?(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:(?:that|which)\s+)?(?:we|the\s+(?:company|insurer))\s+(?:have\s+|has\s+)?issued\b`,
-  String.raw`\b(?:all|any|every)\s+(?:other\s+)?(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:issued\s+)?(?:covering|on|for|in\s+respect\s+of)\s+the\s+same\s+(?:life|person|insured)`,
-  String.raw`\bacross\s+(?:all|any|every)\s+(?:(?:of\s+)?(?:our|the\s+insurer'?s|its)\s+)?(?:polic(?:y|ies)|plans?)\b`,
-  String.raw`\b(?:combined|together)\s+with\s+(?:all|any|every)\s+(?:other\s+)?(?:polic(?:y|ies)|plans?)\b`,
-  // "all policies issued by us / the Company", "all policies with us", "all Kestrel policies on the life of the Life Assured",
-  // "per Life Assured for all plans in force with the Company" (Critic on #523).
-  String.raw`\b(?:all|any|every)\s+(?:other\s+)?(?:[A-Z][\w&'-]*\s+){0,3}(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:(?:in\s+force\s+)?(?:issued\s+by|with)\s+(?:us|the\s+(?:company|insurer))|(?:issued\s+)?on\s+the\s+life\s+of)\b`,
+  String.raw`\b(?:this|the)\s+(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:and|or|together\s+with)\s+${OTHER_POLICIES}\b`,
+  String.raw`\b${OTHER_POLICIES}\s+(?:(?:that|which)\s+)?(?:we|the\s+(?:company|insurer))\s+(?:have\s+|has\s+)?issued\b`,
+  String.raw`\b${OTHER_POLICIES}\s+(?:in\s+force\s+)?(?:issued\s+)?(?:(?:by|with)\s+(?:us|the\s+(?:company|insurer))\s+)?(?:covering|on|for|in\s+respect\s+of)\s+the\s+(?:same\s+(?:life|person|insured)|life\s+of)`,
+  String.raw`\b${OTHER_POLICIES}\s+(?:in\s+force\s+)?(?:issued\s+by|with)\s+(?:us|the\s+(?:company|insurer))\b`,
+  String.raw`\bacross\s+(?:all|every|any\s+other)\s+(?:(?:of\s+)?(?:our|the\s+insurer'?s|its)\s+)?(?:polic(?:y|ies)|plans?)\b`,
+  String.raw`\b(?:combined|together)\s+with\s+${OTHER_POLICIES}\b`,
 ].join("|"), "i");
+/** "all Kestrel policies ...": an insurer's or brand's name between "all" and "policies", in capitals as printed. */
+const ALL_NAMED_POLICIES = /\b(?:[Aa]ll|[Ee]very)\s+(?:[Oo]ther\s+)?(?:[A-Z][\w&'-]*\s+){1,3}(?:[Pp]olicies|[Pp]lans|[Cc]ertificates|[Cc]ontracts)\s+(?:in\s+force\s+)?(?:(?:issued\s+by|with)\s+(?:us|the\s+(?:[Cc]ompany|[Ii]nsurer))|(?:issued\s+)?on\s+the\s+(?:life\s+of|same\s+life))\b/;
 /** Words that make a sentence about other policies something other than a shared limit: an exclusion, an offset or a
  * condition ("No benefit is payable if a claim has been paid under any other policy", "less any amount paid under any other
  * policy", "not combined with any other policy"). */
@@ -1780,8 +1783,10 @@ export function acrossPolicies(row: Pick<ChatRow, "source" | "figure">): boolean
   // row's name or its conditions about other policies say nothing about this figure (Critic on #523, NEW-HIGH).
   const text = row.source.excerpt.replace(/\s+/g, " ");
   const sentences = text.split(/(?<=[.;])\s+(?=[A-Z("“])/);
-  return sentences.some((t) => anyMoneyFigures(t).some((f) => Math.abs(f.value - amount) < 0.005)
-    && ACROSS_POLICIES.test(t) && LIMIT_WORDS.test(t) && !NOT_SHARED_LIMIT.test(t));
+  // The row's figure is the sentence's only money figure: a sentence that also prints another sum ("benefit of S$500,000,
+  // provided that the total under this and all other policies shall not exceed S$3,000,000") is not about one figure.
+  return sentences.some((t) => { const figs = anyMoneyFigures(t); return figs.length > 0 && figs.every((f) => Math.abs(f.value - amount) < 0.005)
+    && (ACROSS_POLICIES.test(t) || ALL_NAMED_POLICIES.test(t)) && LIMIT_WORDS.test(t) && !NOT_SHARED_LIMIT.test(t); });
 }
 
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is

@@ -91,8 +91,14 @@ test("acrossPolicies: only the sentence printing the row's own figure, as a shar
     "We will pay S$200,000. No benefit is payable under this policy if a claim has been paid under any other policy we have issued on the same life.",
     "Medical expenses up to S$5,000, less any amount paid under this policy or any other policy we have issued.",
     "Hospital income S$20,000 in total; benefits are not combined with any other policy.",
-    "We will pay a lump sum of S$300,000 under this policy. The most under this policy and all other policies we have issued on the same life shall not exceed S$3,000,000."])
+    "We will pay a lump sum of S$300,000 under this policy. The most under this policy and all other policies we have issued on the same life shall not exceed S$3,000,000.",
+    // A policy's own limit, in words close to the shared ones (Critic on #523, round 2).
+    "The maximum payable for any claim under this policy issued by the Company is S$100,000.", "The maximum for any claim under this policy on the life of the Life Assured is S$200,000.",
+    "The most we pay for any benefit under this plan with us is S$150,000 in total.", "The maximum payable under any policy we have issued for this benefit is S$90,000."])
     assert.ok(!acrossPolicies(row(no)), no);
+  // One sentence printing the own sum and the shared cap: the own sum is never labelled (Critic on #523, round 2).
+  for (const t of ["Total Permanent Disability benefit of S$500,000, provided that the total payable under this policy and all other policies issued by us on the same life shall not exceed S$3,000,000.",
+    "Sum assured S$500,000 (the total under this and all other policies on the life of the insured is limited to S$3,000,000)."]) assert.ok(!acrossPolicies(row(t, 500000)), t);
   // The own sum in an excerpt that also prints a shared limit stays the policy's own.
   assert.ok(!acrossPolicies(row("Total Permanent Disability Benefit S$500,000. This policy and all other policies we have issued on the same life shall not exceed S$3,000,000.", 500000)));
   assert.ok(acrossPolicies(row("Total Permanent Disability Benefit S$500,000. This policy and all other policies we have issued on the same life shall not exceed S$3,000,000.", 3000000)));
