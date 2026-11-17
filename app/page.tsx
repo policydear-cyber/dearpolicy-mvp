@@ -30,7 +30,7 @@ export default function DashboardPage(){
  // Whether Home's ask box is on screen, so the phone's floating Ask button can step aside instead of covering it.
  const [askInView,setAskInView]=useState(false);
  useEffect(()=>{if(typeof IntersectionObserver==="undefined")return;let io:IntersectionObserver|null=null;const watch=()=>{const box=document.getElementById("ask");if(!box)return false;io=new IntersectionObserver(([e])=>setAskInView(!!e?.isIntersecting),{threshold:.15});io.observe(box);return true;};
-  if(watch())return()=>io?.disconnect();const t=window.setInterval(()=>{if(watch())window.clearInterval(t);},500);return()=>{window.clearInterval(t);io?.disconnect();};},[]);
+  if(watch())return()=>io?.disconnect();let tries=0;const t=window.setInterval(()=>{if(watch()||++tries>=20)window.clearInterval(t);},500);return()=>{window.clearInterval(t);io?.disconnect();};},[]);
  async function load(memberId?:string,quiet=false){const n=++seq.current;if(!quiet)setLoading(true);const params=new URLSearchParams();if(memberId)params.set("familyMemberId",memberId);if(quiet)params.set("poll","1");
   const q=params.toString()?`?${params}`:"";let payload:Dashboard;
   try{
