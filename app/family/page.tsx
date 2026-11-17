@@ -83,14 +83,16 @@ export default function FamilyPage() {
     // A failed or hung (30 s) cover list shows nothing about cover, never the last list: it may be out of date after a save.
     // Only the latest refresh may change it: an older one answering late (after a save) is dropped.
     const turn = ++coverTurn.current;
+    // Older browsers (before Safari 16, Chrome 103) have no AbortSignal.timeout: no time limit there rather than a throw.
+    const coverTimeout = () => typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(30_000) : undefined;
     const coverFailed = () => { if (turn !== coverTurn.current) return; setKinds({}); setCoverState("failed"); };
-    void fetch("/api/benefit-table", { cache: "no-store", signal: AbortSignal.timeout(30_000) }).then((r) => r.ok ? r.json() : null).catch(() => null)
+    void fetch("/api/benefit-table", { cache: "no-store", signal: coverTimeout() }).then((r) => r.ok ? r.json() : null).catch(() => null)
       .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[]; covers?: TableKindCover[]; scheduleLines?: { policyId: string; category: string }[] }[] } | null) => {
         // Not loaded (an error, offline): nothing is shown, never the stale Coverage rows (Critic R199-3).
         if (!table) return coverFailed();
         if (turn !== coverTurn.current) return;
         if (table.enabled) { setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [], p.scheduleLines ?? [])]))); return setCoverState("loaded"); }
-        return fetch("/api/ledger", { cache: "no-store", signal: AbortSignal.timeout(30_000) }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[]; scheduleLines?: ScheduleLine[] } | null) => {
+        return fetch("/api/ledger", { cache: "no-store", signal: coverTimeout() }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[]; scheduleLines?: ScheduleLine[] } | null) => {
           if (!l) return coverFailed();
           if (turn !== coverTurn.current) return;
           setKinds(ledgerKindsByPerson(l.rows ?? [], l.scheduleLines ?? []));
