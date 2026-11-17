@@ -32,7 +32,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { nameAccountsForMember } from "@/lib/policies/linking";
+import { onlyTheirWords } from "@/lib/policies/linking";
 import type { BoundFigure, CalculationRecord, CalcOperand, ChatAnswer, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { recomputeCalculation } from "@/lib/claims/calc-record";
 import { dayEdgeExceptionsFromWording, dayRuleFromWording, distinctDayEdges } from "@/lib/claims/day-count";
@@ -318,14 +318,15 @@ export async function attachProvenance(answer: ChatAnswer, accountId?: string, f
     // of a stranger's longer name: "Alex" in "Alex Chen" is not Alex Tan (#530, where the preferred name became required).
     const wordsOf = (p: { display_name: string | null; preferred_name: string | null }) =>
       new Set(`${p.display_name ?? ""} ${p.preferred_name ?? ""}`.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean));
-    /** "Alex" inside "Alex Chen's death benefit": a capitalised word straight after the name that is none of this person's
-     * names makes it someone else's longer name, so it never names them (TE on #530). */
+    /** "Alex" inside "Alex Chen's death benefit": capitalised words straight after the name, up to a possessive, none of
+     * them this person's, make it someone else's longer name, so it never names them (TE on #530). */
     const insideLongerName = (sentence: string, name: string, p: { display_name: string | null; preferred_name: string | null }) => {
       const mine = wordsOf(p), esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      // Only the word straight after counts ("Alex Chen"): after a possessive ("Alex's Hospital Cash") it is the benefit.
-      for (const m of sentence.matchAll(new RegExp(`(?<![\\p{L}])${esc}(?![\\p{L}])(['’]s\\b)?[ \\t]*(\\p{L}+)?`, "giu"))) {
-        const after = m[1] ? undefined : m[2];
-        if (!(after && /^\p{Lu}/u.test(after) && !mine.has(after.toLowerCase()))) return false;
+      // The words straight after, up to a possessive ("Alex Chen's", "Mary Tan Ah Moi's"), all capitalised and none of
+      // theirs: a longer name. "Alex's Hospital Cash" and "Alex Hospital Cash is" are the benefit, not a name.
+      for (const m of sentence.matchAll(new RegExp(`(?<![\\p{L}])${esc}(?![\\p{L}])((?:[ \\t]+\\p{Lu}[\\p{L}]*)+)['’]s(?![\\p{L}])|(?<![\\p{L}])${esc}(?![\\p{L}])`, "giu"))) {
+        const after = (m[1] ?? "").trim().split(/\s+/).filter(Boolean);
+        if (!after.length || !after.every((w) => /^\p{Lu}/u.test(w)) || after.some((w) => mine.has(w.toLowerCase()))) return false;
       }
       return true;
     };
@@ -343,6 +344,9 @@ export async function attachProvenance(answer: ChatAnswer, accountId?: string, f
         // document's own people (who) are looked at.
         const named = people.filter((p) => who.has(p.id) && [p.display_name, p.preferred_name].some((n) => !!n && n.trim().length >= 3 && lower.includes(" " + n.toLowerCase().trim() + " ")
           && !insideLongerName(s, n.trim(), p)));
+        // A name of theirs only inside a stranger's longer name ("Alex Chen's ...") is not theirs, nor the owner's.
+        const stranger = !named.length && people.some((p) => who.has(p.id) && [p.display_name, p.preferred_name].some((n) => !!n && n.trim().length >= 3 && lower.includes(" " + n.toLowerCase().trim() + " ")));
+        if (!h.subjectId && stranger) continue;
         const subjectId = h.subjectId ?? named[0]?.id ?? doc.owner;
         for (const f of moneyFiguresIn(s)) for (let p = from; p <= to; p++) {
           const pageText = pages.find((x) => x.policy_id === h.policyId && x.page_number === p)?.text;
@@ -367,12 +371,20 @@ export async function attachProvenance(answer: ChatAnswer, accountId?: string, f
       const owner = (c.ownerName ?? "").split(/, | and /)[0]?.trim().toLowerCase();
       const tokens = (n: string | null) => (n ?? "").toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 2);
       const own = new Set(tokens(owner));
+      // Main's rule (exact on the full or preferred name, else every word of one of them in the owner), among the
+      // document's own people; two who fit is no one (siblings "Tan Wei Jie" and "Tan Wen Jun" for "W J Tan"), and a lone
+      // fit through the preferred name only is dropped when the owner has a word that is none of theirs (#530).
+      const fitsWords = (n: string | null) => { const t = tokens(n); return t.length > 0 && t.every((w) => own.has(w)); };
+      const exactFit = people.filter((p) => who.has(p.id) && [p.display_name, p.preferred_name].some((n) => !!n && n.trim().toLowerCase() === owner));
+      const wordFit = exactFit.length ? [] : people.filter((p) => who.has(p.id) && [p.display_name, p.preferred_name].some(fitsWords));
+      const lone = exactFit.length === 1 ? exactFit[0] : !exactFit.length && wordFit.length === 1 ? wordFit[0] : undefined;
+      const loneOk = lone && ((exactFit.length ? (lone.display_name ?? "").trim().toLowerCase() === owner : fitsWords(lone.display_name))
+        || onlyTheirWords(owner, { id: lone.id, display_name: lone.display_name ?? "", preferred_name: lone.preferred_name }));
       const subjectId = !owner ? doc.owner
-        : people.find((p) => who.has(p.id) && [p.display_name, p.preferred_name].some((n) => !!n && n.trim().toLowerCase() === owner))?.id
-        ?? people.find((p) => who.has(p.id) && [p.display_name].some((n) => { const t = tokens(n); return t.length > 0 && t.every((w) => own.has(w)); }))?.id
-        ?? people.find((p) => who.has(p.id) && nameAccountsForMember(owner, { id: p.id, display_name: p.display_name ?? "", preferred_name: p.preferred_name }))?.id
+        : loneOk ? lone!.id
+        : exactFit.length || wordFit.length ? undefined
         // One person on the document: theirs, unless the owner it prints has a word that is none of theirs ("Alex Chen").
-        ?? (who.size === 1 && [...own].every((w) => TITLE_WORDS.has(w) || people.some((p) => p.id === doc.owner && wordsOf(p).has(w))) ? doc.owner : undefined);
+        : (who.size === 1 && [...own].every((w) => TITLE_WORDS.has(w) || people.some((p) => p.id === doc.owner && wordsOf(p).has(w))) ? doc.owner : undefined);
       if (!subjectId) continue;
       for (let p = c.citation.pageStart!; p <= Math.max(c.citation.pageStart!, c.citation.pageEnd ?? 0); p++) {
         const pageText = pages.find((x) => x.policy_id === doc.id && x.page_number === p)?.text;
