@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
 import { AccountTabs } from "@/components/account-tabs";
@@ -69,6 +69,7 @@ export default function FamilyPage() {
   /** Whether the cover list has answered yet. Until it has, no card may say "No cover found": that would be a guess,
       and it flipped to "Covered for …" seconds later on a real household. "failed" says nothing about cover at all. */
   const [coverState, setCoverState] = useState<"loading" | "loaded" | "failed">("loading");
+  const coverTurn = useRef(0);
 
   async function refresh() {
     const data = await fetch("/api/family").then((r) => r.json());
@@ -79,17 +80,23 @@ export default function FamilyPage() {
     setBaseline(Object.fromEntries(members.map((m) => [m.id, m])));
     // A household on the benefit table: its rows say what each person is covered for (its Coverage rows stopped updating).
     // Optional, like the Coverage rows: the page works without it.
-    void fetch("/api/benefit-table", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null)
+    // A failed or hung (30 s) cover list shows nothing about cover, never the last list: it may be out of date after a save.
+    // Only the latest refresh may change it: an older one answering late (after a save) is dropped.
+    const turn = ++coverTurn.current;
+    const coverFailed = () => { if (turn !== coverTurn.current) return; setKinds({}); setCoverState("failed"); };
+    void fetch("/api/benefit-table", { cache: "no-store", signal: AbortSignal.timeout(30_000) }).then((r) => r.ok ? r.json() : null).catch(() => null)
       .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[]; covers?: TableKindCover[]; scheduleLines?: { policyId: string; category: string }[] }[] } | null) => {
         // Not loaded (an error, offline): nothing is shown, never the stale Coverage rows (Critic R199-3).
-        if (!table) return setCoverState((c) => c === "loaded" ? c : "failed");
+        if (!table) return coverFailed();
+        if (turn !== coverTurn.current) return;
         if (table.enabled) { setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [], p.scheduleLines ?? [])]))); return setCoverState("loaded"); }
-        return fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[]; scheduleLines?: ScheduleLine[] } | null) => {
-          if (!l) return setCoverState((c) => c === "loaded" ? c : "failed");
+        return fetch("/api/ledger", { cache: "no-store", signal: AbortSignal.timeout(30_000) }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[]; scheduleLines?: ScheduleLine[] } | null) => {
+          if (!l) return coverFailed();
+          if (turn !== coverTurn.current) return;
           setKinds(ledgerKindsByPerson(l.rows ?? [], l.scheduleLines ?? []));
           setCoverState("loaded");
         });
-      }).catch(() => setCoverState((c) => c === "loaded" ? c : "failed"));
+      }).catch(() => coverFailed());
   }
   useEffect(() => { void refresh(); }, []);
 
