@@ -166,6 +166,9 @@ async function main() {
       ["a plan footnote", ["\u2022\tSimple Fracture", "(% of S$5,000)", "^ Plan A only"], "Arm\t25%", 25],
       ["another table's heading above a title", ["Burns due to Accident", "Body surface (% of S$10,000)", "Head\t10%", "Fracture due to Accident"], "Arm\t25%", 25],
       ["another table's bare heading above a title", ["(% of S$10,000)", "Head\t10%", "Fracture due to Accident"], "Arm\t25%", 25],
+      ["another table's rows with words after the share", ["Body surface (% of S$10,000)", "Head\t10% S$1,000", "Fracture due to Accident"], "Arm\t25%", 25],
+      ["another table's rows with a note after the share", ["Body surface (% of S$10,000)", "Head\t10% (see note 2)", "Fracture due to Accident"], "Arm\t25%", 25],
+      ["another table's heading right above a title", ["Burns due to Accident (% of S$10,000)", "Fracture due to Accident"], "Arm\t25%", 25],
     ];
     for (const [why, head, line, value] of cases) {
       const rows = table({ cover: "PA Cover", sum: 600000, sumText: "S$600,000", lines: [...head, line], benefits: [{ benefit: line.split("\t")[0], value, quote: line, percentOf: "other" }] });

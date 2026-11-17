@@ -99,7 +99,13 @@ export function kindSettled(messages: string[], members: string[] = []): { kind:
     const named = namedIn(m, members);
     const kindWord = new RegExp(String.raw`\b(?:${KIND_WORDS})\b`, "i").test(m);
     const fresh = [...named].filter((n) => !whose?.has(n));
-    if (SWAP.test(m) && fresh.length && !kindWord && !/\b(?:unsure|sure|maybe|perhaps|possibly|probably|could|might|think|thought)\b|\?/i.test(m)) {
+    // A swap names the new person and takes the old one back ("not Desmond", "instead of Desmond"), or is only "I meant
+    // Amy"; "too", "as well", "also", "both", "and" add a person, whose kind is not told (Critic on #520).
+    const oldNamed = [...named].filter((n) => whose?.has(n));
+    const swap = fresh.length && !kindWord && !/\b(?:unsure|sure|maybe|perhaps|possibly|probably|could|might|think|thought|too|also|both|and|as\s+well|plus|with)\b|\?/i.test(m)
+      && ((oldNamed.length > 0 && /\b(?:not|instead\s+of|rather\s+than)\b/i.test(m)) || /^\s*(?:sorry,?\s*)?(?:i\s+)?meant\s+[\p{L}' -]+[.!]?\s*$/iu.test(m)
+        || (!whose && SWAP.test(m)));
+    if (swap) {
       whose = new Set(fresh); continue;
     }
     if (kindWord || TAKE_BACK.test(m)) { kind = null; continue; }

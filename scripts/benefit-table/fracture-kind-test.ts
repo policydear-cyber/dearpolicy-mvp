@@ -115,6 +115,13 @@ test("a settled kind is for this injury and person only, and is taken back by an
   for (const later of ["He also hurt his wrist in the fall.", "Desmond broke his arm too.", "Sorry, I meant other.", "Actually the doctor now says it's compound.",
     "Not sure actually, could be other.", "Wait, no."]) assert.equal(k(["Desmond broke his arm.", "Simple", later]), null, later);
   assert.equal(k(["Rowan had a simple fracture last year. Now Amy broke her arm."]), null);
+  // A person added is never a swap: the kind stays the told person's (Critic on #520, re-review 3).
+  for (const added of ["Actually Amy was in the accident too.", "It was Amy as well.", "Amy and Rowan both."]) {
+    const st = kindSettled(["Rowan broke his arm.", "Simple", added], M);
+    assert.ok(!st || ([...(st.whose ?? [])].join() === "Rowan Hartley"), `${added}: ${JSON.stringify(st && [...(st.whose ?? [])])}`);
+  }
+  assert.deepEqual([...kindSettled(["Rowan broke his arm.", "Simple", "I meant Amy."], M)!.whose!], ["Amy Hartley-Lim"]);
+  assert.deepEqual([...kindSettled(["Rowan broke his arm.", "Simple", "It was Amy instead of Rowan."], M)!.whose!], ["Amy Hartley-Lim"]);
   // A person added later is not settled: the kind stays the told person's.
   assert.deepEqual([...kindSettled(["Amy broke her arm.", "Simple", "Rowan was in the same accident."], M)!.whose!], ["Amy Hartley-Lim"]);
 });

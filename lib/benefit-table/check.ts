@@ -913,12 +913,17 @@ export function tableBase(text: string, rowStart: number, names = ""): { amount:
   const block: string[] = [];
   // The table's own rows run up to its heading lines; a share row above a heading line is another table's (Critic on
   // #520: a Burns table's "(% of S$10,000)" above a "Fracture due to Accident" title was used for the arm).
+  // A "(% of S$N)" column heading is the table's only when it sits right above the table's share rows, with no title
+  // between (Critic on #520: "Burns due to Accident (% of S$10,000)" over a "Fracture due to Accident" title).
   let heading = false;
   for (let i = above.length - 1; i >= 0 && block.length < 30; i--) {
     const line = above[i];
     if (!line.trim()) break;
-    const shareRow = /\d+(?:\.\d+)?\s*%\s*[#*^†‡]?\s*$/.test(line) && !/\(\s*%\s*of\b/i.test(line) || /^\s*[#*^†‡]\s*$/.test(line);
+    const columnHeading = /\(\s*%\s*of\b/i.test(line);
+    // Any line with a share not followed by "of" is a share row, whatever follows it ("Head 10% S$1,000", "10% (note 2)").
+    const shareRow = !columnHeading && /\d+(?:\.\d+)?\s*%(?!\s*of\b)/i.test(line) || /^\s*[#*^†‡]\s*$/.test(line);
     if (shareRow && heading) break;
+    if (columnHeading && heading) return null;
     if (!shareRow) heading = true;
     block.unshift(line);
     if (/^\s*[•▪●◦·\u2022\u25aa\u25cf]/.test(line)) break;
