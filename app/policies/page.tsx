@@ -461,7 +461,7 @@ export default function PoliciesPage() {
       {personId && <p className="document-person-filter" data-testid="person-filter">Showing documents linked to <b>{family.find((m) => m.id === personId)?.display_name ?? "one person"}</b>. <button type="button" className="text-link" onClick={() => { setPersonId(null); window.history.replaceState(null, "", "/policies"); }}>Show all documents</button></p>}
 
       {libraryNotice && <div className="upload-status library-notice" role="status" data-testid="library-notice">{libraryNotice}{undoNotFamily?.notice === libraryNotice && <button type="button" className="mini-button" onClick={undoMarkNotFamily}>Undo</button>}<button type="button" className="mini-button" onClick={() => { setLibraryNotice(""); setUndoNotFamily(null); }} aria-label="Dismiss">✕</button></div>}
-      <div className="document-list">{shown.map((policy) => {
+      <div className="document-list rows">{shown.map((policy) => {
         const quarantineHeld = isQuarantineHeld(policy);
         const scanRejected = isScanRejected(policy);
         // A document held in quarantine (or rejected outright) still sits at
@@ -482,7 +482,7 @@ export default function PoliciesPage() {
           <div className="document-main">
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? readingWaitCopy(policy.processing_stage).eta : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
+            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage).eta : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
               {/* Its numbers sit with what it is, so the actions stand alone. */}
               {!!numbers.length && (processing || policy.processing_status === "failed") && <small className="document-numbers">{numbers.join(" · ")}</small>}</div>
               {!processing && !quarantineHeld && !scanRejected && (() => {

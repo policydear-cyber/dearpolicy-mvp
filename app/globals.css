@@ -419,6 +419,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .document-found.warn { color: var(--warn-text); }
 .document-names { font-size: var(--fs-xs); color: var(--muted); }
 .document-override { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.document-title .status { justify-self: start; margin-top: 4px; font-style: normal; text-transform: none; white-space: nowrap; }
 .detected-row label { font-size: var(--fs-sm); color: var(--ink); }
 .document-authority { font-size: var(--fs-xs); font-weight: 650; border-radius: 999px; padding: 5px 10px; }
 .document-authority.confirmed { background: var(--good-tint); color: var(--good-text); }
@@ -1409,6 +1410,7 @@ div.answer-point { display: grid; gap: 4px; }
 .message { max-width: min(920px, 100%); }
 @media (min-width: 1280px) {
   .coverage-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .document-list { grid-template-columns: repeat(auto-fill, minmax(560px, 1fr)); align-items: start; }
   .premium-breakdown-list, .payment-list, .claims-list { grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); }
 }
 @media (min-width: 1500px) {
@@ -1473,6 +1475,7 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
    -------------------------------------------------------------------------- */
 @media (min-width: 761px) {
   .page, .chat-page { max-width: none; margin: 0; }
+  .document-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); align-items: start; }
   .premium-breakdown-list, .payment-list, .claims-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
   .coverage-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
   .family-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); }
@@ -1503,7 +1506,8 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
 }
 
 /* Visual polish round 2 (Nov 2026): document cards. */
-/* The actions sit at the bottom of a document on a phone. */
+/* Cards in a row share one height; the policy numbers and actions sit at the bottom, so the grid has no holes. */
+@media (min-width: 761px) { .document-list { align-items: stretch; } }
 .document-card { display: flex; flex-direction: column; }
 .document-card > .document-meta { margin-top: auto; }
 /* Delete is quiet until it is about to act: muted, at the end of the row; red on hover, focus and Confirm. */
@@ -1692,22 +1696,23 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
    screens): its read status and actions. Phone: the same row, stacked.
    Layout only; no colour roles change.
    -------------------------------------------------------------------------- */
-.document-list { grid-template-columns: minmax(0, 1fr); gap: 10px; }
-.document-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px 16px; }
-.document-main { display: grid; gap: 10px; min-width: 0; }
-.document-head { align-items: start; }
-.document-head > .status { font-style: normal; text-transform: none; white-space: nowrap; align-self: start; }
-.document-title .document-numbers { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; }
-.document-main .covers-summary { margin-top: 0; }
-.document-card > .detail-panel { grid-column: 1 / -1; }
+/* Scoped to the household page (.document-list.rows); the staff page keeps its tiles. */
+.document-list.rows { grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: start; }
+.rows .document-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px 16px; }
+.rows .document-main { display: grid; gap: 10px; min-width: 0; }
+.rows .document-head { align-items: start; }
+.rows .document-head > .status { font-style: normal; text-transform: none; white-space: nowrap; align-self: start; }
+.rows .document-title .document-numbers { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; }
+.rows .document-main .covers-summary { margin-top: 0; }
+.rows .document-card > .detail-panel { grid-column: 1 / -1; }
 @media (max-width: 480px) {
   /* Narrow: the status goes under the name rather than squeezing it. */
-  .document-head > .status { grid-column: 2; justify-self: start; }
+  .rows .document-head > .status { grid-column: 2; justify-self: start; }
 }
 @media (min-width: 1024px) {
-  .document-card { grid-template-columns: minmax(0, 1fr) auto; column-gap: 28px; align-items: start; padding: 16px 20px; }
-  .document-card > .document-meta { margin-top: 0; flex-wrap: wrap; justify-content: flex-end; max-width: 440px; }
-  .document-meta .mini-button.danger { margin-left: 0; }
+  .rows .document-card { grid-template-columns: minmax(0, 1fr) auto; column-gap: 28px; align-items: start; padding: 16px 20px; }
+  .rows .document-card > .document-meta { margin-top: 0; flex-wrap: wrap; justify-content: flex-end; max-width: 440px; }
+  .rows .document-meta .mini-button.danger { margin-left: 0; }
   /* Everything under the name lines up with the name, so each row reads as one block. */
-  .document-main > :not(.document-head) { margin-left: 52px; }
+  .rows .document-main > :not(.document-head) { margin-left: 52px; }
 }
