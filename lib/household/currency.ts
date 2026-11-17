@@ -113,7 +113,12 @@ export async function withdrawHouseholdCurrency(accountId: string, opts: { keep?
       const args = [accountId, pairs.map((r) => r.id), pairs.map((r) => r.currency)];
       await query(`DELETE FROM coverage_rules c WHERE ${fromCover} AND c.origin<>'person' AND c.updated_at=c.created_at`, args)
         .catch((error) => console.warn("household currency: wording rows not removed:", error instanceof Error ? error.message : error));
-      await query(`UPDATE coverage_rules c SET amount = CASE WHEN c.pays_kind='percent_of_sum' THEN c.amount ELSE NULL END, sum_basis=NULL WHERE ${fromCover}`, args)
+      // As above, a figure a person typed stays theirs: only the benefit's own figure, or the withdrawn cover's sum, is taken off.
+      await query(`UPDATE coverage_rules c SET amount = CASE WHEN c.pays_kind='percent_of_sum' THEN c.amount ELSE NULL END, sum_basis=NULL WHERE ${fromCover}
+            AND (c.pays_kind='percent_of_sum' OR c.amount IS NULL
+                 OR c.amount = (SELECT b.formula_value FROM policy_benefits b WHERE b.id::text = split_part(split_part(c.seed_key,'|',1),':',2)))
+            AND (c.sum_basis IS NULL OR EXISTS (SELECT 1 FROM policy_coverages pc WHERE pc.account_id = $1 AND pc.id::text = ANY($2::text[])
+                 AND pc.policy_id = c.policy_id AND pc.amount = c.sum_basis))`, args)
         .catch((error) => console.warn("household currency: wording amounts not cleared:", error instanceof Error ? error.message : error));
     }
   }
