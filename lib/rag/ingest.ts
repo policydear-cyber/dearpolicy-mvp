@@ -250,7 +250,7 @@ async function previousReading(args: ProcessPolicyArgs): Promise<PolicyExtractio
 /** Round 9: a reading as it may be stored -- roles by the document's own
  * wording, people and cover re-found on their pages, and every name, figure,
  * unit, date, number and role checked against the printed text. */
-export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[] }[], opts: { documentTitle?: string | null; allPages?: { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[] }[]; householdCurrency?: string | null } = {}): PolicyExtraction {
+export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[] }[], opts: { documentTitle?: string | null; allPages?: { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[]; unreadable?: boolean; notRead?: boolean }[]; householdCurrency?: string | null } = {}): PolicyExtraction {
   // A page left out because it could not be checked gives no fact, but it is still part of the document: the kind of
   // document is decided on every page, as it is when every page could be checked.
   const rolePages = opts.allPages ?? pages;

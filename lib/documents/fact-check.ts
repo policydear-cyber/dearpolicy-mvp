@@ -629,6 +629,9 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
       if (!ok && own && (!coverage.currency || coverage.currency.toUpperCase() === own) && onEvidence((line) => moneyShapedFigure(line, Number(coverage.amount)))) {
         ok = true; fromHousehold = own;
       }
+      // A figure confirmed as money with no currency of its own (a bare "$" line, a reading that gave none) takes the
+      // household's on the same page terms; a page naming another currency is never in the map.
+      else if (ok && !coverage.currency && own) fromHousehold = own;
     }
   }
   const notes = coverage.notes && !looksLikeInjectedInstruction(coverage.notes) && (!text || readerTextSupported(text, coverage.notes)) ? coverage.notes : null;

@@ -13,20 +13,10 @@
  * a percentage, days or years. Pure functions; no I/O.
  */
 import { currenciesIn } from "@/lib/documents/image-currency";
+import { UNCHECKED_PAGE } from "@/lib/documents/layout-check";
 
-/** The currencies a household can choose. "NONE" is "Don't assume a currency". */
-export const HOUSEHOLD_CURRENCIES = ["SGD", "USD", "HKD", "AUD", "MYR", "GBP", "EUR", "PHP"] as const;
-export type HouseholdCurrency = (typeof HOUSEHOLD_CURRENCIES)[number];
-export const NO_HOUSEHOLD_CURRENCY = "NONE" as const;
-export type HouseholdCurrencySetting = HouseholdCurrency | typeof NO_HOUSEHOLD_CURRENCY;
-/** A household that has not chosen: launch is for Singapore households (DC 17 Nov, "default S$ for now"). */
-export const DEFAULT_HOUSEHOLD_CURRENCY: HouseholdCurrency = "SGD";
-
-export const HOUSEHOLD_CURRENCY_LABELS: Record<HouseholdCurrencySetting, string> = {
-  SGD: "Singapore dollar (S$)", USD: "US dollar (US$)", HKD: "Hong Kong dollar (HK$)", AUD: "Australian dollar (A$)",
-  MYR: "Malaysian ringgit (RM)", GBP: "British pound (£)", EUR: "Euro (€)", PHP: "Philippine peso (₱)",
-  NONE: "Don't assume a currency",
-};
+export { HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY, DEFAULT_HOUSEHOLD_CURRENCY, HOUSEHOLD_CURRENCY_LABELS, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
+import { HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY, DEFAULT_HOUSEHOLD_CURRENCY, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
 
 const DOLLARS = new Set<string>(["SGD", "USD", "HKD", "AUD"]);
 
@@ -47,23 +37,33 @@ export function effectiveHouseholdCurrency(stored: unknown): HouseholdCurrency |
  * dollar currency. */
 const agrees = (named: string, household: string) => named === household || (named === "$" && DOLLARS.has(household));
 
-type Page = { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[] };
+type Page = { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[]; unreadable?: boolean; notRead?: boolean };
+
+/** A page whose words are not known: unreadable, not read, a page the image check could not confirm (its figure lines,
+ * and any currency on them, were taken out), or no text and no image reading. It may be the page that prints another
+ * currency, so it never counts as agreeing (Critic #526 H3). */
+const unknownPage = (p: Page) => !!p.unreadable || !!p.notRead || p.text.startsWith(UNCHECKED_PAGE)
+  || (!p.text.trim() && !(p.imageCurrencies?.length || p.imageCurrency));
 
 /** The pages whose bare figures may be read in the household's currency (see the module note), decided page by page:
- * - a page that names a currency itself (in its text or its image reading) uses the household's only when every currency
- *   it names agrees with it: a schedule that says "Currency : Singapore Dollar" once, for a household in S$;
- * - a page that names none uses it only when no page of the document, and no page image, names any other currency
- *   (a policy wording that lists the currencies a policy may be written in holds every such page).
+ * - a page that names a currency by name or code (in its text or its image reading) uses the household's only when every
+ *   currency it names agrees with it: a schedule that says "Currency : Singapore Dollar" once, for a household in S$;
+ * - a page that names none, or only a bare "$" or "dollars", uses it only when every page of the document is known and
+ *   no page, and no page image, names any other currency: a bare "$" beside "Policy Currency: USD" on another page is
+ *   US$, never S$ (Critic #526 H1), and a policy wording that lists the currencies a policy may be written in holds
+ *   every such page.
  * Nothing when the household chose "Don't assume". */
 export function householdCurrencyPages(pages: Page[], household: string | null | undefined): Map<number, string> {
   const out = new Map<number, string>();
   const code = parseHouseholdCurrencySetting(household);
   if (!code || code === NO_HOUSEHOLD_CURRENCY) return out;
   const namedOn = (p: Page) => [...currenciesIn(p.text), ...(p.imageCurrency ? [p.imageCurrency] : []), ...(p.imageCurrencies ?? [])];
-  const documentAgrees = pages.every((p) => namedOn(p).every((c) => agrees(c, code)));
+  const documentAgrees = pages.every((p) => !unknownPage(p) && namedOn(p).every((c) => agrees(c, code)));
   for (const p of pages) {
+    if (unknownPage(p)) continue;
     const named = namedOn(p);
-    if (named.length ? named.every((c) => agrees(c, code)) : documentAgrees) out.set(p.pageNumber, code);
+    const byName = named.filter((c) => c !== "$");
+    if (byName.length ? named.every((c) => agrees(c, code)) : documentAgrees) out.set(p.pageNumber, code);
   }
   return out;
 }

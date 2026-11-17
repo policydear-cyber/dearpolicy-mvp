@@ -28,7 +28,11 @@ export function currenciesIn(text: string): string[] {
   }
   for (const m of t.matchAll(/(?<![A-Za-z])(SGD|USD|HKD|AUD|MYR|EUR|GBP|PHP|NZD|CAD|CNY|RMB|JPY|IDR|THB|INR|KRW|TWD|CHF|VND|BND)(?![A-Za-z])/g))
     out.push(["SGD", "USD", "HKD", "AUD", "MYR", "EUR", "GBP", "PHP"].includes(m[1]) ? m[1] : "?");
-  if (/(?<![A-Za-z])RM\s?\d/.test(t)) out.push("MYR");
+  // "RM" alone ("Sum Assured (RM)", "Currency: RM") is ringgit too; a false match only keeps an amount held (Critic #526 H2).
+  if (/(?<![A-Za-z])RM(?![A-Za-z])/.test(t)) out.push("MYR");
+  // Rupiah ("Rp 100.000.000") and other currencies outside the list, by code.
+  if (/(?<![A-Za-z])Rp\.?\s?\d/.test(t)) out.push("?");
+  for (const m of t.matchAll(/(?<![A-Za-z])(MOP|AED|SAR|QAR|KWD|BHD|OMR|ZAR|SEK|NOK|DKK|LKR|PKR|BDT|MMK|KHR|LAK|NPR|MVR|TRY|RUB|BRL|MXN|PLN|CZK|HUF|ILS|EGP|NGN|KES)(?![A-Za-z])/g)) out.push("?");
   if (/\bsingapore\s+dollars?\b/i.test(t)) out.push("SGD");
   if (/\b(?:u\.?s\.?|united\s+states|american)\s+dollars?\b/i.test(t)) out.push("USD");
   if (/\bhong\s+kong\s+dollars?\b/i.test(t)) out.push("HKD");
@@ -43,7 +47,7 @@ export function currenciesIn(text: string): string[] {
     if (!/^(?:singapore|u\.?s\.?|states|american|kong|australian)$/i.test(m[1]) && /^(?:new|zealand|canadian|brunei|taiwan|fiji|jamaican|bahamian|barbados|belize|bermuda|cayman|guyana|liberian|namibian|solomon|surinamese|trinidad|tobago|zimbabwe|eastern|caribbean)$/i.test(m[1])) out.push("?");
   }
   if (/(?<![A-Za-z])dollars?\b/i.test(t) && !out.length) out.push("$");
-  for (const w of ["yen", "yuan", "renminbi", "rupees?", "rupiah", "baht", "won", "francs?", "dong", "kr(?:ona|one|oner)"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
+  for (const w of ["yen", "yuan", "renminbi", "rupees?", "rupiah", "baht", "won", "francs?", "dong", "kr(?:ona|one|oner)", "dirhams?", "riyals?", "rials?", "rand", "kyat", "riel", "taka", "patacas?", "dinars?", "lira", "roubles?", "rubles?", "reais", "real", "zloty", "shekels?", "kip", "rufiyaa", "liras?"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
   return out;
 }
 

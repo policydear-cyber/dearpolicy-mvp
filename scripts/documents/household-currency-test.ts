@@ -21,7 +21,7 @@ async function main() {
   const { verifiedExtraction } = await import("@/lib/rag/ingest");
   const { PolicyExtractionSchema } = await import("@/lib/ai/extract-policy");
 
-  type Page = { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[] };
+  type Page = { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[]; unreadable?: boolean; notRead?: boolean };
   type Cov = { amount: number; currency: string | null; evidence: string; page?: number; product?: string | null; person?: string };
   const extraction = (covs: Cov[], person = "Mei Ling Tan") => PolicyExtractionSchema.parse({
     documentType: "Policy schedule", documentRole: "personal_schedule", documentNotes: [], insurer: "Kestrel Assurance (fictitious)", productName: "Kestrel Shield", productsMentioned: ["Kestrel Shield"],
@@ -80,6 +80,29 @@ async function main() {
   await test("P ... and not with a ringgit household", () => assert.deepEqual(shown([{ ...death, currency: null }], [{ pageNumber: 1, text: "Premium $12.50 monthly" }, p2(BARE)], "MYR"), ["held"]));
   await test("P 'dollars' written out agrees with S$", () => assert.deepEqual(shown([death], [p2("All amounts are in dollars\n" + BARE)], "SGD"), ["SGD 100000"]));
   await test("P 'Canadian Dollar' never agrees", () => assert.deepEqual(shown([death], [p2("Currency: Canadian Dollar\n" + BARE)], "SGD"), ["held"]));
+
+  // ---- C: Critic #526 (H1-H3)
+  await test("C H1 a bare $ page beside 'Policy Currency: USD' on another page is not S$", () => {
+    assert.equal(HC.householdCurrencyPages([{ pageNumber: 1, text: "Policy Currency: USD" }, p2("Death Benefit $500,000.00")], "SGD").size, 0);
+    // The figure itself is still confirmed as money (the bare $), with no currency given to it.
+    assert.deepEqual(shown([{ amount: 500000, currency: null, evidence: "Death Benefit $500,000.00" }], [{ pageNumber: 1, text: "Policy Currency: USD" }, p2("Life Assured\tMei Ling Tan\nDeath Benefit $500,000.00")], "SGD"), ["null 500000"]);
+  });
+  await test("C H1 ... while the same bare $ page alone is a dollar that agrees with S$", () =>
+    assert.deepEqual(shown([{ amount: 500000, currency: null, evidence: "Death Benefit $500,000.00" }], [p2("Life Assured\tMei Ling Tan\nDeath Benefit $500,000.00")], "SGD"), ["SGD 500000"]));
+  await test("C H2 'Sum Assured (RM)' over a bare figure is ringgit", () => assert.deepEqual(shown([{ ...death, currency: null }], [p2("Sum Assured (RM)\n" + BARE)], "SGD"), ["held"]));
+  await test("C H2 'Currency: RM' is ringgit", () => assert.deepEqual(shown([{ ...death, currency: null }], [p2("Currency: RM\n" + BARE)], "SGD"), ["held"]));
+  await test("C H2 rupiah 'Rp' is another currency", () => assert.deepEqual(shown([{ ...death, currency: null }], [{ pageNumber: 1, text: "Premi Rp 1.500.000" }, p2(BARE)], "SGD"), ["held"]));
+  for (const w of ["Currency: AED", "Amounts in dirhams", "Sum assured in South African rand", "Currency: MOP", "Kyat", "Amounts in Swedish krona"])
+    await test(`C H2 '${w}' is another currency`, () => assert.deepEqual(shown([{ ...death, currency: null }], [{ pageNumber: 1, text: w }, p2(BARE)], "SGD"), ["held"]));
+  await test("C H3 an unread scan page (no text, no image reading) holds the bare page", () => assert.deepEqual(shown([death], [{ pageNumber: 1, text: "" }, p2(BARE)], "SGD"), ["held"]));
+  await test("C H3 an unreadable page holds it", () => assert.deepEqual(shown([death], [{ pageNumber: 1, text: "smudge", unreadable: true } as Page, p2(BARE)], "SGD"), ["held"]));
+  await test("C H3 a page marked not read holds it", () => assert.deepEqual(shown([death], [{ pageNumber: 1, text: "", notRead: true } as Page, p2(BARE)], "SGD"), ["held"]));
+  await test("C H3 a page the image check could not confirm holds it", async () => {
+    const { UNCHECKED_PAGE } = await import("@/lib/documents/layout-check");
+    assert.deepEqual(shown([death], [{ pageNumber: 1, text: UNCHECKED_PAGE + "\nSchedule" }, p2(BARE)], "SGD"), ["held"]);
+  });
+  await test("C H3 ... but a page that names S$ itself still uses it", () =>
+    assert.deepEqual(shown([death], [{ pageNumber: 1, text: "" }, p2("Currency : Singapore Dollar\n" + BARE)], "SGD"), ["SGD 100000"]));
 
   // ---- I: the page image
   await test("I the page image names RM: held", () => assert.deepEqual(shown([death], [p2(BARE, { imageCurrencies: ["MYR"] })], "SGD"), ["held"]));
