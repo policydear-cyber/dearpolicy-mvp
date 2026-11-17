@@ -69,7 +69,8 @@ async function unread(accountId: string, owner: (cache: boolean) => string | nul
     return { count: rows.rows.length, names: rows.rows.map((r) => documentCardTitle(r)), ids: rows.rows.map((r) => r.id), coverUnknown: rows.rows.filter((r) => r.kinds_known !== true).length };
   } catch (error) {
     console.warn("Could not count documents not fully read:", error instanceof Error ? error.message : error);
-    return { count: 0, names: [], ids: [], coverUnknown: 0 };
+    // Nothing is known of what was read, so no kind is named a gap (Critic PR 533): Home waits instead.
+    return { count: 0, names: [], ids: [], coverUnknown: 1 };
   }
 }
 
