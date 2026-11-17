@@ -76,6 +76,14 @@ function namedIn(text: string, members: string[]): Set<string> {
   for (const [w, ms] of owners) if (ms.size === 1 && said.has(w)) out.add([...ms][0]);
   return out;
 }
+/** Whether a message takes a member back by name: "not Desmond", "instead of Desmond", "rather than Desmond", the
+ * negation right before a word of their name that no other member's has ("not just Rowan" adds Amy; Critic on #520). */
+function takesBack(text: string, member: string, members: string[]): boolean {
+  const words = (n: string) => n.toLowerCase().replace(/\([^)]*\)/g, " ").split(/[^\p{L}]+/u).filter((w) => w.length > 2);
+  const others = new Set(members.filter((m) => m !== member).flatMap(words));
+  const own = words(member).filter((w) => !others.has(w));
+  return own.some((w) => new RegExp(String.raw`\b(?:not|instead\s+of|rather\s+than)\s+${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\b`, "iu").test(text));
+}
 /** Words that take back or doubt what was said ("Sorry, I meant other", "Wait, no", "not sure actually"). */
 const TAKE_BACK = /\b(?:no|not|nope|meant|mean|actually|wait|sorry|instead|correction|unsure|sure|maybe|perhaps|possibly|probably|could|might|think|thought|seems?|said)\b|n't\b|\?/i;
 /** A message that only moves the injury from one person to another: "it was Charmaine, not Desmond", "I meant Amy". */
@@ -103,7 +111,8 @@ export function kindSettled(messages: string[], members: string[] = []): { kind:
     // Amy"; "too", "as well", "also", "both", "and" add a person, whose kind is not told (Critic on #520).
     const oldNamed = [...named].filter((n) => whose?.has(n));
     const swap = fresh.length && !kindWord && !/\b(?:unsure|sure|maybe|perhaps|possibly|probably|could|might|think|thought|too|also|both|and|as\s+well|plus|with)\b|\?/i.test(m)
-      && ((oldNamed.length > 0 && /\b(?:not|instead\s+of|rather\s+than)\b/i.test(m)) || /^\s*(?:sorry,?\s*)?(?:i\s+)?meant\s+[\p{L}' -]+[.!]?\s*$/iu.test(m)
+      && !/\bnot\s+(?:just|only|merely|simply)\b/i.test(m)
+      && (oldNamed.some((n) => takesBack(m, n, members)) || /^\s*(?:sorry,?\s*)?(?:i\s+)?meant\s+[\p{L}' -]+[.!]?\s*$/iu.test(m)
         || (!whose && SWAP.test(m)));
     if (swap) {
       whose = new Set(fresh); continue;

@@ -116,7 +116,7 @@ test("a settled kind is for this injury and person only, and is taken back by an
     "Not sure actually, could be other.", "Wait, no."]) assert.equal(k(["Desmond broke his arm.", "Simple", later]), null, later);
   assert.equal(k(["Rowan had a simple fracture last year. Now Amy broke her arm."]), null);
   // A person added is never a swap: the kind stays the told person's (Critic on #520, re-review 3).
-  for (const added of ["Actually Amy was in the accident too.", "It was Amy as well.", "Amy and Rowan both."]) {
+  for (const added of ["Actually Amy was in the accident too.", "It was Amy as well.", "Amy and Rowan both.", "Amy was there, not just Rowan.", "To be clear, it was Rowan, not Amy.", "Not Amy, Rowan."]) {
     const st = kindSettled(["Rowan broke his arm.", "Simple", added], M);
     assert.ok(!st || ([...(st.whose ?? [])].join() === "Rowan Hartley"), `${added}: ${JSON.stringify(st && [...(st.whose ?? [])])}`);
   }
