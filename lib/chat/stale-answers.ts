@@ -66,6 +66,9 @@ export function invalidatedAnswer(answer: ChatAnswer, reason: InvalidationReason
     figureBindings: [], computations: [], calculations: [], restatedCalculationIds: [],
     // (the simple chat's cards and bottom line go too: a page or client that reads them must find no figure)
     ...("statements" in answer ? { statements: [] } : {}), ...("bottomLine" in answer ? { bottomLine: NOTICE[reason] } : {}),
+    // (the insurer contacts go too: they name the document and page the answer relied on, which may be the one now gone -- TE journeys
+    // on main 9bca70a, D2)
+    ...("insurerContacts" in answer ? { insurerContacts: [] } : {}),
     invalidated: { reason },
   } as ChatAnswer;
 }

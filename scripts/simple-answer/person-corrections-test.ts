@@ -605,6 +605,17 @@ async function main() {
     assert.deepEqual(subjects!.supersededBy([G], [{ answerId: "a1", people: [G] }, { answerId: "a2", people: [G, D] }], [D]), [], "an answer that showed the new person stands");
   });
 
+  await test("D2 an invalidated answer keeps no insurer contacts (they name the document and page it relied on), for every reason", async () => {
+    const { invalidatedAnswer } = await import("@/lib/chat/stale-answers");
+    const contact = { insurer: "Kestrel Life", items: [{ kind: "phone", value: "6123 4567" }], document: "Kestrel schedule", page: 2 };
+    for (const reason of ["policy_deleted", "documents_added", "person_unlinked", "superseded"] as const) {
+      const out = invalidatedAnswer({ summary: "S$3,000", details: [], citations: [], nextSteps: [], questions: [], insurerContacts: [contact] } as any, reason) as any;
+      assert.deepEqual(out.insurerContacts, [], reason);
+      assert.doesNotMatch(JSON.stringify(out), /6123 4567|Kestrel schedule/, reason);
+    }
+    assert.ok(!("insurerContacts" in (invalidatedAnswer({ summary: "x" } as any) as any)), "an answer with no contacts gains no field");
+  });
+
   console.log(`person corrections: ${passed} passed, ${failures.length} failed`);
   for (const f of failures) console.log(`FAIL ${f}`);
   if (failures.length) process.exit(1);
