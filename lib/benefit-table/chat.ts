@@ -1777,8 +1777,8 @@ const ALL_NAMED_POLICIES = /\b(?:[Uu]nder|[Ff]or|[Aa]cross|[Ii]n\s+respect\s+of)
 const NOT_SHARED_LIMIT = /\b(?:in\s+addition\s+to|irrespective\s+of|regardless\s+of|separate(?:ly)?\s+from|independent(?:ly)?\s+of|apart\s+from|may\s+also\s+pay|no\s+benefits?|not\s+(?:be\s+)?(?:payable|paid|combined)|less\s+(?:any|the)|minus|deduct\w*|reduced\s+by|offset|if\s+(?:a|any)\s+claim\s+(?:has\s+been|is|was)\s+(?:paid|made|admitted))\b/i;
 /** Words that make a sentence a limit on what is paid. */
 /** The other policies as the sentence's subject, at its start: "All Kestrel policies on the same life ...", "In total, all
- * plans issued by the Company ...". */
-const SUBJECT_POLICIES = /^\s*(?:(?:[Ii]n\s+total|[Oo]verall|[Ii]n\s+aggregate),?\s+)?(?:[Aa]ll|[Ee]very)\s+(?:other\s+)?(?:[A-Z][\w&'-]*\s+){0,3}(?:policies|plans|certificates|contracts|Policies|Plans|Certificates|Contracts)\b/;
+ * plans issued by the Company ...", "This policy and all other policies we have issued on the same life ...". */
+const SUBJECT_POLICIES = /^\s*(?:(?:[Ii]n\s+total|[Oo]verall|[Ii]n\s+aggregate),?\s+)?(?:(?:[Tt]his|[Tt]he)\s+(?:[Pp]olicy|[Pp]lan|[Cc]ertificate|[Cc]ontract)\s+(?:and|together\s+with)\s+)?(?:[Aa]ll|[Ee]very)\s+(?:other\s+)?(?:[A-Z][\w&'-]*\s+){0,3}(?:policies|plans|certificates|contracts|Policies|Plans|Certificates|Contracts)\b/;
 const LIMIT_WORDS = /\b(?:no\s+more\s+than|not\s+more\s+than|most|maximum|max\.|not\s+exceed|exceed|limit(?:ed|s)?|in\s+total|total|aggregate\w*|up\s+to|capped)\b/i;
 export const SHARED_POLICIES_WORDS = "the most the insurer pays for these claims under this and all its other policies on the same person together, not this policy's own cover";
 /** Whether a row's printed words say its limit is shared with the insurer's other policies on the same life (ACROSS_POLICIES). */
