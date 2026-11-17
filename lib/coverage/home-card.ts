@@ -6,13 +6,14 @@
  * when another count avoids it. Pure; used by app/page.tsx. Works for any household and any insurer.
  *   Test: scripts/coverage/home-card-test.ts */
 
+const clean = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
+
 export type HomeCardInput = { policyNames?: string[] | null; parts?: { name?: string | null }[] | null; count?: number | null };
 
 /** Whether Home may show the card's amount: only when the cover rests on one line, so the figure is never a sum of
  * several schedules, policies or benefits. */
-export const homeCardShowsAmount = (c: { count?: number | null; parts?: unknown[] | null }) => Math.max(c.count ?? 0, c.parts?.length ?? 0) <= 1;
-
-const clean = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
+export const homeCardShowsAmount = (c: { count?: number | null; parts?: unknown[] | null; policyNames?: string[] | null }) =>
+  Math.max(c.count ?? 0, c.parts?.length ?? 0, new Set((c.policyNames ?? []).map((n) => clean(n).toLowerCase()).filter(Boolean)).size) <= 1;
 
 /** What pays for this cover, in a few words: one policy's name, two names joined, or "N policies"; one policy with several
  * benefits for this cover says how many ("Group Term Life · 2 benefits"). Null when nothing is named and there is one line. */

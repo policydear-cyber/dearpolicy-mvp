@@ -29,6 +29,9 @@ test("several lines or policies: no total on Home (different schedules are never
   assert.equal(homeCardSource({ policyNames: [], count: 3 }), "3 benefits");
   // One line: its own confirmed amount is shown.
   assert.equal(homeCardShowsAmount({ count: 1 }), true);
+  assert.equal(homeCardShowsAmount({ count: 1, policyNames: ["Term Life", "term  life"] }), true, "the same policy named twice is one");
+  // Fails closed (Critic, e57bfdc): one line by count, but two policies named, never shows a figure that may be their sum.
+  assert.equal(homeCardShowsAmount({ count: 1, policyNames: ["A Plan", "B Plan"] }), false);
   assert.equal(homeCardShowsAmount({ count: 0 }), true, "a derived cover with no line has no amount to sum");
 });
 test("three or more: a count, never a list that overflows the card", () => {
