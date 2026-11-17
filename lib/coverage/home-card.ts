@@ -51,21 +51,20 @@ export function pickCoverByName(label: string, covers: (string | null | undefine
   return tie ? -1 : best;
 }
 
-/** Initials kept in capitals when an all-capitals name is set in title case: any 2 or 3 letters except a common word
- * ("AIA", "FWD", "UOB"; not "CAR", "PET"), and 4 letters only when known initials or with no vowel ("NTUC", "HSBC").
- * A short allow-list for 4 letters, so "LONG", "WARD" and "BOND" read as words (TE PR 525 R2a). */
-const SHORT_WORDS = new Set(["and", "of", "the", "for", "to", "in", "on", "at", "by", "or", "co", "st", "pro", "max", "new", "one", "two", "six", "ten",
-  "all", "top", "my", "our", "key", "own", "pay", "per", "day", "sun", "duo", "go", "up", "car", "pet", "big", "fit", "kid", "ace", "you", "eye", "leg",
-  "art", "bay", "box", "boy", "cub", "dad", "mum", "mom", "net", "now", "pal", "red", "sea", "sky", "tea", "way", "win", "zen", "joy", "fun", "out", "off",
-  "her", "his", "its", "get", "set", "lux", "an", "as", "is", "it", "be", "we", "us", "me", "no", "so", "do", "if", "air", "end", "age", "add",
-  "aid", "arm", "ear", "hip", "lip", "toe", "far", "few", "low", "old", "raw", "row", "tax", "via", "web", "yes", "yet", "mrs", "mr", "ms", "dr"]);
-const KNOWN_INITIALS = new Set(["ntuc", "ocbc", "msig"]);
+/** An all-capitals name set in title case keeps every word of up to 4 letters as written, so initials are never
+ * lowercased ("IRAS", "AMEX", "ACE", "US"); only the short words of insurance products and joining words below read as words
+ * ("LONG TERM CARE PLAN" -> "Long Term Care Plan"). Words of 5 letters or more read as words (TE PR 525 R2). */
+const SHORT_WORDS = new Set(["co", "st", "pro", "max", "new", "one", "two", "six", "ten", "all", "top", "my", "our", "your", "key", "own", "pay", "day",
+  "car", "pet", "big", "fit", "kid", "kids", "eye", "leg", "plus", "care", "life", "term", "long", "gold", "home", "cash", "plan", "trip", "star", "safe",
+  "wise", "link", "flex", "best", "rich", "pure", "year", "fund", "save", "good", "sure", "more", "only", "lady", "baby", "free", "full", "high", "mega",
+  "easy", "ward", "bond", "bank", "shop", "help", "mind", "well", "back", "risk", "land", "fast", "step", "goal", "luke", "men", "work", "with", "card",
+  "lite", "mini", "maxi", "gain", "grow", "keep", "self", "next", "duo", "solo", "true", "home", "fly", "go", "up", "fire", "auto", "bike", "boat",
+  "maid", "dog", "cat", "body", "bone", "head", "hand", "foot", "baby", "teen", "silver", "basic", "whole", "cover"]);
 const LOWER_WORDS = new Set(["and", "of", "the", "for", "to", "in", "on", "at", "by", "or"]);
 const titleWord = (w: string, first: boolean): string => {
   const lower = w.toLowerCase();
-  if (w.length >= 2 && w.length <= 3 && !SHORT_WORDS.has(lower)) return w;
-  if (w.length === 4 && (KNOWN_INITIALS.has(lower) || !/[aeiouy]/.test(lower))) return w;
   if (!first && LOWER_WORDS.has(lower)) return lower;
+  if (w.length <= 4 && !SHORT_WORDS.has(lower) && !LOWER_WORDS.has(lower)) return w;
   return lower[0].toUpperCase() + lower.slice(1);
 };
 /** A policy's name as a card shows it: an all-capitals name in title case ("MINDEF & MHA GROUP INSURANCE SCHEME" ->
@@ -82,7 +81,10 @@ export function homePolicyName(name: string): string {
       const [head, tail] = w.split(/['’]/);
       const mark = w.slice(head.length, head.length + 1);
       if (tail === undefined) return titleWord(head, i === 0);
-      return head.length === 1 ? head + mark + titleWord(tail, false) : titleWord(head, i === 0) + mark + tail.toLowerCase();
+      if (head.length === 1) return head + mark + titleWord(tail, false);
+      const h = titleWord(head, i === 0);
+      // A possessive follows its word: "ANDREW'S" -> "Andrew's", but "MEN'S" stays as written when "MEN" does.
+      return h + mark + (h === head ? tail : tail.toLowerCase());
     });
   }
   // A short code with a hyphen ("(H-2026)") never breaks at its hyphen (TE PR 525 F5).

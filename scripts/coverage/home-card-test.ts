@@ -104,6 +104,9 @@ test("readable names: all capitals in title case, initials kept; long names lose
   assert.equal(homePolicyName("INCOME FAMILY BOND"), "Income Family Bond");
   assert.equal(homePolicyName("ST. ANDREW'S CARE"), "St. Andrew's Care");
   assert.equal(homePolicyName("UOB DBS AXA PRU"), "UOB DBS AXA PRU");
+  // Initials of up to 4 letters are never lowercased (TE PR 525 7d26518).
+  for (const n of ["IRAS", "CHAS", "IPPT", "ICBC", "ACRA", "AMEX", "MOM", "ACE", "US", "IT"]) assert.equal(homePolicyName(`${n} TRAVEL`), `${n} Travel`, n);
+  assert.equal(homePolicyName("MEN'S HEALTH"), "Men's Health");
 });
 test("phone person switcher: keys wrap onto rows, names break between words, never scrolls sideways", () => {
   const css = readFileSync("app/globals.css", "utf8");
