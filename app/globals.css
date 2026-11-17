@@ -1301,15 +1301,28 @@ div.answer-point { display: grid; gap: 4px; }
 /* Home cards are compact sheets (DC 17 Nov "looks weird and empty"): icon and cover name on one line, what pays under
    it, then the amount (only when one is confirmed) and Covered at the foot. Columns come from lib/coverage/home-card.ts
    (data-cols) so the last row is not one card alone; on a phone an odd last card spans the row. */
-.home-cards .coverage-grid[data-cols] { grid-template-columns: repeat(var(--home-cols, 3), minmax(0, 1fr)); gap: 22px 16px; }
-.home-cards .coverage-grid[data-cols="4"] { --home-cols: 4; }
-.home-cards .coverage-card.covered { min-height: 0; padding: 16px 18px 18px; gap: 6px; }
+/* Columns follow the width the cards actually get (a container query on .home-cards; Test engineer, PR 519, F2): 2 columns
+   until there is room for 3 or 4 card-sized columns, so a name never breaks mid-word and an amount never spills. */
+.home-cards { container-type: inline-size; }
+.home-cards .coverage-grid[data-cols] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+.home-cards .coverage-grid[data-cols] > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+@container (min-width: 600px) {
+  .home-cards .coverage-grid[data-cols="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px 16px; }
+  .home-cards .coverage-grid[data-cols="3"] > :last-child:nth-child(odd) { grid-column: auto; }
+}
+@container (min-width: 820px) {
+  .home-cards .coverage-grid[data-cols="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px 16px; }
+  .home-cards .coverage-grid[data-cols="4"] > :last-child:nth-child(odd) { grid-column: auto; }
+}
+.home-cards .coverage-card.covered { min-height: 0; padding: 16px 18px 18px; gap: 6px; container-type: inline-size; }
 .home-cards .coverage-card.covered .coverage-top { gap: 12px; margin-bottom: 4px; padding-right: 18px; }
 .home-cards .coverage-card.covered .coverage-icon { flex: none; width: 34px; height: 34px; border-radius: 10px; }
-.home-cards .coverage-card.covered .coverage-name { margin: 0; line-height: 1.25; overflow-wrap: anywhere; }
-.home-cards .coverage-source { font-size: var(--fs-xs); line-height: 1.35; color: var(--on-cover-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-.home-cards .coverage-card.covered .coverage-amount { margin-top: auto; padding-top: 8px; font-size: 24px; }
+.home-cards .coverage-card.covered .coverage-name { margin: 0; line-height: 1.25; overflow-wrap: break-word; min-width: 0; }
+.home-cards .coverage-source { font-size: var(--fs-xs); line-height: 1.35; color: var(--on-cover-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: break-word; }
+.home-cards .coverage-card.covered .coverage-amount { margin-top: auto; padding-top: 8px; font-size: clamp(16px, 12.5cqi, 26px); white-space: nowrap; }
 .home-cards .coverage-card.covered:not(:has(.coverage-amount)) .coverage-status { margin-top: auto; }
+/* A narrow card (a small phone) puts the icon above the name, so the name has the card's whole width. */
+@container (max-width: 190px) { .home-cards .coverage-card.covered .coverage-top { flex-direction: column; align-items: flex-start; gap: 8px; } }
 .home-cards .coverage-card.covered .coverage-status { padding-top: 6px; }
 /* Gaps to consider (DC 17 Nov): the main kinds not found, as empty slots under the cards, so they read as places a
    sheet could go, not as warnings. Neutral ink, no status colour. */
@@ -1322,11 +1335,7 @@ div.answer-point { display: grid; gap: 4px; }
 .home-gap:hover { border-color: var(--brand-ink); }
 .home-gap .icon, .home-gap svg { width: 16px; height: 16px; color: var(--muted); flex: none; }
 .home-gaps .home-gaps-foot { font-size: var(--fs-xs); color: var(--muted); }
-.home-gaps .home-gaps-foot .text-link { display: inline; min-height: 0; font-weight: 500; color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
-@media (max-width: 760px) and (min-width: 621px) {
-  .home-cards .coverage-grid[data-cols] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .home-cards .coverage-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
-}
+.home-gaps .home-gaps-foot .text-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 500; color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 .home-ask-panel { position: sticky; top: 24px; display: grid; gap: 12px; padding: 20px; border: 1px solid var(--brand-ink); border-radius: var(--r-lg); background: var(--surface); }
 .home-ask-panel h2 { margin: 0; font-size: var(--fs-xl); display: flex; align-items: center; gap: 10px; }
 .home-ask-panel > p { margin: 0; color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.5; }
@@ -1350,7 +1359,7 @@ div.answer-point { display: grid; gap: 4px; }
   .home-cards .coverage-card.covered .coverage-top { gap: 10px; }
   .home-cards .coverage-card.covered .coverage-icon { width: 30px; height: 30px; }
   .home-cards .coverage-name { font-size: var(--fs-sm); }
-  .home-cards .coverage-card.covered .coverage-amount { font-size: 19px; }
+  .home-cards .coverage-card.covered .coverage-amount { font-size: clamp(15px, 12.5cqi, 21px); }
   .home-cards-head h1 { font-size: var(--fs-xl); }
   .home-ask-panel { padding: 16px; }
 }

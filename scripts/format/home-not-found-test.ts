@@ -35,8 +35,8 @@ test("wording or a booklet alone (on file): listed apart, never said to be missi
   assert.equal(text(html([], null, "Ama", ["Travel"])).includes("No cover of these kinds"), false, "no 'not found' line when nothing is missing");
 });
 test("a child or other dependant has no Disability Income gap; an adult does", () => {
-  for (const r of ["Child", "Son", "daughter", "Dependent child", "Grandson"]) assert.ok(!homeGaps([], r).missing.includes("Disability Income"), r);
-  for (const r of ["Self", "Spouse", "Parent", null]) assert.ok(homeGaps([], r).missing.includes("Disability Income"), String(r));
+  for (const r of ["Child", "Son", "daughter", "Dependent child", "Grandson", "Stepson", "step-daughter"]) assert.ok(!homeGaps([], r).missing.includes("Disability Income"), r);
+  for (const r of ["Self", "Spouse", "Parent", "Son-in-law", "Daughter-in-law", "Mason", null]) assert.ok(homeGaps([], r).missing.includes("Disability Income"), String(r));
   assert.ok(homeGaps([], "Child").missing.includes("Hospitalisation"));
 });
 test("add-ons and covers only some households need are never gaps", () => {

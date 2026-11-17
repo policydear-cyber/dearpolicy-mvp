@@ -1,6 +1,7 @@
-/** Home's protection cards (DC 16-17 Nov): each card says Covered, with its amount only when one amount is confirmed. A
- * card with no single amount names what pays instead (the policy, or how many), so it never reads as an empty box and
- * never shows a sum or an unconfirmed figure. The grid picks its column count so the last row is never one card alone
+/** Home's protection cards (DC 16-17 Nov): each card says Covered, with its amount only when the dashboard gives one
+ * confirmed amount (which, for lump sums from separate policies, is their sum: app/api/dashboard/route.ts, DC 27 Oct).
+ * Every card also names what pays (the policy, or how many), so a card with no amount never reads as an empty box. This
+ * file only names; it never builds or shows a figure. The grid picks its column count so the last row is never one card alone
  * when another count avoids it. Pure; used by app/page.tsx. Works for any household and any insurer.
  *   Test: scripts/coverage/home-card-test.ts */
 
@@ -13,8 +14,8 @@ export function homeCardSource(c: HomeCardInput): string | null {
   const seen = new Map<string, string>();
   for (const n of [...(c.policyNames ?? []), ...(c.parts ?? []).map((p) => p?.name ?? "")]) {
     const name = clean(n);
-    // "Policy" is the dashboard's stand-in for a part with no product name: it names nothing.
-    if (!name || /^policy$/i.test(name)) continue;
+    // "Policy" and "Owned policy" are the dashboard's stand-ins for a cover with no product name: they name nothing.
+    if (!name || /^(?:owned\s+)?policy$/i.test(name)) continue;
     const key = name.toLowerCase();
     if (!seen.has(key)) seen.set(key, name);
   }

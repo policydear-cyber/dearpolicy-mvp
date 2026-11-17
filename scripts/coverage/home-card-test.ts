@@ -25,6 +25,7 @@ test("three or more: a count, never a list that overflows the card", () => {
 test("nothing named, or only the dashboard's 'Policy' stand-in: no line, never an invented name", () => {
   assert.equal(homeCardSource({ policyNames: [] }), null);
   assert.equal(homeCardSource({ policyNames: null, parts: [{ name: "Policy" }, { name: null }] }), null);
+  assert.equal(homeCardSource({ policyNames: ["Owned policy"] }), null);
 });
 test("the source line never carries an amount: only names go in", () => {
   // A policy name that happens to hold a figure is shown as the name it is; no amount is ever built here.
@@ -49,7 +50,11 @@ test("the page shows the amount only when there is one, names the source, and se
   assert.match(page, /\{amount&&<span className="coverage-amount">\{amount\}<\/span>\}/);
   assert.match(page, /data-cols=\{homeGridColumns\(covered\.length\)\}/);
   const css = readFileSync("app/globals.css", "utf8");
-  assert.match(css, /\.home-cards \.coverage-grid\[data-cols="4"\] \{ --home-cols: 4; \}/);
+  // Columns follow the width the cards get, not the screen (Test engineer #519 F2): 2 until 3 or 4 fit card-sized.
+  assert.match(css, /\.home-cards \{ container-type: inline-size; \}/);
+  assert.match(css, /@container \(min-width: 820px\) \{\s*\.home-cards \.coverage-grid\[data-cols="4"\] \{ grid-template-columns: repeat\(4,/);
+  assert.match(css, /@container \(min-width: 600px\) \{\s*\.home-cards \.coverage-grid\[data-cols="3"\] \{ grid-template-columns: repeat\(3,/);
+  assert.doesNotMatch(css.slice(css.indexOf("Home cards are compact sheets"), css.indexOf("Gaps to consider (DC 17 Nov)")), /overflow-wrap: anywhere/, "a cover name never breaks mid-word");
   assert.match(css, /\.home-cards \.coverage-grid > :last-child:nth-child\(odd\) \{ grid-column: 1 \/ -1; \}/);
 });
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }

@@ -7,7 +7,7 @@ import { Icon, coverIcon } from "@/components/icons";
 export const GAP_CATEGORIES = ["Hospitalisation", "Death", "Critical Illness", "Total Permanent Disability", "Personal Accident", "Disability Income", "Travel"] as const;
 
 /** A relationship that names a child or other dependant (Family's free-text label), who earns no income to protect. */
-const DEPENDANT = /\b(child|son|daughter|kid|baby|infant|dependant|dependent|grand(?:son|daughter|child))\b/i;
+const DEPENDANT = /\b(?:(?:step|grand|god)?(?:son|daughter|child)|kid|baby|infant|dependant|dependent)\b(?!-in-law)/i;
 
 /** The gaps for a person, in GAP_CATEGORIES order: `missing`, main kinds with nothing found; `onFile`, kinds found only in
  * wording or a booklet that no plan of the person's is shown to include (Critic #519 M1: these WERE found in the
