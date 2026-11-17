@@ -66,6 +66,9 @@ export default function FamilyPage() {
   const [editing, setEditing] = useState<string | null>(null);
   /** What each person is covered for, by kind, from the Coverage rows. Optional: the page works without it. */
   const [kinds, setKinds] = useState<Record<string, string[]>>({});
+  /** Whether the cover list has answered yet. Until it has, no card may say "No cover found": that would be a guess,
+      and it flipped to "Covered for …" seconds later on a real household. "failed" says nothing about cover at all. */
+  const [coverState, setCoverState] = useState<"loading" | "loaded" | "failed">("loading");
 
   async function refresh() {
     const data = await fetch("/api/family").then((r) => r.json());
@@ -79,13 +82,14 @@ export default function FamilyPage() {
     void fetch("/api/benefit-table", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null)
       .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[]; covers?: TableKindCover[]; scheduleLines?: { policyId: string; category: string }[] }[] } | null) => {
         // Not loaded (an error, offline): nothing is shown, never the stale Coverage rows (Critic R199-3).
-        if (!table) return;
-        if (table.enabled) { return setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [], p.scheduleLines ?? [])]))); }
+        if (!table) return setCoverState((c) => c === "loaded" ? c : "failed");
+        if (table.enabled) { setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [], p.scheduleLines ?? [])]))); return setCoverState("loaded"); }
         return fetch("/api/ledger", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[]; scheduleLines?: ScheduleLine[] } | null) => {
-          if (!l) return;
+          if (!l) return setCoverState((c) => c === "loaded" ? c : "failed");
           setKinds(ledgerKindsByPerson(l.rows ?? [], l.scheduleLines ?? []));
+          setCoverState("loaded");
         });
-      }).catch(() => undefined);
+      }).catch(() => setCoverState((c) => c === "loaded" ? c : "failed"));
   }
   useEffect(() => { void refresh(); }, []);
 
@@ -172,7 +176,10 @@ export default function FamilyPage() {
                   return named.length ? <p data-testid="family-covered-for"><b>Covered for</b> {named.join(" · ")}. {see}</p>
                     : unknownOnly ? <p data-testid="family-covered-for"><b>Found</b> cover for {name}, but not yet what kind of cover it is. {see}</p>
                     : unknownToConfirm ? <p data-testid="family-covered-for"><b>Possible cover</b> for {name}, still to confirm: not yet what kind of cover it is. {see}</p>
-                    : null; })() ?? (member.policy_count ? <p>No cover found in {member.policy_count === 1 ? "this document" : "these documents"} yet. You can still ask about {member.policy_count === 1 ? "it" : "them"} in <Link className="text-link" href="/chat">Ask DearPolicy</Link>.</p> : null)}
+                    : null; })() ?? (!member.policy_count ? null
+                    : coverState === "loading" ? <p className="muted" data-testid="family-cover-loading" aria-busy="true">Checking what {baseline[member.id]?.display_name ?? member.display_name} is covered for&hellip;</p>
+                    : coverState === "failed" ? null
+                    : <p data-testid="family-no-cover">No cover found in {member.policy_count === 1 ? "this document" : "these documents"} yet. You can still ask about {member.policy_count === 1 ? "it" : "them"} in <Link className="text-link" href="/chat">Ask DearPolicy</Link>.</p>)}
               </div>
               <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>
                 <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name</label><input id={`fm-${member.id}-name`} value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} /></div>
