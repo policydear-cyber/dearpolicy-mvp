@@ -80,7 +80,8 @@ export default function HouseholdPage() {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) return setCurrencyStatus(customerMessage(payload.error, "Could not save the currency. Please try again in a moment."));
-    setCurrencyStatus("Saved. Documents you upload from now on use it. For a document already uploaded, choose Read again on the Documents page.");
+    setCurrencyStatus((payload.withdrawn ? "Saved. Amounts that used your previous choice are no longer shown. " : "Saved. ")
+      + "Documents you upload from now on use it. For a document already uploaded, choose Read again on the Documents page.");
     await refresh();
   }
 
@@ -139,7 +140,7 @@ export default function HouseholdPage() {
 
           <section className="section" data-testid="household-currency">
             <div className="section-heading"><div><h2>Policy currency</h2></div></div>
-            <p className="lead">When a document prints amounts without a currency, DearPolicy shows them in the currency you choose here. A currency printed in the document always comes first. Until you choose, those amounts are shown without a figure.</p>
+            <p className="lead">When a document prints amounts without any currency, DearPolicy shows them in the currency you choose here. A currency printed in the document always comes first, and amounts printed with only a $ sign are left as they are. Until you choose, DearPolicy doesn't assume a currency for them.</p>
             <form onSubmit={saveCurrency} className="profile-add-grid">
               <div className="field"><label htmlFor="hh-currency">Currency</label>
                 <select id="hh-currency" value={currencyInput} onChange={(e) => setCurrencyInput(e.target.value)} disabled={!isOwner}>

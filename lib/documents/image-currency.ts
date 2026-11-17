@@ -17,17 +17,31 @@ const DOLLARS = new Set(["SGD", "USD", "HKD", "AUD"]);
 export function currenciesIn(text: string): string[] {
   const out: string[] = [];
   const t = String(text ?? "");
-  for (const m of t.matchAll(/(?<![A-Za-z])(SG|S|US|HK|AU|A)?\$/g)) {
-    const p = (m[1] ?? "").toUpperCase();
-    out.push(p === "S" || p === "SG" ? "SGD" : p === "US" ? "USD" : p === "HK" ? "HKD" : p === "A" || p === "AU" ? "AUD" : "$");
+  // A dollar sign and the letters printed against it: glued ("S$", "U.S.$", "NT$") or, for a known prefix, one space apart
+  // ("US $", "HK $"). A prefix outside the list is another dollar; no prefix is a bare "$" (Test engineer #526 F1).
+  const dollarOf = (prefix: string) => {
+    const p = prefix.replace(/\./g, "").toUpperCase();
+    return p === "S" || p === "SG" ? "SGD" : p === "US" ? "USD" : p === "HK" ? "HKD" : p === "A" || p === "AU" ? "AUD" : "?";
+  };
+  let rest = t;
+  for (const re of [/(?<![A-Za-z.])((?:[A-Za-z]\.?){1,3})\$/g, /(?<![A-Za-z.])(S|SG|US|U\.S\.|HK|AU|NZ|NT|C|R)\s\$/g]) {
+    for (const m of rest.matchAll(re)) out.push(dollarOf(m[1]));
+    rest = rest.replace(re, " ");
   }
-  // Any other sign ("€", "£", "₱" are on the list; "¥", "₹", "฿", "R$" with another prefix ... are not).
-  for (const m of t.matchAll(/(?<![A-Za-z])([A-Za-z]{0,3})(\p{Sc})/gu)) {
-    if (m[2] === "$") { if (m[1] && !/^(?:SG|S|US|HK|AU|A)$/i.test(m[1])) out.push("?"); continue; }
-    out.push(m[2] === "€" ? "EUR" : m[2] === "£" ? "GBP" : m[2] === "₱" ? "PHP" : "?");
+  for (const _ of rest.matchAll(/\$/g)) out.push("$");
+  // Any other sign ("€", "£", "₱" are on the list; "¥", "₹", "฿" ... are not).
+  for (const m of t.matchAll(/\p{Sc}/gu)) {
+    if (m[0] === "$") continue;
+    out.push(m[0] === "€" ? "EUR" : m[0] === "£" ? "GBP" : m[0] === "₱" ? "PHP" : "?");
   }
-  for (const m of t.matchAll(/(?<![A-Za-z])(SGD|USD|HKD|AUD|MYR|EUR|GBP|PHP|NZD|CAD|CNY|RMB|JPY|IDR|THB|INR|KRW|TWD|CHF|VND|BND)(?![A-Za-z])/g))
-    out.push(["SGD", "USD", "HKD", "AUD", "MYR", "EUR", "GBP", "PHP"].includes(m[1]) ? m[1] : "?");
+  // Codes in any case ("Usd", "Php", "Currency: Myr"; Test engineer #526 F1).
+  for (const m of t.matchAll(/(?<![A-Za-z])(SGD|USD|HKD|AUD|MYR|EUR|GBP|PHP|NZD|CAD|CNY|RMB|JPY|IDR|THB|INR|KRW|TWD|NTD|CHF|VND|BND)(?![A-Za-z])/gi)) {
+    const code = m[1].toUpperCase();
+    out.push(["SGD", "USD", "HKD", "AUD", "MYR", "EUR", "GBP", "PHP"].includes(code) ? code : "?");
+  }
+  // Rupees ("Rs 500,000.00", "Rs."), and a currency named by its country's adjective.
+  if (/(?<![A-Za-z])Rs\.?(?![A-Za-z])/.test(t)) out.push("?");
+  if (/\bmalaysian\b/i.test(t)) out.push("MYR");
   // "RM" alone ("Sum Assured (RM)", "Currency: RM") is ringgit too; a false match only keeps an amount held (Critic #526 H2).
   if (/(?<![A-Za-z])RM(?![A-Za-z])/.test(t)) out.push("MYR");
   // Rupiah ("Rp 100.000.000") and other currencies outside the list, by code.

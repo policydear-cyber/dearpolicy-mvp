@@ -5,7 +5,7 @@ import { listMemberships, renameHousehold } from "@/lib/household/repo";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { requestHouseholdDeletion } from "@/lib/lifecycle/coordinator";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { HouseholdCurrencyNotAvailable, setHouseholdCurrency, storedHouseholdCurrency } from "@/lib/household/currency";
+import { HouseholdCurrencyNotAvailable, setHouseholdCurrency, storedHouseholdCurrency, withdrawHouseholdCurrency } from "@/lib/household/currency";
 import { parseHouseholdCurrencySetting } from "@/lib/documents/household-currency";
 
 export const runtime = "nodejs";
@@ -67,7 +67,10 @@ export async function PATCH(request: NextRequest) {
         if (error instanceof HouseholdCurrencyNotAvailable) return NextResponse.json({ error: "The currency setting is not available yet. Please try again later." }, { status: 503 });
         throw error;
       }
-      return NextResponse.json({ ok: true, currency: setting });
+      // Amounts that took the old setting's currency are taken back now, so no wrong currency stays on screen
+      // (Test engineer #526 F4); a document read again applies the new one.
+      const withdrawn = await withdrawHouseholdCurrency(ctx.householdId, { keep: setting === "NONE" ? "__none__" : setting }).catch(() => 0);
+      return NextResponse.json({ ok: true, currency: setting, withdrawn });
     }
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name || name.length > 200) {

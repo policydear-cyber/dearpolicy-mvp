@@ -29,7 +29,8 @@ import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { dismissedNameKeys, nameKey } from "@/lib/policies/name-dismissals";
 import { householdCurrencyPages } from "@/lib/documents/household-currency";
-import { householdCurrencyOf } from "@/lib/household/currency";
+import { householdCurrencyOf, relatedPolicyTexts, withdrawRelatedHouseholdCurrency } from "@/lib/household/currency";
+import { currenciesIn } from "@/lib/documents/image-currency";
 
 export type ProcessPolicyArgs = {
   accountId: string;
@@ -247,16 +248,19 @@ async function previousReading(args: ProcessPolicyArgs): Promise<PolicyExtractio
   } catch { return null; }
 }
 
+/** The policy numbers a reading prints: its own and its covers'. */
+const policyNumbersOf = (e: PolicyExtraction) => [e.policyNumber, ...e.insuredPeople.flatMap((p) => p.coverages.map((c) => c.policyNumber))];
+
 /** Round 9: a reading as it may be stored -- roles by the document's own
  * wording, people and cover re-found on their pages, and every name, figure,
  * unit, date, number and role checked against the printed text. */
-export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[] }[], opts: { documentTitle?: string | null; allPages?: { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[]; unreadable?: boolean; notRead?: boolean }[]; householdCurrency?: string | null } = {}): PolicyExtraction {
+export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[] }[], opts: { documentTitle?: string | null; allPages?: { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[]; unreadable?: boolean; notRead?: boolean }[]; householdCurrency?: string | null; relatedTexts?: string[] } = {}): PolicyExtraction {
   // A page left out because it could not be checked gives no fact, but it is still part of the document: the kind of
   // document is decided on every page, as it is when every page could be checked.
   const rolePages = opts.allPages ?? pages;
   const roleFromReader = deterministicDocumentRole(rolePages, null) == null;
   // The household's own currency is decided on every page of the document, a page left out included (DC 17 Nov).
-  const householdCurrency = householdCurrencyPages(rolePages, opts.householdCurrency);
+  const householdCurrency = householdCurrencyPages(rolePages, opts.householdCurrency, opts.relatedTexts);
   const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages, rolePages), pages), pages, { roleFromReader, documentTitle: opts.documentTitle, householdCurrency }).extraction;
   return crossCheckPrintedFacts(checked, pages);
 }
@@ -730,7 +734,16 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // the page image has had its say: a currency any page or image prints always decides (lib/documents/household-currency).
     if (extraction.insuredPeople.some((p) => p.coverages.some((c) => c.amount != null && (!c.evidenceVerified || !c.currency)))) {
       const householdCurrency = await householdCurrencyOf(args.accountId);
-      if (householdCurrency) extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle, allPages: pages, householdCurrency });
+      // The household's other documents of the same policy decide too: a schedule that says US Dollar holds its bare
+      // endorsement (Test engineer #526 F2).
+      const relatedTexts = householdCurrency ? await relatedPolicyTexts(args.accountId, args.policyId, policyNumbersOf(extraction)).catch(() => null) : [];
+      if (householdCurrency && relatedTexts) extraction = verifiedExtraction(raw, pages.filter((p) => !p.unchecked), { documentTitle, allPages: pages, householdCurrency, relatedTexts });
+    }
+    // ... and the other way round: this document prints a currency, so another document of the same policy whose amounts
+    // took the household's (another) currency gives them back until it is read again.
+    {
+      const named = pages.flatMap((p) => [...currenciesIn(p.text), ...(p.imageCurrency ? [p.imageCurrency] : []), ...(p.imageCurrencies ?? [])]);
+      if (named.length) await withdrawRelatedHouseholdCurrency(args.accountId, args.policyId, policyNumbersOf(extraction), named).catch(() => 0);
     }
     if (messyNotes.length) extraction.documentNotes = [...new Set([...extraction.documentNotes, ...messyNotes])];
     // Read again, a document keeps its earlier type unless this reading is personal proof of cover (DC 5 Nov).
