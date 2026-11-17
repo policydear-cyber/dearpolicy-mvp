@@ -1334,7 +1334,13 @@ function serverFigureChecked(sf: ServerFigure, st: ModelStatement, found: Found,
   const money = (v: number) => formatMoney(cur.sign, v);
   const where = `${docLabel(household, bdoc)}, page ${bf.page}`;
   // The child's share with its printed words and what settles it: 'Grace Okafor's date of birth on page 1 is 09/04/2017.'
-  const lifeWords = child ? (life!.birth && child.belowAge != null ? `${person}'s date of birth on page ${bf.page} is ${life!.birth}` : `page ${bf.page} prints ${person} as "${life!.relationship}"`) : "";
+  // When the schedule's line printed neither, the status came from the household's own record (householdLife): say so,
+  // never cite the page for it (Critic on #527, H2).
+  const lifeWords = !child ? "" : life!.birth && child.belowAge != null ? `${person}'s date of birth on page ${bf.page} is ${life!.birth}`
+    : life!.relationship ? `page ${bf.page} prints ${person} as "${life!.relationship}"`
+    : life!.household && life!.householdBirth && life!.household !== "spouse" ? `${person}'s date of birth in your family details is ${life!.householdBirth}`
+    : life!.household === "spouse" ? `${person} is recorded in your family details as your spouse`
+    : `${person} is recorded in your family details as you`;
   const childLine = !child ? "" : sf.child!.status === "child"
     ? `. The policy (page ${rf.page}) says: "${child.words.replace(/[.;]+$/, "")}", and ${lifeWords}`
     : `. The policy (page ${rf.page}) pays ${child.percent}% for ${childCase(child)}, which ${person} is not: ${lifeWords}`;

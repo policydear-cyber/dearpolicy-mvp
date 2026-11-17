@@ -7,6 +7,7 @@
  * child limit only when the schedule's own line prints nothing to say, and a printed date of birth or relationship wins.
  * Part B (routes, PGlite): /api/family works BEFORE the migration is applied (no sex field, nothing breaks), and after it
  * saves, keeps, clears and rejects a sex, and one household cannot change another's member.
+ * The chat's people module is checked in scripts/rag2-member-sex-test.ts.
  * Made-up people only.
  */
 import { readFile } from "node:fs/promises";
@@ -14,7 +15,6 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import { parseSex, profileGaps, genderOfSex, resetSexColumnCache } from "@/lib/household/member-profile";
 import { memberRelation } from "@/lib/claims/person";
-import { toPerson } from "@/lib/rag2/people";
 import { householdLife, personStatusWhy, provenAdult } from "@/lib/benefit-table/child-limit";
 
 let passed = 0, failed = 0;
@@ -50,18 +50,25 @@ async function partA() {
     assert.equal(memberRelation("child", null, "female").gender, "f");
     assert.equal(memberRelation("parent", null, "male").gender, "m");
     assert.equal(memberRelation("child", "son", null).gender, "m");
-    assert.equal(memberRelation("child", "son", "unspecified").gender, "m", "prefer not to say falls back to the words");
-    const p = toPerson({ id: "1", displayName: "Lim Xin Yi", preferredName: null, relationship: "child", notes: null, dateOfBirth: "2016-05-01", sex: "female" });
-    assert.equal(p.relationLabel, "daughter");
+    assert.equal(memberRelation("child", "son", "unspecified").gender, "m", "prefer not to say: the words");
     assert.equal(memberRelation("child", null, "female").relation, "child", "sex never changes the relation");
   });
 
   const limit18 = { belowAge: 18 }, ageless = { belowAge: null };
   const blank = { birth: null, relationship: null };
-  await check("profile date of birth: the household's child aged 9, nothing printed: the child's share applies", () => {
+  await check("profile date of birth: the household's child aged 9, nothing printed: still not settled (the schedule decides a child's share)", () => {
     const life = householdLife(blank, { relationship: "child", date_of_birth: "2017-04-09" }).life!;
-    assert.deepEqual(personStatusWhy(life, limit18, DAYS), { status: "child" });
-    assert.deepEqual(personStatusWhy(life, ageless, DAYS), { status: "child" });
+    assert.equal(personStatusWhy(life, limit18, DAYS).status, null);
+    assert.equal(personStatusWhy(life, ageless, DAYS).status, null);
+  });
+  await check("profile date of birth: a mistyped year (1917 for 2017) never makes a child an adult", () => {
+    const life = householdLife(blank, { relationship: "child", date_of_birth: "1917-04-09" }).life!;
+    assert.equal(personStatusWhy(life, ageless, DAYS).status, null);
+    const sib = householdLife(blank, { relationship: "sibling", date_of_birth: "1880-04-09" }).life!;
+    assert.equal(personStatusWhy(sib, ageless, DAYS).status, null);
+  });
+  await check("sex: a recorded 'son' saved as female stays a son (the words win)", () => {
+    assert.equal(memberRelation("son", null, "female").gender, "m");
   });
   await check("profile date of birth: a parent aged 61, nothing printed: not the insured child", () => {
     const life = householdLife(blank, { relationship: "parent", date_of_birth: "1965-01-20" }).life!;
@@ -172,6 +179,10 @@ async function partB() {
     const row = (await pool.query<{ display_name: string; sex: string }>(`SELECT display_name, sex FROM family_members WHERE id=$1`, [kidId])).rows[0];
     assert.equal(row.display_name, "Lim Xin Yi"); assert.equal(row.sex, "female");
   });
+  await check("a date of birth before 1900 is refused as a typo", async () => {
+    const res = await patch(kidId, hA, { displayName: "Lim Xin Yi", relationship: "child", dateOfBirth: "1817-04-09" });
+    assert.equal(res.status, 400);
+  });
   await check("the database refuses any other value too", async () => {
     await assert.rejects(pool.query(`UPDATE family_members SET sex='other' WHERE id=$1`, [kidId]));
   });
@@ -184,13 +195,6 @@ async function partB() {
     const row = (await pool.query<{ sex: string }>(`SELECT sex FROM family_members WHERE id=$1`, [kidId])).rows[0];
     assert.equal(row.sex, "female");
     asUser(ownerA);
-  });
-  await check("the chat's people read carries the sex: 'child' + female reads as a daughter", async () => {
-    const { loadMembers } = await import("@/lib/rag2/store");
-    const members = await loadMembers(hA);
-    const kid = members.find((m) => m.id === kidId)!;
-    assert.equal(kid.sex, "female");
-    assert.equal(toPerson(kid).relationLabel, "daughter");
   });
 }
 

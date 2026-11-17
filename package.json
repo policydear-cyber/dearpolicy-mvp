@@ -319,6 +319,7 @@
     "chat:plan-kind-test": "node --import tsx scripts/chat/plan-kind-test.ts",
     "family:covered-for-other-test": "node --import tsx scripts/family/covered-for-other-test.ts",
     "family:member-profile-test": "node --import tsx scripts/family/member-profile-test.ts",
+    "rag2:member-sex-test": "node --import tsx scripts/rag2-member-sex-test.ts",
     "chat:hospital-kind-test": "node --import tsx scripts/chat/hospital-kind-test.ts",
     "r5:claims-test": "node --import tsx scripts/r5-claims-regressions.ts",
     "v11:customer-screens-test": "node --import tsx scripts/v11-ux-customer-screens-regressions.ts",

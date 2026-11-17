@@ -90,6 +90,7 @@ export default function FamilyPage() {
     event.preventDefault(); setStatus("");
     if (!dob) return setStatus("Add their date of birth.");
     if (dob > todayIso()) return setStatus("A date of birth can't be in the future.");
+    if (dob < "1900-01-01") return setStatus("Check the year of that date of birth.");
     if (sexField && !sex) return setStatus("Choose female, male or prefer not to say.");
     const response = await fetch("/api/family", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: name, relationship, dateOfBirth: dob, preferredName: preferred || null, ...(sexField ? { sex } : {}) }) });
     const payload = await response.json();
@@ -99,6 +100,7 @@ export default function FamilyPage() {
 
   async function save(member: Member) {
     if (member.date_of_birth && member.date_of_birth > todayIso()) return setStatus("A date of birth can't be in the future.");
+    if (member.date_of_birth && member.date_of_birth < "1900-01-01") return setStatus("Check the year of that date of birth.");
     const response = await fetch(`/api/family/${member.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: member.display_name, relationship: member.relationship, dateOfBirth: member.date_of_birth, preferredName: member.preferred_name, notes: member.notes, ...(sexField ? { sex: member.sex ?? null } : {}) }) });
     const payload = await response.json();
     setStatusFor(member.id);
@@ -172,7 +174,7 @@ export default function FamilyPage() {
               <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>
                 <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name</label><input id={`fm-${member.id}-name`} value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} /></div>
                 <div className="field"><label htmlFor={`fm-${member.id}-relationship`}>Relationship</label><select id={`fm-${member.id}-relationship`} value={member.relationship} onChange={(e) => update(member.id,{ relationship:e.target.value })}>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
-                <div className="field"><label htmlFor={`fm-${member.id}-dob`}>Date of birth</label><input id={`fm-${member.id}-dob`} type="date" max={today} value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} /></div>
+                <div className="field"><label htmlFor={`fm-${member.id}-dob`}>Date of birth</label><input id={`fm-${member.id}-dob`} type="date" min="1900-01-01" max={today} value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} /></div>
                 {sexField ? <div className="field"><label htmlFor={`fm-${member.id}-sex`}>Sex</label><select id={`fm-${member.id}-sex`} value={member.sex ?? ""} onChange={(e) => update(member.id,{ sex:e.target.value || null })}><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div> : null}
                 <div className="field"><label htmlFor={`fm-${member.id}-preferred`}>Preferred name</label><input id={`fm-${member.id}-preferred`} value={member.preferred_name ?? ""} onChange={(e) => update(member.id,{ preferred_name:e.target.value || null })} /></div>
               </div>
@@ -204,7 +206,7 @@ export default function FamilyPage() {
         <form onSubmit={add} className="profile-add-grid">
           <div className="field wide"><label htmlFor="fm-new-name">Full name, as on their policies</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen Wei Ming" autoComplete="off" required /></div>
           <div className="field"><label htmlFor="fm-new-relationship">Relationship to you</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
-          <div className="field"><label htmlFor="fm-new-dob">Date of birth</label><input id="fm-new-dob" type="date" max={today} value={dob} onChange={(e) => setDob(e.target.value)} required /></div>
+          <div className="field"><label htmlFor="fm-new-dob">Date of birth</label><input id="fm-new-dob" type="date" min="1900-01-01" max={today} value={dob} onChange={(e) => setDob(e.target.value)} required /></div>
           {sexField ? <div className="field"><label htmlFor="fm-new-sex">Sex</label><select id="fm-new-sex" value={sex} onChange={(e) => setSex(e.target.value)} required><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div> : null}
           <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="For example, Alex" autoComplete="off" /></div>
           <p className="profile-add-why">The date of birth tells adult cover from child cover, and sex tells &ldquo;my son&rdquo; from &ldquo;my daughter&rdquo; in Ask DearPolicy. What a policy prints always comes first.</p>

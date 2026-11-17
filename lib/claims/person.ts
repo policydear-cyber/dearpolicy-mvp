@@ -327,12 +327,13 @@ const MALE_WORD = /\b(?:father|dad|husband|son|brother|grandfather|grandpa|uncle
 export function memberRelation(relationship: string | null | undefined, notesIn: string | null | undefined, sex?: string | null): { relation: MemberRelation; gender: MemberGender } {
   const rel = (relationship ?? "").toLowerCase().trim(), notes = (notesIn ?? "").toLowerCase();
   const both = rel + " " + notes;
-  // Gender from the sex the household entered on the profile (sql/member-profile.sql), else from the relation words,
-  // reading "stepson" / "step-daughter" as son / daughter. "Unspecified" or unanswered falls back to the words.
+  // Gender from the relation words, reading "stepson" / "step-daughter" as son / daughter; when they say none ("child",
+  // "parent"), from the sex the household entered on the profile (sql/member-profile.sql). The words win: a profile saved
+  // with the wrong sex never turns a recorded "son" into a daughter (Critic on #527, M2).
   const plain = both.replace(/\bstep[- ]?/g, "");
   const said = String(sex ?? "").trim().toLowerCase();
-  const g: MemberGender = said === "female" ? "f" : said === "male" ? "m"
-    : FEMALE_WORD.test(plain) && !MALE_WORD.test(plain) ? "f" : MALE_WORD.test(plain) && !FEMALE_WORD.test(plain) ? "m" : null;
+  const g: MemberGender = FEMALE_WORD.test(plain) && !MALE_WORD.test(plain) ? "f" : MALE_WORD.test(plain) && !FEMALE_WORD.test(plain) ? "m"
+    : said === "female" ? "f" : said === "male" ? "m" : null;
   if (rel === "helper" || /\bhelper\b|\bmaid\b|\bdomestic\b|\bnanny\b|\bcaregiver\b/.test(both)) return { relation: "helper", gender: g };
   if (/in[- ]law/.test(both)) {
     if (/\b(?:mother|father|parent)s?[- ]in[- ]law\b/.test(both) || rel === "parent") return { relation: "parent_in_law", gender: g };

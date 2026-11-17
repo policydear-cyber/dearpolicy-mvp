@@ -85,7 +85,7 @@ export type PrintedLife = { birth: string | null; relationship: string | null;
   /** The household's own record of who the person is: "self" or "spouse" (the account holder or their spouse), "child"
    * (recorded as their child), or "other" (any other relationship, kept only with a date of birth), and the date of birth
    * it entered on the profile (YYYY-MM-DD), if any. Set only by the household (householdLife), never read from a document;
-   * a printed relationship or date of birth that says otherwise still wins (householdAdult, householdChild). */
+   * a printed relationship or date of birth that says otherwise still wins (householdAdult). A profile date of birth never settles a member as the insured child. */
   household?: "self" | "spouse" | "child" | "other" | null; householdBirth?: string | null };
 const BIRTH_HEAD = /^(?:date\s+of\s+birth|birth\s*date|d\.?\s?o\.?\s?b\.?|born)$/i;
 const RELATION_HEAD = /^(?:relationship(?:\s+to\s+(?:the\s+)?(?:policyholder|proposer|insured|policy\s+owner))?|relation)$/i;
@@ -577,18 +577,19 @@ export function householdAdult(life: PrintedLife | null | undefined, age: number
   if (life.household === "spouse") return true;
   const own = life.householdBirth ?? null;
   if (age != null && age > 18) return !!own && ageSide(own, days, age) === "over";
-  // Anyone else the household entered a date of birth for (its child, parent, sibling ...): the same ages as the account
-  // holder's, and only from that date of birth (member profile, sql/member-profile.sql).
-  if (life.household !== "self") return !!own && ageSide(own, days, 26) === "over";
+  // Anyone else the household entered a date of birth for (its parent, sibling ...): the same ages as the account holder's,
+  // and only from a plausible date of birth (member profile, sql/member-profile.sql). A member recorded as the household's
+  // child is never settled as an adult by the profile alone: a mistyped year ("1917" for "2017") would otherwise pay the
+  // adult share for a child (Critic on #527, H1). No amount is the safe side.
+  if (life.household === "child") return false;
+  if (life.household !== "self") return !!own && profileSide(own, days, age != null && age > 18 ? age : 26) === "over";
   return !own || ageSide(own, days, 26) === "over";
 }
-/** Whether the household's own record proves a person IS the insured child a limit is for, when the schedule's line prints
- * no date of birth and no adult relationship: recorded as the household's child, with a profile date of birth under the
- * limit's age (18 when it prints none) on every day. A child's share is then the amount, never more than the row's. */
-export function householdChild(life: PrintedLife | null | undefined, age: number | null, days: number[]): boolean {
-  if (life?.household !== "child" || life.birth || !life.householdBirth || !days.length) return false;
-  if (relationClass(life.relationship) === "adult" || relationClass(life.relationship) === "other") return false;
-  return ageSide(life.householdBirth, days, age ?? 18) === "under";
+/** ageSide for a date of birth the household typed: a date giving an age over 100 on any day settles nothing (a mistyped
+ * year, Critic on #527 H1). */
+function profileSide(birth: string, days: number[], age: number): "under" | "over" | null {
+  for (const [y, mo, d] of birthReadings(birth)) for (const day of days) if (yearsOn(y, mo, d, day) > 100) return null;
+  return ageSide(birth, days, age);
 }
 
 /** The relationships that make a person an insured child, a closed list: never a step, grand or in-law form, "adult child"
@@ -659,8 +660,6 @@ export function personStatusWhy(life: PrintedLife | null | undefined, limit: Pic
   // The household's record (the account holder, their spouse, or a profile date of birth), with nothing printed against
   // it: not a child.
   if (householdAdult(life, limit.belowAge, days)) return { status: "not_child" };
-  // The household's child, with a profile date of birth under the limit's age, and nothing printed against it.
-  if (householdChild(life, limit.belowAge, days)) return { status: "child" };
   if (limit.belowAge != null) {
     if (!birth) return no("does not print a date of birth");
     const side = ageSide(birth, days, limit.belowAge);

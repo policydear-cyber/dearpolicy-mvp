@@ -37,7 +37,7 @@ function schedule(people: Person[], tableLines: string[], benefits: Record<strin
   const d: Household["documents"][number] = { policyId: DOC, name: `${product}.pdf`, insurer: "Example Assurance plc", productName: product, policyNumber: null, documentType: null,
     documentRole: "personal_schedule", effectiveDate: null, expiryDate: null, uploadedAt: "2026-10-01", uploadedFor: null, linkedPeople: people.map((p) => p.name), supersededAt: null,
     processingStatus: "ready", pages: [page1, page2, ...(o.page3 ? [o.page3] : [])].map((text, i) => ({ page: i + 1, text })) };
-  const house: Household = { accountId: ACC, members: people.map((p) => ({ name: p.name, relationship: p.relationship })), documents: [d] };
+  const house: Household = { accountId: ACC, members: people.map((p) => ({ name: p.name, relationship: o.relationships?.[p.name] ?? p.relationship, date_of_birth: o.familyDob?.[p.name] ?? null })), documents: [d] };
   const family: FamilyMember[] = people.map((p, i) => ({ id: `m${i}`, display_name: p.name, relationship: o.relationships?.[p.name] ?? p.relationship, date_of_birth: o.familyDob?.[p.name] ?? null }));
   const src: SourceDoc = { id: d.policyId, name: d.name, readable: true, pages: d.pages };
   const reading = checkReading(src, { document: { kind: "personal_proof", product, insurer: d.insurer, namedPeople: people.map((p) => p.name), plan: null,
@@ -1012,6 +1012,28 @@ test("the fold decides on all of a parent's child rows together, in any order, a
   // No child row at all (as R2's reading): unchanged from the first commit.
   assert.deepEqual(figs(realShape({ childCol: null }), /Accidental death/), ["100000", "80000", "5000"]);
 });
+
+// ---------- Member profile (#527): the family profile's date of birth, only when the schedule's line prints nothing ----------
+{
+  const bare = (name: string, rel: string, sum: string, value: number) => P(name, rel, "", sum, value, [name, sum]);
+  const kid = bare("Grace Okafor", "Child", "GBP 20,000", 20000), gran = bare("Ngozi Okafor", "Policyholder", "GBP 100,000", 100000);
+  const fam = (dob: Record<string, string>) => family([gran, kid], CELL, { header: "Insured person\tSum Insured", relationships: { "Grace Okafor": "child", "Ngozi Okafor": "parent" }, familyDob: dob });
+  test("profile: the household's child aged 9 still gets no amount from the profile alone (unchanged rule: the schedule decides a child's share)", () => {
+    assert.deepEqual(death(fam({ "Grace Okafor": "2017-04-09" }), kid).amounts, []);
+  });
+  test("profile: a parent aged 66 gets the full share, and the basis says why from the family details", () => {
+    const n = death(fam({ "Ngozi Okafor": "1960-01-01" }), gran);
+    assert.deepEqual(n.amounts, ["£100,000"]);
+    assert.match(n.basis, /which Ngozi Okafor is not: Ngozi Okafor's date of birth in your family details is 1960-01-01/);
+  });
+  test("profile negative controls: no date of birth, a mistyped year, or a child entered as an adult give no amount", () => {
+    assert.deepEqual(death(fam({}), kid).amounts, []);
+    assert.deepEqual(death(fam({}), gran).amounts, []);
+    assert.deepEqual(death(fam({ "Grace Okafor": "1917-04-09" }), kid).amounts, [], "a one-digit typo must not pay the adult share");
+    assert.deepEqual(death(fam({ "Grace Okafor": "1996-04-09" }), kid).amounts, [], "the household's child is never made an adult by the profile alone");
+    assert.deepEqual(death(fam({ "Ngozi Okafor": "1817-01-01" }), gran).amounts, [], "an age over 100 settles nothing");
+  });
+}
 
 console.log(`${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`FAIL ${f}`);
