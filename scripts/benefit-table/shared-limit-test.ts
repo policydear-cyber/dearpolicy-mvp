@@ -85,7 +85,8 @@ test("acrossPolicies: only the sentence printing the row's own figure, as a shar
     "The most we pay under all policies issued on the same life assured, in total, is S$1,000,000.",
     "The total payable under all policies issued by the Company on the life of the Life Assured shall not exceed S$1,050,000.",
     "The maximum under all policies with us is S$1,050,000.", "The most payable under all Kestrel policies on the life of the Life Assured is S$1,050,000.",
-    "The aggregate limit under all policies issued by us is S$1,050,000.", "Maximum S$1,050,000 per Life Assured for all plans in force with the Company."]) assert.ok(acrossPolicies(row(yes)), yes);
+    "The aggregate limit under all policies issued by us is S$1,050,000.", "In total, all Kestrel Plans on the same life will pay no more than S$1,050,000.",
+    "All Kestrel policies on the life of the Life Assured are limited to S$1,050,000 in total."]) assert.ok(acrossPolicies(row(yes)), yes);
   for (const no of ["The most we pay for all claims under this benefit is S$500,000 in total.", "Aggregate limit per policy year S$100,000",
     "This policy does not cover claims paid under any other policy. Limit S$5,000.", "Overall limit for all early stage claims: S$100,000",
     "We will pay S$200,000. No benefit is payable under this policy if a claim has been paid under any other policy we have issued on the same life.",
@@ -99,7 +100,12 @@ test("acrossPolicies: only the sentence printing the row's own figure, as a shar
     "This benefit of up to S$100,000 is payable in addition to any other policy we have issued.", "We will pay up to S$100,000 irrespective of all other policies with us.",
     "The maximum benefit is S$100,000, regardless of any other policy issued by the Company on the life of the Life Assured.",
     "The most we pay under this policy is S$100,000; any other policy we have issued may also pay.", "The total payable is S$100,000, separate from all other plans with the Company.",
-    "Up to S$100,000 in total, combined with any other policy."])
+    "Up to S$100,000 in total, combined with any other policy.", "Maximum S$1,050,000 per Life Assured for all plans in force with the Company.",
+    // Words about other policies after the figure never make it shared (Critic on #523, round 4).
+    "S$100,000 in total, excluding any amount recovered from any other policy we have issued.", "This S$100,000 limit is distinct from all other policies with us.",
+    "Up to S$100,000, on top of any amount paid from all other policies we have issued.", "The limit is S$100,000 and is not reduced for amounts paid under any other policy we have issued.",
+    "We pay up to S$100,000 even if a claim is also made under any other policy we have issued.", "The maximum is S$100,000, without regard to benefits under all other policies with us.",
+    "The most is S$100,000, plus whatever is paid under any other policy we have issued.", "Regardless of all other policies with us, the maximum is S$100,000."])
     assert.ok(!acrossPolicies(row(no)), no);
   // One sentence printing the own sum and the shared cap: the own sum is never labelled (Critic on #523, round 2).
   for (const t of ["Total Permanent Disability benefit of S$500,000, provided that the total payable under this policy and all other policies issued by us on the same life shall not exceed S$3,000,000.",

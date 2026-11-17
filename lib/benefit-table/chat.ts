@@ -1776,7 +1776,10 @@ const ALL_NAMED_POLICIES = /\b(?:[Uu]nder|[Ff]or|[Aa]cross|[Ii]n\s+respect\s+of)
  * policy", "not combined with any other policy"). */
 const NOT_SHARED_LIMIT = /\b(?:in\s+addition\s+to|irrespective\s+of|regardless\s+of|separate(?:ly)?\s+from|independent(?:ly)?\s+of|apart\s+from|may\s+also\s+pay|no\s+benefits?|not\s+(?:be\s+)?(?:payable|paid|combined)|less\s+(?:any|the)|minus|deduct\w*|reduced\s+by|offset|if\s+(?:a|any)\s+claim\s+(?:has\s+been|is|was)\s+(?:paid|made|admitted))\b/i;
 /** Words that make a sentence a limit on what is paid. */
-const LIMIT_WORDS = /\b(?:most|maximum|max\.|not\s+exceed|exceed|limit(?:ed|s)?|in\s+total|total|aggregate\w*|up\s+to|capped)\b/i;
+/** The other policies as the sentence's subject, at its start: "All Kestrel policies on the same life ...", "In total, all
+ * plans issued by the Company ...". */
+const SUBJECT_POLICIES = /^\s*(?:(?:[Ii]n\s+total|[Oo]verall|[Ii]n\s+aggregate),?\s+)?(?:[Aa]ll|[Ee]very)\s+(?:other\s+)?(?:[A-Z][\w&'-]*\s+){0,3}(?:policies|plans|certificates|contracts|Policies|Plans|Certificates|Contracts)\b/;
+const LIMIT_WORDS = /\b(?:no\s+more\s+than|not\s+more\s+than|most|maximum|max\.|not\s+exceed|exceed|limit(?:ed|s)?|in\s+total|total|aggregate\w*|up\s+to|capped)\b/i;
 export const SHARED_POLICIES_WORDS = "the most the insurer pays for these claims under this and all its other policies on the same person together, not this policy's own cover";
 /** Whether a row's printed words say its limit is shared with the insurer's other policies on the same life (ACROSS_POLICIES). */
 export function acrossPolicies(row: Pick<ChatRow, "source" | "figure">): boolean {
@@ -1788,8 +1791,16 @@ export function acrossPolicies(row: Pick<ChatRow, "source" | "figure">): boolean
   const sentences = text.split(/(?<=[.;])\s+(?=[A-Z("“])/);
   // The row's figure is the sentence's only money figure: a sentence that also prints another sum ("benefit of S$500,000,
   // provided that the total under this and all other policies shall not exceed S$3,000,000") is not about one figure.
-  return sentences.some((t) => { const figs = anyMoneyFigures(t); return figs.length > 0 && figs.every((f) => Math.abs(f.value - amount) < 0.005)
-    && (ACROSS_POLICIES.test(t) || ALL_NAMED_POLICIES.test(t)) && LIMIT_WORDS.test(t) && !NOT_SHARED_LIMIT.test(t); });
+  // Order (Critic on #523, round 4): a limit word and the other-policies group both come before the figure, in its sentence
+  // ("The most ... under this Policy and all Policies ... shall not exceed S$1,050,000"; "All Kestrel policies on the same life
+  // are limited to S$..."). Words about other policies after the figure ("S$100,000, plus whatever is paid under any other
+  // policy", "regardless of ...") never make it shared.
+  return sentences.some((t) => {
+    const figs = anyMoneyFigures(t);
+    if (!figs.length || figs.some((f) => Math.abs(f.value - amount) >= 0.005)) return false;
+    const pre = t.slice(0, Math.min(...figs.map((f) => f.index)));
+    return LIMIT_WORDS.test(pre) && !NOT_SHARED_LIMIT.test(pre) && (ACROSS_POLICIES.test(pre) || ALL_NAMED_POLICIES.test(pre) || SUBJECT_POLICIES.test(pre));
+  });
 }
 
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is
