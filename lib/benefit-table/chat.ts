@@ -1752,6 +1752,80 @@ function dailyRateRule(row: ChatRow, household: Household): StayRule | null {
   return readStayRule(page.text, found.offset, found.excerpt, row.figure.amount, household.members.map((m) => m.name), documentOwnWords(household.documents[found.docIndex]));
 }
 
+/** Words that make a limit one shared by the insurer's other policies on the same life, not one policy's own: "this Policy
+ * and all Policies We have issued", "all policies issued covering the same Life Assured", "across all policies", "combined
+ * with any other policy". Closed list; anything else is read as the policy's own limit, as before. */
+/** Other policies of the insurer, as a group: "all (other) policies", "every (other) policy", "any other policy". A lone
+ * "any policy" or "this policy" is the policy itself (Critic on #523, round 2). */
+const OTHER_POLICIES = String.raw`(?:all\s+(?:other\s+)?(?:policies|plans|certificates|contracts)|every\s+(?:other\s+)?(?:policy|plan|certificate|contract)|any\s+other\s+(?:polic(?:y|ies)|plans?|certificates?|contracts?))`;
+/** The word before the group that puts the figure under the other policies too: "under / for / across / in respect of all
+ * policies ...". Any other link ("in addition to", "regardless of", "separate from") keeps the limit the policy's own
+ * (Critic on #523, round 3). */
+const UNDER = String.raw`(?:under|for|across|in\s+respect\s+of|from)\s+`;
+const ACROSS_POLICIES = new RegExp([
+  String.raw`\b(?:this|the)\s+(?:polic(?:y|ies)|plans?|certificates?|contracts?)\s+(?:and|or|together\s+with)\s+${OTHER_POLICIES}\b`,
+  String.raw`\b${UNDER}${OTHER_POLICIES}\s+(?:(?:that|which)\s+)?(?:we|the\s+(?:company|insurer))\s+(?:have\s+|has\s+)?issued\b`,
+  String.raw`\b${UNDER}${OTHER_POLICIES}\s+(?:in\s+force\s+)?(?:issued\s+)?(?:(?:by|with)\s+(?:us|the\s+(?:company|insurer))\s+)?(?:covering|on|for|in\s+respect\s+of)\s+the\s+(?:same\s+(?:life|person|insured)|life\s+of)`,
+  String.raw`\b${UNDER}${OTHER_POLICIES}\s+(?:in\s+force\s+)?(?:issued\s+by|with)\s+(?:us|the\s+(?:company|insurer))\b`,
+  String.raw`\bacross\s+(?:all|every|any\s+other)\s+(?:(?:of\s+)?(?:our|the\s+insurer'?s|its)\s+)?(?:polic(?:y|ies)|plans?)\b`,
+].join("|"), "i");
+/** "all Kestrel policies ...": an insurer's or brand's name between "all" and "policies", in capitals as printed. */
+const ALL_NAMED_POLICIES = /\b(?:[Uu]nder|[Ff]or|[Aa]cross|[Ii]n\s+respect\s+of)\s+(?:[Aa]ll|[Ee]very)\s+(?:[Oo]ther\s+)?(?:[A-Z][\w&'-]*\s+){1,3}(?:[Pp]olicies|[Pp]lans|[Cc]ertificates|[Cc]ontracts)\s+(?:in\s+force\s+)?(?:(?:issued\s+by|with)\s+(?:us|the\s+(?:[Cc]ompany|[Ii]nsurer))|(?:issued\s+)?on\s+the\s+(?:life\s+of|same\s+life))\b/;
+/** Words that make a sentence about other policies something other than a shared limit: an exclusion, an offset or a
+ * condition ("No benefit is payable if a claim has been paid under any other policy", "less any amount paid under any other
+ * policy", "not combined with any other policy"). */
+const NOT_SHARED_LIMIT = /\b(?:in\s+addition\s+to|irrespective\s+of|regardless\s+of|separate(?:ly)?\s+from|independent(?:ly)?\s+of|apart\s+from|may\s+also\s+pay|no\s+benefits?|not\s+(?:be\s+)?(?:payable|paid|combined)|less\s+(?:any|the)|minus|deduct\w*|reduced\s+by|offset|if\s+(?:a|any)\s+claim\s+(?:has\s+been|is|was)\s+(?:paid|made|admitted))\b/i;
+/** Words that make a sentence a limit on what is paid. */
+/** The other policies as the sentence's subject, at its start: "All Kestrel policies on the same life ...", "In total, all
+ * plans issued by the Company ...", "This policy and all other policies we have issued on the same life ...". */
+const SUBJECT_POLICIES = /^\s*(?:(?:[Ii]n\s+total|[Oo]verall|[Ii]n\s+aggregate),?\s+)?(?:(?:[Tt]his|[Tt]he)\s+(?:[Pp]olicy|[Pp]lan|[Cc]ertificate|[Cc]ontract)\s+(?:and|together\s+with)\s+)?(?:[Aa]ll|[Ee]very)\s+(?:other\s+)?(?:[A-Z][\w&'-]*\s+){0,3}(?:policies|plans|certificates|contracts|Policies|Plans|Certificates|Contracts)\b/;
+/** A limit on all the policies together, said after them. */
+const JOINT_LIMIT = /\b(?:(?:shall|will|must|does|do|is|are)\s+not\s+exceed|not\s+exceed(?:ing)?|no\s+more\s+than|not\s+more\s+than|limited\s+to|capped\s+at|in\s+total|together|combined|in\s+aggregate|aggregate)\b/i;
+/** Words that give each policy its own limit. */
+const OWN_LIMIT_WORDS = /\b(?:this\s+(?:policy|plan|one|certificate|contract)|separate(?:ly)?|independent(?:ly)?|each|own)\b/i;
+/** Words after a figure that make it each policy's own. */
+const PER_POLICY_AFTER = /\b(?:for\s+each|each|per\s+(?:policy|plan|certificate|contract)|own)\b/i;
+const LIMIT_WORDS = /\b(?:no\s+more\s+than|not\s+more\s+than|most|maximum|max\.|not\s+exceed|exceed|limit(?:ed|s)?|in\s+total|total|aggregate\w*|up\s+to|capped)\b/i;
+export const SHARED_POLICIES_WORDS = "the most the insurer pays for these claims under this and all its other policies on the same person together, not this policy's own cover";
+/** Whether a row's printed words say its limit is shared with the insurer's other policies on the same life (ACROSS_POLICIES). */
+export function acrossPolicies(row: Pick<ChatRow, "source" | "figure">): boolean {
+  if (row.figure.kind !== "printed") return false;
+  const amount = row.figure.amount;
+  // Only the sentence of the row's own words that prints the row's own figure counts: another clause of the excerpt, the
+  // row's name or its conditions about other policies say nothing about this figure (Critic on #523, NEW-HIGH).
+  const text = row.source.excerpt.replace(/\s+/g, " ");
+  // A ";" parts clauses whatever follows it ("... are separate; the most this policy pays is ...", Critic on #523, round 6).
+  const sentences = text.split(/(?<=\.)\s+(?=[A-Z("“])|;\s*/);
+  // The row's figure is the sentence's only money figure: a sentence that also prints another sum ("benefit of S$500,000,
+  // provided that the total under this and all other policies shall not exceed S$3,000,000") is not about one figure.
+  // Order (Critic on #523, round 4): a limit word and the other-policies group both come before the figure, in its sentence
+  // ("The most ... under this Policy and all Policies ... shall not exceed S$1,050,000"; "All Kestrel policies on the same life
+  // are limited to S$..."). Words about other policies after the figure ("S$100,000, plus whatever is paid under any other
+  // policy", "regardless of ...") never make it shared.
+  return sentences.some((t) => {
+    const figs = anyMoneyFigures(t);
+    if (!figs.length || figs.some((f) => Math.abs(f.value - amount) >= 0.005)) return false;
+    const pre = t.slice(0, Math.min(...figs.map((f) => f.index)));
+    const last = figs.reduce((a, b) => (b.index > a.index ? b : a));
+    // "... is S$500,000 for each Policy": a limit per policy, never joint (TE on #523).
+    if (PER_POLICY_AFTER.test(t.slice(last.index + last.length))) return false;
+    if (!LIMIT_WORDS.test(pre) || NOT_SHARED_LIMIT.test(pre)) return false;
+    // Between the policies and the figure, nothing that gives each policy its own limit ("separate", "each", "this policy").
+    const apart = (between: string) => OWN_LIMIT_WORDS.test(between);
+    // The policies as the subject: only a limit on all of them together ("shall not exceed", "no more than", "limited to",
+    // "in total") counts (Critic on #523, round 6).
+    const subject = SUBJECT_POLICIES.exec(pre);
+    if (subject) { const between = pre.slice(subject[0].length); return JOINT_LIMIT.test(between) && !apart(between); }
+    // Otherwise the limit word comes first too: "The most ... under this Policy and all Policies ...". A clause about other
+    // policies that opens the sentence ("Even if you claim under any other policy we have issued, the most we pay is ...")
+    // sets this policy apart from them (Critic on #523, round 5).
+    const group = [ACROSS_POLICIES.exec(pre), ALL_NAMED_POLICIES.exec(pre)].filter((m): m is RegExpExecArray => !!m);
+    if (!group.length) return false;
+    const first = group.reduce((a, b) => (b.index < a.index ? b : a));
+    return LIMIT_WORDS.test(pre.slice(0, first.index)) && !apart(pre.slice(first.index + first[0].length));
+  });
+}
+
 /** What a row is, in the server's words only: its benefit and cover, whom it is for, how it is paid, and whether it is
  * a projection. The model's own sentence is not used for an amount, so a figure is never labelled as another benefit. */
 export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (row: ChatRow) => string): string {
@@ -1769,7 +1843,12 @@ export function rowLabel(row: ChatRow, labels?: Map<string, string>, names?: (ro
   // A table's row letter or number ("J, ", "D. ") is the document's layout, not the benefit's name.
   // A figure its quote prints "per child (up to 2 children)" is that, never a sum for the family (release-set H10).
   const per = f.kind === "printed" && f.unit !== "per_day" && f.unit !== "per_period" ? perUnit(row.source.excerpt, f.amount) : null;
-  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, ${qualifierText(row.qualifier)} only` : ""}${how ? `: ${how}` : ""}${per ? `${how ? "," : ":"} ${per}` : ""}.`;
+  // A limit its words say is shared with the insurer's other policies on the same life ("under this Policy and all Policies We
+  // have issued covering the same Life Assured shall not exceed S$1,050,000") is never this policy's own cover: its card says
+  // so, in place of "up to this limit" (launch checklist C2, release-candidate run 17 Nov).
+  const shared = f.kind === "printed" && f.unit !== "per_day" && f.unit !== "per_period" && acrossPolicies(row);
+  const said = shared ? SHARED_POLICIES_WORDS : how;
+  return `${names ? names(row) : row.benefit} (${cover})${row.qualifier ? `, ${qualifierText(row.qualifier)} only` : ""}${said ? `: ${said}` : ""}${per && !shared ? `${said ? "," : ":"} ${per}` : ""}.`;
 }
 
 /** A row whose printed figure is paid per child ("S$5,000 per child (up to 2 children)"). */
