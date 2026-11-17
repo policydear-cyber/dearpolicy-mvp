@@ -5,6 +5,7 @@
  * available yet.
  */
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { NotFoundError } from "@/lib/household/repo";
 import { effectiveHouseholdCurrency, parseHouseholdCurrencySetting, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency";
@@ -12,7 +13,7 @@ import { effectiveHouseholdCurrency, parseHouseholdCurrencySetting, type Househo
 /** The stored choice for a household, or null when it has not chosen (or the column is not there yet). */
 export async function storedHouseholdCurrency(userId: string, householdId: string): Promise<HouseholdCurrencySetting | null> {
   return createUserSupabaseClient(userId, async (client) => {
-    const row = (await client.query<{ currency: string | null }>(`select to_jsonb(a)->>'currency' as currency from accounts a where a.id = $1`, [householdId])).rows[0];
+    const row = (await client.query<{ currency: string | null }>(`select to_jsonb(a)->>'currency' as currency from accounts a where a.id = $1 and ${activePredicate("a")}`, [householdId])).rows[0];
     return parseHouseholdCurrencySetting(row?.currency);
   });
 }
@@ -21,7 +22,7 @@ export async function storedHouseholdCurrency(userId: string, householdId: strin
  * gives null: nothing is assumed when the setting cannot be read. */
 export async function householdCurrencyOf(accountId: string): Promise<HouseholdCurrency | null> {
   try {
-    const row = (await query<{ currency: string | null }>(`SELECT to_jsonb(a)->>'currency' AS currency FROM accounts a WHERE a.id=$1`, [accountId])).rows[0];
+    const row = (await query<{ currency: string | null }>(`SELECT to_jsonb(a)->>'currency' AS currency FROM accounts a WHERE a.id=$1 AND ${activePredicate("a")}`, [accountId])).rows[0];
     if (!row) return null;
     return effectiveHouseholdCurrency(row.currency);
   } catch {
@@ -35,7 +36,7 @@ export class HouseholdCurrencyNotAvailable extends Error {}
 export async function setHouseholdCurrency(userId: string, householdId: string, setting: HouseholdCurrencySetting): Promise<void> {
   await createUserSupabaseClient(userId, async (client) => {
     try {
-      const { rowCount } = await client.query(`update accounts set currency = $1 where id = $2`, [setting, householdId]);
+      const { rowCount } = await client.query(`update accounts set currency = $1 where id = $2 and ${activePredicate()}`, [setting, householdId]);
       if (rowCount === 0) throw new NotFoundError("Household not found");
     } catch (error) {
       if ((error as { code?: string })?.code === "42703") throw new HouseholdCurrencyNotAvailable();
