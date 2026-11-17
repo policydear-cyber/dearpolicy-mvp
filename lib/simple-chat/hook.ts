@@ -398,6 +398,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
       !context.conversation.family_member_id && asksForNobody([message, ...history.filter((t) => t.role === "user").map((t) => t.text)], household, rows), table ? withheldRows(table, household) : []) : { json: json, report: null };
     const parsed = readModelAnswer(fromRows.json);
     const asked = [message, ...history.filter((t) => t.role === "user").map((t) => t.text).reverse()];
+    // Each document's benefit-table state, so a point about whether a file was read says what other answers say of it.
+    if (live?.states) for (const d of household.documents) d.tableState = live.states.get(d.policyId) ?? null;
     const { answer, report } = parsed ? verifyAnswer(household, parsed, asked, new Set(fromRows.report?.labels ?? []), fromRows.report?.figures ?? []) : verifyAnswer(household, { bottomLine: NO_ANSWER, statements: [], nextSteps: [], question: null });
     if (fromRows.report && answer.statements) {
       const { kept, refused } = keepLabelledAmounts(answer.statements, fromRows.report);

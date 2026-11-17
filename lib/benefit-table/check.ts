@@ -889,6 +889,76 @@ export function headlineSumShare(cell: string, value: number, next = "", words =
   const from = all.slice(pcts[0].index!).replace(/\s+/g, " ").trim();
   return HEADLINE_CELL.test(from);
 }
+/** A share's fixed base printed over its own table, for a row whose reading left the base unsettled (live walk 17 Nov:
+ * the Product Summary's "Arm, Elbow, Wrist or Ribs<TAB>25%" under "Simple Fracture Benefit Limit: S$5,000" and "(% of
+ * S$5,000)" was shown as "25% of the figure its table prints", with no amount). Every one of these must hold, else null:
+ * - the row's own line is a label, then the bare share and nothing after it ("25%"): a row that names its own base
+ *   ("80% of reasonable expenses", "200% of the daily benefit") is never settled here;
+ * - the block above the row (its share rows, then its heading lines up to the nearest bullet, blank line or another
+ *   table's share row) prints its base once, with a stated currency, as a
+ *   column heading "(% of S$5,000)", which must be printed (TE on #520: a limit line alone may be what a co-payment is
+ *   taken off), and any "<name> Benefit Limit: S$5,000" line, whose name's words must all be in the row's
+ *   section or benefit name, or the bullet heading the block opens with ("Simple Fracture" for "Simple Fracture due to
+ *   Accident");
+ * - nothing in the block names another base or limit ("(% of Medical Expenses Limit)", the sum insured), an overall,
+ *   yearly or maximum limit, a plan, or a line with "only" (Critic on #520, NEW-HIGH 1).
+ * Returns that figure and the line that prints it. */
+export function tableBase(text: string, rowStart: number, names = ""): { amount: number; currency: string; line: string } | null {
+  const lineStart = text.lastIndexOf("\n", rowStart - 1) + 1;
+  const lineEnd = (() => { const e = text.indexOf("\n", rowStart); return e < 0 ? text.length : e; })();
+  const own = text.slice(lineStart, lineEnd).normalize("NFKC");
+  // A label, a tab or spaces, then the share alone.
+  if (!/^[^\t%]*\p{L}[^\t%]*(?:\t|\s{2,}|\s)\s*\d+(?:\.\d+)?\s*%\s*[#*^†‡]?\s*$/u.test(own)) return null;
+  const above = text.slice(0, lineStart).split("\n");
+  above.pop();
+  const block: string[] = [];
+  // The table's own rows run up to its heading lines; a share row above a heading line is another table's (Critic on
+  // #520: a Burns table's "(% of S$10,000)" above a "Fracture due to Accident" title was used for the arm).
+  // A "(% of S$N)" column heading is the table's only when it sits right above the table's share rows, with no title
+  // between (Critic on #520: "Burns due to Accident (% of S$10,000)" over a "Fracture due to Accident" title).
+  let heading = false;
+  for (let i = above.length - 1; i >= 0 && block.length < 30; i--) {
+    const line = above[i];
+    if (!line.trim()) break;
+    const columnHeading = /\(\s*%\s*of\b/i.test(line);
+    // Any line with a share not followed by "of" is a share row, whatever follows it ("Head 10% S$1,000", "10% (note 2)").
+    const shareRow = !columnHeading && /\d+(?:\.\d+)?\s*%(?!\s*of\b)/i.test(line) || /^\s*[#*^†‡]\s*$/.test(line);
+    if (shareRow && heading) break;
+    if (columnHeading && heading) return null;
+    if (!shareRow) heading = true;
+    block.unshift(line);
+    if (/^\s*[•▪●◦·\u2022\u25aa\u25cf]/.test(line)) break;
+  }
+  const words = (t: string) => t.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 1 && !["benefit", "benefits", "limit", "the", "of", "for", "due", "to"].includes(w));
+  // The row's own names, and the heading its block opens with ("• Simple Fracture due to Accident").
+  const own_names = new Set(words([names, /^\s*[•▪●◦·\u2022\u25aa\u25cf]/.test(block[0] ?? "") ? block[0] : ""].join(" ")));
+  const HEADING = new RegExp(String.raw`^\(\s*%\s*of\s+(${CELL_MONEY})\s*\)$`, "iu");
+  const HEADING_IN = new RegExp(String.raw`\(\s*%\s*of\s+(${CELL_MONEY})\s*\)\s*$`, "iu");
+  const LIMIT = new RegExp(String.raw`^\s*((?:\p{L}+\s+){1,5})benefit\s+limit\s*:?\s*(${CELL_MONEY})\s*$`, "iu");
+  const BAD = new RegExp(String.raw`\b(?:overall|aggregate|total|maximum|max|annual|yearly|per\s+(?:policy\s+)?year|per\s+(?:claim|event|incident|life|person)|plans?|only|lifetime)\b|${HEADLINE_SUM_NAME}`, "i");
+  const found: { amount: number; currency: string; line: string }[] = [];
+  for (const raw of block) {
+    const line = raw.normalize("NFKC").trim();
+    if (BAD.test(line)) return null;
+    const h = HEADING.exec(line) ?? HEADING_IN.exec(line), l = LIMIT.exec(line);
+    const money = l ? l[2] : h ? h[1] : null;
+    if (!money) {
+      // Any other words that speak of a base or a limit name one this rule cannot read.
+      if (/%\s*of\b|\blimit\b/i.test(line)) return null;
+      continue;
+    }
+    if (l && !words(l[1]).every((w) => own_names.has(w))) return null;
+    const currency = statedCurrencyCode(money);
+    const amount = Number(money.replace(/^[^\d]*/, "").replace(/,/g, ""));
+    if (!currency || !Number.isFinite(amount) || amount <= 0) return null;
+    found.push({ amount, currency, line });
+  }
+  // The column heading "(% of S$N)" is what says the shares are of that figure; a limit line alone may be what a
+  // co-payment, deductible or reimbursement rate is taken off, never their base (TE on #520).
+  if (!found.some((f) => !/benefit\s+limit/i.test(f.line))) return null;
+  if (new Set(found.map((f) => f.amount)).size !== 1 || new Set(found.map((f) => f.currency)).size !== 1) return null;
+  return found.find((f) => /benefit\s+limit/i.test(f.line)) ?? found[0];
+}
 /** Whether the row leaves its percentage's base unsettled (anything but the sum insured, a neutral continuation or the
  * row's end follows it). False when no percentage equal to the value is printed. */
 function percentBaseUnsettled(row: string, value: number): boolean {
@@ -2125,6 +2195,12 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
         out.dropped.push({ what: label, why: "fixed base not printed on the row's page; kept the row with no amount" });
         percentOf = null; baseAmount = null; baseSource = null;
       }
+    }
+    // A share whose base the reading left unsettled, under a table that prints its own fixed base (tableBase).
+    if (pays === "percent" && value != null && (percentOf === "other" || percentOf == null) && placed.has(source)) {
+      const t = tableBase(pageText(source.page), placed.get(source)!.start, [str(b.section) ?? "", benefit].join(" "));
+      const at = t ? find(t.line, source.page) : null;
+      if (t && at && at.page === source.page && printedIn(at, t.amount)) { percentOf = "fixed_amount"; baseAmount = t.amount; baseSource = at; }
     }
     const currency = pays === "percent"
       ? (baseSource ? statedCurrencyCode(baseSource.excerpt) ?? declaredCurrency(pageText(source.page)) : null)

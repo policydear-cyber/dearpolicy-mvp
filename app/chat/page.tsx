@@ -23,6 +23,7 @@ import { StoppedNotice,isStopped } from "@/components/answer-stopped";
 import { LearnLinks } from "@/components/learn-links";
 import { sendFailure } from "@/components/chat-send-failure";
 import { applyReplaced,type ReplacedAnswer } from "@/lib/chat/replaced-live";
+import { COVER_NOTE } from "@/lib/chat/cover-note";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
  * uncertainty, and one next question or action. Internal working -- what the
@@ -487,7 +488,7 @@ function ChatContent(){
           {/* Only a notice about this answer itself (an estimate is not a payout); the general note is said once, under the box. */}
           {message.answer?.disclaimer&&message.answer.disclaimer.trim()!==GENERIC_DISCLAIMER&&!isStopped(message.answer,message.content)?<div className="answer-disclaimer">{message.answer.disclaimer}</div>:null}
           {/* Knowledge library: general explanations of terms this answer uses (static, never changes the answer). */}
-          {message.role==="assistant"&&message.answer&&!isStopped(message.answer,message.content)?<LearnLinks texts={[message.content,...(message.answer.details??[]),...(message.answer.claimItems??[]).flatMap(item=>[item.reason,...(item.conditions??[])])]}/>:null}
+          {message.role==="assistant"&&message.answer&&!isStopped(message.answer,message.content)?<LearnLinks texts={[message.content.replace(COVER_NOTE," "),...(message.answer.details??[]),...(message.answer.claimItems??[]).flatMap(item=>[item.reason,...(item.conditions??[])])]}/>:null}
         </div>
         {message.error?(message.noFamily
           ?<div className="alert error message-inline-error" role="alert" data-testid="chat-no-family"><strong>Not sent.</strong><span> {message.error}</span><Link className="mini-button" href="/family">Add family members</Link></div>

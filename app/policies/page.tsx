@@ -461,7 +461,7 @@ export default function PoliciesPage() {
       {personId && <p className="document-person-filter" data-testid="person-filter">Showing documents linked to <b>{family.find((m) => m.id === personId)?.display_name ?? "one person"}</b>. <button type="button" className="text-link" onClick={() => { setPersonId(null); window.history.replaceState(null, "", "/policies"); }}>Show all documents</button></p>}
 
       {libraryNotice && <div className="upload-status library-notice" role="status" data-testid="library-notice">{libraryNotice}{undoNotFamily?.notice === libraryNotice && <button type="button" className="mini-button" onClick={undoMarkNotFamily}>Undo</button>}<button type="button" className="mini-button" onClick={() => { setLibraryNotice(""); setUndoNotFamily(null); }} aria-label="Dismiss">✕</button></div>}
-      <div className="document-list">{shown.map((policy) => {
+      <div className="document-list rows">{shown.map((policy) => {
         const quarantineHeld = isQuarantineHeld(policy);
         const scanRejected = isScanRejected(policy);
         // A document held in quarantine (or rejected outright) still sits at
@@ -476,10 +476,15 @@ export default function PoliciesPage() {
         const referenceLinks = policy.linked_people.filter((p) => p.source === "scheme_reference_match");
         const personalLinks = policy.linked_people.filter((p) => p.source !== "scheme_reference_match");
         const pct = Math.max(0, Math.min(100, Number(policy.processing_progress ?? 0)));
+        const numbers = [policy.policy_number && `Policy ${policy.policy_number}`, policy.group_policy_number && `Group ${policy.group_policy_number}`].filter((n): n is string => !!n);
         return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} id={`doc-${policy.id}`} data-policy-id={policy.id}>
+          {/* One document per row: what it is, whose it is and what was found on the left; its actions on the right (phone: underneath). */}
+          <div className="document-main">
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{policy.processing_status === "failed" && !processing ? null : <span>{processing ? readingWaitCopy(policy.processing_stage).eta : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy)].join(" · ")}</span>}
+            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage).eta : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
+              {/* Its numbers sit with what it is, so the actions stand alone. */}
+              {!!numbers.length && (processing || policy.processing_status === "failed") && <small className="document-numbers">{numbers.join(" · ")}</small>}</div>
               {!processing && !quarantineHeld && !scanRejected && (() => {
                 // A document with a page not read, or its cover reading unfinished, is never labelled plain "Ready".
                 const read = documentReadLabel(policy);
@@ -487,7 +492,7 @@ export default function PoliciesPage() {
                 const benefits = benefitReading[policy.id];
                 if (read.tone === "ready" && benefits && (benefits.state === "failed" || benefits.state === "backed_off")) return <em className={`status ${policy.processing_status} partial`} data-testid="document-status"><Icon name="alert"/> Benefits not read yet</em>;
                 return <em className={`status ${policy.processing_status}${read.tone === "partial" ? " partial" : ""}`} data-testid="document-status">{read.tone === "ready" ? <><Icon name="check"/> Ready</> : read.tone === "partial" ? <><Icon name="alert"/> {read.label}</> : read.tone === "failed" ? <><Icon name="fileOff"/> {read.label}</> : read.label}</em>;
-              })()}</div>
+              })()}
           </div>
 
           {/* Whose it is, then what was found in it: the two things a person checks first. */}
@@ -563,8 +568,10 @@ export default function PoliciesPage() {
                 : <><button type="button" className="mini-button" data-testid="read-again-failed" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : advice.action}</button>{advice.uploadAction && <button type="button" className="mini-button" onClick={chooseAnother}>{advice.uploadAction}</button>}</>}</div></div>;
           })()}
 
-          {/* Its numbers and the actions on it come last. */}
-          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}{(policy.quarantine_status === "scan_clean" || policy.quarantine_status === "not_scanned_prototype") && <PreviewLink policy={policy} />}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}><Icon name="list"/>{detailsId === policy.id ? "Hide details" : "Details"}</button>}{!processing && policy.processing_status === "ready" && <button type="button" className="mini-button" title="Read this document again from the file DearPolicy kept. People you chose for it stay chosen." disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}><Icon name="refresh"/>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : "Read again"}</button>}{confirmRereadId === policy.id && <><button type="button" className="mini-button" onClick={() => setConfirmRereadId(null)}>Cancel</button><small className="reread-note" data-testid="reread-note">{policy.processing_status === "ready" ? <>Coverage for this document is unavailable for a minute while it&rsquo;s read again.</> : "This reads the whole document again."}</small></>}<button className={`mini-button danger${confirmDeleteId === policy.id ? " armed" : ""}`} disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}><Icon name="trash"/>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+          </div>
+
+          {/* The actions on it come last. */}
+          <div className="document-meta">{(policy.quarantine_status === "scan_clean" || policy.quarantine_status === "not_scanned_prototype") && <PreviewLink policy={policy} />}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}><Icon name="list"/>{detailsId === policy.id ? "Hide details" : "Details"}</button>}{!processing && policy.processing_status === "ready" && <button type="button" className="mini-button" title="Read this document again from the file DearPolicy kept. People you chose for it stay chosen." disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}><Icon name="refresh"/>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : "Read again"}</button>}{confirmRereadId === policy.id && <><button type="button" className="mini-button" onClick={() => setConfirmRereadId(null)}>Cancel</button><small className="reread-note" data-testid="reread-note">{policy.processing_status === "ready" ? <>Coverage for this document is unavailable for a minute while it&rsquo;s read again.</> : "This reads the whole document again."}</small></>}<button className={`mini-button danger${confirmDeleteId === policy.id ? " armed" : ""}`} disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}><Icon name="trash"/>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
 
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
         </div>;

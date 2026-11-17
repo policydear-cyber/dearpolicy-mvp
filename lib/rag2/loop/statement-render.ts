@@ -19,6 +19,7 @@ import { cellDate } from "../tables";
 import { applicabilityOf, ATTRIBUTES, definitionFor, definitionsIn, reportedValue, type Definition } from "../applicability";
 import { documentLabel, profileDocument, standingClause } from "./relation";
 import { checkNotFound, type AbsenceCheck, type PrintedLine } from "./absence-scope";
+import { KIND_WORDS, namedKinds } from "@/lib/benefit-table/fracture-kind";
 
 /** Statements the server wrote (never split, never re-edited by the composer). Not a tool parameter: kept aside. */
 export const RENDERED = new WeakSet<object>();
@@ -39,17 +40,6 @@ const CASE_TERM = /\b((?:[A-Za-z]+\s+)?Fracture)(?:s|\/s|\(s\))?(?![A-Za-z])/i;
 /** A case name outside brackets needs its qualifier ("Other Fracture", "Compound Fracture"): a plain "Fractures" heading or "Bone
  * Fracture" title names no case. */
 const QUALIFIED = String.raw`(?!(?:bone|bones|the|all|any|for|of)\s)[A-Za-z]+\s+Fractures?`;
-/** The words that name a kind of fracture (medicine's own closed vocabulary, not a policy's wording): never a body site ("Hip") or
- * a joining word ("or"; Critic on #516, M1, M3). */
-const KIND_WORDS = "simple|compound|open|closed|complicated|uncomplicated|other|major|minor|multiple|comminuted|displaced|undisplaced|non-displaced|stress|hairline|greenstick|complete|incomplete|pathological";
-/** The kinds of fracture a benefit's own name prints: "Simple Fracture or Compound Fracture due to Accident", "Simple and Compound
- * Fractures" -> simple, compound. */
-const namedKinds = (benefit: string): Set<string> => {
-  const out = new Set<string>();
-  for (const m of benefit.matchAll(new RegExp(String.raw`\b((?:(?:${KIND_WORDS})\s*(?:,|\/|\band\b|\bor\b)\s*)*(?:${KIND_WORDS}))\s+Fractures?\b`, "gi")))
-    for (const k of m[1].toLowerCase().split(/\s*(?:,|\/|\band\b|\bor\b)\s*/)) if (k) out.add(k);
-  return out;
-};
 const caseOf = (label: string, benefit = ""): { tag: string; row: string } | null => {
   const b = CASE_BRACKET.exec(label);
   const tag = b ? CASE_TERM.exec(b[1])?.[1] : null;
