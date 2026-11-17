@@ -27,6 +27,10 @@ export default function DashboardPage(){
  // Only the newest request may change the page, so a late quiet re-fetch never shows a person the household has since
  // switched away from; quiet re-fetches follow whoever is chosen now (want), and say so (poll=1) so they start no reading.
  const seq=useRef(0),want=useRef<string|undefined>(undefined);
+ // Whether Home's ask box is on screen, so the phone's floating Ask button can step aside instead of covering it.
+ const [askInView,setAskInView]=useState(false);
+ useEffect(()=>{if(typeof IntersectionObserver==="undefined")return;let io:IntersectionObserver|null=null;const watch=()=>{const box=document.getElementById("ask");if(!box)return false;io=new IntersectionObserver(([e])=>setAskInView(!!e?.isIntersecting),{threshold:.15});io.observe(box);return true;};
+  if(watch())return()=>io?.disconnect();const t=window.setInterval(()=>{if(watch())window.clearInterval(t);},500);return()=>{window.clearInterval(t);io?.disconnect();};},[]);
  async function load(memberId?:string,quiet=false){const n=++seq.current;if(!quiet)setLoading(true);const params=new URLSearchParams();if(memberId)params.set("familyMemberId",memberId);if(quiet)params.set("poll","1");
   const q=params.toString()?`?${params}`:"";let payload:Dashboard;
   try{
@@ -107,7 +111,9 @@ export default function DashboardPage(){
    </div>)}</div></section>}
   {returning&&<HomeAttention/>}
   </>}
-  <Link href={`/chat${active?.id?`?member=${encodeURIComponent(active.id)}`:""}`} className="home-ask-fab button primary" aria-label="Ask DearPolicy"><Icon name="ask"/>Ask DearPolicy</Link>
+  {/* Phone: Ask stays one tap away, but steps aside while Home's own ask box is on screen, and an empty household has
+      nothing to ask about yet (its first step is to add people or upload), so the button never covers that box or a step. */}
+  {!emptyPortfolio&&<Link href={`/chat${active?.id?`?member=${encodeURIComponent(active.id)}`:""}`} className="home-ask-fab button primary" aria-label="Ask DearPolicy" data-hidden={askInView?"true":undefined} aria-hidden={askInView?true:undefined} tabIndex={askInView?-1:undefined}><Icon name="ask"/>Ask DearPolicy</Link>}
  </div>;
 }
 
