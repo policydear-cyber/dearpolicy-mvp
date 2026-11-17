@@ -76,10 +76,15 @@ export async function withdrawHouseholdCurrency(accountId: string, opts: { keep?
   const ids = (result.rows as { id: string }[]).map((r) => r.id);
   // The Coverage ledger's machine rows seeded from those amounts carry the currency too: a row nobody edited is removed,
   // and seeded again from the amount as it now stands (lib/ledger/store.ts seedLedger). A person's own row is kept.
-  if (ids.length) await query(
-    `DELETE FROM coverage_rules c WHERE c.account_id=$1 AND c.origin<>'person' AND c.status<>'rejected' AND c.updated_at=c.created_at
-       AND c.seed_key LIKE 'coverage:%' AND split_part(split_part(c.seed_key,'|',1),':',2) = ANY($2::text[])`,
-    [accountId, ids]).catch(() => undefined);
+  // A row a person edited keeps their words and figure, but not the currency the setting gave it: it shows as an amount
+  // with no currency until the document is read again (Test engineer #526 N1).
+  if (ids.length) {
+    const seeded = `c.account_id=$1 AND c.seed_key LIKE 'coverage:%' AND split_part(split_part(c.seed_key,'|',1),':',2) = ANY($2::text[])`;
+    await query(`DELETE FROM coverage_rules c WHERE ${seeded} AND c.origin<>'person' AND c.status<>'rejected' AND c.updated_at=c.created_at`, [accountId, ids])
+      .catch((error) => console.warn("household currency: ledger rows not removed:", error instanceof Error ? error.message : error));
+    await query(`UPDATE coverage_rules c SET currency=NULL WHERE ${seeded}`, [accountId, ids])
+      .catch((error) => console.warn("household currency: ledger currency not cleared:", error instanceof Error ? error.message : error));
+  }
   return ids.length;
 }
 
