@@ -1783,6 +1783,8 @@ const SUBJECT_POLICIES = /^\s*(?:(?:[Ii]n\s+total|[Oo]verall|[Ii]n\s+aggregate),
 const JOINT_LIMIT = /\b(?:(?:shall|will|must|does|do|is|are)\s+not\s+exceed|not\s+exceed(?:ing)?|no\s+more\s+than|not\s+more\s+than|limited\s+to|capped\s+at|in\s+total|together|combined|in\s+aggregate|aggregate)\b/i;
 /** Words that give each policy its own limit. */
 const OWN_LIMIT_WORDS = /\b(?:this\s+(?:policy|plan|one|certificate|contract)|separate(?:ly)?|independent(?:ly)?|each|own)\b/i;
+/** Words after a figure that make it each policy's own. */
+const PER_POLICY_AFTER = /\b(?:for\s+each|each|per\s+(?:policy|plan|certificate|contract)|own)\b/i;
 const LIMIT_WORDS = /\b(?:no\s+more\s+than|not\s+more\s+than|most|maximum|max\.|not\s+exceed|exceed|limit(?:ed|s)?|in\s+total|total|aggregate\w*|up\s+to|capped)\b/i;
 export const SHARED_POLICIES_WORDS = "the most the insurer pays for these claims under this and all its other policies on the same person together, not this policy's own cover";
 /** Whether a row's printed words say its limit is shared with the insurer's other policies on the same life (ACROSS_POLICIES). */
@@ -1804,6 +1806,9 @@ export function acrossPolicies(row: Pick<ChatRow, "source" | "figure">): boolean
     const figs = anyMoneyFigures(t);
     if (!figs.length || figs.some((f) => Math.abs(f.value - amount) >= 0.005)) return false;
     const pre = t.slice(0, Math.min(...figs.map((f) => f.index)));
+    const last = figs.reduce((a, b) => (b.index > a.index ? b : a));
+    // "... is S$500,000 for each Policy": a limit per policy, never joint (TE on #523).
+    if (PER_POLICY_AFTER.test(t.slice(last.index + last.length))) return false;
     if (!LIMIT_WORDS.test(pre) || NOT_SHARED_LIMIT.test(pre)) return false;
     // Between the policies and the figure, nothing that gives each policy its own limit ("separate", "each", "this policy").
     const apart = (between: string) => OWN_LIMIT_WORDS.test(between);

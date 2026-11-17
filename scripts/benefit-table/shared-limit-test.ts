@@ -112,7 +112,9 @@ test("acrossPolicies: only the sentence printing the row's own figure, as a shar
     "Besides benefits under all other policies issued by the Company, we pay a maximum of S$100,000.", "Excluding amounts paid under any other policy we have issued, the total we pay is S$100,000.",
     // The policies as the subject, each with its own limit (Critic on #523, round 6).
     "This policy and all other policies we have issued are separate; the most this policy pays is S$100,000.", "This policy and all other policies with us pay separately, up to S$100,000 each.",
-    "This policy and all other plans with the Company are independent and the maximum under this policy is S$100,000."])
+    "This policy and all other plans with the Company are independent and the maximum under this policy is S$100,000.",
+    // A limit per policy, said after the figure (TE on #523).
+    "The most We will pay under this Policy and all other Policies We have issued covering the same Life Assured is S$500,000 for each Policy."])
     assert.ok(!acrossPolicies(row(no)), no);
   // One sentence printing the own sum and the shared cap: the own sum is never labelled (Critic on #523, round 2).
   for (const t of ["Total Permanent Disability benefit of S$500,000, provided that the total payable under this policy and all other policies issued by us on the same life shall not exceed S$3,000,000.",
