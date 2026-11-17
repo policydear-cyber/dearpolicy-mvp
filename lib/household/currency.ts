@@ -65,25 +65,41 @@ export async function relatedPolicyTexts(accountId: string, policyId: string, po
  * F4), and when another document of the same policy turns out to print another currency (F2). They return to how they
  * were before the setting: no amount shown, until the document is read again. */
 export async function withdrawHouseholdCurrency(accountId: string, opts: { keep?: string | null; policyIds?: string[] } = {}): Promise<number> {
+  // The currency each amount carried before it is withdrawn: only a ledger row still in that currency took it from here.
   const result = await query(
-    `UPDATE policy_coverages SET currency=NULL, confirmed=false, evidence_verified=false,
-            notes=NULLIF(btrim(replace(replace(notes, ' · ' || $2, ''), $2, '')), '')
-      WHERE account_id=$1 AND position($2 in coalesce(notes,''))>0
-        AND ($3::text IS NULL OR currency IS DISTINCT FROM $3)
-        AND ($4::uuid[] IS NULL OR policy_id = ANY($4::uuid[]))
-      RETURNING id::text`,
+    `WITH old AS (
+       SELECT id, currency FROM policy_coverages
+        WHERE account_id=$1 AND position($2 in coalesce(notes,''))>0
+          AND ($3::text IS NULL OR currency IS DISTINCT FROM $3)
+          AND ($4::uuid[] IS NULL OR policy_id = ANY($4::uuid[]))
+        FOR UPDATE)
+     UPDATE policy_coverages pc SET currency=NULL, confirmed=false, evidence_verified=false,
+            notes=NULLIF(btrim(replace(replace(pc.notes, ' · ' || $2, ''), $2, '')), '')
+       FROM old WHERE pc.id=old.id
+     RETURNING pc.id::text AS id, old.currency AS currency`,
     [accountId, HOUSEHOLD_CURRENCY_NOTE, opts.keep ?? null, opts.policyIds ?? null]);
-  const ids = (result.rows as { id: string }[]).map((r) => r.id);
+  const withdrawn = result.rows as { id: string; currency: string | null }[];
+  const ids = withdrawn.map((r) => r.id);
   // The Coverage ledger's machine rows seeded from those amounts carry the currency too: a row nobody edited is removed,
   // and seeded again from the amount as it now stands (lib/ledger/store.ts seedLedger). A person's own row is kept.
-  // A row a person edited keeps their words and figure, but not the currency the setting gave it: it shows as an amount
-  // with no currency until the document is read again (Test engineer #526 N1).
+  // A row a person edited keeps their words, but not the money figure the setting gave a currency to (Test engineer #526
+  // N1): the ledger's currency column can't be empty, and an amount with no currency is never shown (DC's rule), so its
+  // money figure is taken off instead. A percentage stays (it is not money). Only a row still in the currency the setting
+  // gave is touched: a currency a person set on the row themselves is theirs (Critic #526).
   if (ids.length) {
     const seeded = `c.account_id=$1 AND c.seed_key LIKE 'coverage:%' AND split_part(split_part(c.seed_key,'|',1),':',2) = ANY($2::text[])`;
     await query(`DELETE FROM coverage_rules c WHERE ${seeded} AND c.origin<>'person' AND c.status<>'rejected' AND c.updated_at=c.created_at`, [accountId, ids])
       .catch((error) => console.warn("household currency: ledger rows not removed:", error instanceof Error ? error.message : error));
-    await query(`UPDATE coverage_rules c SET currency=NULL WHERE ${seeded}`, [accountId, ids])
-      .catch((error) => console.warn("household currency: ledger currency not cleared:", error instanceof Error ? error.message : error));
+    const pairs = withdrawn.filter((r) => r.currency);
+    if (pairs.length) {
+      await query(
+        `UPDATE coverage_rules c SET amount = CASE WHEN c.pays_kind='percent_of_sum' THEN c.amount ELSE NULL END, sum_basis=NULL
+           FROM unnest($2::text[], $3::text[]) AS w(id, currency)
+          WHERE c.account_id=$1 AND c.seed_key LIKE 'coverage:%' AND split_part(split_part(c.seed_key,'|',1),':',2) = w.id
+            AND c.currency = w.currency`,
+        [accountId, pairs.map((r) => r.id), pairs.map((r) => r.currency)])
+        .catch((error) => console.warn("household currency: ledger amounts not cleared:", error instanceof Error ? error.message : error));
+    }
   }
   return ids.length;
 }
