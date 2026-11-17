@@ -25,9 +25,12 @@ import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
 import { benefitWords } from "./cover-rows";
 import { rowSectionCode, rowSectionNumber } from "./section-id";
-import { childCase, personStatus, personStatusWhy, provenAdult, statusDays, withoutChildLimit, type ChildLimit } from "./child-limit";
+import { childCase, personStatus, personStatusWhy, provenAdult, statusDays, withoutChildLimit, type ChildLimit, householdLife } from "./child-limit";
 
 export type FamilyMember = { id: string; display_name: string; preferred_name?: string | null;
+  /** Who the household says this person is on the Family page ("self", "spouse", "child", ...): "self" or "spouse" settles
+   * that they are not an insured child when their schedule line prints nothing to say (householdLife). */
+  relationship?: string | null;
   /** The date of birth the household entered on the Family page (YYYY-MM-DD), when it did: tells which age group's row of a
    * wording is the person's (tierProblem). */
   date_of_birth?: string | null;
@@ -253,7 +256,7 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
     }
     const match = named ?? shared;
     if (!match) { unmatched.push(c); continue; }
-    found.push({ ...c, personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null, documentKind: r.kind, planType: planTypeOf(c, r.planType ?? null, { product: r.product, baseCovers: r.covers.filter((x) => !x.riderOf).length }) });
+    found.push({ ...c, ...householdLife(c.life, match.member), personId: match.member.id, coverKey: coverKeyOf(c), confirmation: null, ended: coverEnded(c, r, today), documentPeriodFrom: r.periodFrom ?? null, documentPeriodTo: r.periodTo ?? null, documentKind: r.kind, planType: planTypeOf(c, r.planType ?? null, { product: r.product, baseCovers: r.covers.filter((x) => !x.riderOf).length }) });
   }
   // One person's printed policy numbers for one cover type, grouped where they may be one policy's number written two ways
   // ("MT-104455", "MT104455", "00104455", "104455-01"; TE P152 F1).
@@ -368,6 +371,7 @@ function figureFor(b: CheckedBenefit, cover: PersonCover, fromIllustration: bool
 const BASIC_PLAN_SHARE = /%[^\n%]{0,60}\b(?:basic|base|main)\s+(?:plan|policy|contract|benefit)\b|%[^\n%]{0,60}\bof\s+the\s+(?:basic|base|main)\b/i;
 /** Whether a row's printed child share is the person's (lib/benefit-table/child-limit.ts): "child" or "not_child" from the
  * cover's own line on every day it could matter (today and the printed period of insurance), or null when not settled. */
+export { householdLife };
 export function childStatusOf(b: Pick<CheckedBenefit, "childLimit">, cover: Pick<PersonCover, "life" | "documentPeriodFrom" | "documentPeriodTo">, today: number) {
   return b.childLimit ? personStatus(cover.life, b.childLimit, statusDays(today, cover.documentPeriodFrom, cover.documentPeriodTo)) : null;
 }
@@ -421,9 +425,10 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
     const child = b.childLimit ? childStatusOf(b, cover, today) : null;
     if (b.childLimit && !child) return { kind: "none", why: `${b.value}% of the sum insured, or ${b.childLimit.percent}% for ${childCase(b.childLimit)}; ${cover.person}'s own line of the schedule ${childWhyOf(b, cover, today) ?? "does not settle which"}: see the document` };
     const percent = child === "child" ? b.childLimit!.percent : b.value!;
-    const life = cover.life?.birth ? `date of birth ${cover.life.birth}` : `relationship "${cover.life?.relationship ?? ""}"`;
-    const childWords = !b.childLimit ? "" : child === "child" ? ` for ${childCase(b.childLimit)} (${life}, p${cover.source.page})`
-      : `; its ${b.childLimit.percent}% for ${childCase(b.childLimit)} is not for this person (${life}, p${cover.source.page})`;
+    const life = cover.life?.birth ? `date of birth ${cover.life.birth}, p${cover.source.page}` : cover.life?.relationship ? `relationship "${cover.life.relationship}", p${cover.source.page}`
+      : cover.life?.household ? `recorded in your family as ${cover.life.household === "self" ? "you" : "your spouse"}` : `p${cover.source.page}`;
+    const childWords = !b.childLimit ? "" : child === "child" ? ` for ${childCase(b.childLimit)} (${life})`
+      : `; its ${b.childLimit.percent}% for ${childCase(b.childLimit)} is not for this person (${life})`;
     return capped(cents(percent * cover.sumInsured / 100), cover.currency,
       `${percent}% of ${money(cover.sumInsured, cover.currency)} (${cover.cover}, ${cover.confirmation?.status === "corrected" ? "the figure you gave" : `${cover.source.document} p${cover.source.page}${cover.asOf ? `, as of ${cover.asOf}` : ""}`})${childWords}`);
   }

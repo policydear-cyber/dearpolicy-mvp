@@ -81,7 +81,11 @@ export function withoutChildLimit(text: string, limit: Pick<ChildLimit, "words">
 }
 
 /** What the schedule prints about one person, from their own line of its people table. */
-export type PrintedLife = { birth: string | null; relationship: string | null };
+export type PrintedLife = { birth: string | null; relationship: string | null;
+  /** The household's own record of who the person is, when it says the account holder or their spouse ("self", "spouse"):
+   * never an insured child of a scheme, at any age. Set only by the household (assemble.ts householdLife), never read
+   * from a document; a printed relationship or date of birth that says otherwise still wins. */
+  household?: "self" | "spouse" | null };
 const BIRTH_HEAD = /^(?:date\s+of\s+birth|birth\s*date|d\.?\s?o\.?\s?b\.?|born)$/i;
 const RELATION_HEAD = /^(?:relationship(?:\s+to\s+(?:the\s+)?(?:policyholder|proposer|insured|policy\s+owner))?|relation)$/i;
 const DATE = String.raw`\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\.?,?\s+\d{4}`;
@@ -546,7 +550,16 @@ export function provenAdult(life: PrintedLife | null | undefined, age: number | 
     return side === "over" ? { adult: true } : { adult: false, why: side === "under" ? `prints a date of birth (${life.birth}) under ${over}` : `prints a date of birth (${life.birth}) that does not settle whether they are ${over} or over on every day of the period of insurance` };
   }
   if (rel === "adult" && over <= 18) return { adult: true };
+  if (life?.household) return { adult: true };
   return { adult: false, why: rel === "adult" ? `does not print a date of birth to show they are ${over} or over` : "does not print a date of birth" };
+}
+/** The cover's printed life with the household's record of the account holder or their spouse added (PrintedLife.household):
+ * the household's Family page says who "self" and "spouse" are, and neither is ever a scheme's insured child. Any other
+ * relationship (child, parent, other) adds nothing; the printed line is never replaced. */
+export function householdLife(life: PrintedLife | undefined, member: { relationship?: string | null }): { life?: PrintedLife } {
+  const rel = (member.relationship ?? "").trim().toLowerCase();
+  if (rel !== "self" && rel !== "spouse") return life ? { life } : {};
+  return { life: { birth: life?.birth ?? null, relationship: life?.relationship ?? null, household: rel } };
 }
 /** The relationships that make a person an insured child, a closed list: never a step, grand or in-law form, "adult child"
  * or "child (over 18)" (gate H1). */
@@ -613,6 +626,8 @@ export function personStatusWhy(life: PrintedLife | null | undefined, limit: Pic
     if (!side) return no(`prints a date of birth (${birth}) that does not settle whether they are under 18 on every day of the period of insurance`);
     if ((rel === "child") !== (side === "under")) return no(`prints a relationship ("${life!.relationship!.trim()}") and a date of birth (${birth}) that do not agree`);
   }
+  // The household's record of the account holder or their spouse, with nothing printed against it: not a child.
+  if (life?.household && !birth && rel !== "child") return { status: "not_child" };
   if (limit.belowAge != null) {
     if (!birth) return no("does not print a date of birth");
     const side = ageSide(birth, days, limit.belowAge);
