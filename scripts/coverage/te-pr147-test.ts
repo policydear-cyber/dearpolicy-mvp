@@ -54,9 +54,9 @@ for (const { m, cur, rate, sum } of MARKETS) {
   t(`${m} J2 the TPD tile shows the standing cover's sum`, !!td && new RegExp(`^(?:S\\$|MYR |GBP |£)${sum.toLocaleString("en-US")}$`).test(td), cash(td));
   t(`${m} J3 the Coverage page still lists every hospital cash and TPD row`, categoryRows("Hospital Cash", home).length === 3 && categoryRows("Total Permanent Disability", home).length === 3, [categoryRows("Hospital Cash", home).length, categoryRows("Total Permanent Disability", home).length]);
 
-  // N1 bare "$" only: shown as printed, never with a currency.
+  // N1 bare "$" only: never a card amount (DC: amount only if confirmed; live 4a263298), and never with a currency.
   const n1 = tile("Hospital Cash", [daily("gtl", "Hospital Cash Benefit", rate, null)]);
-  t(`${m} N1 bare "$" only: '(currency not stated)', never ${cur}`, !!n1 && /not stated/.test(n1) && !n1.includes(cur) && !/S\$|£|MYR/.test(n1), cash(n1));
+  t(`${m} N1 bare "$" only: no amount on the card, never ${cur}`, n1 == null, cash(n1));
   // N2 bare "$" with a different amount on the same cover: no figure.
   const n2 = tile("Hospital Cash", [daily("gtl", "Daily Hospital Cash Benefit", rate, cur), daily("gtl", "Hospital Cash Benefit", rate + 5, null)]);
   t(`${m} N2 bare "$" with a different amount: no figure`, n2 == null, cash(n2));

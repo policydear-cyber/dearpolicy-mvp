@@ -187,6 +187,8 @@
     "benefit-table:stay-days-test": "node --import tsx scripts/benefit-table/stay-days-test.ts",
     "benefit-table:child-limit-test": "node --import tsx scripts/benefit-table/child-limit-test.ts",
     "benefit-table:fracture-kind-test": "node --import tsx scripts/benefit-table/fracture-kind-test.ts",
+    "benefit-table:ordinal-quote-test": "node --import tsx scripts/benefit-table/ordinal-quote-test.ts",
+    "benefit-table:offer-figure-test": "node --import tsx scripts/benefit-table/offer-figure-test.ts",
     "benefit-table:shared-limit-test": "node --import tsx scripts/benefit-table/shared-limit-test.ts",
     "benefit-table:plain-table-test": "node --import tsx scripts/benefit-table/plain-table-test.ts",
     "benefit-table:sum-base-test": "node --import tsx scripts/benefit-table/sum-base-test.ts",
