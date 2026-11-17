@@ -1708,17 +1708,14 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 @media (max-width: 620px) {
   .coverage-grid { grid-template-columns: minmax(0, 1fr); }
   .member-strip { grid-template-columns: minmax(0, 1fr); }
-  /* People on a phone: two keys a row, each name whole on up to two lines; nothing scrolls sideways or is cut
-     (coordinator 17 Nov). */
-  .member-pills { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: auto; overflow: visible; }
-  .member-pill { white-space: normal; min-width: 0; }
+  /* People on a phone: the keys wrap onto rows, each as wide as its name needs (a long name takes the row), so a name
+     breaks only between its words; nothing scrolls sideways or is cut (coordinator 17 Nov, TE PR 525 R1). */
+  .member-pills { display: flex; flex-wrap: wrap; width: auto; overflow: visible; }
+  .member-pill { flex: 1 1 auto; max-width: 100%; white-space: normal; min-width: 0; padding: 8px; gap: 6px; }
   .member-pill > span:last-child { min-width: 0; }
   .member-pill .member-dot { flex-shrink: 0; }
-  .member-pill { padding: 8px; gap: 6px; }
   .member-pill b, .member-pill small { display: block; min-width: 0; overflow-wrap: break-word; line-height: 1.25; }
 }
-/* The smallest phones: one person a row, so a whole word of a name always fits its line. */
-@media (max-width: 380px) { .member-pills { grid-template-columns: minmax(0, 1fr); } }
 
 /* Insurer contact details under an answer's next steps (components/insurer-contacts.tsx). */
 .insurer-contacts { display: grid; gap: 10px; margin: 0; }

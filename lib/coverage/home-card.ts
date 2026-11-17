@@ -51,15 +51,23 @@ export function pickCoverByName(label: string, covers: (string | null | undefine
   return tie ? -1 : best;
 }
 
-/** Short words kept in capitals when an all-capitals name is set in title case: likely initials ("AIA", "MHA", "CPF").
- * Common short words are not initials. */
-// Short words that are words, not initials: never kept in capitals.
+/** Initials kept in capitals when an all-capitals name is set in title case: any 2 or 3 letters except a common word
+ * ("AIA", "FWD", "UOB"; not "CAR", "PET"), and 4 letters only when known initials or with no vowel ("NTUC", "HSBC").
+ * A short allow-list for 4 letters, so "LONG", "WARD" and "BOND" read as words (TE PR 525 R2a). */
 const SHORT_WORDS = new Set(["and", "of", "the", "for", "to", "in", "on", "at", "by", "or", "co", "st", "pro", "max", "new", "one", "two", "six", "ten",
-  "all", "top", "my", "our", "your", "plus", "care", "life", "term", "gold", "home", "cash", "plan", "trip", "star", "safe", "wise", "link", "flex",
-  "best", "rich", "pure", "year", "fund", "save", "good", "sure", "more", "only", "lady", "kids", "baby", "free", "full", "high", "mega", "easy", "key",
-  "wealth", "with", "card", "work", "living", "cover", "basic", "term", "whole", "pay", "per", "day", "own", "first", "time", "lite", "prime", "smart", "sun",
-  "great", "true", "elite", "solo", "duo", "max", "mini", "maxi", "gain", "grow", "keep", "self", "next", "go", "up"]);
+  "all", "top", "my", "our", "key", "own", "pay", "per", "day", "sun", "duo", "go", "up", "car", "pet", "big", "fit", "kid", "ace", "you", "eye", "leg",
+  "art", "bay", "box", "boy", "cub", "dad", "mum", "mom", "net", "now", "pal", "red", "sea", "sky", "tea", "way", "win", "zen", "joy", "fun", "out", "off",
+  "her", "his", "its", "get", "set", "lux", "an", "as", "is", "it", "be", "we", "us", "me", "no", "so", "do", "if", "air", "end", "age", "add",
+  "aid", "arm", "ear", "hip", "lip", "toe", "far", "few", "low", "old", "raw", "row", "tax", "via", "web", "yes", "yet", "mrs", "mr", "ms", "dr"]);
+const KNOWN_INITIALS = new Set(["ntuc", "ocbc", "msig"]);
 const LOWER_WORDS = new Set(["and", "of", "the", "for", "to", "in", "on", "at", "by", "or"]);
+const titleWord = (w: string, first: boolean): string => {
+  const lower = w.toLowerCase();
+  if (w.length >= 2 && w.length <= 3 && !SHORT_WORDS.has(lower)) return w;
+  if (w.length === 4 && (KNOWN_INITIALS.has(lower) || !/[aeiouy]/.test(lower))) return w;
+  if (!first && LOWER_WORDS.has(lower)) return lower;
+  return lower[0].toUpperCase() + lower.slice(1);
+};
 /** A policy's name as a card shows it: an all-capitals name in title case ("MINDEF & MHA GROUP INSURANCE SCHEME" ->
  * "Mindef & MHA Group Insurance Scheme"), and a long name without its trailing codes in brackets ("PruFlexiCash Protection
  * Plus (7th Series) (EJ7)" -> "PruFlexiCash Protection Plus"), so it fits two lines and is never cut mid-name. A name
@@ -68,13 +76,13 @@ export function homePolicyName(name: string): string {
   let n = clean(name);
   if (n.length > 26) { const bare = n.replace(/(?:\s*\([^()]*\))+\s*$/, "").trim(); if (bare.length >= 4) n = bare; }
   if (/\p{Lu}{2}/u.test(n) && !/\p{Ll}/u.test(n)) {
-    // Each run of letters on its own, so "O'BRIEN" -> "O'Brien" and "CO-OPERATIVE" -> "Co-Operative".
-    n = n.replace(/\p{L}+/gu, (w, i: number) => {
-      const lower = w.toLowerCase();
-      // Initials: up to 3 letters, or 4 with at most one vowel ("NTUC", "OCBC"; not "GOAL", "LUKE").
-      if ((w.length <= 3 || (w.length === 4 && (lower.match(/[aeiouy]/g) ?? []).length <= 1)) && !SHORT_WORDS.has(lower)) return w;
-      if (i > 0 && LOWER_WORDS.has(lower)) return lower;
-      return lower[0].toUpperCase() + lower.slice(1);
+    // Each word on its own, and each part of a hyphenated word ("CO-OPERATIVE" -> "Co-Operative"). An apostrophe after
+    // one letter starts a name ("O'BRIEN" -> "O'Brien"); after more it is a possessive ("ANDREW'S" -> "Andrew's").
+    n = n.replace(/\p{L}+(?:['’]\p{L}+)?/gu, (w: string, i: number) => {
+      const [head, tail] = w.split(/['’]/);
+      const mark = w.slice(head.length, head.length + 1);
+      if (tail === undefined) return titleWord(head, i === 0);
+      return head.length === 1 ? head + mark + titleWord(tail, false) : titleWord(head, i === 0) + mark + tail.toLowerCase();
     });
   }
   // A short code with a hyphen ("(H-2026)") never breaks at its hyphen (TE PR 525 F5).

@@ -96,11 +96,19 @@ test("readable names: all capitals in title case, initials kept; long names lose
   assert.equal(homePolicyName("O'BRIEN FAMILY PLAN"), "O'Brien Family Plan");
   assert.equal(homePolicyName("ST. LUKE CARE"), "St. Luke Care");
   assert.equal(homePolicyName("AIA HEALTHSHIELD GOLD MAX B"), "AIA Healthshield Gold Max B");
+  // TE PR 525 R2: real short words read as words; possessives keep a small s.
+  assert.equal(homePolicyName("LONG TERM CARE PLAN"), "Long Term Care Plan");
+  assert.equal(homePolicyName("PRIVATE WARD SHIELD"), "Private Ward Shield");
+  assert.equal(homePolicyName("FWD CAR INSURANCE"), "FWD Car Insurance");
+  assert.equal(homePolicyName("PET CARE PLAN"), "Pet Care Plan");
+  assert.equal(homePolicyName("INCOME FAMILY BOND"), "Income Family Bond");
+  assert.equal(homePolicyName("ST. ANDREW'S CARE"), "St. Andrew's Care");
+  assert.equal(homePolicyName("UOB DBS AXA PRU"), "UOB DBS AXA PRU");
 });
-test("phone person switcher: two keys a row, wraps names, never scrolls sideways", () => {
+test("phone person switcher: keys wrap onto rows, names break between words, never scrolls sideways", () => {
   const css = readFileSync("app/globals.css", "utf8");
   assert.doesNotMatch(css, /\.member-pills \{ mask-image/, "no sideways-scroll fade");
-  assert.match(css, /\.member-pills \{ display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.member-pills \{ display: flex; flex-wrap: wrap;/);
 });
 test("columns: the last row is never one card alone where 3 or 4 columns avoid it", () => {
   for (let n = 4; n <= 24; n++) {

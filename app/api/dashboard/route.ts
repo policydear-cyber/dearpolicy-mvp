@@ -209,13 +209,18 @@ export async function GET(request:NextRequest){
 
   const unmatchedRows=await query<{category:string;amount:string|null;evidence_text:string|null;policy_id:string;source_page:number|null}&OnFileDoc>(`SELECT pc.category,pc.amount::text,pc.evidence_text,p.id::text AS policy_id,pc.source_page,${ON_FILE_DOC_COLUMNS} FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND NOT (pc.confirmed=true AND pc.evidence_verified=true)`,[accountId,active.id]);
   const unmatchedLines=new Map<string,number>();
+  // A file's name names a held cover only when a person chose it and it names nobody else in the household ("Gil CI
+  // certificate.pdf" never names Fay's card, TE PR 525).
+  const ownWords=new Set(active.display_name.toLowerCase().split(/[^\p{L}]+/u).filter(Boolean));
+  const otherWords=new Set(familyResult.rows.filter(m=>m.id!==active.id).flatMap(m=>m.display_name.toLowerCase().split(/[^\p{L}]+/u)).filter(w=>w.length>=3&&!ownWords.has(w)));
+  const ownFileName=(f:string)=>{if(isMachineFilename(f))return null;const n=prettifyFilename(f);return n.toLowerCase().split(/[^\p{L}]+/u).some(w=>otherWords.has(w))?null:n;};
   // An unconfirmed line whose own quote and person are printed on its page shows the cover is held, with no amount
   // (lib/coverage/held-line.ts). Any unconfirmed line of a category means its confirmed figures may be only part of the
   // cover, so that category shows no amount at all: a part sum is never shown as the whole (DC 27 Oct, 16 Nov).
   const benefitUnmatched=unmatchedRows.rows.filter(r=>asBenefitLine(r,r.evidence_text));
   const held=await heldLines(query,accountId,active.id,benefitUnmatched);
   const heldCategories=new Map<string,number>();
-  benefitUnmatched.forEach((r,i)=>{const c=normalizeCoverageCategory(r.category);unmatchedLines.set(c,(unmatchedLines.get(c)??0)+1);noteDoc(c,r);if(held[i]){heldCategories.set(c,(heldCategories.get(c)??0)+1);if(!coverageMap.has(c))addSource(c,r.policy_number??r.policy_id,r.doc_product,r.doc_insurer,isMachineFilename(r.original_filename)?null:prettifyFilename(r.original_filename));}});
+  benefitUnmatched.forEach((r,i)=>{const c=normalizeCoverageCategory(r.category);unmatchedLines.set(c,(unmatchedLines.get(c)??0)+1);noteDoc(c,r);if(held[i]){heldCategories.set(c,(heldCategories.get(c)??0)+1);if(!coverageMap.has(c))addSource(c,r.policy_number??r.policy_id,r.doc_product,r.doc_insurer,ownFileName(r.original_filename));}});
   const statusOf=(category:string)=>({covered:"covered",on_file:"on_file",not_found:"not_covered"} as const)[coverVerdict({proven:coverageMap.has(category)?1:0,unmatchedLines:unmatchedLines.get(category)??0,referenceOnly:referenceOnly.get(category)??0,held:heldCategories.get(category)??0})];
   const partial=(category:string)=>(unmatchedLines.get(category)??0)>0;
   const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:statusOf(category),reviewRequired:conflictCategories.has(category),amount:partial(category)?null:row?.total??null,displayAmount:partial(category)?null:row?.displayAmount??null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,sources:statusOf(category)==="covered"?[...(sources.get(category)?.values()??[])]:[],onFileDocuments:statusOf(category)==="on_file"?[...(onFileDocs.get(category)??[])].sort():[]};});
