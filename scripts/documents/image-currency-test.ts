@@ -44,6 +44,11 @@ async function main() {
     ["image prints no currency", BARE, BARE, null],
     ["the text layer prints a currency: the text decides", "Death\tS$100,000.00\nTotal Permanent Disability\t100,000.00", "Currency: US$\n" + BARE, null],
     ["the text layer prints a currency word", "Amounts in dollars\n" + BARE, "Currency: S$\n" + BARE, null],
+    // The page-image reading stays narrow: words that only look like a currency never hide an S$ amount (Critic #526).
+    ["a nationality field (Malaysian) in the text", "Nationality: Malaysian\n" + BARE, "S$ Life 100,000.00", "SGD"],
+    ["a web address ending .php in the text", "www.insurer.com.sg/claims.php\n" + BARE, "S$ Life 100,000.00", "SGD"],
+    ["a nationality field in the image", BARE, "Nationality Malaysian\nS$ Life 100,000.00", "SGD"],
+    ["a name 'Rs Tan' in the text", "Mr Rs Tan\n" + BARE, "S$ Life 100,000.00", "SGD"],
   ];
   for (const [name, text, image, want] of cases) await test(`C ${name}`, () => assert.equal(singleImageCurrency(text, image), want));
   await test("C a text with no currency prints none", () => assert.equal(textPrintsCurrency(BARE), false));

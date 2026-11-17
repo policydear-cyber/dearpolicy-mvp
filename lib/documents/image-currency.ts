@@ -12,8 +12,10 @@
 
 const DOLLARS = new Set(["SGD", "USD", "HKD", "AUD"]);
 
-/** Every currency the text names, as codes from the closed list, or "?" for one outside it. */
-function currenciesIn(text: string): string[] {
+/** Every currency the text names, as codes from the closed list, "$" for a bare dollar sign or word, or "?" for one
+ * outside the list. Kept exactly as narrow as it is for the page-image check (a wider list there would hide correct
+ * amounts); the household currency uses its own, wider reading (lib/documents/household-currency). */
+export function currenciesIn(text: string): string[] {
   const out: string[] = [];
   const t = String(text ?? "");
   for (const m of t.matchAll(/(?<![A-Za-z])(SG|S|US|HK|AU|A)?\$/g)) {

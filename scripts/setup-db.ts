@@ -43,6 +43,7 @@ const MIGRATIONS = [
   "sql/benefit-table.sql",
   "sql/benefit-figure-confirmations.sql",
   "sql/member-profile.sql",
+  "sql/household-currency.sql",
 ];
 
 async function main() {
