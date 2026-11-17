@@ -79,19 +79,25 @@ test("kindsSaid: only a kind said of the fracture itself", () => {
   assert.deepEqual([...kindsSaid("the fracture was simple")], ["simple"]);
   assert.deepEqual([...kindsSaid("He broke his arm. Any other benefits?")], []);
 });
-test("live walk 17 Nov shape: no kind said, two kinds printed: no amount, each row named for its kind, one question", () => {
-  const a = answer(both(), "Rowan broke his arm in an accident. What can he claim?", [/Other Fracture/, /^Simple Fracture: /]);
-  assert.deepEqual(a.amounts, []);
-  assert.ok(a.points.some((t) => /"Other Fracture"/.test(t)), a.points.join(" | "));
-  assert.ok(a.points.some((t) => /"Simple Fracture"/.test(t)), a.points.join(" | "));
-  assert.match(a.question, /Which kind of fracture did Rowan Hartley have: "Simple Fracture" or "Other Fracture"\?/);
-  assert.equal(a.report.dropped.length, 0, "no 'left out an amount' note");
+test("live walk 17 Nov shape: no kind said, two kinds printed: both amounts as alternatives, smaller first, each named, one question", () => {
+  for (const asked of [[/Other Fracture/, /^Simple Fracture: /], [/Other Fracture/]]) {
+    const a = answer(both(), "Rowan broke his arm in an accident. What can he claim?", asked);
+    assert.deepEqual(a.amounts, ["S$1,250", "S$120,000"], String(asked));
+    assert.ok(a.points.some((t) => /this amount is for what the policy calls "Other Fracture"/.test(t)), a.points.join(" | "));
+    assert.ok(a.points.some((t) => /this amount is for what the policy calls "Simple Fracture"/.test(t)), a.points.join(" | "));
+    assert.match(a.question, /Which kind of fracture did Rowan Hartley have: "Simple Fracture" or "Other Fracture"\?/);
+  }
 });
-test("the kind said: that kind's amount, the other kind's none", () => {
+test("the kind said: that kind's amount; the other kind's none, with why", () => {
   const simple = answer(both(), "Rowan had a simple fracture of his arm. What can he claim?", [/Other Fracture/, /^Simple Fracture: /]);
   assert.deepEqual(simple.amounts, ["S$1,250"]);
-  const other = answer(both(), "Rowan had an other fracture of his arm, it was compound. What can he claim?", [/Other Fracture/]);
+  assert.ok(simple.points.some((t) => /"Other Fracture", not the kind of fracture you described/.test(t)), simple.points.join(" | "));
+  const other = answer(both(), "Rowan had an other fracture of his arm. What can he claim?", [/Other Fracture/]);
   assert.deepEqual(other.amounts, ["S$120,000"]);
+});
+test("a kind the documents do not print says nothing: both as alternatives", () => {
+  const a = answer(both(), "Rowan had a compound fracture of his arm. What can he claim?", [/Other Fracture/]);
+  assert.deepEqual(a.amounts, ["S$1,250", "S$120,000"]);
 });
 test("one kind printed only: the amount as before", () => {
   const h = household([OTHER.replace("(Other Fracture)", "")], [ben({ section: "Fracture", benefit: "Arm, Elbow, Wrist or Ribs", pays: "percent", value: 20, percentOf: "sum_insured", quote: OTHER.replace("(Other Fracture)", "") })]);
