@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { customerMessage } from "@/components/customer-text";
 import { HOUSEHOLD_CURRENCIES, HOUSEHOLD_CURRENCY_LABELS, NO_HOUSEHOLD_CURRENCY } from "@/lib/documents/household-currency-options";
 
-type HouseholdState = { activeHouseholdId: string | null; activeHouseholdCurrency: string | null; memberships?: Array<{ householdId: string; role: string }> };
+type HouseholdState = { activeHouseholdId: string | null; activeHouseholdCurrency: string | null; currencySettingAvailable?: boolean; memberships?: Array<{ householdId: string; role: string }> };
 
 /**
  * The policy currency is compulsory (DC 18 Nov 2026). New households choose it at sign-up (app/signup/SignupForm.tsx).
@@ -26,7 +26,8 @@ export function HouseholdCurrencyPrompt() {
         if (!response.ok) return;
         const data = (await response.json()) as HouseholdState;
         const owner = data.memberships?.some((m) => m.householdId === data.activeHouseholdId && m.role === "owner");
-        if (!cancelled && data.activeHouseholdId && owner && !data.activeHouseholdCurrency) setNeeded(true);
+        // Nobody is asked before the setting can be stored (Critic #534 M1).
+        if (!cancelled && data.currencySettingAvailable && data.activeHouseholdId && owner && !data.activeHouseholdCurrency) setNeeded(true);
       } catch { /* nothing shown when it can't be read */ }
     })();
     return () => { cancelled = true; };
@@ -43,9 +44,9 @@ export function HouseholdCurrencyPrompt() {
       const response = await fetch("/api/household", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ currency: choice }) });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) { setError(customerMessage(payload.error, "Could not save the currency. Please try again in a moment.")); return; }
+      // Nothing on the page changes: the choice is used when a document is read (lib/rag/ingest.ts), and a household with
+      // no choice before has no amount that took one. So no reload, and nothing typed on the page is lost (Critic #534).
       setNeeded(false);
-      // The page's own amounts were read before the choice: load it again.
-      window.location.reload();
     } catch {
       setError("Could not save the currency. Check your connection and try again.");
     } finally {

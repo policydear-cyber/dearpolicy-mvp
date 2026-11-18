@@ -121,9 +121,20 @@ export async function ensureDefaultHousehold(
     // The policy currency chosen at sign-up (DC 18 Nov: compulsory there) is stored with the new household; a household
     // made any other way (an emailed link, a fresh start) has none until its owner chooses (components/household-currency-prompt).
     const currency = parseHouseholdCurrencySetting(options.currency);
-    const created = currency
-      ? await client.query<{ id: string }>(`insert into accounts(id, name, currency) values (gen_random_uuid(), $1, $2) returning id`, [displayName || "My household", currency])
-      : await client.query<{ id: string }>(`insert into accounts(id, name) values (gen_random_uuid(), $1) returning id`, [displayName || "My household"]);
+    // A database without accounts.currency yet (sql/household-currency.sql not applied) still makes the household, without
+    // the choice: the savepoint keeps the transaction usable, and the owner is asked once the setting exists (Critic #534 H1).
+    let created: { rows: { id: string }[] } | null = null;
+    if (currency) {
+      await client.query("savepoint household_currency");
+      try {
+        created = await client.query<{ id: string }>(`insert into accounts(id, name, currency) values (gen_random_uuid(), $1, $2) returning id`, [displayName || "My household", currency]);
+        await client.query("release savepoint household_currency");
+      } catch (error) {
+        if ((error as { code?: string })?.code !== "42703") throw error;
+        await client.query("rollback to savepoint household_currency");
+      }
+    }
+    created ??= await client.query<{ id: string }>(`insert into accounts(id, name) values (gen_random_uuid(), $1) returning id`, [displayName || "My household"]);
     const householdId = created.rows[0].id;
     await client.query(`insert into household_members(household_id, user_id, role) values ($1, $2, 'owner')`, [
       householdId,
