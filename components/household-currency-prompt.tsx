@@ -17,6 +17,7 @@ export function HouseholdCurrencyPrompt() {
   const [choice, setChoice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,6 +34,8 @@ export function HouseholdCurrencyPrompt() {
     return () => { cancelled = true; };
   }, []);
 
+  // Documents already uploaded were read before the choice (Test engineer #534 L1): said once, in place of the box.
+  if (saved) return <p className="alert" role="status" data-testid="household-currency-saved">Saved. For documents you uploaded before, choose Read again on each one to use this currency.</p>;
   if (!needed) return null;
 
   const save = async (event: FormEvent) => {
@@ -47,6 +50,7 @@ export function HouseholdCurrencyPrompt() {
       // Nothing on the page changes: the choice is used when a document is read (lib/rag/ingest.ts), and a household with
       // no choice before has no amount that took one. So no reload, and nothing typed on the page is lost (Critic #534).
       setNeeded(false);
+      setSaved(true);
     } catch {
       setError("Could not save the currency. Check your connection and try again.");
     } finally {
