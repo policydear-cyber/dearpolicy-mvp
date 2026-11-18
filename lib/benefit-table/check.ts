@@ -918,7 +918,8 @@ const PROSE_TAIL = String.raw`(?:${CELL_TAIL}|(?:(?:payable|paid)\s+)?in\s+one\s
 const PROSE_SHARE = new RegExp(String.raw`\b(?:we|the\s+company|the\s+insurer|the\s+plan|the\s+policy|it)\s+(?:(?:will|shall)\s+pay|pays?)\s+(?:${SPELLED_NUMBER}[\s-]+){0,10}\(?\s*(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent)\s*\)?\s+of\s+${HEADLINE_SUM_NAME}${OF_THIS_PLAN}(?:\s*,?\s*${PROSE_TAIL})*\s*\.(?:\s|$)`, "iu");
 /** Words that make a benefit share its sum with another payment: "counted towards this benefit", "together pay at most",
  * "combined". Such a provision's share is left as read (Critic on #544, MEDIUM). */
-const SHARED_WITH = /\b(?:count(?:ed|s)?\s+(?:towards|against)|together\b[^.;]{0,60}\bat\s+most|in\s+total\b[^.;]{0,60}\bat\s+most|combined|aggregate)\b/i;
+const SHARED_WITH = /\b(?:count(?:ed|s)?\s+(?:towards|against)|together\b[^.;]{0,60}\bat\s+most|in\s+total\b[^.;]{0,60}\bat\s+most|combined|aggregate|what\s+remains|remaining\s+(?:sum|amount|balance))\b/i;
+const REPEATED = /\b(?:monthly|weekly|quarterly|annually|yearly|every\s+(?:month|week|year|quarter)|each\s+(?:month|week|year|quarter)|per\s+(?:month|week|annum|year)|a\s+(?:month|year)|for\s+\w+\s*(?:\(\d+\)\s*)?(?:consecutive\s+)?(?:months|years|weeks))\b/i;
 export function proseHeadlineShare(cell: string, value: number, next = "", words = "", provision = ""): boolean {
   // Spaces and line breaks read as one space; a tab stays, so a row's label cell before the sentence is seen as one.
   const all = cell.normalize("NFKC").replace(/[^\S\t]+/g, " ").replace(/ *\t[\s]*/g, "\t");
@@ -927,6 +928,9 @@ export function proseHeadlineShare(cell: string, value: number, next = "", words
   // amount paid under the Early Stage Benefit" each leave the share as read (Critic on #544, NEW-HIGH).
   const around = `${all}\n${next}\n${words}\n${provision.normalize("NFKC")}`;
   if (SHARE_LIFE.test(around) || TAKES_OFF.test(around) || SHARED_WITH.test(around)) return false;
+  // A share paid again and again ("This is paid monthly for 24 months", "each year") is not one sum: a percentage row has no
+  // period, so it is left as read (TE on #544).
+  if (REPEATED.test(`${all}\n${next}`)) return false;
   const pcts = [...all.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent\b)/gi)];
   if (pcts.length !== 1 || Math.abs(Number(pcts[0][1].replace(",", ".")) - value) > 0.0001) return false;
   const m = PROSE_SHARE.exec(all);
@@ -942,6 +946,12 @@ const CLAUSE_LINE = /^\s*(\d+(?:\.\d+)*)\.?[ \t]+\p{Lu}/u;
 /** The provision a sentence at [start, end) of a page is in: back to the nearest numbered clause line above it (or the page's
  * top), and on to the next numbered clause that is not one of that clause's own sub-clauses ("3.2" or "4" after "3.1", but
  * not "3.1.1"), or the page's end when no clause number was found above. At most 80 lines each way; the caller joins the pages around it. */
+/** Whether clause number `a` comes after `b` in a document's order ("3.2" and "4" after "3.1"; "1" and "3" do not). */
+function clauseAfter(a: string, b: string): boolean {
+  const x = a.split(".").map(Number), y = b.split(".").map(Number);
+  for (let k = 0; k < Math.max(x.length, y.length); k++) { const p = x[k] ?? -1, q = y[k] ?? -1; if (p !== q) return p > q; }
+  return false;
+}
 export function provisionAround(text: string, start: number, end: number): string {
   const lines = text.split("\n");
   let at = 0, first = 0, last = lines.length - 1;
@@ -952,7 +962,9 @@ export function provisionAround(text: string, start: number, end: number): strin
   last = Math.min(lines.length - 1, own + 80);
   for (let i = own + 1; i <= Math.min(lines.length - 1, own + 80); i++) {
     const m = CLAUSE_LINE.exec(lines[i]);
-    if (m && num && m[1] !== num && !m[1].startsWith(`${num}.`)) { last = i - 1; break; }
+    // Only a later clause ends it: "3.2" or "4" after "3.1". A sub-clause ("3.1.1") or a list inside the clause that counts
+    // from 1 again ("1. The illness ...", "2. Any Early Stage amount paid is deducted.") is the clause's own (TE on #544).
+    if (m && num && m[1] !== num && !m[1].startsWith(`${num}.`) && clauseAfter(m[1], num)) { last = i - 1; break; }
   }
   return lines.slice(first, last + 1).join("\n");
 }

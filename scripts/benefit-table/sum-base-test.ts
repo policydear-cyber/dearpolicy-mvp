@@ -698,6 +698,20 @@ test("A (Critic re-check 2 on #544): a label that says who pays is still a table
   assert.equal(proseHeadlineShare("Death\tChild\tWe will pay 100% of the Sum Assured.", 100), false, "two cells before the sentence");
 });
 
+for (const [what, page2] of [
+  ["a numbered list inside the clause with a deduction (TE P7c)", `3 BENEFITS\n${PROSE}\n1. The illness must be diagnosed by a specialist.\n2. Any Early Stage amount paid is deducted.\n3.2 Death Benefit`],
+  ["a payment repeated monthly", `3 BENEFITS\n${PROSE.replace("in one (1) lump sum.", "each month.")}`],
+  ["a payment repeated on the next line", `3 BENEFITS\n${PROSE}\nThis is paid monthly for 24 months.`],
+  ["only what remains of the sum", `3 BENEFITS\n${PROSE}\nAfter an Early Stage claim, only what remains of the Sum Assured is paid.`],
+] as const) test(`C control (TE on #544): ${what} leaves the share with no amount`, () => {
+  const quote = page2.includes("each month.") ? PROSE_QUOTE.replace("in one (1) lump sum.", "each month.") : PROSE_QUOTE;
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote }] });
+  const r = rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/);
+  assert.ok(!r || r.figure.kind === "none", JSON.stringify(r?.figure));
+});
+
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.error(`benefit-table sum base: ${passed} passed, ${failures.length} failed`);
