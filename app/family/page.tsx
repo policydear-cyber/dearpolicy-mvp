@@ -31,6 +31,13 @@ function ageToday(dob: string | null, today: string | undefined): number | null 
 /** "a, b and c" */
 function listWords(words: string[]) { return words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`; }
 
+/** The marker on a required field's label. Screen readers hear "required" from the field itself. */
+const Req = () => <span className="field-required" aria-hidden="true">*</span>;
+/** A field's own "Required" line, shown only after Add or Save was pressed with it empty. */
+const Missing = ({ id, show }: { id: string; show: boolean }) => show ? <small className="error" id={`${id}-error`}>Required</small> : null;
+/** Ties a field to its "Required" line while it shows. */
+const invalid = (id: string, show: boolean) => show ? { "aria-invalid": true as const, "aria-describedby": `${id}-error` } : {};
+
 /** Today as YYYY-MM-DD in the person's own time zone (a birth date can't be later). */
 function todayIso() {
   const d = new Date();
@@ -49,6 +56,10 @@ export default function FamilyPage() {
   const [dob, setDob] = useState("");
   const [preferred, setPreferred] = useState("");
   const [sex, setSex] = useState("");
+  /** Add was pressed with a field empty: each empty field now says "Required" (until it is filled). */
+  const [newTried, setNewTried] = useState(false);
+  /** Save was pressed on these people with a detail empty: each empty field now says "Required". */
+  const [editTried, setEditTried] = useState<Record<string, boolean>>({});
   /** Whether a sex can be saved yet (the database update for it is in place). Until then it is not asked for. */
   const [sexField, setSexField] = useState(false);
   /** The family list (and whether a sex can be saved) has loaded: until then the form can't know which fields it needs. */
@@ -100,27 +111,26 @@ export default function FamilyPage() {
 
   async function add(event: FormEvent) {
     event.preventDefault(); setStatus(""); setStatusFor(null); setStatusIsError(false);
-    if (!dob) return setStatus("Add their date of birth.");
+    const empty = newEmpty.find(([, isEmpty]) => isEmpty);
+    if (empty) { setNewTried(true); document.getElementById(`fm-new-${empty[0]}`)?.focus(); return; }
     if (dob > todayIso()) return setStatus("A date of birth can't be in the future.");
     if (dob < "1900-01-01") return setStatus("Check the year of that date of birth.");
-    if (sexField && !sex) return setStatus("Choose female, male or prefer not to say.");
-    if (!preferred.trim()) return setStatus("Add the name you call them.");
     const response = await fetch("/api/family", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: name, relationship, dateOfBirth: dob, preferredName: preferred.trim(), ...(sexField ? { sex } : {}) }) });
     const payload = await response.json();
     if (!response.ok) return setStatus(customerMessage(payload.error, "This family member couldn't be added. Try again in a moment."));
-    setName(""); setDob(""); setPreferred(""); setSex(""); setRelationship(""); setStatus("Family member added."); await refresh();
+    setName(""); setDob(""); setPreferred(""); setSex(""); setRelationship(""); setNewTried(false); setStatus("Family member added."); await refresh();
   }
 
   async function save(member: Member) {
-    const gaps = profileGaps(member, sexField);
-    if (gaps.length) { setStatusFor(member.id); setStatusIsError(true); return setStatus(`Add ${listWords(gaps)} to save.`); }
+    const empty = editEmpty(member).find(([, isEmpty]) => isEmpty);
+    if (empty) { setEditTried((t) => ({ ...t, [member.id]: true })); document.getElementById(`fm-${member.id}-${empty[0]}`)?.focus(); return; }
     if (member.date_of_birth && member.date_of_birth > todayIso()) return setStatus("A date of birth can't be in the future.");
     if (member.date_of_birth && member.date_of_birth < "1900-01-01") return setStatus("Check the year of that date of birth.");
     const response = await fetch(`/api/family/${member.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: member.display_name, relationship: member.relationship, dateOfBirth: member.date_of_birth, preferredName: member.preferred_name, notes: member.notes, ...(sexField ? { sex: member.sex ?? null } : {}) }) });
     const payload = await response.json();
     setStatusFor(member.id);
     setStatusIsError(!response.ok);
-    if (response.ok) setEditing(null);
+    if (response.ok) { setEditing(null); setEditTried((t) => ({ ...t, [member.id]: false })); }
     setStatus(response.ok ? `Saved ${member.display_name}.` : (customerMessage(payload.error, "Your changes couldn't be saved. Try again in a moment.")));
     if (response.ok) await refresh();
   }
@@ -150,6 +160,16 @@ export default function FamilyPage() {
     setStatus(response.ok ? `Removed ${member.display_name}.` : (customerMessage(payload.error, "This family member couldn't be removed. Try again in a moment.")));
     if (response.ok) await refresh();
   }
+
+  /** Which add-form fields are empty, by field id, in screen order. */
+  const newEmpty: [string, boolean][] = [["name", !name.trim()], ["relationship", !relationship], ["dob", !dob], ["sex", sexField && !sex], ["preferred", !preferred.trim()]];
+  const newShows = (field: string) => newTried && newEmpty.some(([f, isEmpty]) => f === field && isEmpty);
+  /** Which of a person's details are empty, by field id: the full name, and the details profileGaps asks for. */
+  function editEmpty(member: Member): [string, boolean][] {
+    const gaps = profileGaps(member, sexField).map((g) => PROFILE_GAP_FIELD[g]);
+    return [["name", !member.display_name.trim()], ...["relationship", "dob", "sex", "preferred"].map((f): [string, boolean] => [f, gaps.includes(f)])];
+  }
+  const editShows = (member: Member, field: string) => !!editTried[member.id] && editEmpty(member).some(([f, isEmpty]) => f === field && isEmpty);
 
   function update(id: string, patch: Partial<Member>) { setFamily((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item)); }
 
@@ -191,11 +211,11 @@ export default function FamilyPage() {
                     : <p data-testid="family-no-cover">No cover found in {member.policy_count === 1 ? "this document" : "these documents"} yet. You can still ask about {member.policy_count === 1 ? "it" : "them"} in <Link className="text-link" href="/chat">Ask DearPolicy</Link>.</p>)}
               </div>
               <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>
-                <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name</label><input id={`fm-${member.id}-name`} value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} /></div>
-                <div className="field"><label htmlFor={`fm-${member.id}-relationship`}>Relationship</label><select id={`fm-${member.id}-relationship`} required value={member.relationship ?? ""} onChange={(e) => update(member.id,{ relationship:e.target.value })}><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
-                <div className="field"><label htmlFor={`fm-${member.id}-dob`}>Date of birth</label><input id={`fm-${member.id}-dob`} required type="date" min="1900-01-01" max={today} value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} /></div>
-                {sexField ? <div className="field"><label htmlFor={`fm-${member.id}-sex`}>Sex</label><select id={`fm-${member.id}-sex`} required value={member.sex ?? ""} onChange={(e) => update(member.id,{ sex:e.target.value || null })}><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div> : null}
-                <div className="field"><label htmlFor={`fm-${member.id}-preferred`}>Preferred name</label><input id={`fm-${member.id}-preferred`} required placeholder="What you call them" value={member.preferred_name ?? ""} onChange={(e) => update(member.id,{ preferred_name:e.target.value || null })} /></div>
+                <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name <Req /></label><input id={`fm-${member.id}-name`} required value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} {...invalid(`fm-${member.id}-name`, editShows(member, "name"))} /><Missing id={`fm-${member.id}-name`} show={editShows(member, "name")} /></div>
+                <div className="field"><label htmlFor={`fm-${member.id}-relationship`}>Relationship <Req /></label><select id={`fm-${member.id}-relationship`} required value={member.relationship ?? ""} onChange={(e) => update(member.id,{ relationship:e.target.value })} {...invalid(`fm-${member.id}-relationship`, editShows(member, "relationship"))}><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select><Missing id={`fm-${member.id}-relationship`} show={editShows(member, "relationship")} /></div>
+                <div className="field"><label htmlFor={`fm-${member.id}-dob`}>Date of birth <Req /></label><input id={`fm-${member.id}-dob`} required type="date" min="1900-01-01" max={today} value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} {...invalid(`fm-${member.id}-dob`, editShows(member, "dob"))} /><Missing id={`fm-${member.id}-dob`} show={editShows(member, "dob")} /></div>
+                {sexField ? <div className="field"><label htmlFor={`fm-${member.id}-sex`}>Sex <Req /></label><select id={`fm-${member.id}-sex`} required value={member.sex ?? ""} onChange={(e) => update(member.id,{ sex:e.target.value || null })} {...invalid(`fm-${member.id}-sex`, editShows(member, "sex"))}><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select><Missing id={`fm-${member.id}-sex`} show={editShows(member, "sex")} /></div> : null}
+                <div className="field"><label htmlFor={`fm-${member.id}-preferred`}>Preferred name <Req /></label><input id={`fm-${member.id}-preferred`} required placeholder="What you call them" value={member.preferred_name ?? ""} onChange={(e) => update(member.id,{ preferred_name:e.target.value || null })} {...invalid(`fm-${member.id}-preferred`, editShows(member, "preferred"))} /><Missing id={`fm-${member.id}-preferred`} show={editShows(member, "preferred")} /></div>
               </div>
               {/* Removing someone says what happens before it is confirmed: a person still on a document can't be
                   removed (untick them there first; answers that used their cover are then marked out of date). */}
@@ -203,12 +223,10 @@ export default function FamilyPage() {
                 ? <><strong>{baseline[member.id]?.display_name ?? member.display_name} is still linked to {member.policy_count === 1 ? "a document" : `${member.policy_count} documents`}.</strong> Untick them on {member.policy_count === 1 ? "it" : "each one"} on the Documents page first. Saved answers that used their cover are then marked out of date when reopened.</>
                 : <><strong>Remove {baseline[member.id]?.display_name ?? member.display_name} from your household?</strong> This can&rsquo;t be undone. Saved answers that used their cover are marked out of date when reopened. If DearPolicy still has chats or claims about them, it keeps them and says so.</>}</div>}
               {statusFor === member.id && status && confirmId !== member.id ? <p className={`profile-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : undefined}>{status}</p> : null}
-              {(editing === member.id || isDirty(member)) && profileGaps(member, sexField).length
-                ? <p id={`fm-${member.id}-needs`} className="profile-add-why" data-testid="profile-edit-needs">Still needed to save: {listWords(profileGaps(member, sexField))}.</p> : null}
               <div className="profile-actions">
                 {editing === member.id || isDirty(member) ? <>
-                  <button className="button secondary" disabled={!isDirty(member) || profileGaps(member, sexField).length > 0} aria-describedby={`fm-${member.id}-needs`} onClick={() => save(member)}>{isDirty(member) ? "Save" : "Saved"}</button>
-                  <button className="button secondary" onClick={() => { update(member.id, baseline[member.id]); setEditing(null); }}>{isDirty(member) ? "Undo changes" : "Close"}</button>
+                  <button className="button secondary" disabled={!isDirty(member)} onClick={() => save(member)}>{isDirty(member) ? "Save" : "Saved"}</button>
+                  <button className="button secondary" onClick={() => { update(member.id, baseline[member.id]); setEditing(null); setEditTried((t) => ({ ...t, [member.id]: false })); }}>{isDirty(member) ? "Undo changes" : "Close"}</button>
                 </> : <button className="button secondary" aria-expanded={false} aria-controls={`fm-${member.id}-details`} onClick={() => setEditing(member.id)}>Edit details</button>}
                 {/* Someone still on a document can't be removed, so they are sent where the next step is, not offered a delete that fails. */}
                 {confirmId === member.id && member.policy_count
@@ -224,16 +242,14 @@ export default function FamilyPage() {
       {/* The people come first: a returning household opens this page to see or change them, and adds someone rarely. */}
       <section className="profile-add-panel" aria-label="Add a family member">
         {family.length ? <h3>Add a family member</h3> : null}
-        <form onSubmit={add} className="profile-add-grid" onChange={() => { if (status) { setStatus(""); setStatusFor(null); } }}>
-          <div className="field wide"><label htmlFor="fm-new-name">Full name, as on their policies</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen" autoComplete="off" required /></div>
-          <div className="field"><label htmlFor="fm-new-relationship">Relationship to you</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select></div>
-          <div className="field"><label htmlFor="fm-new-dob">Date of birth</label><input id="fm-new-dob" type="date" min="1900-01-01" max={today} value={dob} onChange={(e) => setDob(e.target.value)} required /></div>
-          {sexField ? <div className="field"><label htmlFor="fm-new-sex">Sex</label><select id="fm-new-sex" value={sex} onChange={(e) => setSex(e.target.value)} required><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div> : null}
-          <div className="field"><label htmlFor="fm-new-preferred">Preferred name</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="For example, Alex" autoComplete="off" required /></div>
-          <p className="profile-add-why">All fields are needed. The date of birth tells adult cover from child cover, sex tells &ldquo;my son&rdquo; from &ldquo;my daughter&rdquo;, and the preferred name is what you call them in Ask DearPolicy (it can be the same as their full name). What a policy prints always comes first.</p>
-          <button className="button primary" type="submit" disabled={!loaded || !name.trim() || !relationship || !dob || (sexField && !sex) || !preferred.trim()} aria-describedby="fm-new-needs">+ Add person</button>
-          {loaded && (name.trim() || relationship || dob || sex || preferred.trim()) && (!name.trim() || !relationship || !dob || (sexField && !sex) || !preferred.trim())
-            ? <p id="fm-new-needs" className="profile-add-why">Still needed: {[!name.trim() ? "full name" : null, !relationship ? "relationship" : null, !dob ? "date of birth" : null, sexField && !sex ? "sex" : null, !preferred.trim() ? "preferred name" : null].filter(Boolean).join(", ")}.</p> : null}
+        <form onSubmit={add} noValidate className="profile-add-grid" onChange={() => { if (status) { setStatus(""); setStatusFor(null); } }}>
+          <div className="field wide"><label htmlFor="fm-new-name">Full name, as on their policies <Req /></label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen" autoComplete="off" required {...invalid("fm-new-name", newShows("name"))} /><Missing id="fm-new-name" show={newShows("name")} /></div>
+          <div className="field"><label htmlFor="fm-new-relationship">Relationship to you <Req /></label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required {...invalid("fm-new-relationship", newShows("relationship"))}><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select><Missing id="fm-new-relationship" show={newShows("relationship")} /></div>
+          <div className="field"><label htmlFor="fm-new-dob">Date of birth <Req /></label><input id="fm-new-dob" type="date" min="1900-01-01" max={today} value={dob} onChange={(e) => setDob(e.target.value)} required {...invalid("fm-new-dob", newShows("dob"))} /><Missing id="fm-new-dob" show={newShows("dob")} /></div>
+          {sexField ? <div className="field"><label htmlFor="fm-new-sex">Sex <Req /></label><select id="fm-new-sex" value={sex} onChange={(e) => setSex(e.target.value)} required {...invalid("fm-new-sex", newShows("sex"))}><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select><Missing id="fm-new-sex" show={newShows("sex")} /></div> : null}
+          <div className="field"><label htmlFor="fm-new-preferred">Preferred name <Req /></label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="For example, Alex" autoComplete="off" required {...invalid("fm-new-preferred", newShows("preferred"))} /><Missing id="fm-new-preferred" show={newShows("preferred")} /></div>
+          {/* Never disabled once loaded: pressing Add with a field empty marks each empty field "Required". */}
+          <button className="button primary" type="submit" disabled={!loaded}>+ Add person</button>
         </form>
         {status && <div className="upload-status" role="status">{status}</div>}
       </section>
