@@ -20,6 +20,8 @@ const partLabel = (n: string) => homePolicyName(clean(n).replace(/\s*\((?:group\
 const withPeriod = (text: string, period: string | null | undefined) => (period ? `${text} a ${period}` : text);
 /** A figure is shown only with the currency its line states: a bare or missing one never becomes S$ (Home rule, 16 Nov). */
 const priced = (amount: number | null | undefined, currency: string | null | undefined) => amount != null && Number.isFinite(amount) && statedCurrencyCode(currency) ? formatMoney(amount, currency) : null;
+const partNotes = (p: SummaryPart) => [p.conditional && "conditions apply", p.accelerates && "paid instead of the death benefit, not on top of it",
+  p.otherTile && "pays only on what another cover type covers"].filter((n): n is string => !!n);
 const NO_CURRENCY = "the line prints no currency, so no amount is shown";
 
 export function coverSummary(c: SummaryCover): CoverSummary | null {
@@ -36,15 +38,13 @@ export function coverSummary(c: SummaryCover): CoverSummary | null {
     const amount = figure && c.amount != null ? withPeriod(figure, parts[0]?.period) : figure;
     const label = name ? partLabel(name) : "Your policy";
     if (!amount) return { lines: [{ name: label, amount: null, notes: [NO_CURRENCY] }], total: null, why: null };
-    return { lines: [{ name: label, amount, notes: [] }], total: amount, why: null };
+    // A single part keeps what qualifies it ("paid instead of the death benefit"), as the list does (TE PR 535 F2).
+    return { lines: [{ name: label, amount, notes: parts.length === 1 ? partNotes(parts[0]) : [] }], total: amount, why: null };
   }
   if (parts.length) {
     const withheld = Boolean(c.partial || c.reviewRequired);
     const lines = parts.map((p): SummaryLine => {
-      const notes: string[] = [];
-      if (p.conditional) notes.push("conditions apply");
-      if (p.accelerates) notes.push("paid instead of the death benefit, not on top of it");
-      if (p.otherTile) notes.push("pays only on what another cover type covers");
+      const notes = partNotes(p);
       // A partly confirmed cover, or one whose policy prints several amounts, shows no amount on any line: a confirmed
       // part of a policy's cover is never shown as what that policy pays (Critic PR 535 H1, M1).
       if (withheld) { notes.push(c.partial ? "not all of this cover's lines are confirmed yet" : "this policy prints more than one amount; see each with its page below"); return { name: partLabel(p.name), amount: null, notes }; }

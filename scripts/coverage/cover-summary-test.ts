@@ -30,6 +30,17 @@ test("one figure paid per period keeps its period", () => {
   const d = coverSummary({ ...base, displayAmount: "S$2,400 a month", policyNames: ["Disability Income"] })!;
   assert.equal(d.total, "S$2,400 a month");
 });
+test("a single qualified part keeps its qualifier on the amount (TE PR 535 F2)", () => {
+  const s = coverSummary({ ...base, amount: 250000, currency: "SGD", policyNames: ["Early CI"], parts: [{ name: "Early CI", amount: 250000, currency: "SGD", accelerates: true }] })!;
+  assert.match(s.total!, /250,000/);
+  assert.match(s.lines[0].notes.join(" "), /instead of the death benefit/);
+});
+test("the page clears an earlier cover's summary before loading another person's or cover's (TE PR 535 F1)", () => {
+  const page = readFileSync("app/coverage/page.tsx", "utf8");
+  assert.match(page, /useEffect\(\(\)=>\{setSummary\(null\);/);
+  assert.match(page, /activeMember\?\.id!==member\)\{setSummary\(null\);return;\}/);
+  assert.match(page, /catch\(\(\)=>\{if\(live\)setSummary\(null\);\}\)/);
+});
 test("a figure with no stated currency (or a bare $) is never shown", () => {
   for (const currency of [null, "$", ""]) {
     const s = coverSummary({ ...base, amount: 120000, currency, policyNames: ["Term Life"] })!;
