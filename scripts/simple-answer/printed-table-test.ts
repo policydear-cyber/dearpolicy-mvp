@@ -115,10 +115,15 @@ t("a leftover quote that is a fragment or a bare label goes; a whole sentence, a
     pt("k3", "Term Plan", "As of 06/10/2022", { conditions: ["Only while the policy is in force"] }),
     pt("k4", "Term Plan", "As of 06/10/2022", { amount: { text: "S$100,000", currencyResolved: true, illustration: false } as never }),
     { id: "k5", kind: "fact", text: "The policy covers death.", fullText: "", conditions: [] } as AnswerStatement,
+    // A short whole sentence is an exclusion worth keeping (Critic #546 LOW-3); a short cut-off one is not.
+    pt("k6", "Term Plan", "Cosmetic surgery is not covered."),
+    pt("k7", "Term Plan", "Pre-existing conditions are excluded."),
+    pt("f3", "Term Plan", "and is not covered."),
+    pt("f4", "Term Plan", "Pre-existing conditions are excluded unless"),
   ] };
   const removed = dropQuoteFragments(answer);
-  assert.deepEqual(answer.statements.map((s) => s.id), ["k1", "k2", "k3", "k4", "k5"]);
-  assert.equal(removed.length, 2);
+  assert.deepEqual(answer.statements.map((s) => s.id), ["k1", "k2", "k3", "k4", "k5", "k6", "k7"]);
+  assert.equal(removed.length, 4);
 });
 
 console.log(`printed table: ${passed} passed, ${failures.length} failed`);

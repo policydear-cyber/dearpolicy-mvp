@@ -153,6 +153,11 @@ async function main() {
     assert.match(libraryFact(two, files[1]), /^Example Insurance endorsement \(uploaded 20 Oct 2026\) was read\./);
     assert.match(libraryFact({ ...h, documents: [files[0]] }, files[0]), /^Example Insurance endorsement was read\./);
     assert.doesNotMatch(libraryFact(two, files[1]), /0a1b2c3d|output_/);
+    // Uploaded the same day too: told apart by their order that day, never the same words twice (Critic #546 LOW-4).
+    const sameDay = [files[0], { ...files[1], uploadedAt: "2026-09-28T05:00:00Z" }];
+    const day = { ...h, documents: sameDay };
+    assert.match(libraryFact(day, sameDay[0]), /^Example Insurance endorsement \(upload 1 of 2 on 28 Sept 2026\) was read\./);
+    assert.match(libraryFact(day, sameDay[1]), /^Example Insurance endorsement \(upload 2 of 2 on 28 Sept 2026\) was read\./);
     // A name a person gave the file is the card's title, said once.
     assert.match(libraryFact(h, { ...plain, name: "Lim travel.pdf" }), /^Lim travel was read\./);
   });

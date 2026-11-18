@@ -464,7 +464,11 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   // they left out stays in the turn's report).
   // Rows of a printed figures table are shown as a table, not as quoted strings.
   if (answer.statements) answer.statements = tablesFromPrintedRows(answer.statements, household, (d) => docLabel(household, d));
-  report.sentencesLeftOut.push(...dropQuoteFragments(answer));
+  const fragments = dropQuoteFragments(answer);
+  report.sentencesLeftOut.push(...fragments);
+  // Every point was a cut-off quote and the bottom line introduces them: the answer says nothing was shown, never a bare
+  // introduction to nothing (Critic #546 LOW-3; the same rule as after the checks).
+  if (fragments.length && !(answer.statements ?? []).length && INTRODUCES.test(answer.bottomLine ?? answer.summary ?? "")) answer.statements = [{ id: "nothing-shown", kind: "uncertainty", text: NOTHING_SHOWN, fullText: NOTHING_SHOWN, conditions: [] }];
   report.sentencesLeftOut.push(...declutterAnswer(answer));
   // How to reach the insurer, as the household's own documents print it, when the answer gives next steps or is about
   // claiming. Read by the server from the stored pages; never the model's words.

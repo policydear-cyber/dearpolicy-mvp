@@ -174,7 +174,9 @@ export function dropQuoteFragments(answer: { statements?: AnswerStatement[] }): 
     if (!m) return true;
     const quote = m[2].trim();
     const row = quote.split(/\r?\n/).some((l) => isDataRow(cellsOf(l)));
-    const sentence = /[.!?)”"]$/.test(quote) && quote.split(/\s+/).length >= 6;
+    // A whole sentence, however short ("Cosmetic surgery is not covered."), stays: it starts with a capital or runs to six
+    // words, and ends as a sentence does (Critic #546 LOW-3).
+    const sentence = /[.!?][)”"’]?$/.test(quote) && (/^[“"‘(]?\p{Lu}/u.test(quote) || quote.split(/\s+/).length >= 6);
     if (row || sentence) return true;
     removed.push(st.text);
     return false;

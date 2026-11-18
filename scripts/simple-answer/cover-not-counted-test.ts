@@ -274,6 +274,16 @@ async function main() {
     assert.doesNotMatch(said, /\b(?:two|three|four)\b[^.]*\bdocuments?\b[^.]*not fully read/i, said);
     assert.doesNotMatch(said, /\.pdf\b/, said);
   });
+  await check("every way of counting files about reading goes; a count of cover that says nothing of reading stays (Critic #546 MED-2)", async () => {
+    const q = "How much death cover does Jane have, and which of her documents aren't fully read?";
+    for (const count of ["Three documents could not be read.", "Two of your documents haven't been fully read.", "Two documents aren't fully read.",
+      "Two of Jane's documents are not fully read.", "Three of your documents are unreadable.", "Two documents are still being read."]) {
+      const a = await mixed(q, `Jane has a death benefit from Harbour Term Life. ${count}`);
+      assert.equal(a.bottomLine, "Jane has a death benefit from Harbour Term Life.", count);
+    }
+    const lead = "Jane has death cover under two policies.";
+    assert.equal((await mixed(q, lead)).bottomLine, lead);
+  });
   await check("a count the model gives when the question is not about reading stays (negative control)", async () => {
     const lead = "Jane has a death benefit from Harbour Term Life. Two of her documents are not fully read.";
     const a = await mixed("How much death cover does Jane have?", lead);

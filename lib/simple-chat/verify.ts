@@ -1639,7 +1639,10 @@ const TERM_OR_PLAN_BEFORE = /\b(?:term|plans?)(?:\s*\((?:years?|yrs?|months?)\))
  * (lib/documents/household-currency householdCurrencyPages): null unless the household chose one and nothing the document
  * or its other documents of the same policy print names another currency. */
 function householdCurrencyFor(household: Household, doc: HouseholdDocument, page: number): string | null {
-  if (!household.currency) return null;
+  // Only on a page where the stored reading already gave a figure the household's currency from the setting: the same
+  // decision Home made at upload, which also weighed the currencies the page image names and the related documents of every
+  // policy number the reading found (Critic #546 HIGH-1: page text alone can lose an "RM" the image check confirmed).
+  if (!household.currency || !doc.settingCurrencyPages?.includes(page)) return null;
   const key = (n: string | null | undefined) => String(n ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const related = key(doc.policyNumber) ? household.documents.filter((o) => o !== doc && !o.supersededAt && key(o.policyNumber) === key(doc.policyNumber)).flatMap((o) => o.pages.map((p) => p.text)) : [];
   // A page that could not be read may print another currency: it is not known, so it blocks the fill (unknownPage).
@@ -2978,8 +2981,12 @@ export function fileTitle(household: Household, d: HouseholdDocument): string {
   const title = titleOf(d);
   // Never a file name in an answer (DC, 18 Nov: answers lead with plain names). Two live files the cards title alike are
   // told apart by upload day (overnight run 23 Oct, N195, N282).
-  const twin = household.documents.some((o) => o !== d && !o.supersededAt && flat(titleOf(o)) === flat(title));
-  return twin && d.uploadedAt ? `${title} (uploaded ${sgDay(d.uploadedAt)})` : title;
+  const twins = household.documents.filter((o) => !o.supersededAt && flat(titleOf(o)) === flat(title));
+  if (twins.length < 2 || !d.uploadedAt) return title;
+  // Uploaded the same day too: told apart by their order that day, as the Documents page lists them (Critic #546 LOW-4).
+  const day = sgDay(d.uploadedAt), sameDay = twins.filter((o) => o.uploadedAt && sgDay(o.uploadedAt) === day);
+  const nth = sameDay.indexOf(d);
+  return sameDay.length > 1 && nth >= 0 ? `${title} (upload ${nth + 1} of ${sameDay.length} on ${day})` : `${title} (uploaded ${day})`;
 }
 export function libraryFact(household: Household, d: HouseholdDocument): string {
   // A point about the file itself names the file as its Documents page card does, so the household can find it there.
@@ -3686,7 +3693,10 @@ function readPastWords(d: HouseholdDocument, tableStates: ReadonlyMap<string, st
 const ownedBy = (d: HouseholdDocument, person: string) =>
   d.linkedPeople.some((p) => baseName(p) === person) || (!d.linkedPeople.length && (!d.uploadedFor || baseName(d.uploadedFor) === person));
 /** A sentence that counts the files not read in full ("Two of his documents are not fully read"). */
-const FILE_COUNT = new RegExp(`\\b(?:${COUNT_WORDS.join("|")}|\\d+|both|all)\\b(?:\\s+of)?(?:\\s+(?:your|his|her|their|the|these|those))?(?:\\s+\\w+){0,3}?\\s+(?:documents?|files?|policies|uploads?)\\b[^.!?]*?\\b(?:not (?:been )?(?:fully |completely )?read|read (?:only )?in part|(?:partly|partially) read|only partly read)\\b`, "i");
+// Any count of files that says anything about reading them: "could not be read", "haven't been fully read", "are
+// unreadable", "are still being read", "Two of Mary's documents…" (Critic #546 MED-2). A count of policies that says
+// nothing about reading ("three policies with death cover") is not one.
+const FILE_COUNT = new RegExp(`\\b(?:${COUNT_WORDS.join("|")}|\\d+|both|all)\\b(?:\\s+[\\w'’-]+){0,4}?\\s+(?:documents?|files?|policies|uploads?)\\b[^.!?]*?\\b(?:read|unread|unreadable|reading|on hold)\\b`, "i");
 /** The bottom line without its sentences counting files not read in full, which are reported. */
 function withoutFileCounts(text: string, dropped: string[]): string {
   const all = sentences(text);

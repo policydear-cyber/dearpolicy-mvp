@@ -25,14 +25,16 @@ const ID = "eeeeeeee-0000-4000-8000-0000000000c1";
 const PERSON = "Tan Mei Ling Rachel";
 
 /** A two-page component schedule. `lines` are the component rows [name, sum]; `extra` adds a line to page 1. */
-function build(lines: [string, string][], o: { extra?: string; head?: string; currency?: string | null } = {}) {
+function build(lines: [string, string][], o: { extra?: string; head?: string; currency?: string | null; settled?: number[] } = {}) {
   const row = ([n, s]: [string, string]) => `${n}\tIn Force\t${s}\t0.00\t02-Mar-2015\t02-Mar-2040`;
   const page1 = ["Client Information", `Policyowner:\t${PERSON}`, "Policy Number:\t70112233", o.extra ?? "Policy Status:\tIn Force"].join("\n");
   const page2 = ["Benefit Details:", `Life Assured Name:\t${PERSON}`, o.head ?? "Component\tStatus\tSum Assured\tComponent Premium\tCover Start Date\tCover Expiry Date", ...lines.map(row),
     "Example Assurance (Pte) Limited\tCONFIDENTIAL"].join("\n");
   const doc: Household["documents"][number] = { policyId: ID, name: "Harbour Protector.pdf", insurer: "Example Assurance", productName: "Harbour Protector", policyNumber: "70112233",
     documentType: null, documentRole: "personal_schedule", effectiveDate: null, expiryDate: null, uploadedAt: "2026-10-01", uploadedFor: null, linkedPeople: [PERSON], supersededAt: null,
-    processingStatus: "ready", pages: [{ page: 1, text: page1 }, { page: 2, text: page2 }] };
+    processingStatus: "ready", pages: [{ page: 1, text: page1 }, { page: 2, text: page2 }],
+    // The pages Home's stored reading gave the setting's currency (policy_coverages with its note): page 2 by default.
+    settingCurrencyPages: o.settled ?? (o.currency ? [2] : []) };
   const house: Household = { accountId: ACC, members: [{ name: PERSON, relationship: "self" }], documents: [doc], currency: o.currency ?? null };
   const src: SourceDoc = { id: ID, name: doc.name, readable: true, pages: doc.pages };
   const num = (s: string) => Number(s.replace(/[^\d.]/g, ""));
@@ -142,6 +144,10 @@ test("H3 the document states the currency itself: no settings note", () => {
 });
 test("H4 household chose no currency: as before, currency not stated", () => {
   assert.deepEqual(ask(build(LINES, { currency: null }), /^Total and Permanent Disability/).cards.map((c) => [c.text, c.currencyResolved]), [["100,000", false]]);
+});
+test("H6 Home did not give this page the setting's currency (say the image check confirmed RM): never filled (Critic #546 HIGH-1)", () => {
+  assert.deepEqual(ask(build(LINES, { currency: "SGD", settled: [] }), /^Total and Permanent Disability/).cards.map((c) => [c.text, c.currencyResolved]), [["100,000", false]]);
+  assert.deepEqual(ask(build(LINES, { currency: "SGD", settled: [1] }), /^Total and Permanent Disability/).cards.map((c) => [c.text, c.currencyResolved]), [["100,000", false]]);
 });
 test("H5 a count is never money, even with a household currency", () => {
   assert.deepEqual(ask(build([["Harbour Protector", "100,000.00"], ["Physiotherapy visits per year", "12.00"]], { currency: "SGD" }), /^Physiotherapy/).cards, []);
