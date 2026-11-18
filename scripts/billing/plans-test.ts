@@ -225,11 +225,11 @@ test("counting and limits, per household", async () => {
     await db.query("DELETE FROM chat_conversations WHERE account_id=$1", [A]);
     assert.equal((await H.takeQuestion(A)).allowed, false, "still used up after deleting chats");
     // Last month's count is last month's.
-    await db.query("UPDATE household_question_counts SET month=(date_trunc('month',now())-interval '1 day')::date WHERE account_id=$1", [A]);
+    await db.query("UPDATE household_question_counts SET month=(date_trunc('month',now() AT TIME ZONE 'UTC')-interval '1 day')::date WHERE account_id=$1", [A]);
     assert.equal(await H.questionsThisMonth(A), 0);
     assert.equal((await H.takeQuestion(A)).allowed, true, "a new month starts again");
     // Ten at once, one left: only one gets through.
-    await db.query("UPDATE household_question_counts SET questions=9 WHERE account_id=$1 AND month=date_trunc('month',now())::date", [A]);
+    await db.query("UPDATE household_question_counts SET questions=9 WHERE account_id=$1 AND month=date_trunc('month',now() AT TIME ZONE 'UTC')::date", [A]);
     const burst = await Promise.all(Array.from({ length: 10 }, () => H.takeQuestion(A)));
     assert.equal(burst.filter((r) => r.allowed).length, 1, "questions sent together can't all slip past the limit");
     for (let i = 0; i < 30; i++) await H.takeQuestion(B);
@@ -243,6 +243,29 @@ test("counting and limits, per household", async () => {
   } finally {
     delete process.env.DEARPOLICY_PLAN_LIMITS;
   }
+});
+
+test("uploads sent at the same moment can't all pass the document limit (TE F6)", async () => {
+  const db = await database();
+  const H = await import("@/lib/billing/household-plan");
+  const D = "00000000-0000-0000-0000-0000000b1e00", PERSON_D = "61000000-0000-4000-8000-000000000004";
+  await db.query("INSERT INTO accounts(id,name) VALUES($1,'Koh household')", [D]);
+  await db.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Koh Li Hua','self')", [PERSON_D, D]);
+  const add = (n: number) => (x: { query: (t: string, p?: unknown[]) => Promise<unknown> }) => x.query(
+    `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,quarantine_status) VALUES($1,$2,$3,$4,$5,$6,'queued','scan_clean')`,
+    [pid(500 + n), D, PERSON_D, `d-${n}.pdf`, `kd-${n}`, `hd-${n}`]).then(() => undefined);
+  for (let n = 0; n < 4; n++) await add(n)({ query: (t, p) => db.query(t, p as unknown[]) });
+  process.env.DEARPOLICY_PLAN_LIMITS = "on";
+  try {
+    const results = await Promise.all(Array.from({ length: 8 }, (_, i) => H.insertWithinDocumentLimit(D, {}, add(10 + i))));
+    assert.equal(results.filter((r) => r.allowed).length, 1, "4 of 5: exactly one of eight gets the last place");
+    assert.equal(await H.keptDocumentCount(D), 5);
+    await assert.rejects(H.insertWithinDocumentLimit(D, { replacingPolicyId: pid(500) }, async () => { throw Object.assign(new Error("dup"), { code: "23505" }); }), /dup/, "an insert failure is passed on, and rolled back");
+    assert.equal(await H.keptDocumentCount(D), 5);
+  } finally {
+    delete process.env.DEARPOLICY_PLAN_LIMITS;
+  }
+  assert.equal((await H.insertWithinDocumentLimit(D, {}, add(30))).allowed, true, "limits off: recorded as before");
 });
 
 test("a household can't give itself a plan: no browser privilege on household_plans", async () => {
@@ -319,6 +342,7 @@ test("routes: the chat refuses the 11th Free question before anything is sent; t
   assert.match(source, /code:plan\.code,upgradePath:"\/usage"\},\{status:429\}/);
   const accept = readFileSync("app/api/policies/upload/accept.ts", "utf8");
   assert.ok(accept.indexOf("mayAddDocument(") < accept.indexOf("INSERT INTO policies"), "checked before the document is recorded");
+  assert.ok(accept.indexOf("insertWithinDocumentLimit(") > 0 && accept.indexOf("insertWithinDocumentLimit(") < accept.indexOf("INSERT INTO policies"), "and checked again with the insert, under the lock");
   assert.ok(accept.indexOf("mayAddDocument(") < accept.indexOf("savePolicyFile("), "and before it is stored");
   assert.match(readFileSync("app/api/policies/upload/start/route.ts", "utf8"), /mayAddDocument\(ctx\.householdId/);
   const reprocess = readFileSync("app/api/policies/reprocess/route.ts", "utf8");

@@ -14,7 +14,7 @@
  * meters, and nothing is refused: so the table can be created, and the owner's own household given a complimentary
  * plan, before any household is held to a limit.
  */
-import { query } from "@/lib/db/client";
+import { pool, query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { PLANS, checkDocumentLimit, checkQuestionLimit, isPlanId, type BillingInterval, type LimitCheck, type PlanId } from "@/lib/plans/catalogue";
 
@@ -48,12 +48,17 @@ export class PlanCheckUnavailable extends Error {
   }
 }
 
+/** Where a read runs: the shared pool, or the connection of a transaction that holds the plan lock (a second pool
+ * connection taken while holding it could wait forever on a small pool). */
+type Reader = { query: <T extends Record<string, unknown>>(text: string, params?: unknown[]) => Promise<{ rows: T[] }> };
+const shared: Reader = { query: (text, params) => query(text, params ?? []) as never };
+
 const isMissingTable = (error: unknown) => (error as { code?: string } | null)?.code === "42P01";
 
-export async function readHouseholdPlan(householdId: string): Promise<HouseholdPlan> {
+export async function readHouseholdPlan(householdId: string, db: Reader = shared): Promise<HouseholdPlan> {
   let row: { plan: string; status: string; billing_interval: string | null; current_period_end: string | null; stripe_customer_id: string | null } | undefined;
   try {
-    row = (await query<{ plan: string; status: string; billing_interval: string | null; current_period_end: string | null; stripe_customer_id: string | null }>(
+    row = (await db.query<{ plan: string; status: string; billing_interval: string | null; current_period_end: string | null; stripe_customer_id: string | null }>(
       `SELECT plan,status,billing_interval,current_period_end::text,stripe_customer_id FROM household_plans WHERE account_id=$1`, [householdId])).rows[0];
   } catch (error) {
     if (isMissingTable(error) && !planLimitsEnforced()) return FREE;
@@ -72,9 +77,9 @@ export async function readHouseholdPlan(householdId: string): Promise<HouseholdP
 }
 
 /** Documents that count towards the plan: kept (not deleted), current (not replaced by a newer copy) and not unreadable. */
-export async function keptDocumentCount(householdId: string): Promise<number> {
+export async function keptDocumentCount(householdId: string, db: Reader = shared): Promise<number> {
   try {
-    const row = (await query<{ count: number }>(
+    const row = (await db.query<{ count: number }>(
       `SELECT count(*)::int AS count FROM policies WHERE account_id=$1 AND superseded_at IS NULL AND processing_status<>'failed' AND ${activePredicate()}`,
       [householdId])).rows[0];
     return Number(row?.count ?? 0);
@@ -88,7 +93,7 @@ export async function keptDocumentCount(householdId: string): Promise<number> {
 export async function questionsThisMonth(householdId: string): Promise<number> {
   try {
     const row = (await query<{ questions: number }>(
-      `SELECT questions FROM household_question_counts WHERE account_id=$1 AND month=date_trunc('month',now())::date`, [householdId])).rows[0];
+      `SELECT questions FROM household_question_counts WHERE account_id=$1 AND month=date_trunc('month',now() AT TIME ZONE 'UTC')::date`, [householdId])).rows[0];
     return Number(row?.questions ?? 0);
   } catch (error) {
     if (!isMissingTable(error) || planLimitsEnforced()) throw new PlanCheckUnavailable(error);
@@ -104,9 +109,9 @@ export async function questionsThisMonth(householdId: string): Promise<number> {
 }
 
 /** Whether a document counts towards the plan now (this household's, kept, current and not unreadable). */
-async function documentCounts(householdId: string, policyId: string): Promise<boolean> {
+async function documentCounts(householdId: string, policyId: string, db: Reader = shared): Promise<boolean> {
   try {
-    return (await query(
+    return (await db.query(
       `SELECT 1 FROM policies WHERE id=$1 AND account_id=$2 AND superseded_at IS NULL AND processing_status<>'failed' AND ${activePredicate()}`,
       [policyId, householdId])).rows.length > 0;
   } catch (error) {
@@ -117,11 +122,12 @@ async function documentCounts(householdId: string, policyId: string): Promise<bo
 /** May this household keep one more document? Always yes while limits are off. A newer copy of a document that already
  * counts takes its place; a newer copy of one that doesn't (unreadable, or not this household's) is one more (TE F4, F5).
  * `rereading`: an unreadable document read again would start to count (TE F3); a counted one already does. */
-export async function mayAddDocument(householdId: string, opts: { replacingPolicyId?: string | null; rereadingPolicyId?: string | null } = {}): Promise<LimitCheck> {
+export async function mayAddDocument(householdId: string, opts: { replacingPolicyId?: string | null; rereadingPolicyId?: string | null } = {}, db: Reader = shared): Promise<LimitCheck> {
   if (!planLimitsEnforced()) return { allowed: true };
   const existing = opts.replacingPolicyId ?? opts.rereadingPolicyId ?? null;
-  if (existing && /^[0-9a-f-]{36}$/i.test(existing) && await documentCounts(householdId, existing)) return { allowed: true };
-  const [plan, kept] = await Promise.all([readHouseholdPlan(householdId), keptDocumentCount(householdId)]);
+  if (existing && /^[0-9a-f-]{36}$/i.test(existing) && await documentCounts(householdId, existing, db)) return { allowed: true };
+  const plan = await readHouseholdPlan(householdId, db);
+  const kept = await keptDocumentCount(householdId, db);
   return checkDocumentLimit(plan.planId, kept);
 }
 
@@ -131,7 +137,7 @@ export async function mayAddDocument(householdId: string, opts: { replacingPolic
 export async function takeQuestion(householdId: string): Promise<LimitCheck> {
   if (!planLimitsEnforced()) {
     await query(
-      `INSERT INTO household_question_counts(account_id,month,questions) VALUES($1,date_trunc('month',now())::date,1)
+      `INSERT INTO household_question_counts(account_id,month,questions) VALUES($1,date_trunc('month',now() AT TIME ZONE 'UTC')::date,1)
        ON CONFLICT (account_id,month) DO UPDATE SET questions=household_question_counts.questions+1`, [householdId]).catch(() => undefined);
     return { allowed: true };
   }
@@ -140,7 +146,7 @@ export async function takeQuestion(householdId: string): Promise<LimitCheck> {
   let taken: number | null;
   try {
     taken = (await query<{ questions: number }>(
-      `INSERT INTO household_question_counts(account_id,month,questions) VALUES($1,date_trunc('month',now())::date,1)
+      `INSERT INTO household_question_counts(account_id,month,questions) VALUES($1,date_trunc('month',now() AT TIME ZONE 'UTC')::date,1)
        ON CONFLICT (account_id,month) DO UPDATE SET questions=household_question_counts.questions+1
        WHERE household_question_counts.questions<$2
        RETURNING questions`, [householdId, limit])).rows[0]?.questions ?? null;
@@ -148,4 +154,46 @@ export async function takeQuestion(householdId: string): Promise<LimitCheck> {
     throw new PlanCheckUnavailable(error);
   }
   return taken == null ? checkQuestionLimit(plan.planId, limit) : { allowed: true };
+}
+
+type Executor = { query: (text: string, params?: unknown[]) => Promise<unknown> };
+
+/** Records a new document only if the household's plan still has room, with the count and the insert under one
+ * per-household lock: uploads sent at the same moment can't all pass the limit (TE F6). `insert` runs inside the
+ * transaction on its connection; a failure rolls it back and is thrown on. While limits are off it runs as before, with
+ * no lock. */
+export async function insertWithinDocumentLimit(householdId: string, opts: { replacingPolicyId?: string | null }, insert: (db: Executor) => Promise<void>): Promise<LimitCheck> {
+  if (!planLimitsEnforced()) {
+    await insert(pool);
+    return { allowed: true };
+  }
+  const client = await pool.connect();
+  let open = false;
+  try {
+    await client.query("BEGIN");
+    open = true;
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('dearpolicy-plan-documents:' || $1::text))", [householdId]);
+    let check: LimitCheck;
+    try {
+      check = await mayAddDocument(householdId, opts, client as unknown as Reader);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      open = false;
+      throw error;
+    }
+    if (!check.allowed) {
+      await client.query("ROLLBACK");
+      open = false;
+      return check;
+    }
+    await insert(client);
+    await client.query("COMMIT");
+    open = false;
+    return { allowed: true };
+  } catch (error) {
+    if (open) await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }

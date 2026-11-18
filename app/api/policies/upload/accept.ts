@@ -24,7 +24,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { maskIdentityText } from "@/lib/chat/identity-numbers";
 import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
 import { noteOwnerChosen, noteOwnerUnsure } from "@/lib/policies/upload-owner";
-import { mayAddDocument, PlanCheckUnavailable } from "@/lib/billing/household-plan";
+import { insertWithinDocumentLimit, mayAddDocument, PlanCheckUnavailable } from "@/lib/billing/household-plan";
 
 /** The largest document DearPolicy accepts. Direct uploads carry it to
  * storage; the classic multipart route is only for files the platform lets
@@ -160,14 +160,20 @@ export async function acceptPolicyUpload(args: {
 
   try {
     // Trusted server connection; every value is server-derived. Browser
-    // sessions hold no INSERT privilege on policies.
-    await pool.query(
+    // sessions hold no INSERT privilege on policies. The plan's document limit is checked again here, with the insert,
+    // under one per-household lock, so uploads sent at the same moment can't all pass it (TE F6).
+    const recorded = await insertWithinDocumentLimit(ctx.householdId, { replacingPolicyId: outcome.verifiedSupersedesId }, (db) => db.query(
       `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,processing_stage,processing_progress,processing_message,supersedes_id)
        VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,$7,$8)`,
       [policyId, ctx.householdId, outcome.familyMemberId, args.filename, storageKey, fileHash,
         malwareScanningIntentionallyDisabled() ? "Document received — reading and extracting information." : "Waiting to be analysed…",
         outcome.verifiedSupersedesId],
-    );
+    ).then(() => undefined));
+    if (!recorded.allowed) {
+      await discardStored();
+      if (!args.storedKey) await deletePolicyFile(storageKey).catch(() => undefined);
+      return NextResponse.json({ error: recorded.message, reasonCode: "PLAN_DOCUMENT_LIMIT", upgradePath: "/usage" }, { status: 403 });
+    }
     // "Not sure": the owner above is only a placeholder, so the document is nobody's until someone is linked to it.
     if (!args.explicitFamilyMember) await noteOwnerUnsure(ctx.householdId, policyId);
     // Who was chosen, kept as chosen: the card says so when the names printed in it put it with someone else.
@@ -180,6 +186,11 @@ export async function acceptPolicyUpload(args: {
     // (unique (account_id,file_hash)), or a second finalize of the same
     // direct-upload intent (policies.id). Either way the document is
     // already there; the stored object is kept only if it is the row's own.
+    if (error instanceof PlanCheckUnavailable) {
+      await discardStored();
+      if (!args.storedKey) await deletePolicyFile(storageKey).catch(() => undefined);
+      return NextResponse.json({ error: error.message, reasonCode: "PLAN_CHECK_UNAVAILABLE" }, { status: 503 });
+    }
     if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505") {
       await discardStored();
       return NextResponse.json({ error: "This exact document is already in DearPolicy." }, { status: 409 });
