@@ -3035,7 +3035,7 @@ export function personalFileName(name: string): string | null {
 const ABOUT_DOCUMENTS = /\b(?:documents?|files|uploads?|uploaded|paperwork)\b|\bfile\b(?!\s+(?:(?:a|an|the|my|your|his|her|their|our|this)\s+)?claims?\b)/i;
 /** A question about claiming ("how do I file a claim", "what documents do I need to claim") is not about the library,
  * unless it also asks what was uploaded or linked (TE #104 L9). */
-const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
+export const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
 /** A question about whether files were read ("which documents haven't been fully read?", "could all my files be read?"). */
 const READ_STATUS_WORD = /\b(?:read|readable|unreadable|scanned|failed)\b/i;

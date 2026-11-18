@@ -21,15 +21,31 @@ export const LEAD_ITEM_ID = "lead-item";
 
 type Listable = { bottomLine?: string | null; summary?: string; statements?: AnswerStatement[] };
 
-/** "She is also linked to …", "He is also linked in DearPolicy to …", "Also linked to her: …". */
+/** "She is also linked to …", "He is also linked in DearPolicy to …", "Also linked to her: …": what it names follows. */
 const ALSO_LINKED = /^(?:(?:she|he|they|it|[\p{Lu}][\p{L}'’-]*(?:\s+[\p{Lu}][\p{L}'’-]*){0,3})\s+(?:is|are)\s+also\s+linked\b|also\s+linked\s+to\b)/iu;
+/** What a document that holds no cover is called: an "also linked" sentence goes only when everything it names is one. A
+ * scheme or plan it names (CareShield Life, a home protection scheme) is cover, and the sentence stays (Critic #546 MED-3). */
+const NOT_COVER = /\b(?:booklets?|summar(?:y|ies)|wordings?|brochures?|guides?|letters?|notices?|illustrations?|terms|conditions|forms?|receipts?|statements?|fact ?sheets?|leaflets?|endorsements?|documents?|files?)\b/i;
+/** A first sentence that denies, contrasts or limits is never a list: "has no cover for A, B and C" would read as has A,
+ * B and C (Critic #546 HIGH-1). */
+const NOT_A_LIST = /\b(?:no|not|none|without|except|but|neither|nor|only|never|unless|excluded?|excludes)\b|n['’]t\b/i;
+/** An item that starts as a clause, not a name: "but no accident cover", "none of which…", "which pays…". */
+const CLAUSE_START = /^(?:but|none|which|who|whose|where|except|or|so|yet|though|although|while|with|including)\b/i;
 
-/** A subject and its verb, then the things it names: "Charmaine has", "Desmond's policies are", "Her cover includes". */
-const LEAD = /^(.{1,80}?\b(?:has|have|holds?|is covered by|is insured (?:under|by|with)|includes?|are|consists? of)(?:\s+(?:these|the following))?)\s*:?\s+(.+?)[.!]?$/u;
+/** The subject the list belongs to: a member's name (full or any of its words), a pronoun or "your", then has/have/holds. */
+function leadOf(sentence: string, names: string[]): { lead: string; rest: string } | null {
+  const m = /^(.{1,60}?)\s+(has|have|holds?)\s*:?\s+(.+?)[.!]?$/u.exec(sentence.trim());
+  if (!m) return null;
+  const subject = m[1].trim();
+  const words = new Set(names.flatMap((n) => n.replace(/\s*\([^)]*\)/g, " ").split(/\s+/)).filter((w) => w.length >= 2).map((w) => w.toLowerCase()));
+  const person = /^(?:she|he|they|you|i|we)$/i.test(subject)
+    || subject.split(/\s+/).length <= 4 && subject.split(/\s+/).every((w) => words.has(w.replace(/['’]s$/i, "").toLowerCase()));
+  return person ? { lead: `${subject} ${m[2]}`, rest: m[3] } : null;
+}
 
-/** The parts of a list at the top level (never inside brackets): "A (x, y), B and the C (z)" -> A (x, y) | B | the C (z).
- * Only the last part is split at "and", at its first one: "B and Hospital and Surgical Plan" -> B | Hospital and Surgical
- * Plan, so a name with "and" in it stays whole unless it is the second of the last pair. */
+/** The parts of a list at the top level (never inside brackets): "A (x, y), B (z) and the C (w)" -> A (x, y) | B (z) |
+ * the C (w). The last part is split at "and" only straight after a closing bracket ("B (z) and C (w)"), so a name with
+ * "and" in it ("Hospital and Surgical Plan") is never cut (Critic #546 MED-2). */
 function itemsOf(rest: string): string[] {
   const parts: string[] = [];
   let depth = 0, start = 0;
@@ -40,42 +56,38 @@ function itemsOf(rest: string): string[] {
     else if (depth === 0 && (c === "," || c === ";")) { parts.push(rest.slice(start, i)); start = i + 1; }
   }
   const last = rest.slice(start).trim();
-  if (/^and\s+/i.test(last)) parts.push(last);
-  else {
-    // The first "and" outside brackets in the last part.
-    let d = 0, cut = -1;
-    for (let i = 0; i < last.length && cut < 0; i++) {
-      const c = last[i];
-      if (c === "(" || c === "[") d++;
-      else if ((c === ")" || c === "]") && d > 0) d--;
-      else if (d === 0 && last.slice(i, i + 5).toLowerCase() === " and ") cut = i;
-    }
-    if (cut >= 0 && parts.length) parts.push(last.slice(0, cut), last.slice(cut + 5));
-    else parts.push(last);
-  }
+  const pair = /^(.*?[)\]])\s+and\s+(.+)$/s.exec(last);
+  if (!/^and\s+/i.test(last) && pair) parts.push(pair[1], pair[2]);
+  else parts.push(last);
   return parts.map((p) => p.trim().replace(/^and\s+/i, "").trim()).filter(Boolean);
 }
 
-/** Takes the list out of an overview's bottom line, and the "also linked to" sentences out of the answer. Returns the
- * sentences taken out (the turn's report keeps them). */
-export function listFromBottomLine(answer: Listable): string[] {
+/** Takes the list out of an overview's bottom line, and the "also linked to" sentences that name only documents out of the
+ * answer (not when the question is about the documents themselves: then they are the answer). `names`: the household's
+ * members. Returns the sentences taken out (the turn's report keeps them). */
+export function listFromBottomLine(answer: Listable, opts: { names: string[]; aboutDocuments?: boolean }): string[] {
   const removed: string[] = [];
+  const filler = (s: string) => {
+    if (opts.aboutDocuments || !ALSO_LINKED.test(s.trim())) return false;
+    const named = itemsOf(s.trim().replace(/^.*?\blinked\b(?:\s+in\s+DearPolicy)?(?:\s+to\b)?\s*:?\s*/i, "").replace(/[.!]$/, ""));
+    return named.length > 0 && named.every((n) => NOT_COVER.test(n));
+  };
   const bottom = (answer.bottomLine ?? "").trim();
   const kept = sentences(bottom).filter((s) => {
-    if (ALSO_LINKED.test(s.trim())) { removed.push(s); return false; }
+    if (filler(s)) { removed.push(s); return false; }
     return true;
   });
   let lead = kept.join(" ");
   const items: string[] = [];
-  const first = kept[0] ?? "";
-  const m = LEAD.exec(first.trim());
+  const first = (kept[0] ?? "").trim();
+  const m = NOT_A_LIST.test(first) ? null : leadOf(first, opts.names);
   if (m) {
-    const parts = itemsOf(m[2]);
-    // Three or more named things, each short enough to be a name with its description: a list. Anything else (a sentence
-    // with a clause, two things) stays as the model wrote it.
-    if (parts.length >= 3 && parts.every((p) => p.length <= 160 && !/[.!?]/.test(p.replace(/\([^)]*\)/g, "").replace(/\b(?:Pte|Ltd|Co|Inc|No|St)\./g, "")))) {
+    const parts = itemsOf(m.rest);
+    // Three or more named things, each short enough to be a name with its description and none a clause: a list.
+    // Anything else stays as the model wrote it.
+    if (parts.length >= 3 && parts.every((p) => p.length <= 160 && !CLAUSE_START.test(p) && !/[.!?]/.test(p.replace(/\([^)]*\)/g, "").replace(/\b(?:Pte|Ltd|Co|Inc|No|St)\./g, "")))) {
       items.push(...parts);
-      lead = [`${m[1].trim()}:`, ...kept.slice(1)].join(" ");
+      lead = [`${m.lead}:`, ...kept.slice(1)].join(" ");
     }
   }
   if (lead !== bottom) {
@@ -86,9 +98,9 @@ export function listFromBottomLine(answer: Listable): string[] {
     answer.statements = answer.statements.flatMap((s) => {
       if (s.amount || s.table) return [s];
       const all = sentences(s.text);
-      const left = all.filter((x) => !ALSO_LINKED.test(x.trim()));
+      const left = all.filter((x) => !filler(x));
       if (left.length === all.length) return [s];
-      removed.push(...all.filter((x) => ALSO_LINKED.test(x.trim())));
+      removed.push(...all.filter((x) => filler(x)));
       if (!left.length && !(s.conditions ?? []).length) return [];
       const text = left.join(" ");
       return [{ ...s, text, fullText: s.fullText ? text : s.fullText }];
