@@ -14,6 +14,7 @@
  * `needs_document` with no amount, exactly like an unresolved death-benefit
  * coverage does.
  */
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { canonicalProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
@@ -263,7 +264,7 @@ export function resolveCIEvidence(coverages: OwnedCoverage[], rows: CIWordingPag
           ...(rule.waitingPeriod ? { waitingPeriod: rule.waitingPeriod } : {}),
           ...(rule.survivalPeriod ? { survivalPeriod: rule.survivalPeriod } : {}),
           citation: {
-            chunkId: `page:${first.policy_id}:${rule.page}`, policyId: first.policy_id, policyName: first.product_name ?? first.original_filename,
+            chunkId: `page:${first.policy_id}:${rule.page}`, policyId: first.policy_id, policyName: first.product_name ?? documentCardTitle({ product_name: null, original_filename: first.original_filename, insurer: first.insurer, document_role: first.document_role }),
             insurer: first.insurer ?? undefined, pageStart: rule.page, pageEnd: rule.pageEnd, documentRole: first.document_role,
             personalEvidence: false, evidenceLabel: `${rule.illnessName} wording`,
           },

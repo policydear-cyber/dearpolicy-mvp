@@ -1,3 +1,4 @@
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
@@ -43,7 +44,7 @@ export async function evidenceForAssessment(args:{accountId:string;familyMemberI
     const key = `page:${row.policy_id}:${row.page_number}`;
     if (citations.some((c)=>c.chunkId===key)) continue;
     citations.push({
-      chunkId:key,policyId:row.policy_id,policyName:row.product_name ?? row.original_filename,insurer:row.insurer ?? undefined,
+      chunkId:key,policyId:row.policy_id,policyName:row.product_name ?? documentCardTitle({product_name:null,original_filename:row.original_filename,insurer:row.insurer,document_role:row.document_role}),insurer:row.insurer ?? undefined,
       pageStart:row.page_number,pageEnd:row.page_number,documentRole:row.document_role,personalEvidence:false,evidenceLabel:"Policy wording",
     });
   }
