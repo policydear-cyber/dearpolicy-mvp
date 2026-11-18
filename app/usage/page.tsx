@@ -3,11 +3,11 @@ import { AccountTabs } from "@/components/account-tabs";
 import { customerError } from "@/components/customer-text";
 import { Icon } from "@/components/icons";
 import { PlanCards } from "@/components/plan-cards";
-import { PLANS, documentsLabel, formatSgd, questionsResetLabel, type BillingInterval, type Plan, type PlanId } from "@/lib/billing/plans";
+import { PLANS, documentsLabel, formatSgd, questionsResetLabel, type BillingInterval, type Plan, type PlanId } from "@/lib/plans/catalogue";
 import { checkoutAddress,subscriptionAddress } from "@/components/plan-actions";
 import { useEffect,useState } from "react";
 
-/** Plan usage, for a household: which plan it is on (Free, Plus or Family; lib/billing/plans.ts), what counts against
+/** Plan usage, for a household: which plan it is on (Free, Plus or Family; lib/plans/catalogue.ts), what counts against
  * it, and how to upgrade.
  *
  * V1.1: no models, tokens, provider prices, routing or spending limits here -- that operational view (by operation and

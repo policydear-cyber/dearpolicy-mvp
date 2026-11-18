@@ -1,5 +1,5 @@
 /**
- * Plans: Free, Plus and Family (lib/billing/plans.ts, household-plan.ts, stripe.ts; sql/household-plans.sql).
+ * Plans: Free, Plus and Family (lib/plans/catalogue.ts, household-plan.ts, stripe.ts; sql/household-plans.sql).
  *
  *   npm run -s billing:plans-test
  *
@@ -14,7 +14,7 @@ import { test } from "node:test";
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
-import { PLANS, checkDocumentLimit, checkQuestionLimit, documentsLabel, formatSgd, questionsResetLabel } from "@/lib/billing/plans";
+import { PLANS, checkDocumentLimit, checkQuestionLimit, documentsLabel, formatSgd, questionsResetLabel } from "@/lib/plans/catalogue";
 
 const A = "00000000-0000-0000-0000-0000000b1a00", B = "00000000-0000-0000-0000-0000000b1b00";
 const PERSON_A = "61000000-0000-4000-8000-000000000001", PERSON_B = "61000000-0000-4000-8000-000000000002";
@@ -193,7 +193,13 @@ test("counting and limits, per household", async () => {
     await addPolicy(db, 7, A, "queued");
     const full = await H.mayAddDocument(A);
     assert.equal(full.allowed, false, "5 of 5, a document still being read counts");
-    assert.equal((await H.mayAddDocument(A, { replacing: true })).allowed, true, "a newer copy takes the old one's place");
+    assert.equal((await H.mayAddDocument(A, { replacingPolicyId: pid(1) })).allowed, true, "a newer copy of a counted document takes its place");
+    assert.equal((await H.mayAddDocument(A, { replacingPolicyId: pid(5) })).allowed, false, "a newer copy of an unreadable one is one more (TE F4)");
+    assert.equal((await H.mayAddDocument(A, { replacingPolicyId: pid(6) })).allowed, false, "an already-replaced document has no place to give");
+    assert.equal((await H.mayAddDocument(A, { replacingPolicyId: pid(20) })).allowed, false, "another household's document is no replacement (TE F5)");
+    assert.equal((await H.mayAddDocument(A, { replacingPolicyId: "not-a-real-id" })).allowed, false, "a made-up id is no replacement (TE F5)");
+    assert.equal((await H.mayAddDocument(A, { rereadingPolicyId: pid(1) })).allowed, true, "reading a counted document again adds nothing");
+    assert.equal((await H.mayAddDocument(A, { rereadingPolicyId: pid(5) })).allowed, false, "reading an unreadable one again would make 6 of 5 (TE F3)");
     assert.equal((await H.mayAddDocument(B)).allowed, false, "B has 10 on Free");
 
     // A paid plan, written by the server.
@@ -315,6 +321,8 @@ test("routes: the chat refuses the 11th Free question before anything is sent; t
   assert.ok(accept.indexOf("mayAddDocument(") < accept.indexOf("INSERT INTO policies"), "checked before the document is recorded");
   assert.ok(accept.indexOf("mayAddDocument(") < accept.indexOf("savePolicyFile("), "and before it is stored");
   assert.match(readFileSync("app/api/policies/upload/start/route.ts", "utf8"), /mayAddDocument\(ctx\.householdId/);
+  const reprocess = readFileSync("app/api/policies/reprocess/route.ts", "utf8");
+  assert.ok(reprocess.indexOf("rereadingPolicyId: body.policyId") > 0 && reprocess.indexOf("rereadingPolicyId") < reprocess.indexOf("enqueuePolicyProcessing({"), "Read again checks the plan before queueing");
 
   for (const key of Object.keys(STRIPE_ENV)) delete process.env[key];
   const { POST } = await import("../../app/api/billing/webhook/route");

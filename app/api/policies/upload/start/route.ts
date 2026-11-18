@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     // Over the plan's document limit: say so before the file is sent, not after (finalize checks again).
     try {
-      const limit = await mayAddDocument(ctx.householdId, { replacing: Boolean(body.supersedesPolicyId) });
+      const limit = await mayAddDocument(ctx.householdId, { replacingPolicyId: body.supersedesPolicyId ?? null });
       if (!limit.allowed) return NextResponse.json({ error: limit.message, reasonCode: "PLAN_DOCUMENT_LIMIT", upgradePath: "/usage" }, { status: 403 });
     } catch (error) {
       if (error instanceof PlanCheckUnavailable) return NextResponse.json({ error: error.message, reasonCode: "PLAN_CHECK_UNAVAILABLE" }, { status: 503 });

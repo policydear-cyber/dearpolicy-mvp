@@ -12,6 +12,7 @@ import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
 import { runAfterResponse } from "@/lib/http/background";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 
+import { mayAddDocument, PlanCheckUnavailable } from "@/lib/billing/household-plan";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 // Re-reading a document can take as long as the original upload; give the
@@ -61,6 +62,15 @@ export async function POST(request: NextRequest) {
     });
 
     if (!policy) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+
+    // The household's plan: an unreadable document doesn't count, so reading it again could take it past the limit.
+    try {
+      const limit = await mayAddDocument(ctx.householdId, { rereadingPolicyId: body.policyId });
+      if (!limit.allowed) return NextResponse.json({ error: limit.message, reasonCode: "PLAN_DOCUMENT_LIMIT", upgradePath: "/usage" }, { status: 403 });
+    } catch (error) {
+      if (error instanceof PlanCheckUnavailable) return NextResponse.json({ error: error.message }, { status: 503 });
+      throw error;
+    }
 
     // A document can sit in an in-flight status forever if its background
     // job died permanently: a lease expiry dead-letters the JOB, but nothing

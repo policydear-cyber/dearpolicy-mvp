@@ -13,7 +13,7 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { query } from "@/lib/db/client";
-import type { BillingInterval, PlanId } from "@/lib/billing/plans";
+import type { BillingInterval, PlanId } from "@/lib/plans/catalogue";
 
 type PaidPlan = Exclude<PlanId, "free">;
 const PRICE_ENV: Record<PaidPlan, Record<BillingInterval, string>> = {

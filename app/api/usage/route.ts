@@ -5,7 +5,7 @@ import { usageThisMonth } from "@/lib/ai/ledger";
 import { describeChoice,modelFor,priceFor } from "@/lib/ai/providers";
 import { budgetConfig,startOfMonth,usageByOperationAndModel } from "@/lib/ai/usage";
 import { keptDocumentCount,planLimitsEnforced,questionsThisMonth,readHouseholdPlan } from "@/lib/billing/household-plan";
-import { PLANS } from "@/lib/billing/plans";
+import { PLANS } from "@/lib/plans/catalogue";
 import { billingEnabled } from "@/lib/billing/stripe";
 import { requireHouseholdOwner } from "@/lib/household/repo";
 
@@ -31,7 +31,7 @@ export async function GET(request:NextRequest){
     // $5 provider budget; it is not served under that name any more.
     const budget=budgetConfig();
     const {hardStopUsd:_internalStop,...plan}=usage.plan;void _internalStop;
-    // The household's plan (Free, Plus or Family; lib/billing/plans.ts) and what counts against it. Members see it; only
+    // The household's plan (Free, Plus or Family; lib/plans/catalogue.ts) and what counts against it. Members see it; only
     // the owner can upgrade.
     const [householdPlan,documentsKept,questionsAsked,isOwner]=await Promise.all([
       readHouseholdPlan(ctx.householdId),keptDocumentCount(ctx.householdId),questionsThisMonth(ctx.householdId),

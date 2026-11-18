@@ -133,9 +133,9 @@ export async function acceptPolicyUpload(args: {
     throw error;
   }
 
-  // The household's plan: how many documents it keeps (lib/billing/plans.ts). A newer copy of a document it already keeps
-  // takes that document's place, so it never counts as one more.
-  const limit = await mayAddDocument(ctx.householdId, { replacing: Boolean(outcome.verifiedSupersedesId) }).catch(async (error) => {
+  // The household's plan: how many documents it keeps (lib/plans/catalogue.ts). A newer copy of a document that already
+  // counts takes its place; a newer copy of an unreadable one is one more.
+  const limit = await mayAddDocument(ctx.householdId, { replacingPolicyId: outcome.verifiedSupersedesId }).catch(async (error) => {
     if (error instanceof PlanCheckUnavailable) return { allowed: false as const, message: error.message, code: "plan_check_unavailable" as const };
     throw error;
   });

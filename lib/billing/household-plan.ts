@@ -1,6 +1,6 @@
 /**
  * Which plan a household is on, and whether it may keep one more document or ask one more question
- * (lib/billing/plans.ts holds the numbers).
+ * (lib/plans/catalogue.ts holds the numbers).
  *
  * The plan lives in household_plans (sql/household-plans.sql), written only by the server. A household with no row is
  * on Free. A database without the table yet reads as Free only while limits are off; with limits on, a missing table
@@ -16,7 +16,7 @@
  */
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { PLANS, checkDocumentLimit, checkQuestionLimit, isPlanId, type BillingInterval, type LimitCheck, type PlanId } from "@/lib/billing/plans";
+import { PLANS, checkDocumentLimit, checkQuestionLimit, isPlanId, type BillingInterval, type LimitCheck, type PlanId } from "@/lib/plans/catalogue";
 
 /** Stripe subscription statuses that keep a paid plan, plus 'complimentary' (a plan given without payment). A failed
  * renewal (past_due) keeps the plan while Stripe retries; anything else (canceled, unpaid, incomplete...) is Free. */
@@ -103,9 +103,24 @@ export async function questionsThisMonth(householdId: string): Promise<number> {
   }
 }
 
-/** May this household keep one more document? Always yes while limits are off, and for a replacement copy. */
-export async function mayAddDocument(householdId: string, opts: { replacing?: boolean } = {}): Promise<LimitCheck> {
-  if (!planLimitsEnforced() || opts.replacing) return { allowed: true };
+/** Whether a document counts towards the plan now (this household's, kept, current and not unreadable). */
+async function documentCounts(householdId: string, policyId: string): Promise<boolean> {
+  try {
+    return (await query(
+      `SELECT 1 FROM policies WHERE id=$1 AND account_id=$2 AND superseded_at IS NULL AND processing_status<>'failed' AND ${activePredicate()}`,
+      [policyId, householdId])).rows.length > 0;
+  } catch (error) {
+    throw new PlanCheckUnavailable(error);
+  }
+}
+
+/** May this household keep one more document? Always yes while limits are off. A newer copy of a document that already
+ * counts takes its place; a newer copy of one that doesn't (unreadable, or not this household's) is one more (TE F4, F5).
+ * `rereading`: an unreadable document read again would start to count (TE F3); a counted one already does. */
+export async function mayAddDocument(householdId: string, opts: { replacingPolicyId?: string | null; rereadingPolicyId?: string | null } = {}): Promise<LimitCheck> {
+  if (!planLimitsEnforced()) return { allowed: true };
+  const existing = opts.replacingPolicyId ?? opts.rereadingPolicyId ?? null;
+  if (existing && /^[0-9a-f-]{36}$/i.test(existing) && await documentCounts(householdId, existing)) return { allowed: true };
   const [plan, kept] = await Promise.all([readHouseholdPlan(householdId), keptDocumentCount(householdId)]);
   return checkDocumentLimit(plan.planId, kept);
 }

@@ -1,6 +1,6 @@
 # Plans and billing: owner setup
 
-Free, Plus and Family (approved 18 Nov 2026; numbers in `lib/billing/plans.ts`). Every new household starts on Free.
+Free, Plus and Family (approved 18 Nov 2026; numbers in `lib/plans/catalogue.ts`). Every new household starts on Free.
 Nothing below is needed for the landing page's prices or the Plan usage page to show. Each step is the owner's to do.
 
 ## 1. Create the plans table (needed before limits or payments)

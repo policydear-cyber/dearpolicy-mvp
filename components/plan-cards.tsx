@@ -1,12 +1,12 @@
 "use client";
 import { useState, type ReactNode } from "react";
 import { Icon } from "@/components/icons";
-import { PLANS, PLAN_ORDER, documentsLabel, formatSgd, type BillingInterval, type Plan, type PlanId } from "@/lib/billing/plans";
+import { PLANS, PLAN_ORDER, documentsLabel, formatSgd, type BillingInterval, type Plan, type PlanId } from "@/lib/plans/catalogue";
 import "./plan-cards.css";
 
 /**
  * The three plans side by side, with a monthly or yearly switch (yearly first: two months free). Used on the landing
- * page's pricing section (before sign-up) and on Plan usage (to upgrade). Every number comes from lib/billing/plans.ts.
+ * page's pricing section (before sign-up) and on Plan usage (to upgrade). Every number comes from lib/plans/catalogue.ts.
  * Static: reads no household data. `action` draws each card's button, so the landing page says "Start free" and
  * Plan usage says "Upgrade".
  */

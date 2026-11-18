@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { PlanCards } from "@/components/plan-cards";
-import { PLANS } from "@/lib/billing/plans";
+import { PLANS } from "@/lib/plans/catalogue";
 
 /**
  * The landing page's pricing section (DC, 18 Nov: prices shown before sign-up; every sign-up starts on Free and can

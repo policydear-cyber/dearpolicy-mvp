@@ -52,7 +52,7 @@ export async function POST(request:NextRequest){
     try{over=await overSpendCap(accountId);}
     catch(error){if(error instanceof SpendCheckUnavailable)return NextResponse.json({error:SPEND_CHECK_UNAVAILABLE_TEXT,code:"spend_check_unavailable"},{status:503});throw error;}
     if(over)return NextResponse.json({error:SPEND_LIMIT_TEXT,code:"spend_limit"},{status:429});
-    // The household's plan: this month's questions (lib/billing/plans.ts). Taken last, just before the question is queued,
+    // The household's plan: this month's questions (lib/plans/catalogue.ts). Taken last, just before the question is queued,
     // so a question refused for any other reason isn't counted, and a refused question costs nothing and the household reads why, the reset date and the next plan up.
     let plan;
     try{plan=await takeQuestion(accountId);}

@@ -1,7 +1,7 @@
 /** Opening Stripe's hosted pages from Plan usage: checkout to upgrade, the portal to manage a subscription. Each call
  * asks DearPolicy's server for the page's address (owner only; app/api/billing/*) and returns it, or throws with a
  * message fit for the household (the caller shows it through customerError). */
-import type { BillingInterval, PlanId } from "@/lib/billing/plans";
+import type { BillingInterval, PlanId } from "@/lib/plans/catalogue";
 
 async function pageAddress(path: string, body: object): Promise<string> {
   const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });

@@ -53,9 +53,7 @@ const CUSTOMER_FILES = [
 /** The text a person can read: string literals, template literals and JSX
  * text. Comments and identifiers are not shown to anyone. */
 function visibleText(source: string): string {
-  // Module paths in import lines are never shown to anyone (grader correction, 18 Nov: "@/lib/billing/plans" read as
-  // billing detail on a screen); every string and JSX text on the page is still checked.
-  const noComments = source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1 ").replace(/^\s*import\s[^;\n]*from\s+["'][^"'\n]+["'];?\s*$/gm, " ");
+  const noComments = source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1 ");
   const literals = noComments.match(/"[^"\n]*"|`[^`]*`|'[^'\n]*'/g) ?? [];
   const jsxText = noComments.match(/>[^<>{}\n]*[A-Za-z][^<>{}\n]*</g) ?? [];
   return [...literals, ...jsxText].join("\n");
@@ -185,7 +183,7 @@ test("Plan usage page: allowance only, no infrastructure", () => {
   const usage = read("app/usage/page.tsx");
   const text = visibleText(usage);
   assert.ok(!/model|token|routing|hard stop|cost|\$/i.test(text.replace(/\$\{/g, "")), "no model, token, routing or cost text");
-  // The household's own plan (Free, Plus or Family; lib/billing/plans.ts): its question allowance is shown.
+  // The household's own plan (Free, Plus or Family; lib/plans/catalogue.ts): its question allowance is shown.
   assert.match(usage, /questionsPerMonth/);
   // Plan usage is reached from the Account settings tabs (Household, People, Plan usage).
   assert.match(read("components/account-tabs.tsx"), /\bhref\s*:\s*(["'`])\/usage\1/);

@@ -1,4 +1,4 @@
--- Plans (DC approved 18 Nov 2026: Free, Plus, Family; lib/billing/plans.ts).
+-- Plans (DC approved 18 Nov 2026: Free, Plus, Family; lib/plans/catalogue.ts).
 --
 -- household_plans: one row per household that is on a paid or complimentary plan, or has a Stripe customer. A household
 -- with no row (or a row whose status keeps no plan) is on Free.
