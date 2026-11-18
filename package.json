@@ -194,6 +194,7 @@
     "benefit-table:shared-limit-test": "node --import tsx scripts/benefit-table/shared-limit-test.ts",
     "benefit-table:plain-table-test": "node --import tsx scripts/benefit-table/plain-table-test.ts",
     "benefit-table:sum-base-test": "node --import tsx scripts/benefit-table/sum-base-test.ts",
+    "benefit-table:document-title-test": "node --import tsx scripts/benefit-table/document-title-test.ts",
     "benefit-table:section-label-test": "node --import tsx scripts/benefit-table/section-label-test.ts",
     "benefit-table:each-person-unmarked-test": "node --import tsx scripts/benefit-table/each-person-unmarked-test.ts",
     "policies:pack-label-route-test": "node --import tsx scripts/policies/pack-label-route-test.ts",
