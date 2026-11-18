@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { safeInviteNext } from "@/lib/auth/invite-return";
 import { sameSitePath } from "@/lib/auth/same-site-path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { ensureDefaultHousehold } from "@/lib/household/repo";
-import { secureFirstProof, signupMode, SignupClosedError } from "@/lib/auth/signup-gate";
+import { finishEmailLink } from "@/lib/auth/finish-email-link";
+import { isMissingCodeVerifier, otherBrowserDestination } from "@/lib/auth/email-link";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "public" as const;
@@ -27,38 +26,24 @@ export async function GET(request: Request) {
   const next = sanitizeNext(url.searchParams.get("next"));
 
   if (!code) {
+    // Supabase sends a spent or out-of-date link back here with error_code (e.g. otp_expired) and no code: that link
+    // has expired, it is not "incomplete".
+    if (url.searchParams.get("error_code") || url.searchParams.get("error")) {
+      return NextResponse.redirect(new URL(next === "/update-password" ? "/reset-password?error=expired" : "/login?error=invalid_or_expired_link", url.origin));
+    }
     return NextResponse.redirect(new URL("/login?error=missing_code", url.origin));
   }
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error || !data.user) {
+    // Opened in another browser than the one that asked for the link (lib/auth/email-link.ts): Supabase has already
+    // confirmed the address, only this browser cannot finish signing in. Say so, instead of "expired".
+    if (isMissingCodeVerifier(error)) return NextResponse.redirect(new URL(otherBrowserDestination(next), url.origin));
     return NextResponse.redirect(new URL("/login?error=invalid_or_expired_link", url.origin));
   }
 
-  // Idempotent -- see app/api/auth/signup/route.ts for why this needs to run
-  // here too (email-confirmation-required accounts have no household yet).
-  // Invite-only sign-up (lib/auth/signup-gate.ts): the code exchange proves the person opened a link sent to this
-  // address. Before a household is made for it, any password set before this proof is replaced and every other session
-  // signed out (someone may have pre-registered the address), and the owner then sets their own password.
-  const inviteOnly = signupMode() === "invite";
-  let made = false;
-  try {
-    await ensureDefaultHousehold(data.user.id, `${(data.user.email ?? "my").split("@")[0]}'s household`, undefined, {
-      email: data.user.email,
-      emailProven: true,
-      beforeCreate: inviteOnly ? async () => { await secureFirstProof(supabase.auth); made = true; } : undefined,
-    });
-  } catch (e) {
-    await supabase.auth.signOut().catch(() => {});
-    if (e instanceof SignupClosedError) return NextResponse.redirect(new URL("/login?error=invite_only", url.origin));
-    if (inviteOnly) return NextResponse.redirect(new URL("/login?error=invalid_or_expired_link", url.origin));
-    throw e;
-  }
-
-  // First proof of an invited address: they set their own password first, then go on to the invitation's join page
-  // when they came from one (lib/auth/invite-return.ts; any other `next` is not carried past the password step).
-  const inviteNext = safeInviteNext(url.searchParams.get("next"));
-  if (made) return NextResponse.redirect(new URL("/update-password?first=1" + (inviteNext ? `&next=${encodeURIComponent(inviteNext)}` : ""), url.origin));
-  return NextResponse.redirect(new URL(next, url.origin));
+  // The household, the invite-only proof and where to go next: shared with app/api/auth/confirm (lib/auth/finish-email-link.ts).
+  const destination = await finishEmailLink(supabase.auth, data.user, next, url.searchParams.get("next"));
+  return NextResponse.redirect(new URL(destination, url.origin));
 }

@@ -157,10 +157,15 @@ async function main() {
     }
   });
   await t("only the emailed-link callback proves an address, and it secures the account first; a password or a session proves nothing", () => {
-    const callback = readFileSync("app/api/auth/callback/route.ts", "utf8");
+    // 18 Nov 2026: the callback's proof steps moved, unchanged, to lib/auth/finish-email-link.ts, shared with the
+    // any-browser emailed link (app/api/auth/confirm). Same checks, on the shared file, plus: both routes use it.
+    const callback = readFileSync("lib/auth/finish-email-link.ts", "utf8");
     assert.match(callback, /emailProven: true/);
-    assert.match(callback, /beforeCreate: inviteOnly \? async \(\) => \{ await secureFirstProof\(supabase\.auth\); made = true; \}/);
-    assert.match(callback, /if \(made\) return NextResponse\.redirect\(new URL\("\/update-password/, "the owner sets their own password next");
+    assert.match(callback, /beforeCreate: inviteOnly \? async \(\) => \{ await secureFirstProof\(auth\); made = true; \}/);
+    assert.match(callback, /if \(made\) return "\/update-password/, "the owner sets their own password next");
+    for (const f of ["app/api/auth/callback/route.ts", "app/api/auth/confirm/route.ts"]) {
+      assert.match(readFileSync(f, "utf8"), /await finishEmailLink\(supabase\.auth, data\.user, /, f + " proves the address only after the auth service accepted the link");
+    }
     for (const f of ["app/api/auth/signup/route.ts", "app/api/auth/signin/route.ts", "app/api/household/start/route.ts"]) {
       const src = readFileSync(f, "utf8");
       assert.doesNotMatch(src, /emailProven/, f + " never takes the address as proven");
@@ -177,7 +182,7 @@ async function main() {
     assert.ok(!f.log.some((l) => /household_invitations/.test(l)));
   });
   await t("every place that creates a household passes the person's verified email and turns a closed sign-up into a clear refusal", () => {
-    for (const f of ["app/api/auth/signup/route.ts", "app/api/auth/signin/route.ts", "app/api/auth/callback/route.ts", "app/api/household/start/route.ts"]) {
+    for (const f of ["app/api/auth/signup/route.ts", "app/api/auth/signin/route.ts", "lib/auth/finish-email-link.ts", "app/api/household/start/route.ts"]) {
       const src = readFileSync(f, "utf8");
       assert.match(src, /ensureDefaultHousehold\([^;]*\{\s*(?:\/\/[^\n]*\n\s*)*email:/, f + " passes the email");
       assert.match(src, /SignupClosedError/, f + " handles a closed sign-up");
@@ -185,7 +190,7 @@ async function main() {
     const signup = readFileSync("app/api/auth/signup/route.ts", "utf8");
     assert.ok(signup.indexOf("invitedToSignUp(") > 0 && signup.indexOf("invitedToSignUp(") < signup.indexOf("auth.signUp("), "sign-up checks the invitation before any account is made");
     assert.match(signup, /invitedToSignUp\(email\)\.catch\(\(\) => false\)/, "an error while checking is a no");
-    for (const f of ["app/api/auth/signin/route.ts", "app/api/auth/callback/route.ts"]) assert.match(readFileSync(f, "utf8"), /signOut\(/, f + " leaves no session behind");
+    for (const f of ["app/api/auth/signin/route.ts", "lib/auth/finish-email-link.ts"]) assert.match(readFileSync(f, "utf8"), /signOut\(/, f + " leaves no session behind");
     assert.match(readFileSync("app/login/page.tsx", "utf8"), /invite_only:/);
   });
   await t("the sign-up pre-check fails closed too: a database that cannot be reached means no account", async () => {

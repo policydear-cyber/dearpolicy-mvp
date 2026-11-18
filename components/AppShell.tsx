@@ -46,7 +46,8 @@ const operatorNav: NavItem[] = [
 
 /** Pages a signed-out person uses; no sign-out control there. */
 // /privacy is public and read before signing in, so it gets no app navigation and no Sign out button.
-const SIGNED_OUT_PATHS = new Set(["/login", "/signup", "/reset-password", "/privacy"]);
+// /confirm is where an emailed link lands, before this browser is signed in (lib/auth/email-link.ts).
+const SIGNED_OUT_PATHS = new Set(["/login", "/signup", "/reset-password", "/privacy", "/confirm"]);
 /** Signed in, but with no household to navigate. */
 const NO_NAV_PATHS = new Set(["/household/deleted", "/privacy"]);
 
@@ -155,7 +156,7 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
   const titled = [...items].sort((a, b) => b.href.length - a.href.length).find((item) => item.href !== "/" && isActive(item.href))
     ?? (pathname === "/" && items.length ? items[0] : null);
   // Pages reached through another menu item still name themselves in the browser tab.
-  const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your account", "/reset-password": "Reset password", "/privacy": "Privacy",
+  const ownTitles: Record<string, string> = { "/login": "Sign in", "/signup": "Create your account", "/reset-password": "Reset password", "/privacy": "Privacy", "/confirm": "Confirm",
     "/ledger": "Coverage", "/schedule": "Benefits", "/coverage": "Coverage", "/family": "People", "/usage": "Plan usage", "/claims": "Past events" };
   const pageName = ownTitles[pathname] ?? titled?.label;
   const pageTitle = pageName ? `${pageName} · DearPolicy` : "DearPolicy";

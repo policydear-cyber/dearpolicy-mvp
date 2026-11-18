@@ -17,6 +17,12 @@ const LINK_ERRORS: Record<string, string> = {
   invite_only: "DearPolicy is open by invitation only at the moment. If you were invited, use the email address the invitation was sent to.",
 };
 
+/** Good news shown above the form. email_confirmed: the emailed link was opened in another browser than the one that
+ * asked for it, so the address is confirmed but this browser is not signed in yet (lib/auth/email-link.ts). */
+const LINK_NOTICES: Record<string, string> = {
+  email_confirmed: "Your email address is confirmed. Sign in with your email and password.",
+};
+
 /**
  * Sign-in.
  *
@@ -47,6 +53,7 @@ function LoginForm() {
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const linkError = params.get("error");
+  const linkNotice = params.get("notice");
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -92,6 +99,11 @@ function LoginForm() {
       {linkError && LINK_ERRORS[linkError] ? (
         <div className="alert error" role="alert">
           {LINK_ERRORS[linkError]}
+        </div>
+      ) : null}
+      {!linkError && linkNotice && LINK_NOTICES[linkNotice] ? (
+        <div className="alert" role="status">
+          {LINK_NOTICES[linkNotice]}
         </div>
       ) : null}
       <form onSubmit={submit} className="field" method="post" action="/api/auth/signin" noValidate>

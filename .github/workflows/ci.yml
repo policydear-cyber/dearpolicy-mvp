@@ -392,6 +392,9 @@ jobs:
       - name: Invitation link survives sign-in and sign-up; pending invitations show their expiry
         run: npm run auth:invite-return-test
 
+      - name: Emailed sign-up and reset links work in any browser (opened in a mail app's browser too)
+        run: npm run auth:email-link-test
+
       - name: Policy-document quarantine gate regression suite (real Postgres via PGlite, no live DB needed)
         run: npm run security:policy-quarantine-test
 
