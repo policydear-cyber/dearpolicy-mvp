@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS policy_folders (
   name text CHECK (name IS NULL OR length(btrim(name)) BETWEEN 1 AND 120),
   -- The household answered yes to "Are these all the documents for this policy?". Adding or removing a document asks again.
   complete boolean NOT NULL DEFAULT false,
+  -- The documents in it when the household said yes. If any of them later leaves the library (deleted, or replaced by a
+  -- newer copy), the folder reads as not complete again (lib/policies/folders.ts), so "all documents" never goes stale.
+  confirmed_documents uuid[] NOT NULL DEFAULT '{}',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (id, account_id)

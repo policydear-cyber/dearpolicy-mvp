@@ -110,7 +110,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
   // The household's policy folders, when sql/policy-folders.sql is applied (withFolders): their people still in the
   // household, and their documents still in the library.
   const folderRows = withFolders ? await run(
-    "SELECT account_id, id, name, complete FROM policy_folders WHERE account_id=$1 ORDER BY created_at, id", [accountId]) : [];
+    "SELECT account_id, id, name, complete, confirmed_documents FROM policy_folders WHERE account_id=$1 ORDER BY created_at, id", [accountId]) : [];
   const folderIds = folderRows.map((f) => String(f.id));
   const folderPeople = folderIds.length ? await run(
     `SELECT fp.account_id, fp.folder_id, f.display_name FROM policy_folder_people fp
@@ -123,11 +123,16 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
   for (const row of [...members, ...docs, ...links, ...pages, ...folderRows, ...folderPeople, ...folderDocs])
     if (String(row.account_id) !== accountId) throw new Error("A row from another household was returned; refusing to build a prompt");
   const inLibrary = new Set(ids);
-  const folders: HouseholdFolder[] = folderRows.map((f) => ({
-    id: String(f.id), name: text(f.name), complete: f.complete === true || f.complete === "true",
-    people: folderPeople.filter((p) => String(p.folder_id) === String(f.id)).map((p) => String(p.display_name)),
-    documents: folderDocs.filter((d) => String(d.folder_id) === String(f.id) && inLibrary.has(String(d.policy_id))).map((d) => String(d.policy_id)),
-  }));
+  const folders: HouseholdFolder[] = folderRows.map((f) => {
+    const documents = folderDocs.filter((d) => String(d.folder_id) === String(f.id) && inLibrary.has(String(d.policy_id))).map((d) => String(d.policy_id));
+    const confirmed = Array.isArray(f.confirmed_documents) ? (f.confirmed_documents as unknown[]).map(String) : [];
+    return {
+      id: String(f.id), name: text(f.name), documents,
+      // Said complete only while every document it held when the household said yes is still in the library (as the page says).
+      complete: (f.complete === true || f.complete === "true") && documents.length > 0 && confirmed.every((id) => documents.includes(id)),
+      people: folderPeople.filter((p) => String(p.folder_id) === String(f.id)).map((p) => String(p.display_name)),
+    };
+  });
   return {
     accountId,
     ...(folders.length ? { folders } : {}),

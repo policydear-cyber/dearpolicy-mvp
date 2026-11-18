@@ -39,8 +39,8 @@ export function resetFoldersReady() { ready = null; }
 /** The household's folders, each with its people still in the household and its documents still in the library. */
 export async function listFolders(accountId: string): Promise<PolicyFolder[]> {
   if (!await foldersReady()) return [];
-  const folders = await query<{ id: string; account_id: string; name: string | null; complete: boolean; created_at: Date | string }>(
-    "SELECT id, account_id, name, complete, created_at FROM policy_folders WHERE account_id=$1 ORDER BY created_at, id", [accountId]);
+  const folders = await query<{ id: string; account_id: string; name: string | null; complete: boolean; confirmed_documents: string[] | null; created_at: Date | string }>(
+    "SELECT id, account_id, name, complete, confirmed_documents, created_at FROM policy_folders WHERE account_id=$1 ORDER BY created_at, id", [accountId]);
   if (!folders.rows.length) return [];
   const ids = folders.rows.map((f) => f.id);
   const [people, documents] = await Promise.all([
@@ -56,11 +56,20 @@ export async function listFolders(accountId: string): Promise<PolicyFolder[]> {
   for (const row of [...folders.rows, ...people.rows, ...documents.rows])
     if (String(row.account_id) !== accountId) throw new Error("A folder row from another household was returned");
   return folders.rows.map((f) => ({
-    id: f.id, name: f.name, complete: f.complete,
+    id: f.id, name: f.name,
+    complete: stillComplete(f.complete, f.confirmed_documents, documents.rows.filter((d) => d.folder_id === f.id).map((d) => d.policy_id)),
     createdAt: f.created_at instanceof Date ? f.created_at.toISOString() : String(f.created_at),
     people: people.rows.filter((p) => p.folder_id === f.id).map((p) => ({ id: p.id, name: p.name })),
     documents: documents.rows.filter((d) => d.folder_id === f.id).map((d) => ({ policyId: d.policy_id, slot: d.slot })),
   }));
+}
+
+/** A folder is complete only while every document it held when the household said yes is still in the library: one that
+ * was deleted or replaced by a newer copy since makes it not complete, so the household is asked again. */
+export function stillComplete(complete: boolean, confirmed: readonly string[] | null | undefined, live: readonly string[]): boolean {
+  if (!complete) return false;
+  const now = new Set(live.map(String));
+  return now.size > 0 && (confirmed ?? []).every((id) => now.has(String(id)));
 }
 
 type Tx = { query: (text: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[]; rowCount?: number | null }> };
@@ -128,7 +137,8 @@ export async function createFolder(accountId: string, input: { name?: string | n
   return inTransaction(async (tx) => {
     await checkPeople(tx, accountId, people);
     await checkDocuments(tx, accountId, docs.map((d) => d.policyId));
-    const created = await tx.query("INSERT INTO policy_folders(account_id, name, complete) VALUES($1,$2,$3) RETURNING id", [accountId, name, input.complete]);
+    const created = await tx.query("INSERT INTO policy_folders(account_id, name, complete, confirmed_documents) VALUES($1,$2,$3,$4::uuid[]) RETURNING id",
+      [accountId, name, input.complete, input.complete ? docs.map((d) => d.policyId) : []]);
     const id = String(created.rows[0].id);
     for (const p of people) await tx.query("INSERT INTO policy_folder_people(folder_id, account_id, family_member_id) VALUES($1,$2,$3)", [id, accountId, p]);
     await addDocuments(tx, accountId, id, docs);
@@ -161,7 +171,12 @@ export async function updateFolder(accountId: string, folderId: string, change: 
     if (change.people && await personCount(tx, accountId, folderId) === 0) throw new FolderInputError("Choose who this policy is for.");
     const sets: string[] = ["updated_at=now()"], params: unknown[] = [folderId, accountId];
     if (change.name !== undefined) { params.push(cleanName(change.name)); sets.push(`name=$${params.length}`); }
-    if (complete !== undefined) { params.push(complete); sets.push(`complete=$${params.length}`); }
+    if (complete !== undefined) {
+      params.push(complete); sets.push(`complete=$${params.length}`);
+      // What "all the documents" meant when the household said yes: the documents in it now that are in the library.
+      sets.push(complete ? `confirmed_documents=ARRAY(SELECT fd.policy_id FROM policy_folder_documents fd JOIN policies p ON p.id=fd.policy_id
+        AND p.account_id=fd.account_id AND p.lifecycle_state='active' AND p.superseded_at IS NULL WHERE fd.folder_id=$1 AND fd.account_id=$2)` : "confirmed_documents='{}'");
+    }
     await tx.query(`UPDATE policy_folders SET ${sets.join(",")} WHERE id=$1 AND account_id=$2`, params);
   });
 }

@@ -243,8 +243,27 @@ async function main() {
     await pool.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [rider]);
     const f = (await folders.listFolders(A))[0];
     assert.deepEqual(f.documents.map((d) => d.policyId), [sched, wording]);
+    assert.equal(f.complete, false, "a document confirmed as part of it has gone, so the household is asked again");
     const h = await household(A);
     assert.deepEqual(h.folders![0].documents, [sched, wording]);
+    assert.equal(h.folders![0].complete, false, "chat is not told all documents are there");
+    assert.match(renderLibrary(h), /all_documents="not confirmed"/);
+    // Yes again: complete with what is there now.
+    assert.equal((await item.PATCH(req(`/api/policies/folders/${janeFolder}`, "PATCH", A, { complete: true }), params(janeFolder))).status, 200);
+    assert.equal((await folders.listFolders(A))[0].complete, true);
+    assert.equal((await household(A)).folders![0].complete, true);
+  });
+  await test("D1b a confirmed folder whose document is permanently removed (its row gone) reads as not complete", async () => {
+    asUser(ownerA);
+    const tmp = id("f9800000", 9);
+    await doc(tmp, A, jane, "Endorsement.pdf");
+    const res = await POST(req("/api/policies/folders", "POST", A, { people: [jane], documents: [{ policyId: tmp }, { policyId: sched }], complete: true }));
+    const fid = (await res.json()).id;
+    assert.equal((await folders.listFolders(A)).find((x) => x.id === fid)!.complete, true);
+    await pool.query("DELETE FROM policies WHERE id=$1", [tmp]);
+    assert.equal((await folders.listFolders(A)).find((x) => x.id === fid)!.complete, false);
+    assert.equal((await household(A)).folders!.find((x) => x.id === fid)!.complete, false);
+    await item.DELETE(req(`/api/policies/folders/${fid}`, "DELETE", A), params(fid));
   });
   await test("D2 a person removed from the household drops out of the folder's people", async () => {
     await pool.query("UPDATE family_members SET lifecycle_state='soft_deleted' WHERE id=$1", [john]);
