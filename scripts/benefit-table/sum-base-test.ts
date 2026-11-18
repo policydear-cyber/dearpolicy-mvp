@@ -746,6 +746,17 @@ for (const [what, page2] of [
   assert.equal(amountOf(h, "Lee Wei Ming", /Critical Illness Benefit/), 300000);
 });
 
+for (const [what, page2] of [
+  ["a list with description lines inside a dotted clause, deduction after it (X2b)", "2 BENEFITS\n2.1 Critical Illness Benefit\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.\nThe covered illnesses are:\n1 Major Cancer\nA malignant tumour.\n2 Heart Attack\nDeath of heart muscle.\n3 Stroke\nA cerebrovascular incident.\nAny amount paid under the Early Stage Benefit will be deducted.\n2.2 Death Benefit"],
+  ["a single list item under an unnumbered heading, deduction above it (U10, X3)", "Critical Illness Benefit\nAny amount paid under the Early Stage Benefit will be deducted.\n1 Major Cancer\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum."],
+  ["a spaced list above the sentence, deduction above it (X1)", "Critical Illness Benefit\nAny amount paid under the Early Stage Benefit will be deducted.\n1 Major Cancer\nA malignant tumour.\n2 Heart Attack\nDeath of heart muscle.\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum."],
+] as const) test(`C control (Critic re-check 8 on #544): ${what} leaves the share with no amount`, () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "BENEFITS", benefit: "Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
+});
+
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.error(`benefit-table sum base: ${passed} passed, ${failures.length} failed`);

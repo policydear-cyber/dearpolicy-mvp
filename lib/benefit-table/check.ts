@@ -957,36 +957,53 @@ function clauseAfter(a: string, b: string): boolean {
   for (let k = 0; k < Math.max(x.length, y.length); k++) { const p = x[k] ?? -1, q = y[k] ?? -1; if (p !== q) return p > q; }
   return false;
 }
-/** Whether a numbered line starts a clause: a dotted number ("3.1"), or one number before a short heading alone on its line
- * ("3. Critical Illness Benefit", "4 EXCLUSIONS": at most six words, no full stop), never one of a run of numbered lines
- * (a list inside the clause: "1 Major Cancer" / "2 Heart Attack", or "4. The claim is made within 6 months.").
- * Critic on #544 re-check 7 (a clean "3." clause read to the page's end) and TE R1. */
-function clauseHeading(lines: string[], i: number, num: string): boolean {
+/** Whether a numbered line is a clause heading: a dotted number ("3.1"), a number before a heading in capitals ("4
+ * EXCLUSIONS"), or, only on a page that numbers no clause with dots, one number before a short heading alone on its line
+ * ("3. Critical Illness Benefit": at most six words, no closing punctuation), or on a dotted page the next top-level
+ * clause after `after` ("4 Death Benefit" after "3.1"), that is not one of a list (another such line
+ * numbered one more or one less within two lines: "1 Major Cancer" / "A malignant tumour." / "2 Heart Attack").
+ * Critic on #544 re-checks 7 and 8, TE R1. */
+const CAPS_HEADING = /^[A-Z][A-Z0-9 &'()\/,-]{2,}$/;
+function clauseHeading(lines: string[], i: number, num: string, dotted: boolean, after: string | null = null): boolean {
   if (num.includes(".")) return true;
   const rest = lines[i].replace(/^\s*\d+\.?[ \t]+/, "").trim();
+  if (CAPS_HEADING.test(rest)) return true;
   if (/[.;:!?]$/.test(rest) || rest.split(/\s+/).length > 6 || !/^\p{Lu}/u.test(rest)) return false;
-  const n = Number(num), near = (j: number) => { const m = j >= 0 && j < lines.length ? CLAUSE_LINE.exec(lines[j]) : null; return !!m && !m[1].includes(".") && Math.abs(Number(m[1]) - n) === 1; };
-  return !near(i - 1) && !near(i + 1);
+  // On a page with dotted clauses a one-number heading is only the next top-level clause ("4 Death Benefit" after "3.1"),
+  // never a list item that happens to count past it ("3 Stroke" inside "2.1").
+  if (dotted && !(after && Number(num) === Number(after.split(".")[0]) + 1)) return false;
+  const n = Number(num);
+  for (let j = Math.max(0, i - 2); j <= Math.min(lines.length - 1, i + 2); j++) {
+    const m = j !== i ? CLAUSE_LINE.exec(lines[j]) : null;
+    if (m && !m[1].includes(".") && Math.abs(Number(m[1]) - n) === 1) return false;
+  }
+  return true;
 }
+const DOTTED_CLAUSE = /^\s*\d+\.\d+(?:\.\d+)*\.?[ \t]+\p{Lu}/u;
 export function provisionAround(text: string, start: number, end: number): string {
   const lines = text.split("\n");
+  const dotted = lines.some((l) => DOTTED_CLAUSE.test(l));
   let at = 0, first = 0, last = lines.length - 1;
   for (let i = 0, pos = 0; i < lines.length; pos += lines[i].length + 1, i++) { if (pos <= start) at = i; if (pos <= end) last = i; }
   const own = last;
-  let num: string | null = null;
-  // Upwards only a dotted clause number ("3.1") starts the clause: a list item or heading with one number ("1 Major
-  // Cancer", "2. Heart Attack") may sit inside it, so the search reads past them, to the top of the page if need be
-  // (Critic on #544, U1).
-  for (let i = at; i >= Math.max(0, at - 80); i--) { const m = CLAUSE_LINE.exec(lines[i]); first = i; if (m && clauseHeading(lines, i, m[1])) { num = m[1]; break; } }
+  let num: string | null = null, nearest: string | null = null;
+  // Upwards the clause starts only at a dotted number or a heading in capitals; a one-number line ("1 Major Cancer",
+  // "3. Critical Illness Benefit") may be a list item inside it, so the text is read past it, to the top of the page if
+  // need be (Critic on #544, U1, U10, X1, X3). The nearest one-number heading still sets where the clause ends below.
+  for (let i = at; i >= Math.max(0, at - 80); i--) {
+    const m = CLAUSE_LINE.exec(lines[i]); first = i;
+    if (!m) continue;
+    const rest = lines[i].replace(/^\s*\d+\.?[ \t]+/, "").trim();
+    if (m[1].includes(".") || CAPS_HEADING.test(rest)) { num = m[1]; break; }
+    if (!nearest && clauseHeading(lines, i, m[1], dotted)) nearest = m[1];
+  }
+  num = num ?? nearest;
   last = Math.min(lines.length - 1, own + 80);
+  // Only a later clause heading ends it: "3.2" or "4 EXCLUSIONS" after "3.1"; never a sub-clause ("3.1.1") or a list in
+  // the clause, however it counts ("1. The illness ...", "4. The claim is made within 6 months.", "3 Stroke").
   for (let i = own + 1; i <= Math.min(lines.length - 1, own + 80); i++) {
     const m = CLAUSE_LINE.exec(lines[i]);
-    // Only a later clause ends it: "3.2" or "4" after "3.1". A sub-clause ("3.1.1") or a list inside the clause that counts
-    // from 1 again ("1. The illness ...", "2. Any Early Stage amount paid is deducted.") is the clause's own (TE on #544).
-    // A list counting on inside the clause ("4. The claim is made within 6 months.") is the clause's too, so a number
-    // without a dot ends it only as a heading in capitals ("4 EXCLUSIONS") (TE on #544, R1).
-    const ends = m && clauseHeading(lines, i, m[1]);
-    if (m && ends && num && m[1] !== num && !m[1].startsWith(`${num}.`) && clauseAfter(m[1], num)) { last = i - 1; break; }
+    if (m && num && clauseHeading(lines, i, m[1], dotted, num) && m[1] !== num && !m[1].startsWith(`${num}.`) && clauseAfter(m[1], num)) { last = i - 1; break; }
   }
   return lines.slice(first, last + 1).join("\n");
 }
