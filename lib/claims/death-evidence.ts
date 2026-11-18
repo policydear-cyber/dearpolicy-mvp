@@ -1,3 +1,4 @@
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { canonicalProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
@@ -240,7 +241,7 @@ export function resolveDeathEvidence(coverages: OwnedCoverage[], rows: DeathWord
       if (!found) continue; // this tier's one candidate has no clause -- fall through
       rules.push({ coverageId: coverage.id, benefit: product === "group term life" ? "gtl-death" : "gpa-accidental-death", quote: found.quote, racingExclusion: found.racingExclusion,
         formula: found.formula, ...(found.cap ? { cap: found.cap } : {}),
-        citation: { chunkId: `page:${first.policy_id}:${found.page}`, policyId: first.policy_id, policyName: first.product_name ?? first.original_filename,
+        citation: { chunkId: `page:${first.policy_id}:${found.page}`, policyId: first.policy_id, policyName: documentCardTitle({ product_name: first.product_name, original_filename: first.original_filename, insurer: first.insurer, document_role: first.document_role, policy_number: first.group_policy_number }),
           insurer: first.insurer ?? undefined, pageStart: found.page, pageEnd: found.pageEnd, documentRole: first.document_role,
           personalEvidence: false, evidenceLabel: "Death benefit wording" } });
       resolved = true;
