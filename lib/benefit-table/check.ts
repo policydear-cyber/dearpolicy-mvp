@@ -986,7 +986,7 @@ export function provisionAround(text: string, start: number, end: number): strin
   let at = 0, first = 0, last = lines.length - 1;
   for (let i = 0, pos = 0; i < lines.length; pos += lines[i].length + 1, i++) { if (pos <= start) at = i; if (pos <= end) last = i; }
   const own = last;
-  let num: string | null = null, nearest: string | null = null;
+  let num: string | null = null, nearest: string | null = null, nearestAt = -1;
   // Upwards the clause starts only at a dotted number or a heading in capitals; a one-number line ("1 Major Cancer",
   // "3. Critical Illness Benefit") may be a list item inside it, so the text is read past it, to the top of the page if
   // need be (Critic on #544, U1, U10, X1, X3). The nearest one-number heading still sets where the clause ends below.
@@ -995,15 +995,22 @@ export function provisionAround(text: string, start: number, end: number): strin
     if (!m) continue;
     const rest = lines[i].replace(/^\s*\d+\.?[ \t]+/, "").trim();
     if (m[1].includes(".") || CAPS_HEADING.test(rest)) { num = m[1]; break; }
-    if (!nearest && clauseHeading(lines, i, m[1], dotted)) nearest = m[1];
+    if (!nearest && clauseHeading(lines, i, m[1], dotted)) { nearest = m[1]; nearestAt = i; }
   }
   num = num ?? nearest;
   last = Math.min(lines.length - 1, own + 80);
   // Only a later clause heading ends it: "3.2" or "4 EXCLUSIONS" after "3.1"; never a sub-clause ("3.1.1") or a list in
   // the clause, however it counts ("1. The illness ...", "4. The claim is made within 6 months.", "3 Stroke").
+  // Once a one-number line has appeared in the clause, any later one is the same list counting on, however long its items'
+  // descriptions ("3 Stroke" ... "4 Kidney Failure" inside 3.1; Critic on #544 re-check 9, Y1, X2).
+  const bare = (l: string) => { const m = CLAUSE_LINE.exec(l); return !!m && !m[1].includes(".") && !CAPS_HEADING.test(l.replace(/^\s*\d+\.?[ \t]+/, "").trim()); };
+  // Counted from the clause's own heading line (a one-number heading is the clause's, not a list item).
+  let listOpen = lines.slice(Math.max(first, num === nearest ? nearestAt : first) + 1, own + 1).some(bare);
   for (let i = own + 1; i <= Math.min(lines.length - 1, own + 80); i++) {
     const m = CLAUSE_LINE.exec(lines[i]);
-    if (m && num && clauseHeading(lines, i, m[1], dotted, num) && m[1] !== num && !m[1].startsWith(`${num}.`) && clauseAfter(m[1], num)) { last = i - 1; break; }
+    const listItem = listOpen && bare(lines[i]);
+    if (bare(lines[i])) listOpen = true;
+    if (m && num && !listItem && clauseHeading(lines, i, m[1], dotted, num) && m[1] !== num && !m[1].startsWith(`${num}.`) && clauseAfter(m[1], num)) { last = i - 1; break; }
   }
   return lines.slice(first, last + 1).join("\n");
 }
