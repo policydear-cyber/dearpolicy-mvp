@@ -126,7 +126,10 @@ test("households: counts per household, deleted ones left out, plans table not s
   const list = await C.readHouseholds();
   assert.ok(list.ok, JSON.stringify(list));
   if (!list.ok) return;
-  assert.deepEqual(list.data.rows.map((h) => h.id).sort(), [A, B].sort(), "the deleted household is left out");
+  // Other test setups (CI's dev account) may add households of their own; only ours are checked here.
+  const ids = list.data.rows.map((h) => h.id);
+  assert.ok(ids.includes(A) && ids.includes(B), "both active households are listed");
+  assert.ok(!ids.includes(GONE), "the deleted household is left out");
   const a = list.data.rows.find((h) => h.id === A)!;
   assert.deepEqual([a.members, a.people, a.documents, a.documentsRead, a.documentsUnreadable, a.documentsInProgress], [2, 1, 4, 2, 1, 1],
     "replaced and deleted documents don't count; another household's never do");
@@ -139,14 +142,21 @@ test("households: counts per household, deleted ones left out, plans table not s
   const totals = await C.readTotals();
   assert.ok(totals.ok);
   if (totals.ok) {
-    assert.deepEqual([totals.data.households, totals.data.documents, totals.data.documentsRead, totals.data.documentsUnreadable, totals.data.documentsInProgress], [2, 7, 5, 1, 1]);
+    // Totals agree with the per-household rows (which already prove replaced, deleted and other households' documents drop out).
+    const rows = list.data.rows;
+    const sum = (f: (h: (typeof rows)[number]) => number) => rows.reduce((n, h) => n + f(h), 0);
+    assert.equal(totals.data.households, rows.length);
+    assert.deepEqual([totals.data.documents, totals.data.documentsRead, totals.data.documentsUnreadable, totals.data.documentsInProgress],
+      [sum((h) => h.documents), sum((h) => h.documentsRead), sum((h) => h.documentsUnreadable), sum((h) => h.documentsInProgress)],
+      "the deleted household's document isn't in the totals");
+    assert.ok(totals.data.documents >= 7);
     assert.deepEqual([totals.data.accounts, totals.data.confirmedAccounts, totals.data.signups7d], [3, 2, 3]);
   }
   const days = await C.readSignupsByDay();
   assert.ok(days.ok);
   if (days.ok) {
     assert.equal(days.data.length, 14);
-    assert.equal(days.data.reduce((n, d) => n + d.households, 0), 2, "only active households");
+    assert.equal(days.data.reduce((n, d) => n + d.households, 0), list.data.rows.length, "only active households");
     assert.equal(days.data.reduce((n, d) => n + (d.accounts ?? 0), 0), 3);
   }
 });

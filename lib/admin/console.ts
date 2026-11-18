@@ -1,5 +1,7 @@
 /**
  * Read-only data for the admin console (/admin). Called only from app/admin pages, after requireAdminOrNotFound().
+ * It changes no household data. (The one write on the path is the existing ensureProvenanceSchema() inside
+ * usageByOperationAndModel(), an idempotent CREATE ... IF NOT EXISTS the operator page already runs.)
  *
  * Runs on the trusted server connection (lib/db/client.ts), which is how it can see every household; nothing here is
  * reachable from a browser role, and no household's RLS or grants change. It reads counts, statuses and metadata
