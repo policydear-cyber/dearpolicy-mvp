@@ -734,6 +734,18 @@ test("C: a capital heading with one number ends the clause; monthly premiums in 
   assert.equal(amountOf(h, "Lee Wei Ming", /Critical Illness Benefit/), 300000);
 });
 
+for (const [what, page2] of [
+  ["a clean clause under \"3.\" with the next clause \"4. Death Benefit\" taking an amount off", "3. Critical Illness Benefit\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.\n\n4. Death Benefit\nWe will pay the Sum Assured less any amount paid under clause 3."],
+  ["a clean 3.1 with the next clause \"4 Death Benefit\" taking an amount off", `3 BENEFITS\n${PROSE}\n\n4 Death Benefit\nWe will pay the Sum Assured less any amount paid under clause 3.1.`],
+  ["a clean 3.1 with the next clause \"4. Income Benefit\" paid monthly", `3 BENEFITS\n${PROSE}\n\n4. Income Benefit\nIt is paid monthly for 24 months.`],
+  ["a claim payable within a month", `3 BENEFITS\n${PROSE}\nClaims are payable within a month of approval.`],
+] as const) test(`C (Critic re-check 7 on #544): ${what} still settles`, () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(amountOf(h, "Lee Wei Ming", /Critical Illness Benefit/), 300000);
+});
+
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.error(`benefit-table sum base: ${passed} passed, ${failures.length} failed`);

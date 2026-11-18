@@ -919,7 +919,7 @@ const PROSE_SHARE = new RegExp(String.raw`\b(?:we|the\s+company|the\s+insurer|th
 /** Words that make a benefit share its sum with another payment: "counted towards this benefit", "together pay at most",
  * "combined". Such a provision's share is left as read (Critic on #544, MEDIUM). */
 const SHARED_WITH = /\b(?:count(?:ed|s)?\s+(?:towards|against)|together\b[^.;]{0,60}\bat\s+most|in\s+total\b[^.;]{0,60}\bat\s+most|combined|aggregate|what\s+remains|what\s+is\s+left|remaining\s+(?:sum|amount|balance))\b/i;
-const REPEATED = /\b(?:monthly|weekly|quarterly|annually|yearly|every\s+(?:month|week|year|quarter)|each\s+(?:month|week|year|quarter)|per\s+(?:month|week|annum|year)|a\s+(?:month|year)|instal+ments?|for\s+\w+\s*(?:\(\d+\)\s*)?(?:consecutive\s+)?(?:months|years|weeks))\b/i;
+const REPEATED = /\b(?:monthly|weekly|quarterly|annually|yearly|every\s+(?:month|week|year|quarter)|each\s+(?:month|week|year|quarter)|per\s+(?:month|week|annum|year)|instal+ments?|for\s+\w+\s*(?:\(\d+\)\s*)?(?:consecutive\s+)?(?:months|years|weeks))\b/i;
 export function proseHeadlineShare(cell: string, value: number, next = "", words = "", provision = ""): boolean {
   // Spaces and line breaks read as one space; a tab stays, so a row's label cell before the sentence is seen as one.
   const all = cell.normalize("NFKC").replace(/[^\S\t]+/g, " ").replace(/ *\t[\s]*/g, "\t");
@@ -957,6 +957,17 @@ function clauseAfter(a: string, b: string): boolean {
   for (let k = 0; k < Math.max(x.length, y.length); k++) { const p = x[k] ?? -1, q = y[k] ?? -1; if (p !== q) return p > q; }
   return false;
 }
+/** Whether a numbered line starts a clause: a dotted number ("3.1"), or one number before a short heading alone on its line
+ * ("3. Critical Illness Benefit", "4 EXCLUSIONS": at most six words, no full stop), never one of a run of numbered lines
+ * (a list inside the clause: "1 Major Cancer" / "2 Heart Attack", or "4. The claim is made within 6 months.").
+ * Critic on #544 re-check 7 (a clean "3." clause read to the page's end) and TE R1. */
+function clauseHeading(lines: string[], i: number, num: string): boolean {
+  if (num.includes(".")) return true;
+  const rest = lines[i].replace(/^\s*\d+\.?[ \t]+/, "").trim();
+  if (/[.;:!?]$/.test(rest) || rest.split(/\s+/).length > 6 || !/^\p{Lu}/u.test(rest)) return false;
+  const n = Number(num), near = (j: number) => { const m = j >= 0 && j < lines.length ? CLAUSE_LINE.exec(lines[j]) : null; return !!m && !m[1].includes(".") && Math.abs(Number(m[1]) - n) === 1; };
+  return !near(i - 1) && !near(i + 1);
+}
 export function provisionAround(text: string, start: number, end: number): string {
   const lines = text.split("\n");
   let at = 0, first = 0, last = lines.length - 1;
@@ -966,7 +977,7 @@ export function provisionAround(text: string, start: number, end: number): strin
   // Upwards only a dotted clause number ("3.1") starts the clause: a list item or heading with one number ("1 Major
   // Cancer", "2. Heart Attack") may sit inside it, so the search reads past them, to the top of the page if need be
   // (Critic on #544, U1).
-  for (let i = at; i >= Math.max(0, at - 80); i--) { const m = CLAUSE_LINE.exec(lines[i]); first = i; if (m && m[1].includes(".")) { num = m[1]; break; } }
+  for (let i = at; i >= Math.max(0, at - 80); i--) { const m = CLAUSE_LINE.exec(lines[i]); first = i; if (m && clauseHeading(lines, i, m[1])) { num = m[1]; break; } }
   last = Math.min(lines.length - 1, own + 80);
   for (let i = own + 1; i <= Math.min(lines.length - 1, own + 80); i++) {
     const m = CLAUSE_LINE.exec(lines[i]);
@@ -974,7 +985,7 @@ export function provisionAround(text: string, start: number, end: number): strin
     // from 1 again ("1. The illness ...", "2. Any Early Stage amount paid is deducted.") is the clause's own (TE on #544).
     // A list counting on inside the clause ("4. The claim is made within 6 months.") is the clause's too, so a number
     // without a dot ends it only as a heading in capitals ("4 EXCLUSIONS") (TE on #544, R1).
-    const ends = m && (m[1].includes(".") || /^\s*\d+\.?[ \t]+[A-Z][A-Z0-9 &'()\/,-]{2,}$/.test(lines[i]));
+    const ends = m && clauseHeading(lines, i, m[1]);
     if (m && ends && num && m[1] !== num && !m[1].startsWith(`${num}.`) && clauseAfter(m[1], num)) { last = i - 1; break; }
   }
   return lines.slice(first, last + 1).join("\n");
