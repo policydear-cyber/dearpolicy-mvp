@@ -121,7 +121,10 @@ async function main() {
     assert.match(libraryFact(h, none), /\(Schedule scan\.pdf\) could not be read: no page of it could be read, so nothing in it was used\./);
     // A failed document says it could not be read, never "read in part".
     assert.match(renderLibrary({ ...h, documents: [{ ...only, processingStatus: "failed" }] }), /reading_status="could not be read \(failed\)"/);
-    assert.match(SIMPLE_SYSTEM_PROMPT, /When it names pages that could not be read at all and the answer would rely on that document, say which pages could not be read/);
+    // Since 18 Nov (DC: answers that narrate reading read as unsure) the pages are named only when the question is about
+    // the reading or the answer turns on them; never "does not have" what those pages could print.
+    assert.match(SIMPLE_SYSTEM_PROMPT, /Say which pages could not be read or checked only when the question is about that document's reading, or when the answer turns on something that could be printed only on those pages/);
+    assert.match(SIMPLE_SYSTEM_PROMPT, /never say it does not have something that could be printed on the pages it names/);
   });
 
   await check("a document with pages the upload check could not check says so, even when those pages are not sent (live 32fa444 E2, A1)", async () => {
