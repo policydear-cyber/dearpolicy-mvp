@@ -109,6 +109,13 @@ test("table: a words row that prints only the schedule's figures is a payment sc
       baseAmount: null, baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 2, quote }] } as never).benefits.find((b) => b.benefit === benefit);
   assert.equal(row("TPD payment above S$200,000", "If the sum payable in respect of a valid claim is above S$200,000, the Company\nwill first pay a lump sum of S$200,000 and pay the balance in three (3) equal annual\ninstalments.")?.paymentSchedule, true);
   assert.equal(row("TPD", "We will pay the Sum Assured if the Insured Person suffers Total and Permanent Disability.")?.paymentSchedule, undefined);
+  const withFuneral = [SCHEDULE, `${TERMS}\nFuneral expenses up to S$500 are paid.`].map((text, i) => ({ page: i + 1, text }));
+  const funeral = checkReading({ id: "d1", name: "group.pdf", readable: true, pages: withFuneral }, {
+    document: { kind: "personal_proof", product: "Group Term Life", insurer: "Example Group Life", namedPeople: [PERSON], plan: null, periodFrom: null, periodTo: null },
+    covers: [], benefits: [{ section: "4. Total and Permanent Disability Benefit", benefit: "TPD and funeral", column: null, pays: "words", value: null, period: null, basis: null, asOf: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 2,
+      quote: "will first pay a lump sum of S$200,000 and pay the balance in three (3) equal annual\ninstalments. The first annual instalment will be paid on the 1st anniversary of the\ninitial lump sum payment.\nFuneral expenses up to S$500 are paid." }] } as never).benefits.find((b) => b.benefit === "TPD and funeral");
+  assert.equal(funeral?.paymentSchedule, undefined, "a small real amount beside the schedule (Critic re-check 11)");
 });
 
 if (failures.length) {

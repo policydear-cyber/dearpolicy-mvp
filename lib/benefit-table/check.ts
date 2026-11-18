@@ -2325,7 +2325,8 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // A row paid as its words say whose printed money is only a payment schedule's (its threshold or first part) says so,
     // never "no figure printed": the figure is printed, it is just not an amount of cover (live check of #545, 18 Nov).
     const paymentSchedule = pays === "words" && value == null && (() => {
-      const figures = [...source.excerpt.matchAll(/(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\d,])/g)].map((m) => Number(m[0].replace(/,/g, "")));
+      // Every money figure: one with a currency sign or code at any size ("S$500"), or one with thousands separators.
+      const figures = [...source.excerpt.matchAll(/(?:(?:[A-Z]{1,3}\$|RM|£|€|\$|\b(?:SGD|USD|MYR|HKD|GBP|EUR|AUD))\s?(\d[\d,]*(?:\.\d+)?))|(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d+)?)(?![\d,])/g)].map((m) => Number((m[1] ?? m[2]).replace(/,/g, "")));
       return figures.length > 0 && figures.every((v) => scheduleFigure(source.excerpt, v) || scheduleFigure(scheduleWords, v));
     })();
     // The most cover a plan offers, on a document that names no one's own cover ("Be insured up to a maximum coverage of
