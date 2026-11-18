@@ -5,10 +5,10 @@ Nothing below is needed for the landing page's prices or the Plan usage page to 
 
 ## 1. Create the plans table (needed before limits or payments)
 
-Apply `sql/household-plans.sql` to the production database (Supabase SQL editor). It adds one table and changes
-nothing else. Until it is applied every household reads as Free and nothing is refused.
+Apply `sql/household-plans.sql` to the production database (Supabase SQL editor). It adds two tables (plans, and
+each household's question count for the month) and changes nothing else. Until it is applied every household reads as Free and nothing is refused.
 
-Rollback: `DROP TABLE IF EXISTS household_plans;`
+Rollback: `DROP TABLE IF EXISTS household_question_counts; DROP TABLE IF EXISTS household_plans;`
 
 ## 2. Keep your own household (and testers) on a full plan
 
@@ -23,6 +23,11 @@ ON CONFLICT (account_id) DO UPDATE SET plan = excluded.plan, status = excluded.s
 A complimentary plan is never changed by a payment event.
 
 ## 3. Switch the limits on
+
+Check first that step 1 is applied and step 2's row exists:
+`SELECT plan, status FROM household_plans WHERE account_id = '<household id>';` must show `family | complimentary`.
+If the table is missing while limits are on, uploads and questions are paused for every household with "couldn't check
+your plan" (never silently dropped to Free), so do step 1 before this step.
 
 In Vercel, Production environment variables: `DEARPOLICY_PLAN_LIMITS=on`, then redeploy.
 From then on a household on Free keeps 5 documents and asks 10 questions a month; Plus 20 and 60; Family up to 100

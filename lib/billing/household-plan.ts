@@ -2,8 +2,13 @@
  * Which plan a household is on, and whether it may keep one more document or ask one more question
  * (lib/billing/plans.ts holds the numbers).
  *
- * The plan lives in household_plans (sql/household-plans.sql), written only by the server. A household with no row,
- * or a database without the table yet, is on Free.
+ * The plan lives in household_plans (sql/household-plans.sql), written only by the server. A household with no row is
+ * on Free. A database without the table yet reads as Free only while limits are off; with limits on, a missing table
+ * refuses nothing and allows nothing on a guess (PlanCheckUnavailable), so switching limits on before the table and the
+ * owner's complimentary row exist can't drop every household, the owner's included, to Free (Critic, 18 Nov).
+ *
+ * Questions are counted in household_question_counts when each one is accepted, not from chat_messages: deleting
+ * chats must never give a household its questions back (Critic, 18 Nov).
  *
  * Limits are enforced only when DEARPOLICY_PLAN_LIMITS=on. Off (the default), Plan usage still shows the plan and its
  * meters, and nothing is refused: so the table can be created, and the owner's own household given a complimentary
@@ -11,7 +16,7 @@
  */
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { checkDocumentLimit, checkQuestionLimit, isPlanId, type BillingInterval, type LimitCheck, type PlanId } from "@/lib/billing/plans";
+import { PLANS, checkDocumentLimit, checkQuestionLimit, isPlanId, type BillingInterval, type LimitCheck, type PlanId } from "@/lib/billing/plans";
 
 /** Stripe subscription statuses that keep a paid plan, plus 'complimentary' (a plan given without payment). A failed
  * renewal (past_due) keeps the plan while Stripe retries; anything else (canceled, unpaid, incomplete...) is Free. */
@@ -51,7 +56,7 @@ export async function readHouseholdPlan(householdId: string): Promise<HouseholdP
     row = (await query<{ plan: string; status: string; billing_interval: string | null; current_period_end: string | null; stripe_customer_id: string | null }>(
       `SELECT plan,status,billing_interval,current_period_end::text,stripe_customer_id FROM household_plans WHERE account_id=$1`, [householdId])).rows[0];
   } catch (error) {
-    if (isMissingTable(error)) return FREE;
+    if (isMissingTable(error) && !planLimitsEnforced()) return FREE;
     throw new PlanCheckUnavailable(error);
   }
   if (!row) return { ...FREE, stored: true };
@@ -78,8 +83,16 @@ export async function keptDocumentCount(householdId: string): Promise<number> {
   }
 }
 
-/** Messages the household has sent to Ask DearPolicy this calendar month (UTC), every member together. */
+/** Questions the household has asked Ask DearPolicy this calendar month (UTC), every member together. Before
+ * sql/household-plans.sql is applied, and only while limits are off, the messages still on file are counted instead. */
 export async function questionsThisMonth(householdId: string): Promise<number> {
+  try {
+    const row = (await query<{ questions: number }>(
+      `SELECT questions FROM household_question_counts WHERE account_id=$1 AND month=date_trunc('month',now())::date`, [householdId])).rows[0];
+    return Number(row?.questions ?? 0);
+  } catch (error) {
+    if (!isMissingTable(error) || planLimitsEnforced()) throw new PlanCheckUnavailable(error);
+  }
   try {
     const row = (await query<{ count: number }>(
       `SELECT count(*)::int AS count FROM chat_messages m JOIN chat_conversations c ON c.id=m.conversation_id
@@ -97,9 +110,27 @@ export async function mayAddDocument(householdId: string, opts: { replacing?: bo
   return checkDocumentLimit(plan.planId, kept);
 }
 
-/** May this household ask one more question this month? Always yes while limits are off. */
-export async function mayAskQuestion(householdId: string): Promise<LimitCheck> {
-  if (!planLimitsEnforced()) return { allowed: true };
-  const [plan, asked] = await Promise.all([readHouseholdPlan(householdId), questionsThisMonth(householdId)]);
-  return checkQuestionLimit(plan.planId, asked);
+/** Takes one of this month's questions for the household, or refuses when they are used up. One statement counts and
+ * checks together, so questions sent at the same moment can't all slip past the limit. While limits are off nothing is
+ * refused; the question is still counted when the table exists, so Plan usage shows it. */
+export async function takeQuestion(householdId: string): Promise<LimitCheck> {
+  if (!planLimitsEnforced()) {
+    await query(
+      `INSERT INTO household_question_counts(account_id,month,questions) VALUES($1,date_trunc('month',now())::date,1)
+       ON CONFLICT (account_id,month) DO UPDATE SET questions=household_question_counts.questions+1`, [householdId]).catch(() => undefined);
+    return { allowed: true };
+  }
+  const plan = await readHouseholdPlan(householdId);
+  const limit = PLANS[plan.planId].questionsPerMonth;
+  let taken: number | null;
+  try {
+    taken = (await query<{ questions: number }>(
+      `INSERT INTO household_question_counts(account_id,month,questions) VALUES($1,date_trunc('month',now())::date,1)
+       ON CONFLICT (account_id,month) DO UPDATE SET questions=household_question_counts.questions+1
+       WHERE household_question_counts.questions<$2
+       RETURNING questions`, [householdId, limit])).rows[0]?.questions ?? null;
+  } catch (error) {
+    throw new PlanCheckUnavailable(error);
+  }
+  return taken == null ? checkQuestionLimit(plan.planId, limit) : { allowed: true };
 }

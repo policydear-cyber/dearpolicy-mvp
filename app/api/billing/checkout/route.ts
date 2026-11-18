@@ -3,11 +3,12 @@ import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { requireHouseholdOwner } from "@/lib/household/repo";
 import { readHouseholdPlan } from "@/lib/billing/household-plan";
-import { billingConfig, createCheckoutSession, stripeCustomerOf } from "@/lib/billing/stripe";
+import { billingConfig, createCheckoutSession, ensureStripeCustomer, expireOpenCheckouts, hasLiveSubscription } from "@/lib/billing/stripe";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-owner" as const;
 
+const ALREADY_PAID = "Your household already has a paid plan, or a payment is being confirmed. Use Manage subscription on Plan usage to change it.";
 const Body = z.object({ plan: z.enum(["plus", "family"]), interval: z.enum(["month", "year"]) });
 
 /** Upgrade: returns the address of Stripe's hosted checkout page for the chosen plan. Owner only (members view and
@@ -21,10 +22,14 @@ export async function POST(request: NextRequest) {
     const ctx = await requireHouseholdContext(request);
     await requireHouseholdOwner(ctx.userId, ctx.householdId);
     const current = await readHouseholdPlan(ctx.householdId);
-    if (current.planId !== "free") return NextResponse.json({ error: "Your household already has a paid plan. Use Manage subscription on Plan usage to change it.", code: "already_paid" }, { status: 409 });
+    if (current.planId !== "free") return NextResponse.json({ error: ALREADY_PAID, code: "already_paid" }, { status: 409 });
+    // One Stripe customer per household, stored first; no second subscription while one is paying or being paid; and
+    // only the newest checkout page stays open, so two tabs can't both take a payment (Critic, 18 Nov).
+    const customerId = await ensureStripeCustomer(config, ctx.householdId, ctx.user.email);
+    if (await hasLiveSubscription(config, customerId)) return NextResponse.json({ error: ALREADY_PAID, code: "already_paid" }, { status: 409 });
+    await expireOpenCheckouts(config, customerId);
     const url = await createCheckoutSession(config, {
-      householdId: ctx.householdId, plan: body.plan, interval: body.interval,
-      email: ctx.user.email, customerId: await stripeCustomerOf(ctx.householdId), origin: request.nextUrl.origin,
+      householdId: ctx.householdId, plan: body.plan, interval: body.interval, customerId, origin: request.nextUrl.origin,
     });
     return NextResponse.json({ url });
   } catch (error) {

@@ -75,7 +75,7 @@ export default function PlanUsagePage(){
         <h3>{plan.name} plan</h3>
         {paid&&renews?<p>{sub.status==="past_due"?`Your last payment didn’t go through. Update your card in Manage subscription to keep ${plan.name}.`:`Paid up to ${renews}.`}</p>:null}
       </div>
-      {paid&&sub.isOwner&&sub.billingEnabled&&sub.hasBillingAccount?<button type="button" className="button" disabled={busy!==null} onClick={()=>void open(subscriptionAddress,"portal")} data-testid="manage-subscription">{busy==="portal"?"Opening…":"Manage subscription"}</button>:null}
+      {sub.isOwner&&sub.billingEnabled&&sub.hasBillingAccount?<button type="button" className="button" disabled={busy!==null} onClick={()=>void open(subscriptionAddress,"portal")} data-testid="manage-subscription">{busy==="portal"?"Opening…":"Manage subscription"}</button>:null}
       </div>
       <Meter label="Documents" used={sub.documentsKept} included={plan.unlimitedDocuments?null:plan.documents} testId="plan-documents"
         detail={plan.unlimitedDocuments?`${documentsLabel(plan)}, within fair use of ${plan.documents}.`:"Documents DearPolicy couldn’t read, and older copies you replaced, don’t count."}/>

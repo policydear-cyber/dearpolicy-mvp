@@ -104,8 +104,15 @@ test("events: a subscription becomes a plan; unknown prices and households are i
   assert.equal(await handleStripeEvent(config, { id: "e1", type: "checkout.session.completed", created: 10, data: { object: { subscription: "sub_1", client_reference_id: A } } }, { fetchImpl: fakeFetch, save }), "saved");
   assert.deepEqual(calls, ["GET https://api.stripe.com/v1/subscriptions/sub_1"]);
   assert.equal((saved[0] as { plan: string }).plan, "plus");
-  assert.equal(await handleStripeEvent(config, { id: "e2", type: "customer.subscription.deleted", created: 11, data: { object: sub("price_pm") } }, { save }), "saved");
-  assert.equal((saved[1] as { status: string }).status, "canceled");
+  // Subscription events use the subscription as Stripe has it now (two events in one second can arrive in either order).
+  const now = (status: string) => (async (url: string) => { calls.push("GET " + url); return new Response(JSON.stringify(sub("price_fm", { status })), { status: 200 }); }) as unknown as typeof fetch;
+  assert.equal(await handleStripeEvent(config, { id: "e2", type: "customer.subscription.updated", created: 11, data: { object: sub("price_pm", { status: "active" }) } }, { fetchImpl: now("canceled"), save }), "saved");
+  assert.deepEqual([(saved[1] as { status: string }).status, (saved[1] as { plan: string }).plan], ["canceled", "family"], "Stripe's current state, not the event's copy");
+  const gone = (async () => new Response("{}", { status: 404 })) as unknown as typeof fetch;
+  assert.equal(await handleStripeEvent(config, { id: "e2b", type: "customer.subscription.deleted", created: 12, data: { object: sub("price_pm") } }, { fetchImpl: gone, save }), "saved");
+  assert.equal((saved[2] as { status: string }).status, "canceled");
+  const down = (async () => new Response("{}", { status: 500 })) as unknown as typeof fetch;
+  await assert.rejects(handleStripeEvent(config, { id: "e2c", type: "customer.subscription.updated", created: 13, data: { object: sub("price_pm") } }, { fetchImpl: down, save }), "Stripe down: the webhook fails so Stripe sends it again");
   assert.equal(await handleStripeEvent(config, { id: "e3", type: "invoice.paid", created: 12, data: { object: {} } }, { save }), "ignored");
 });
 
@@ -114,16 +121,18 @@ test("checkout: the household id travels on the session and the subscription; St
   const config = billingConfig({ ...STRIPE_ENV } as unknown as NodeJS.ProcessEnv)!;
   let sent = "";
   const ok = (async (_u: string, init: RequestInit) => { sent = String(init.body); return new Response(JSON.stringify({ url: "https://checkout.stripe.com/c/x" })); }) as unknown as typeof fetch;
-  const url = await createCheckoutSession(config, { householdId: A, plan: "plus", interval: "year", email: "owner@example.com", customerId: null, origin: "https://app.example" }, ok);
+  const url = await createCheckoutSession(config, { householdId: A, plan: "plus", interval: "year", customerId: "cus_a", origin: "https://app.example" }, ok);
   assert.equal(url, "https://checkout.stripe.com/c/x");
   const p = new URLSearchParams(sent);
   assert.equal(p.get("line_items[0][price]"), "price_py");
   assert.equal(p.get("client_reference_id"), A);
   assert.equal(p.get("subscription_data[metadata][household_id]"), A);
   assert.equal(p.get("mode"), "subscription");
+  assert.equal(p.get("customer"), "cus_a", "always the household's one customer");
+  assert.equal(p.get("customer_email"), null);
   assert.equal(p.get("success_url"), "https://app.example/usage?upgraded=1");
   const bad = (async () => new Response('{"error":{"message":"No such price: price_py; secret detail"}}', { status: 400 })) as unknown as typeof fetch;
-  await assert.rejects(createCheckoutSession(config, { householdId: A, plan: "plus", interval: "year", email: null, customerId: null, origin: "https://x" }, bad), (e: unknown) => e instanceof StripeRequestFailed && !/secret detail/.test((e as Error).message));
+  await assert.rejects(createCheckoutSession(config, { householdId: A, plan: "plus", interval: "year", customerId: "cus_a", origin: "https://x" }, bad), (e: unknown) => e instanceof StripeRequestFailed && !/secret detail/.test((e as Error).message));
 });
 
 // ---- Database: PGlite with the production schema --------------------------------------------------------------------
@@ -149,13 +158,22 @@ async function addPolicy(db: import("@electric-sql/pglite").PGlite, n: number, a
 
 test("before sql/household-plans.sql: every household reads as Free, nothing is refused", async () => {
   await database();
-  const { readHouseholdPlan, mayAddDocument, mayAskQuestion } = await import("@/lib/billing/household-plan");
+  const { readHouseholdPlan, mayAddDocument, takeQuestion, PlanCheckUnavailable } = await import("@/lib/billing/household-plan");
   const plan = await readHouseholdPlan(A);
   assert.equal(plan.planId, "free");
   assert.equal(plan.stored, false);
   delete process.env.DEARPOLICY_PLAN_LIMITS;
   assert.equal((await mayAddDocument(A)).allowed, true);
-  assert.equal((await mayAskQuestion(A)).allowed, true);
+  assert.equal((await takeQuestion(A)).allowed, true);
+  // Limits switched on before the table exists: nothing is refused or allowed on a guess, and nobody drops to Free.
+  process.env.DEARPOLICY_PLAN_LIMITS = "on";
+  try {
+    await assert.rejects(readHouseholdPlan(A), PlanCheckUnavailable);
+    await assert.rejects(mayAddDocument(A), PlanCheckUnavailable);
+    await assert.rejects(takeQuestion(A), PlanCheckUnavailable);
+  } finally {
+    delete process.env.DEARPOLICY_PLAN_LIMITS;
+  }
 });
 
 test("counting and limits, per household", async () => {
@@ -188,22 +206,33 @@ test("counting and limits, per household", async () => {
     await db.query("UPDATE household_plans SET status='past_due' WHERE account_id=$1", [B]);
     assert.equal((await H.readHouseholdPlan(B)).planId, "plus", "kept while Stripe retries a failed payment");
 
-    // Questions: this month's user messages, every member, this household only.
-    await db.query("INSERT INTO chat_conversations(id,account_id,title) VALUES($1,$2,'a'),($3,$4,'b')", [pid(900), A, pid(901), B]);
-    for (let i = 0; i < 9; i++) await db.query("INSERT INTO chat_messages(conversation_id,account_id,role,content) VALUES($1,$2,'user','q')", [pid(900), A]);
-    await db.query("INSERT INTO chat_messages(conversation_id,account_id,role,content) VALUES($1,$2,'assistant','a')", [pid(900), A]);
-    await db.query("INSERT INTO chat_messages(conversation_id,account_id,role,content,created_at) VALUES($1,$2,'user','old',date_trunc('month',now())-interval '1 day')", [pid(900), A]);
-    for (let i = 0; i < 30; i++) await db.query("INSERT INTO chat_messages(conversation_id,account_id,role,content) VALUES($1,$2,'user','q')", [pid(901), B]);
-    assert.equal(await H.questionsThisMonth(A), 9, "answers and last month's questions don't count");
-    assert.equal((await H.mayAskQuestion(A)).allowed, true);
-    await db.query("INSERT INTO chat_messages(conversation_id,account_id,role,content) VALUES($1,$2,'user','q')", [pid(900), A]);
-    const q = await H.mayAskQuestion(A);
+    // Questions: taken one by one as each is accepted, every member together, this household only.
+    for (let i = 0; i < 10; i++) assert.equal((await H.takeQuestion(A)).allowed, true, "question " + (i + 1) + " of 10");
+    assert.equal(await H.questionsThisMonth(A), 10);
+    const q = await H.takeQuestion(A);
     assert.ok(!q.allowed && q.code === "question_limit", "the 11th question on Free");
-    assert.equal((await H.mayAskQuestion(B)).allowed, true, "30 of 60 on Plus");
+    assert.equal(await H.questionsThisMonth(A), 10, "a refused question isn't counted");
+    // Deleting every chat never gives the questions back (Critic HIGH1).
+    await db.query("INSERT INTO chat_conversations(id,account_id,title) VALUES($1,$2,'a')", [pid(900), A]);
+    await db.query("INSERT INTO chat_messages(conversation_id,account_id,role,content) VALUES($1,$2,'user','q')", [pid(900), A]);
+    await db.query("DELETE FROM chat_messages WHERE account_id=$1", [A]);
+    await db.query("DELETE FROM chat_conversations WHERE account_id=$1", [A]);
+    assert.equal((await H.takeQuestion(A)).allowed, false, "still used up after deleting chats");
+    // Last month's count is last month's.
+    await db.query("UPDATE household_question_counts SET month=(date_trunc('month',now())-interval '1 day')::date WHERE account_id=$1", [A]);
+    assert.equal(await H.questionsThisMonth(A), 0);
+    assert.equal((await H.takeQuestion(A)).allowed, true, "a new month starts again");
+    // Ten at once, one left: only one gets through.
+    await db.query("UPDATE household_question_counts SET questions=9 WHERE account_id=$1 AND month=date_trunc('month',now())::date", [A]);
+    const burst = await Promise.all(Array.from({ length: 10 }, () => H.takeQuestion(A)));
+    assert.equal(burst.filter((r) => r.allowed).length, 1, "questions sent together can't all slip past the limit");
+    for (let i = 0; i < 30; i++) await H.takeQuestion(B);
+    assert.equal(await H.questionsThisMonth(B), 30, "B's questions are B's");
+    assert.equal((await H.takeQuestion(B)).allowed, true, "31 of 60 on Plus");
 
     // Limits off again: nothing refused, whatever the counts.
     process.env.DEARPOLICY_PLAN_LIMITS = "off";
-    assert.equal((await H.mayAskQuestion(A)).allowed, true);
+    assert.equal((await H.takeQuestion(A)).allowed, true);
     assert.equal((await H.mayAddDocument(A)).allowed, true);
   } finally {
     delete process.env.DEARPOLICY_PLAN_LIMITS;
@@ -216,6 +245,7 @@ test("a household can't give itself a plan: no browser privilege on household_pl
   try {
     await assert.rejects(db.query("INSERT INTO household_plans(account_id,plan,status) VALUES($1,'family','complimentary')", [A]), /permission denied/);
     await assert.rejects(db.query("SELECT * FROM household_plans"), /permission denied/);
+    await assert.rejects(db.query("UPDATE household_question_counts SET questions=0"), /permission denied/, "nor reset its own question count");
   } finally {
     await db.exec("RESET ROLE");
   }
@@ -240,11 +270,45 @@ test("savePlan: newer events win, complimentary plans stay, unknown households a
   assert.equal((await db.query("SELECT 1 FROM household_plans WHERE account_id='00000000-0000-0000-0000-0000000b1c00'")).rows.length, 0);
 });
 
+test("checkout: one Stripe customer per household, no second subscription, only the newest checkout page open", async () => {
+  const db = await database();
+  const { billingConfig, ensureStripeCustomer, hasLiveSubscription, expireOpenCheckouts } = await import("@/lib/billing/stripe");
+  const config = billingConfig({ ...STRIPE_ENV } as unknown as NodeJS.ProcessEnv)!;
+  const C = "00000000-0000-0000-0000-0000000b1d00";
+  await db.query("INSERT INTO accounts(id,name) VALUES($1,'Ong household')", [C]);
+  const calls: string[] = [];
+  let made = 0;
+  const fake = (async (url: string, init: RequestInit) => {
+    calls.push(String(init.method) + " " + url + " " + ((init.headers as Record<string, string>)["idempotency-key"] ?? ""));
+    if (url.endsWith("/customers")) return new Response(JSON.stringify({ id: "cus_new" + (++made) }));
+    if (url.includes("/subscriptions?")) return new Response(JSON.stringify({ data: [{ status: "canceled" }, { status: url.includes("cus_live") ? "incomplete" : "canceled" }] }));
+    if (url.includes("/checkout/sessions?")) return new Response(JSON.stringify({ data: [{ id: "cs_1" }, { id: "cs_2" }] }));
+    if (url.endsWith("/expire")) return new Response("{}");
+    return new Response("{}", { status: 404 });
+  }) as unknown as typeof fetch;
+  const first = await ensureStripeCustomer(config, C, "owner@example.com", fake);
+  assert.equal(first, "cus_new1");
+  assert.match(calls[0], new RegExp("POST https://api.stripe.com/v1/customers dearpolicy-customer-" + C));
+  assert.equal(await ensureStripeCustomer(config, C, "owner@example.com", fake), "cus_new1", "stored first, reused after");
+  assert.equal(made, 1);
+  const row = (await db.query<{ plan: string; status: string }>("SELECT plan,status FROM household_plans WHERE account_id=$1", [C])).rows[0];
+  assert.deepEqual([row.plan, row.status], ["free", "customer"], "a customer alone is still Free");
+  const H = await import("@/lib/billing/household-plan");
+  assert.equal((await H.readHouseholdPlan(C)).planId, "free");
+  assert.equal(await hasLiveSubscription(config, "cus_new1", fake), false);
+  assert.equal(await hasLiveSubscription(config, "cus_live", fake), true, "a payment being confirmed counts");
+  assert.equal(await expireOpenCheckouts(config, "cus_new1", fake), 2);
+  assert.ok(calls.some((c) => c.startsWith("POST https://api.stripe.com/v1/checkout/sessions/cs_2/expire")));
+  const route = readFileSync("app/api/billing/checkout/route.ts", "utf8");
+  const order = ["ensureStripeCustomer(", "hasLiveSubscription(", "expireOpenCheckouts(", "createCheckoutSession("].map((x) => route.indexOf(x));
+  assert.ok(order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])), "customer, then the live check, then close old pages, then the new page");
+});
+
 test("routes: the chat refuses the 11th Free question before anything is sent; the webhook is off without billing", async () => {
   const db = await database();
   await db.query("DELETE FROM household_plans WHERE account_id=$1", [A]);
   const source = readFileSync("app/api/chat/route.ts", "utf8");
-  const limitAt = source.indexOf("mayAskQuestion(accountId)"), sendAt = source.indexOf("enqueueChat(args)");
+  const limitAt = source.indexOf("takeQuestion(accountId)"), sendAt = source.indexOf("enqueueChat(args)");
   assert.ok(limitAt > 0 && limitAt < sendAt, "checked before the question is queued");
   assert.match(source, /code:plan\.code,upgradePath:"\/usage"\},\{status:429\}/);
   const accept = readFileSync("app/api/policies/upload/accept.ts", "utf8");

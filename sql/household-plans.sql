@@ -1,7 +1,10 @@
 -- Plans (DC approved 18 Nov 2026: Free, Plus, Family; lib/billing/plans.ts).
 --
--- One row per household that is on a paid or complimentary plan. A household with no row is on Free.
--- Additive only: one new table, nothing existing is changed or dropped.
+-- household_plans: one row per household that is on a paid or complimentary plan, or has a Stripe customer. A household
+-- with no row (or a row whose status keeps no plan) is on Free.
+-- household_question_counts: questions each household has asked Ask DearPolicy in a calendar month (UTC). Counted here,
+-- not from chat_messages, because deleting chats must never give a household its questions back (Critic, 18 Nov).
+-- Additive only: two new tables, nothing existing is changed or dropped.
 --
 -- Written only by the server (the Stripe webhook, lib/billing/stripe.ts, through the trusted connection). Browser sessions
 -- get no privilege on it at all, so a household can never give itself a plan: accounts would not do, because
@@ -14,7 +17,7 @@
 --   INSERT INTO household_plans(account_id, plan, status) VALUES ('<household id>', 'family', 'complimentary')
 --   ON CONFLICT (account_id) DO UPDATE SET plan = excluded.plan, status = excluded.status, updated_at = now();
 --
--- Rollback: DROP TABLE IF EXISTS household_plans;
+-- Rollback: DROP TABLE IF EXISTS household_question_counts; DROP TABLE IF EXISTS household_plans;
 CREATE TABLE IF NOT EXISTS household_plans (
   account_id uuid PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
   plan text NOT NULL CHECK (plan IN ('free', 'plus', 'family')),
@@ -35,4 +38,17 @@ REVOKE ALL ON household_plans FROM PUBLIC;
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN EXECUTE 'REVOKE ALL ON household_plans FROM anon'; END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN EXECUTE 'REVOKE ALL ON household_plans FROM authenticated'; END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS household_question_counts (
+  account_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  month date NOT NULL,
+  questions integer NOT NULL DEFAULT 0 CHECK (questions >= 0),
+  PRIMARY KEY (account_id, month)
+);
+ALTER TABLE household_question_counts ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON household_question_counts FROM PUBLIC;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN EXECUTE 'REVOKE ALL ON household_question_counts FROM anon'; END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN EXECUTE 'REVOKE ALL ON household_question_counts FROM authenticated'; END IF;
 END $$;

@@ -57,22 +57,66 @@ export class StripeRequestFailed extends Error {
 }
 
 /** One Stripe API call. Form-encoded, as Stripe's API takes it. Stripe's own error text is never passed on to a household. */
-async function stripe<T>(config: BillingConfig, method: "GET" | "POST", path: string, params: Record<string, string> = {}, fetchImpl: typeof fetch = fetch): Promise<T> {
+async function stripe<T>(config: BillingConfig, method: "GET" | "POST", path: string, params: Record<string, string> = {}, fetchImpl: typeof fetch = fetch, idempotencyKey?: string): Promise<T> {
   const body = new URLSearchParams(params).toString();
   const url = "https://api.stripe.com/v1/" + path + (method === "GET" && body ? "?" + body : "");
   const response = await fetchImpl(url, {
     method,
-    headers: { authorization: "Bearer " + config.secretKey, ...(method === "POST" ? { "content-type": "application/x-www-form-urlencoded" } : {}) },
+    headers: {
+      authorization: "Bearer " + config.secretKey,
+      ...(method === "POST" ? { "content-type": "application/x-www-form-urlencoded" } : {}),
+      ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
+    },
     body: method === "POST" ? body : undefined,
   });
   if (!response.ok) throw new StripeRequestFailed(response.status);
   return (await response.json()) as T;
 }
 
+/** Subscription statuses that mean a household is already paying, or about to (Stripe is still confirming the first
+ * payment): a second checkout must not start. */
+const LIVE_SUBSCRIPTION = new Set(["active", "trialing", "past_due", "incomplete", "unpaid"]);
+
+/** The household's one Stripe customer: the stored one, or a new one stored before any checkout opens, so every
+ * checkout and the billing portal reach the same customer (Critic, 18 Nov: two checkouts on two customers left one
+ * subscription the household couldn't cancel). Stripe's idempotency key makes two tabs at once get the same customer,
+ * and the first one stored wins. */
+export async function ensureStripeCustomer(config: BillingConfig, householdId: string, email: string | null, fetchImpl?: typeof fetch): Promise<string> {
+  const stored = await stripeCustomerOf(householdId);
+  if (stored) return stored;
+  const params: Record<string, string> = { "metadata[household_id]": householdId };
+  if (email) params.email = email;
+  const customer = await stripe<{ id?: string }>(config, "POST", "customers", params, fetchImpl, "dearpolicy-customer-" + householdId);
+  if (!customer.id) throw new StripeRequestFailed(502);
+  const row = (await query<{ id: string }>(
+    `INSERT INTO household_plans(account_id,plan,status,stripe_customer_id) VALUES($1,'free','customer',$2)
+     ON CONFLICT (account_id) DO UPDATE SET stripe_customer_id=COALESCE(household_plans.stripe_customer_id,excluded.stripe_customer_id),updated_at=now()
+     RETURNING stripe_customer_id AS id`, [householdId, customer.id])).rows[0];
+  return row?.id ?? customer.id;
+}
+
+/** Whether the customer already has a subscription that is paying or being paid. */
+export async function hasLiveSubscription(config: BillingConfig, customerId: string, fetchImpl?: typeof fetch): Promise<boolean> {
+  const list = await stripe<{ data?: Array<{ status?: string }> }>(config, "GET", "subscriptions", { customer: customerId, status: "all", limit: "20" }, fetchImpl);
+  return (list.data ?? []).some((s) => LIVE_SUBSCRIPTION.has(String(s.status)));
+}
+
+/** Closes the customer's checkout pages that are still open, so only the newest one can take a payment. */
+export async function expireOpenCheckouts(config: BillingConfig, customerId: string, fetchImpl?: typeof fetch): Promise<number> {
+  const list = await stripe<{ data?: Array<{ id?: string }> }>(config, "GET", "checkout/sessions", { customer: customerId, status: "open", limit: "20" }, fetchImpl);
+  let expired = 0;
+  for (const session of list.data ?? []) {
+    if (!session.id) continue;
+    await stripe(config, "POST", "checkout/sessions/" + encodeURIComponent(session.id) + "/expire", {}, fetchImpl);
+    expired++;
+  }
+  return expired;
+}
+
 /** A hosted checkout page for a paid plan. The household id travels on the session and on the subscription, so the
  * webhook can always tell whose plan it is. */
 export async function createCheckoutSession(config: BillingConfig, args: {
-  householdId: string; plan: PaidPlan; interval: BillingInterval; email: string | null; customerId: string | null; origin: string;
+  householdId: string; plan: PaidPlan; interval: BillingInterval; customerId: string; origin: string;
 }, fetchImpl?: typeof fetch): Promise<string> {
   const params: Record<string, string> = {
     mode: "subscription",
@@ -81,12 +125,11 @@ export async function createCheckoutSession(config: BillingConfig, args: {
     client_reference_id: args.householdId,
     "metadata[household_id]": args.householdId,
     "subscription_data[metadata][household_id]": args.householdId,
+    customer: args.customerId,
     allow_promotion_codes: "true",
     success_url: args.origin + "/usage?upgraded=1",
     cancel_url: args.origin + "/usage",
   };
-  if (args.customerId) params.customer = args.customerId;
-  else if (args.email) params.customer_email = args.email;
   const session = await stripe<{ url?: string }>(config, "POST", "checkout/sessions", params, fetchImpl);
   if (!session.url) throw new StripeRequestFailed(502);
   return session.url;
@@ -180,7 +223,16 @@ export async function handleStripeEvent(config: BillingConfig, event: StripeEven
     return "saved";
   }
   if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
-    const write = planWriteFor(config, object as unknown as StripeSubscription, event.created, null);
+    // The subscription as it is now, not as the event saw it: two events in the same second can arrive in either order
+    // (Critic, 18 Nov). A subscription Stripe no longer has is taken from the event itself.
+    const fromEvent = object as unknown as StripeSubscription;
+    let current = fromEvent;
+    try {
+      current = await stripe<StripeSubscription>(config, "GET", "subscriptions/" + encodeURIComponent(fromEvent.id), {}, deps.fetchImpl);
+    } catch (error) {
+      if (!(error instanceof StripeRequestFailed && error.status === 404)) throw error;
+    }
+    const write = planWriteFor(config, current, event.created, fromEvent.metadata?.household_id ?? null);
     if (!write) return "ignored";
     await save(event.type === "customer.subscription.deleted" ? { ...write, status: "canceled" } : write);
     return "saved";

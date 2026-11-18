@@ -85,6 +85,7 @@ export const TABLE_INVENTORY: Record<string, TableInventoryEntry> = {
 
   // --- infrastructure: no browser role holds any privilege ---
   household_plans: { class: "service_only", authenticated: [], policies: DENY("household_plans"), browserGrantsRequired: false, codePath: "lib/billing/stripe.ts savePlan (Stripe webhook, service); lib/billing/household-plan.ts (service read)" },
+  household_question_counts: { class: "service_only", authenticated: [], policies: DENY("household_question_counts"), browserGrantsRequired: false, codePath: "lib/billing/household-plan.ts takeQuestion (service)" },
   background_jobs: { class: "service_only", authenticated: [], policies: DENY("background_jobs"), browserGrantsRequired: false, codePath: "lib/jobs/queue.ts, lib/jobs/worker-runtime.ts, lib/jobs/dead-letter.ts" },
   background_job_audit_log: { class: "service_only", authenticated: [], policies: DENY("background_job_audit_log"), browserGrantsRequired: false, codePath: "lib/jobs/queue.ts appendJobAudit" },
   chat_analysis_jobs: { class: "service_only", authenticated: [], policies: DENY("chat_analysis_jobs"), browserGrantsRequired: false, codePath: "lib/chat/jobs.ts, app/api/chat/history/[id]/route.ts (service)" },
