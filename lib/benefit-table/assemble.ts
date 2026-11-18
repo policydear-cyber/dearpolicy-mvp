@@ -23,7 +23,7 @@ import { anyMoneyFigures } from "@/lib/format/currency";
 import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, marksIn, namesTheLives, noteMarkOf, numbersIn, bindsToGroup, sharesLimitStrongly, sharesStronglyAmong, withoutOwnShareCap, withoutTravelTogether, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
-import { benefitWords } from "./cover-rows";
+import { benefitWords, rowHead } from "./cover-rows";
 import { rowSectionCode, rowSectionNumber } from "./section-id";
 import { childCase, personStatus, personStatusWhy, provenAdult, statusDays, withoutChildLimit, type ChildLimit, householdLife } from "./child-limit";
 
@@ -458,8 +458,17 @@ function headlineSumProblem(b: CheckedBenefit, cover: PersonCover, personCovers:
   const policy = personCovers.filter((x) => x.personId === cover.personId && x.source.documentId === cover.source.documentId && norm(x.product) === norm(cover.product)
     && samePolicy(x) && x.sumInsured != null);
   const labelled = policy.filter((x) => HEADLINE_LABEL.test(`${x.cover ?? ""}\n${x.source.excerpt}`));
-  const sums = new Set((labelled.length ? labelled : policy).map((x) => `${x.sumInsured}|${x.currency ?? ""}`));
-  if (sums.size !== 1 || !sums.has(`${cover.sumInsured}|${cover.currency ?? ""}`))
+  const key = (x: PersonCover) => `${x.sumInsured}|${x.currency ?? ""}`;
+  const sumsOf = (xs: PersonCover[]) => new Set(xs.map(key));
+  const one = (xs: PersonCover[]) => { const s = sumsOf(xs); return s.size === 1 && s.has(key(cover)); };
+  // No line names the headline sum and the policy's lines print different sums ("Comprehensive Critical Illness Benefit
+  // 300,000" and "Death Benefit 5,000"): the share is of the sum of the line the row's own name names, when that is this
+  // cover's line and every line whose name has all the row's words prints that one sum ("3.1 Critical Illness Benefit":
+  // critical, illness). A name two lines with different sums share, or one this cover's line does not carry, stays doubt.
+  const rowWords = new Set([...benefitWords(rowHead(b.benefit))].filter((w) => !/^\d+$/.test(w)));
+  const byName = rowWords.size ? policy.filter((x) => { const w = benefitWords(x.cover ?? ""); return [...rowWords].every((r) => w.has(r)); }) : [];
+  const settled = labelled.length ? one(labelled) : one(policy) || byName.some((x) => x.coverKey === cover.coverKey) && one(byName);
+  if (!settled)
     return `${b.value}% of the policy's sum, but ${cover.cover ?? "this policy"} prints more than one sum for this person, so which one is not settled`;
   return null;
 }

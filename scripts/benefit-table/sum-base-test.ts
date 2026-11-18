@@ -638,6 +638,35 @@ test("C control: the same sentence linked to a rider's cover is not worked out o
   assert.ok(r);
   assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
 });
+// The policy's schedule prints a second line with its own, different sum ("Death Benefit 5,000" beside "Comprehensive
+// Critical Illness Benefit 300,000", live check on #544): the share is of the line its own name names.
+const TWO_COVERS: Cover[] = [{ cover: "Comprehensive Critical Illness Benefit", sum: 300000, line: "Comprehensive Critical Illness Benefit\tS$300,000" },
+  { cover: "Health Extra", sum: null, line: "- Health Extra\t---", riderOf: "Comprehensive Critical Illness Benefit" }, { cover: "Death Benefit", sum: 5000, line: "Death Benefit\tS$5,000" }];
+const TWO_LINES = (o: { link?: string; benefit?: string; covers?: Cover[] } = {}) => build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+  page1: [CCI_PAGE1.replace(/\nCritical Illness Plan\tS\$300,000$/, ""), ...(o.covers ?? TWO_COVERS).map((c) => c.line)].join("\n"), page2: `3 BENEFITS\n${PROSE}`,
+  link: o.link ?? "Comprehensive Critical Illness Benefit", covers: o.covers ?? TWO_COVERS,
+  benefits: [{ section: "3 BENEFITS", benefit: o.benefit ?? "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+test("C: a second line with its own sum (a small death benefit) does not unsettle the share of the line the row names", () => {
+  assert.equal(amountOf(TWO_LINES(), "Lee Wei Ming", /Critical Illness Benefit/), 300000);
+});
+test("C control: the same row linked to the death benefit's line is not worked out on either sum", () => {
+  const r = rowOf(TWO_LINES({ link: "Death Benefit" }), "Lee Wei Ming", /Critical Illness Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+  assert.doesNotMatch(JSON.stringify(r.figure), /300,000|5,000/);
+});
+test("C control: a row whose name names none of the lines stays with no amount when the lines print two sums", () => {
+  const r = rowOf(TWO_LINES({ benefit: "3.1 Main Benefit" }), "Lee Wei Ming", /Main Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+});
+test("C control: two lines that both carry the row's name, with different sums, stay with no amount", () => {
+  const r = rowOf(TWO_LINES({ covers: [{ cover: "Comprehensive Critical Illness Benefit", sum: 300000, line: "Comprehensive Critical Illness Benefit\tS$300,000" },
+    { cover: "Critical Illness Benefit (Advance)", sum: 50000, line: "Critical Illness Benefit (Advance)\tS$50,000" }] }), "Lee Wei Ming", /Critical Illness Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+  assert.doesNotMatch(JSON.stringify(r.figure), /300,000|50,000/);
+});
 test("C control: the sentence followed by a line that takes earlier payments off stays with no amount", () => {
   const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
     page1: CCI_PAGE1, page2: `3 BENEFITS\n${PROSE}\nAny amount paid earlier under the Early Stage benefit will be deducted.`, covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
