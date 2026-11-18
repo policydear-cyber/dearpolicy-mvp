@@ -8,6 +8,7 @@ import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } f
 import { customerError } from "@/components/customer-text";
 import { coverReadingPending, failedDocumentAdvice, notReadPagesAdvice, readInPartAdvice, unreadablePagesAdvice } from "@/lib/documents/failure-advice";
 import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
+import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-role";
 import { CONFIRM_READ_AGAIN, documentReadLabel, pressReadAgain, readingFinishedSummary, readingWaitCopy } from "@/lib/documents/upload-problems";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
@@ -91,6 +92,8 @@ function foundLine(labels: string[]) {
 }
 
 export default function PoliciesPage() {
+  // Only the household owner uploads, reads again, deletes or links documents; a member sees them (components/household-role).
+  const canManage = useCanManageHousehold();
   const [family, setFamily] = useState<Member[]>([]);
   // Whether the family list was read: a failed /api/family (an error or offline) is not an empty family, so the page then
   // keeps the file picker, as before, and the upload route still refuses a household with no people.
@@ -434,7 +437,9 @@ export default function PoliciesPage() {
           only once a PDF is chosen. What happened shows right under the button, where the thumb just was. */}
       {/* A household with no one in it yet cannot upload (the server needs a person to file the document under): it is
           asked to add the people first, before choosing a file, never after (Live tester, new-household walk 11 Nov). */}
-      {loaded && familyKnown && !family.length ? <div className="upload-form" data-testid="upload-needs-family">
+      {!canManage ? <div className="upload-form" data-testid="upload-owner-only">
+        <p><strong>Only the household owner can upload documents.</strong> You can see every document here and ask about them. To add one of yours, send it to the owner.</p>
+      </div> : loaded && familyKnown && !family.length ? <div className="upload-form" data-testid="upload-needs-family">
         <p><strong>First, add the people your policies cover.</strong> DearPolicy files each document under a person and uses their names to tell whose cover is whose. You can add yourself first and the rest of your family later.</p>
         <Link className="button primary" href="/family"><Icon name="family"/> Add family members</Link>
       </div> : <form onSubmit={upload} className="upload-form">
@@ -509,7 +514,7 @@ export default function PoliciesPage() {
             <div className="progress-track"><div className="progress-fill" style={{ width: `${Math.max(4, pct)}%` }}/></div>
             {/* Stalled means nothing is reading it now: say so and offer to start it, never "will keep trying" (25 Oct). */}
             {policy.processing_stalled
-              ? <><small>Reading has not started. Nothing is lost, and you do not need to upload it again.</small><div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try again"}</button></div></>
+              ? <><small>Reading has not started. Nothing is lost, and you do not need to upload it again.</small>{canManage && <div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try again"}</button></div>}</>
               : <small>{readingWaitCopy(policy.processing_stage).note}</small>}
           </div>}
 
@@ -525,7 +530,7 @@ export default function PoliciesPage() {
             const unread = !processing && policy.processing_status === "ready" ? notReadPagesAdvice(policy.processing_message) : null;
             // The retry path, where the card is: the same confirming Read again as the actions row below (re-reading
             // makes this document's cover unavailable for a minute, and that row says so).
-            const readAgainButton = <div className="row-error-actions"><button type="button" className="mini-button" data-testid="read-again-pages" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : "Read again"}</button></div>;
+            const readAgainButton = !canManage ? null : <div className="row-error-actions"><button type="button" className="mini-button" data-testid="read-again-pages" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : "Read again"}</button></div>;
             return <>
               {missing && <div className="accuracy-warning" data-testid="pages-not-read"><b>{missing.title}</b><span>{missing.what}</span><small>{missing.next}</small>{readAgainButton}</div>}
               {unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>{unread.title}</b><span>{unread.what}</span><small>{unread.next}</small>{!missing && readAgainButton}</div>}
@@ -537,14 +542,15 @@ export default function PoliciesPage() {
 
           {/* Names printed in it and matched to someone: one quiet line with a way to change each, on every kind of document
               (a wording or summary that prints a name is linked by it too, live check 3 Nov). */}
-          {!processing && policy.detected_people.some((p) => p.matchedFamilyMemberId) && <MatchedNames policy={policy} family={family} onMove={(name, to) => to === "__not_family" ? markNotFamily(policy.id, name) : linkPerson(policy.id, name, to)} />}
+          {!processing && policy.detected_people.some((p) => p.matchedFamilyMemberId) && <MatchedNames policy={policy} family={family} readOnly={!canManage} onMove={(name, to) => to === "__not_family" ? markNotFamily(policy.id, name) : linkPerson(policy.id, name, to)} />}
           {!processing && policy.personal_coverage_confirmed ? <>
             {/* Each unmatched printed name asks who it is. */}
-            {!!unmatched.length && <div className="detected-block">{unmatched.map((person) => <div className="detected-row" key={person.name}>
+            {!!unmatched.length && !canManage && <p className="document-names">Named in it: {unmatched.map((p) => p.name).join(", ")}. The household owner can choose who {unmatched.length === 1 ? "this is" : "these are"}.</p>}
+            {!!unmatched.length && canManage && <div className="detected-block">{unmatched.map((person) => <div className="detected-row" key={person.name}>
               <label htmlFor={`who-${policy.id}-${person.name}`}>&ldquo;{person.name}&rdquo; is named in it. Who is this?</label>
               <select id={`who-${policy.id}-${person.name}`} defaultValue="" onChange={(e) => { const select = e.target; if (select.value === "__not_family") void markNotFamily(policy.id, person.name).then((taken) => { if (!taken) select.value = ""; }); else if (select.value) void linkPerson(policy.id, person.name, select.value); }}><option value="">Choose a family member…</option>{family.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}<option value="__not_family">Not in my family</option></select>
             </div>)}<small className="muted">Until you choose, nothing in it is used for that person.</small></div>}
-          </> : !processing && policy.processing_status === "ready" ? <CoversPicker policy={policy} family={family} planChoice={planChoice} onSave={(a) => saveCoverage(policy, a)} referenceLinks={referenceLinks.map((p) => p.name)} /> : null}
+          </> : !processing && policy.processing_status === "ready" ? <CoversPicker policy={policy} family={family} planChoice={planChoice} readOnly={!canManage} onSave={(a) => saveCoverage(policy, a)} referenceLinks={referenceLinks.map((p) => p.name)} /> : null}
 
           {!processing && policy.processing_status === "ready" && (() => {
             const state = benefitReading[policy.id];
@@ -561,17 +567,17 @@ export default function PoliciesPage() {
           {/* Why, and the one next step that can work for this kind of failure (lib/documents/failure-advice.ts). */}
           {!processing && policy.processing_error && (() => {
             const advice = failedDocumentAdvice(policy.processing_error, { hasPages: !!policy.page_count });
-            if (advice.nextStep === "unlock") return <LockedPdf policy={policy} wrong={advice.kind === "password_wrong"} onUnlock={(password) => unlock(policy, password)} />;
+            if (advice.nextStep === "unlock" && canManage) return <LockedPdf policy={policy} wrong={advice.kind === "password_wrong"} onUnlock={(password) => unlock(policy, password)} />;
             return <div className="row-error processing-error" data-testid="document-unreadable" data-failure={advice.kind}><strong>This document could not be read</strong><span>{advice.reason}</span><small>{advice.hint}</small>
-              <div className="row-error-actions">{advice.nextStep === "upload_another"
+              {!canManage ? <OwnerOnlyNote>Only the household owner can read it again or upload another copy.</OwnerOnlyNote> : <div className="row-error-actions">{advice.nextStep === "upload_another"
                 ? <button type="button" className="mini-button" onClick={chooseAnother}>{advice.action}</button>
-                : <><button type="button" className="mini-button" data-testid="read-again-failed" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : advice.action}</button>{advice.uploadAction && <button type="button" className="mini-button" onClick={chooseAnother}>{advice.uploadAction}</button>}</>}</div></div>;
+                : <><button type="button" className="mini-button" data-testid="read-again-failed" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : advice.action}</button>{advice.uploadAction && <button type="button" className="mini-button" onClick={chooseAnother}>{advice.uploadAction}</button>}</>}</div>}</div>;
           })()}
 
           </div>
 
           {/* The actions on it come last. */}
-          <div className="document-meta">{(policy.quarantine_status === "scan_clean" || policy.quarantine_status === "not_scanned_prototype") && <PreviewLink policy={policy} />}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}><Icon name="list"/>{detailsId === policy.id ? "Hide details" : "Details"}</button>}{!processing && policy.processing_status === "ready" && <button type="button" className="mini-button" title="Read this document again from the file DearPolicy kept. People you chose for it stay chosen." disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}><Icon name="refresh"/>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : "Read again"}</button>}{confirmRereadId === policy.id && <><button type="button" className="mini-button" onClick={() => setConfirmRereadId(null)}>Cancel</button><small className="reread-note" data-testid="reread-note">{policy.processing_status === "ready" ? <>Coverage for this document is unavailable for a minute while it&rsquo;s read again.</> : "This reads the whole document again."}</small></>}<button className={`mini-button danger${confirmDeleteId === policy.id ? " armed" : ""}`} disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}><Icon name="trash"/>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+          <div className="document-meta">{(policy.quarantine_status === "scan_clean" || policy.quarantine_status === "not_scanned_prototype") && <PreviewLink policy={policy} />}{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}><Icon name="list"/>{detailsId === policy.id ? "Hide details" : "Details"}</button>}{canManage && !processing && policy.processing_status === "ready" && <button type="button" className="mini-button" title="Read this document again from the file DearPolicy kept. People you chose for it stay chosen." disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}><Icon name="refresh"/>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : "Read again"}</button>}{confirmRereadId === policy.id && <><button type="button" className="mini-button" onClick={() => setConfirmRereadId(null)}>Cancel</button><small className="reread-note" data-testid="reread-note">{policy.processing_status === "ready" ? <>Coverage for this document is unavailable for a minute while it&rsquo;s read again.</> : "This reads the whole document again."}</small></>}{canManage && <button className={`mini-button danger${confirmDeleteId === policy.id ? " armed" : ""}`} disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}><Icon name="trash"/>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>}{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
 
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
         </div>;
@@ -606,7 +612,7 @@ function matchedByPart(memberName: string, printed: string): boolean {
 /** Names printed in a personal document that DearPolicy matched to someone, each with a way to say it is someone
  * else or no one in the family. A match made from part of a name says so, because that is where a wrong match
  * hides (a cousin who shares a given name). The household's answer is used on every page. */
-function MatchedNames({ policy, family, onMove }: { policy: Policy; family: Member[]; onMove: (name: string, to: string) => Promise<boolean> }) {
+function MatchedNames({ policy, family, onMove, readOnly = false }: { policy: Policy; family: Member[]; onMove: (name: string, to: string) => Promise<boolean>; readOnly?: boolean }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const matched = policy.detected_people.filter((p) => p.matchedFamilyMemberId);
@@ -623,8 +629,8 @@ function MatchedNames({ policy, family, onMove }: { policy: Policy; family: Memb
   return <div className="matched-names">
     {override && <p className="document-override" data-testid="upload-override">{override}</p>}
     <p className="document-names">Named in it: {shown.map((p, i) => <span key={p.name}>{i ? ", " : ""}{p.name} ({p.member?.display_name ?? "matched"}{p.byPart ? ", matched by part of the name" : ""})</span>)}{" "}
-      <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Done" : anyByPart ? "Not them? Change" : "Change"}</button></p>
-    {open && <div className="detected-block">{shown.map((p) => <div className="detected-row" key={p.name}>
+      {!readOnly && <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Done" : anyByPart ? "Not them? Change" : "Change"}</button>}</p>
+    {open && !readOnly && <div className="detected-block">{shown.map((p) => <div className="detected-row" key={p.name}>
       <label htmlFor={`is-${policy.id}-${p.name}`}>&ldquo;{p.name}&rdquo; is</label>
       <select id={`is-${policy.id}-${p.name}`} value={p.matchedFamilyMemberId ?? ""} disabled={saving === p.name} onChange={(e) => {
         const to = e.target.value;
@@ -668,7 +674,7 @@ function LockedPdf({ policy, wrong, onUnlock }: { policy: Policy; wrong: boolean
  * a tier (only where the household's answers read it: lib/policies/plan-choice.ts).
  * Every change is saved at once and confirmed. People the booklet
  * names are pointed out. */
-function CoversPicker({ policy, family, planChoice, onSave, referenceLinks }: { policy: Policy; family: Member[]; planChoice: boolean; onSave: (assignments: { familyMemberId: string; planTier: string | null }[]) => Promise<void>; referenceLinks: string[] }) {
+function CoversPicker({ policy, family, planChoice, onSave, referenceLinks, readOnly = false }: { policy: Policy; family: Member[]; planChoice: boolean; onSave: (assignments: { familyMemberId: string; planTier: string | null }[]) => Promise<void>; referenceLinks: string[]; readOnly?: boolean }) {
   const tiers = policy.tier_options ?? [];
   const named = policy.named_tiers ?? [];
   const namedFor = (m: Member) => named.find((n) => {
@@ -709,9 +715,9 @@ function CoversPicker({ policy, family, planChoice, onSave, referenceLinks }: { 
       ? <span><b>Applies to</b> {summary}{planMissing && <small className="covers-plan-missing"> · plan not chosen yet</small>}</span>
       : referenceLinks.length
         ? <span><b>Used for</b> {referenceLinks.join(", ")}<small className="covers-plan-note"> · as the wording for their plan</small></span>
-        : <span><b>Applies to</b> nobody yet<small className="covers-plan-missing"> · choose who it applies to so answers can use it</small></span>}
+        : <span><b>Applies to</b> nobody yet<small className="covers-plan-missing"> · {readOnly ? "the household owner can choose who it applies to" : "choose who it applies to so answers can use it"}</small></span>}
     {saved && <span className="covers-saved" role="status">Saved</span>}
-    <button type="button" className="mini-button" onClick={() => setOpen(true)} aria-expanded={false}>{linked ? "Change" : "Choose"}</button>
+    {!readOnly && <button type="button" className="mini-button" onClick={() => setOpen(true)} aria-expanded={false}>{linked ? "Change" : "Choose"}</button>}
   </div>;
   return <div className="reference-explainer covers-picker" data-testid="covers-picker"><span className="reference-icon">i</span><div>
     <strong>Who does this document cover?</strong>

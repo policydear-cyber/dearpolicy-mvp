@@ -16,8 +16,8 @@ export function HouseholdAccess() {
   const [status, setStatus] = useState("");
   const [confirmMemberId, setConfirmMemberId] = useState<string | null>(null);
   const [confirmInvitationId, setConfirmInvitationId] = useState<string | null>(null);
+  const [confirmTransferId, setConfirmTransferId] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"member" | "owner">("member");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState("");
 
@@ -59,6 +59,23 @@ export function HouseholdAccess() {
     if (response.ok) await refresh();
   }
 
+  /** The owner hands the household to another member and becomes a member. Asked twice, like every other change here,
+   * and the second click says what happens to the person clicking. */
+  async function transferOwnership(member: Member) {
+    if (confirmTransferId !== member.userId) { setConfirmTransferId(member.userId); setConfirmMemberId(null); return; }
+    setConfirmTransferId(null);
+    setStatus("");
+    const response = await fetch(`/api/household/members/${member.userId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ role: "owner" }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    // Every page on screen now has to show what a member can do, so it is loaded afresh; this list then shows the new owner.
+    if (response.ok) { window.location.reload(); return; }
+    setStatus(customerMessage(payload.error, "Could not change the owner. Please try again in a moment."));
+  }
+
   async function createInvitation(event: FormEvent) {
     event.preventDefault();
     setInviteError("");
@@ -66,7 +83,8 @@ export function HouseholdAccess() {
     const response = await fetch("/api/household/invitations", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+      // A household has one owner: an invitation always adds a member. Ownership moves with "Make owner".
+      body: JSON.stringify({ email: inviteEmail.trim(), role: "member" }),
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) return setInviteError(customerMessage(payload.error, "Could not create this invitation. Please try again in a moment."));
@@ -94,7 +112,7 @@ export function HouseholdAccess() {
   return (
     <>
       <section className="section">
-        <div className="section-heading"><div><h2>Who can sign in</h2><p>People who sign in to this household with their own email. Everyone here sees the same family, documents and answers. Owners can also invite and remove people, rename the household, download its data and delete it.</p></div></div>
+        <div className="section-heading"><div><h2>Who can sign in</h2><p>People who sign in to this household with their own email. Everyone here sees the same family, documents and answers, and can use Ask DearPolicy. The household has one owner. Only the owner can upload or change documents, add or change family members, change settings, invite or remove people, download the household&rsquo;s data and delete it.</p></div></div>
         <div className="profile-list" data-testid="household-access">
           {members.map((member) => {
             const isSelf = member.userId === callerUserId;
@@ -104,7 +122,9 @@ export function HouseholdAccess() {
             // would only come back as a 404).
             // The only owner cannot leave: the household would be left
             // with nobody able to manage or delete it.
-            const soleOwner = isSelf && member.role === "owner" && members.filter((m) => m.role === "owner").length === 1;
+            // A household has exactly one owner, who hands it over with "Make owner" before leaving.
+            const soleOwner = isSelf && member.role === "owner";
+            const canTransfer = isOwner && !isSelf && member.role === "member";
             const canAct = (isSelf || isOwner) && !soleOwner;
             const who = member.email ?? (isSelf ? "You" : "Household member");
             return (
@@ -122,7 +142,16 @@ export function HouseholdAccess() {
                     </button>
                   )}
                   {confirmMemberId === member.userId && <button className="mini-button" onClick={() => setConfirmMemberId(null)}>Cancel</button>}
-                  {soleOwner && <small className="muted">You are the only owner, so you can&apos;t leave yet. Invite someone as an owner first, or delete the household on the Household tab.</small>}
+                  {canTransfer && confirmMemberId !== member.userId && (
+                    <button className="mini-button" onClick={() => void transferOwnership(member)}>
+                      {confirmTransferId === member.userId ? "Confirm: make owner" : "Make owner"}
+                    </button>
+                  )}
+                  {confirmTransferId === member.userId && <>
+                    <button className="mini-button" onClick={() => setConfirmTransferId(null)}>Cancel</button>
+                    <small className="muted">They become the owner and you become a member. You&apos;ll still see everything and can use Ask DearPolicy, but only they can change things.</small>
+                  </>}
+                  {soleOwner && <small className="muted">You&apos;re the owner, so you can&apos;t leave. To leave, make someone else the owner first. Or delete the household on the Household tab.</small>}
                 </div>
               </div>
             );
@@ -132,10 +161,9 @@ export function HouseholdAccess() {
 
       {isOwner && (
         <section className="section">
-          <div className="section-heading"><div><h2>Invite someone to sign in</h2></div></div>
+          <div className="section-heading"><div><h2>Invite someone to sign in</h2><p>They join as a member: they see everything and can use Ask DearPolicy, and you stay the owner.</p></div></div>
           <form onSubmit={createInvitation} className="profile-add-grid">
             <div className="field"><label htmlFor="hh-invite-email">Email</label><input id="hh-invite-email" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="name@example.com" required /></div>
-            <div className="field"><label htmlFor="hh-invite-role">Role</label><select id="hh-invite-role" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as "member" | "owner")}><option value="member">Member</option><option value="owner">Owner</option></select></div>
             <button className="button primary" type="submit" disabled={!inviteEmail.trim()}>Create invitation link</button>
           </form>
           {inviteError && <div className="document-warning" style={{ marginTop: 12 }}>{inviteError}</div>}
@@ -153,7 +181,7 @@ export function HouseholdAccess() {
                   <div className="avatar profile-avatar">{invitation.email.slice(0, 1).toUpperCase()}</div>
                   <div className="profile-fields">
                     <div className="field"><label>Email</label><span>{invitation.email}</span></div>
-                    <div className="field"><label>Role</label><span>{invitation.role === "owner" ? "Owner" : "Member"}</span></div>
+                    <div className="field"><label>Role</label><span>Member</span></div>
                     <div className="field"><label>Expires</label><span>{sgDate(invitation.expiresAt)}</span></div>
                   </div>
                   <div className="profile-actions">

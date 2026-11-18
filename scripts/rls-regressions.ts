@@ -50,6 +50,7 @@ const SQL_FILES = [
   // columns are what household-rls.sql grants the deletion route on policies.
   "sql/lifecycle.sql",
   "sql/household-rls.sql",
+  "sql/household-single-owner.sql",
 ];
 
 const uuid = (n: number) => `20000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -130,6 +131,8 @@ async function main() {
     "INSERT INTO policies(id, account_id, family_member_id, insurer, original_filename, storage_key) VALUES ($1,$2,$3,'Insurer','policy.pdf','k')",
     [policyA, householdA, familyA],
   );
+
+  await db.query("INSERT INTO chat_messages(account_id, role, content) VALUES ($1,'user','What does my hospital plan pay?')", [householdA]);
 
   // --- Service-role-equivalent (superuser) sanity check -----------------
   // A trusted server job connecting without SET ROLE must still see both
@@ -219,6 +222,66 @@ async function main() {
       memberA,
     ]);
     assert.equal(roleChange.affectedRows ?? 0, 0, "a plain member must not be able to self-promote to owner");
+
+    // One owner per household (sql/household-rls.sql): a member reads everything but changes nothing except Ask.
+    const seen = await db.query("SELECT id FROM family_members WHERE account_id = $1", [householdA]);
+    assert.equal(seen.rows.length, 1, "a member must still see the household's family members");
+    await expectRejected(
+      db,
+      () => db.query("INSERT INTO family_members(account_id, display_name, relationship) VALUES ($1,'Lim Ah Kow','child')", [householdA]),
+      /row-level security/i,
+      "a member must not be able to add a family member (owner-only)",
+    );
+    const renamed = await db.query("UPDATE family_members SET display_name = 'changed' WHERE account_id = $1", [householdA]);
+    assert.equal(renamed.affectedRows ?? 0, 0, "a member must not be able to edit a family member");
+    const removedPerson = await db.query("DELETE FROM family_members WHERE account_id = $1", [householdA]);
+    assert.equal(removedPerson.affectedRows ?? 0, 0, "a member must not be able to remove a family member");
+    const docDeleted = await db.query(
+      "UPDATE policies SET lifecycle_state = 'pending_deletion', lifecycle_version = lifecycle_version + 1 WHERE account_id = $1",
+      [householdA],
+    );
+    assert.equal(docDeleted.affectedRows ?? 0, 0, "a member must not be able to delete a document");
+    // Ask writes through the server connection; the chat tables' policies still let a member's own session write them.
+    const asked = await db.query("UPDATE chat_messages SET content = content WHERE account_id = $1", [householdA]);
+    assert.equal(asked.affectedRows, 1, "a member must still be able to use Ask (chat tables stay writable)");
+  });
+
+  // The owner still can (the same statements, in a transaction rolled back after).
+  await asUser(db, { userId: ownerA, role: "authenticated" }, async () => {
+    const added = await db.query("INSERT INTO family_members(account_id, display_name, relationship) VALUES ($1,'Lim Ah Kow','child')", [householdA]);
+    assert.equal(added.affectedRows, 1, "the owner must be able to add a family member");
+    const docDeleted = await db.query(
+      "UPDATE policies SET lifecycle_state = 'pending_deletion', lifecycle_version = lifecycle_version + 1 WHERE account_id = $1",
+      [householdA],
+    );
+    assert.equal(docDeleted.affectedRows, 1, "the owner must be able to delete a document");
+  });
+
+  // --- Exactly one owner (sql/household-single-owner.sql) -----------------
+  // A second owner is refused when the transaction commits (the check is deferred to commit for transfers).
+  let secondOwner = "";
+  await db.query("BEGIN");
+  try {
+    await db.query("UPDATE household_members SET role = 'owner' WHERE household_id = $1 AND user_id = $2", [householdA, memberA]);
+    await db.query("COMMIT");
+  } catch (error) {
+    secondOwner = error instanceof Error ? error.message : String(error);
+    await db.query("ROLLBACK").catch(() => undefined);
+  }
+  assert.match(secondOwner, /household_members_one_owner|conflicting key value/i, "a household must never commit with two owners");
+  // A transfer under the owner's own RLS (promote, then demote, one transaction) commits.
+  await asUser(db, { userId: ownerA, role: "authenticated", commit: true }, async () => {
+    const promoted = await db.query("UPDATE household_members SET role = 'owner' WHERE household_id = $1 AND user_id = $2", [householdA, memberA]);
+    assert.equal(promoted.affectedRows, 1, "the owner must be able to name the new owner");
+    const demoted = await db.query("UPDATE household_members SET role = 'member' WHERE household_id = $1 AND user_id = $2", [householdA, ownerA]);
+    assert.equal(demoted.affectedRows, 1, "the old owner becomes a member in the same transaction");
+  });
+  const owners = await db.query<{ user_id: string }>("SELECT user_id FROM household_members WHERE household_id = $1 AND role = 'owner'", [householdA]);
+  assert.deepEqual(owners.rows.map((r) => r.user_id), [memberA], "after a transfer the household has exactly one owner, the new one");
+  // Hand it back so the rest of this suite runs on the seeded roles.
+  await asUser(db, { userId: memberA, role: "authenticated", commit: true }, async () => {
+    await db.query("UPDATE household_members SET role = 'owner' WHERE household_id = $1 AND user_id = $2", [householdA, ownerA]);
+    await db.query("UPDATE household_members SET role = 'member' WHERE household_id = $1 AND user_id = $2", [householdA, memberA]);
   });
 
   // --- Removed members immediately lose access ---------------------------

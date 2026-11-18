@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isUuid, isValidDateString } from "@/lib/db/client";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { hasSexColumn, parseSex } from "@/lib/household/member-profile";
@@ -18,7 +18,7 @@ class SelfProfileConflict extends Error {}
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const { id } = await context.params;
     if (!isUuid(id)) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
     const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null; notes?: string | null; sex?: unknown };
@@ -90,7 +90,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
  * there (HasLinkedActivityError), rather than duplicated per route. */
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const { id } = await context.params;
     if (!isUuid(id)) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
     const idempotencyKey = request.headers.get("idempotency-key") || `delete:${id}`;

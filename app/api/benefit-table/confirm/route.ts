@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { appDb, benefitTableLive } from "@/lib/benefit-table/app";
 import { TableInputError, setConfirmation } from "@/lib/benefit-table/service";
 
@@ -18,7 +18,7 @@ const Body=z.object({
 /** The household confirms one person's headline amount, corrects it, or takes that back (status null). */
 export async function POST(request:NextRequest){
   try{
-    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
+    const ctx=await requireHouseholdOwnerContext(request),accountId=ctx.householdId;
     if(!(await benefitTableLive(accountId)))return NextResponse.json({enabled:false},{status:404});
     const body=Body.parse(await request.json().catch(()=>({})));
     await setConfirmation(appDb,accountId,ctx.userId,body.personId,body.coverKey,body.status,body.sumInsured??null);

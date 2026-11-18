@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useCallback, useState } from "react";
 import { useParams } from "next/navigation";
+import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-role";
 import {
   DOCUMENT_TYPE_GROUPS, DOCUMENT_TYPE_OPTIONS, buildEvidenceUploadForm, defaultDocumentTypeFor, documentTypeGroup, documentTypeLabel, evidenceStatusDisplay,
   POLICY_DEFINITION_REVIEW_REQUIRED_MESSAGE,
@@ -101,6 +102,8 @@ function nextSteps(tone: ClaimDisplay["tone"]): string[] {
 export default function ClaimEvidencePage() {
   const params = useParams<{ id: string }>();
   const claimSessionId = params.id;
+  // Adding, rejecting or deleting a claim document is the household owner's (components/household-role).
+  const canManage = useCanManageHousehold();
   const [claim, setClaim] = useState<Claim | null>(null);
   const [documents, setDocuments] = useState<EvidenceDoc[]>([]);
   const [error, setError] = useState("");
@@ -222,6 +225,7 @@ export default function ClaimEvidencePage() {
 
       <section className="section">
         <h2>Upload a document</h2>
+        {!canManage ? <OwnerOnlyNote>Only the household owner can upload documents for a claim. Send yours to them to add.</OwnerOnlyNote> :
         <form onSubmit={handleUpload} className="field claim-upload-form" style={{ display: "grid", gap: 10, maxWidth: 480 }}>
           <label>Document type
             <select value={docType} onChange={(e) => setDocType(e.target.value)} required>
@@ -248,7 +252,7 @@ export default function ClaimEvidencePage() {
           <label>Document file<input id="claim-file" type="file" name="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff" required /></label>
           {uploadError && <div className="alert error" role="alert">{uploadError}</div>}
           <button className="button primary" type="submit" disabled={busy || !docType}>{busy ? "Uploading…" : "Upload"}</button>
-        </form>
+        </form>}
       </section>
 
       <section className="section">
@@ -313,7 +317,7 @@ export default function ClaimEvidencePage() {
                   : <p className="muted">DearPolicy has not confirmed this document is about this family member, so its bill details can't be checked yet.</p>
               )}
 
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              {canManage && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                 {["needs_review", "extracted", "uploaded", "quarantined", "processing", "matched", "failed"].includes(doc.status) && (
                   <button className="button secondary compact" onClick={() => handleReject(doc.id)}>Reject document</button>
                 )}
@@ -324,7 +328,7 @@ export default function ClaimEvidencePage() {
                 {confirmDeleteId === doc.id && !deletingId && (
                   <button className="button secondary compact" onClick={() => setConfirmDeleteId(null)}>Cancel</button>
                 )}
-              </div>
+              </div>}
               {confirmDeleteId === doc.id && !deletingId && (
                 <p className="muted" role="note">Deleting removes this document and anything DearPolicy read or estimated from it. This can&rsquo;t be undone.</p>
               )}

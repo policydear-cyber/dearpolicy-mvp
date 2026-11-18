@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { scheduleRequestDrain, startJobNow } from "@/lib/jobs/request-drain";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { pool, query } from "@/lib/db/client";
@@ -29,7 +29,7 @@ class NotClearedForProcessing extends Error {}
 export async function POST(request: NextRequest) {
   try {
     const body = Schema.parse(await request.json().catch(() => ({})));
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const allowance = await rereads.attempt(ctx.householdId);
     if (!allowance.allowed) {
       return NextResponse.json({ error: "Too many documents read again in the last hour. Please try again later." },

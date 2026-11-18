@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { requireCurrentUser, UnauthenticatedError, requireRecentAuthentication } from "@/lib/auth/session";
 import { listMemberships, renameHousehold } from "@/lib/household/repo";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
  * lib/household/repo.ts's comment on why that's deliberate). */
 export async function PATCH(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const body = await request.json().catch(() => ({}));
     // The household's own currency (owner-only, like the name): saved on its own.
     if (body.currency !== undefined && body.name === undefined) {
@@ -95,7 +95,7 @@ export async function PATCH(request: NextRequest) {
  * recording via the shared lifecycle coordinator. */
 export async function DELETE(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     requireRecentAuthentication(ctx.user);
     const body = await request.json().catch(() => ({}));
     const confirmName = typeof body.confirmName === "string" ? body.confirmName.trim() : "";

@@ -74,6 +74,28 @@ async function findRouteFiles(dir: string): Promise<string[]> {
 }
 
 const CLASSIFICATION_PATTERN = /export const ROUTE_AUTH\s*=\s*"([a-z-]+)"\s*as const\s*;/;
+/** One owner per household (DC, 18 Nov 2026): every handler that changes household data calls
+ * requireHouseholdOwnerContext(). These are the only changes a member may make, each with why. A new mutating
+ * handler is owner-only unless it is added here on purpose. */
+export const MEMBER_ALLOWED_MUTATIONS: Record<string, string> = {
+  "app/api/chat/route.ts POST": "asking a question (Ask DearPolicy is for every member)",
+  "app/api/chat/jobs/[id]/route.ts DELETE": "cancelling one's own question while it is answered",
+  "app/api/benefit-table/report/route.ts POST": "a note to us that a figure looks wrong; it changes nothing on the page",
+  "app/api/household/switch/route.ts POST": "choosing which of one's own households to view",
+  "app/api/household/invitations/accept/route.ts POST": "accepting an invitation (always joins as a member)",
+};
+const OWNER_GATE = /requireHouseholdOwnerContext\s*\(|scopedDocument\(request,\s*id,\s*true\)/;
+const MUTATING_HANDLER = /export (?:async function|const) (POST|PUT|PATCH|DELETE)\b/g;
+
+/** Each mutating handler's own text, from its export to the next top-level export. */
+export function mutatingHandlers(text: string): { method: string; body: string }[] {
+  const heads = [...text.matchAll(MUTATING_HANDLER)].map((m) => ({ method: m[1], start: m.index ?? 0 }));
+  return heads.map(({ method, start }) => {
+    const next = text.indexOf("\nexport ", start + 1);
+    return { method, body: text.slice(start, next === -1 ? text.length : next) };
+  });
+}
+
 const HOUSEHOLD_REPO_IMPORT = /import\s*\{([^}]*)\}\s*from\s*["'][^"']*\/lib\/household\/repo["']/g;
 
 export interface RouteInventoryResult {
@@ -82,6 +104,8 @@ export interface RouteInventoryResult {
   invalid: { file: string; value: string }[];
   byClass: Record<string, number>;
   missingHouseholdContext: string[];
+  /** "file METHOD": a mutating household handler with no owner check and no MEMBER_ALLOWED_MUTATIONS entry. */
+  ungatedMutations: string[];
   publicRouteViolations: { file: string; reason: string }[];
   reviewerRouteViolations: { file: string; reason: string }[];
 }
@@ -100,6 +124,7 @@ export async function classifyRoutes(): Promise<RouteInventoryResult> {
   const invalid: { file: string; value: string }[] = [];
   const byClass: Record<string, number> = {};
   const missingHouseholdContext: string[] = [];
+  const ungatedMutations: string[] = [];
   const publicRouteViolations: { file: string; reason: string }[] = [];
   const reviewerRouteViolations: { file: string; reason: string }[] = [];
 
@@ -118,7 +143,7 @@ export async function classifyRoutes(): Promise<RouteInventoryResult> {
     }
     byClass[value] = (byClass[value] ?? 0) + 1;
 
-    const callsRequireHouseholdContext = /requireHouseholdContext\s*\(/.test(text);
+    const callsRequireHouseholdContext = /requireHousehold(?:Owner)?Context\s*\(/.test(text);
     const callsReviewerBoundary = /\b(requireAssignedClaimReviewer|requireActiveClaimReviewer)\s*\(/.test(text);
     const recordsDefinitionDecision = /\b(confirmCauseDefinitionMatch|confirmCIDefinitionMatch|confirmDisabilityDefinitionMatch|confirmTravelDeathMatch|recordReviewerDefinitionDecision)\s*\(/.test(text);
 
@@ -132,6 +157,11 @@ export async function classifyRoutes(): Promise<RouteInventoryResult> {
 
     if (value === "household-member" || value === "household-owner") {
       if (!callsRequireHouseholdContext) missingHouseholdContext.push(relative);
+      const posix = relative.split(path.sep).join("/");
+      for (const handler of mutatingHandlers(text)) {
+        const key = `${posix} ${handler.method}`;
+        if (!OWNER_GATE.test(handler.body) && !(key in MEMBER_ALLOWED_MUTATIONS)) ungatedMutations.push(key);
+      }
     }
 
     if (value === "public") {
@@ -154,11 +184,11 @@ export async function classifyRoutes(): Promise<RouteInventoryResult> {
     }
   }
 
-  return { routeFiles, unclassified, invalid, byClass, missingHouseholdContext, publicRouteViolations, reviewerRouteViolations };
+  return { routeFiles, unclassified, invalid, byClass, missingHouseholdContext, ungatedMutations, publicRouteViolations, reviewerRouteViolations };
 }
 
 async function main() {
-  const { routeFiles, unclassified, invalid, byClass, missingHouseholdContext, publicRouteViolations, reviewerRouteViolations } = await classifyRoutes();
+  const { routeFiles, unclassified, invalid, byClass, missingHouseholdContext, ungatedMutations, publicRouteViolations, reviewerRouteViolations } = await classifyRoutes();
   assert.ok(routeFiles.length > 0, "sanity check: at least one app/api/**/route.ts must exist");
 
   assert.equal(
@@ -172,6 +202,23 @@ async function main() {
     0,
     `Every household-member/household-owner route must call requireHouseholdContext(). Missing in: ${missingHouseholdContext.join(", ")}`,
   );
+  assert.deepEqual(
+    ungatedMutations,
+    [],
+    `One owner per household: every handler that changes household data must call requireHouseholdOwnerContext(), ` +
+      `or be listed in MEMBER_ALLOWED_MUTATIONS with the reason a member may do it. Unchecked: ${ungatedMutations.join(", ")}`,
+  );
+  // The rule must be able to fail: a member-allowed handler with its entry removed is reported, and an owner check
+  // anywhere in another handler of the same file doesn't cover it.
+  const probe = `export async function GET(r){ await requireHouseholdOwnerContext(r); }\nexport async function POST(r){ await requireHouseholdContext(r); }`;
+  const probeHandlers = mutatingHandlers(probe);
+  assert.equal(probeHandlers.length, 1);
+  assert.equal(OWNER_GATE.test(probeHandlers[0].body), false, "an owner check in another handler must not count for POST");
+  for (const key of Object.keys(MEMBER_ALLOWED_MUTATIONS)) {
+    const [file, method] = key.split(" ");
+    const text = await readFile(path.resolve(file), "utf8");
+    assert.ok(mutatingHandlers(text).some((h) => h.method === method), `MEMBER_ALLOWED_MUTATIONS names ${key}, which no longer exists`);
+  }
   assert.equal(
     publicRouteViolations.length,
     0,
@@ -189,7 +236,8 @@ async function main() {
     `route-inventory regressions passed: all ${routeFiles.length} app/api/**/route.ts files carry a valid ROUTE_AUTH classification ` +
       `(${Object.entries(byClass)
         .map(([k, v]) => `${k}=${v}`)
-        .join(", ")}); every household-member/household-owner route calls requireHouseholdContext(); no public route reaches for ` +
+        .join(", ")}); every household-member/household-owner route calls requireHouseholdContext(); every handler that changes household data ` +
+      `checks for the owner except the ${Object.keys(MEMBER_ALLOWED_MUTATIONS).length} listed member actions; no public route reaches for ` +
       `household-scoped authorization beyond the one allowed ensureDefaultHousehold() exception; every internal-reviewer route goes through ` +
       `the central reviewer boundary and never household membership.`,
   );

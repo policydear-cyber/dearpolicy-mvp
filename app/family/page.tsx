@@ -6,6 +6,7 @@ import { customerMessage } from "@/components/customer-text";
 import { AccountTabs } from "@/components/account-tabs";
 import { Icon } from "@/components/icons";
 import { HouseholdAccess } from "@/components/household-access";
+import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-role";
 import { profileGaps, PROFILE_GAP_WHY, PROFILE_GAP_FIELD } from "@/lib/household/member-profile";
 import { kindsOfTable, ledgerKindsByPerson, namedCoverKinds, type KindRow, type ScheduleLine, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
 
@@ -38,6 +39,8 @@ function todayIso() {
 }
 
 export default function FamilyPage() {
+  // Only the household owner adds, edits or removes family members (components/household-role).
+  const canManage = useCanManageHousehold();
   // Set after hydration: the server's "today" (and time zone) can differ.
   const [today, setToday] = useState<string | undefined>(undefined);
   useEffect(() => { setToday(todayIso()); }, []);
@@ -173,7 +176,7 @@ export default function FamilyPage() {
               </div>
               <div className="profile-glance">
                 {/* Details still missing (people added before they were asked for): one plain line and a way to add them. */}
-                {(() => { const gaps = profileGaps(baseline[member.id] ?? member, sexField); if (!gaps.length || editing === member.id) return null;
+                {(() => { const gaps = profileGaps(baseline[member.id] ?? member, sexField); if (!gaps.length || editing === member.id || !canManage) return null;
                   const who = baseline[member.id]?.display_name ?? member.display_name;
                   const why = gaps.map((g) => PROFILE_GAP_WHY[g]).join("; ");
                   return <p className="profile-missing" data-testid="profile-missing">Add {who}&rsquo;s {listWords(gaps)}. {why.charAt(0).toUpperCase() + why.slice(1)}. <button type="button" className="text-link" onClick={() => { setEditing(member.id); setTimeout(() => document.getElementById(`fm-${member.id}-${PROFILE_GAP_FIELD[gaps[0]]}`)?.focus(), 0); }}>Add now</button></p>; })()}
@@ -205,7 +208,7 @@ export default function FamilyPage() {
               {statusFor === member.id && status && confirmId !== member.id ? <p className={`profile-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : undefined}>{status}</p> : null}
               {(editing === member.id || isDirty(member)) && profileGaps(member, sexField).length
                 ? <p id={`fm-${member.id}-needs`} className="profile-add-why" data-testid="profile-edit-needs">Still needed to save: {listWords(profileGaps(member, sexField))}.</p> : null}
-              <div className="profile-actions">
+              {canManage && <div className="profile-actions">
                 {editing === member.id || isDirty(member) ? <>
                   <button className="button secondary" disabled={!isDirty(member) || profileGaps(member, sexField).length > 0} aria-describedby={`fm-${member.id}-needs`} onClick={() => save(member)}>{isDirty(member) ? "Save" : "Saved"}</button>
                   <button className="button secondary" onClick={() => { update(member.id, baseline[member.id]); setEditing(null); }}>{isDirty(member) ? "Undo changes" : "Close"}</button>
@@ -215,13 +218,14 @@ export default function FamilyPage() {
                   ? <Link className="button primary" href="/policies">Go to Documents</Link>
                   : <button className={`button secondary${confirmId === member.id ? " danger" : ""}`} onClick={() => remove(member)} aria-label={confirmId === member.id ? `Confirm delete ${member.display_name}` : `Delete ${member.display_name}`}>{confirmId === member.id ? "Confirm delete" : "Delete"}</button>}
                 {confirmId === member.id && <button className="button secondary" onClick={() => setConfirmId(null)}>Cancel</button>}
-              </div>
+              </div>}
             </div>
           ))}
         </div>
       </section>
 
       {/* The people come first: a returning household opens this page to see or change them, and adds someone rarely. */}
+      {!canManage ? <OwnerOnlyNote>Only the household owner can add, change or remove family members.</OwnerOnlyNote> :
       <section className="profile-add-panel" aria-label="Add a family member">
         {family.length ? <h3>Add a family member</h3> : null}
         <form onSubmit={add} className="profile-add-grid" onChange={() => { if (status) { setStatus(""); setStatusFor(null); } }}>
@@ -236,7 +240,7 @@ export default function FamilyPage() {
             ? <p id="fm-new-needs" className="profile-add-why">Still needed: {[!name.trim() ? "full name" : null, !relationship ? "relationship" : null, !dob ? "date of birth" : null, sexField && !sex ? "sex" : null, !preferred.trim() ? "preferred name" : null].filter(Boolean).join(", ")}.</p> : null}
         </form>
         {status && <div className="upload-status" role="status">{status}</div>}
-      </section>
+      </section>}
 
       <HouseholdAccess />
     </div>

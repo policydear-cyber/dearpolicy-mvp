@@ -25,7 +25,7 @@
  * a caller polls GET/this same idempotent POST for `ready`.
  */
 import { NextResponse, type NextRequest } from "next/server";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { requireRecentAuthentication } from "@/lib/auth/session";
 import { requireHouseholdOwner } from "@/lib/household/repo";
@@ -60,7 +60,7 @@ function toResponse(row: HouseholdExportRow) {
 
 export async function POST(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
     requireRecentAuthentication(ctx.user);
     await requireHouseholdOwner(ctx.userId, ctx.householdId);

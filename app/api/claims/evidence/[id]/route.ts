@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { getClaimSession } from "@/lib/claims/session";
 import { getScopedEvidenceDocument, getLatestExtraction, correctExtraction } from "@/lib/claims/evidence/store";
@@ -17,8 +17,9 @@ import {
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
-async function scopedDocument(request: NextRequest, id: string) {
-  const ctx = await requireHouseholdContext(request);
+/** ownerOnly: a correction or a deletion changes household data, which only the owner may do. */
+async function scopedDocument(request: NextRequest, id: string, ownerOnly = false) {
+  const ctx = ownerOnly ? await requireHouseholdOwnerContext(request) : await requireHouseholdContext(request);
   const url = new URL(request.url);
   const familyMemberId = url.searchParams.get("familyMemberId") ?? "";
   const claimSessionId = url.searchParams.get("claimSessionId") ?? "";
@@ -58,7 +59,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const scoped = await scopedDocument(request, id);
+    const scoped = await scopedDocument(request, id, true);
     if ("error" in scoped) return NextResponse.json({ error: scoped.error }, { status: scoped.status });
     const body = (await request.json()) as { reviewedFields?: Partial<ClaimEvidenceExtractedFields>; reviewerName?: string };
     if (!body.reviewedFields || typeof body.reviewedFields !== "object") return NextResponse.json({ error: "reviewedFields is required." }, { status: 400 });
@@ -83,7 +84,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const scoped = await scopedDocument(request, id);
+    const scoped = await scopedDocument(request, id, true);
     if ("error" in scoped) return NextResponse.json({ error: scoped.error }, { status: scoped.status });
 
     const idempotencyKey = request.headers.get("idempotency-key") || `delete:${scoped.document.id}`;

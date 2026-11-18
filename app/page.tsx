@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect,useMemo,useRef,useState } from "react";
 import { customerError } from "@/components/customer-text";
+import { useCanManageHousehold } from "@/components/household-role";
 import { HomeAsk, HomeAttention } from "@/components/home-attention";
 import { HomeNotFound, homeGaps } from "@/components/home-not-found";
 import { homeView } from "@/lib/format/home-view";
@@ -48,6 +49,8 @@ export default function DashboardPage(){
  // answered the document is used for nothing at all, which is why it is on the
  // portfolio rather than buried in the document list.
  const [claiming,setClaiming]=useState("");
+ // Only the household owner says whose a document is (components/household-role); a member is told who can.
+ const canManage=useCanManageHousehold();
  const [claimError,setClaimError]=useState("");
  async function claim(policyId:string,familyMemberId:string){
   setClaiming(policyId);setClaimError("");
@@ -103,12 +106,12 @@ export default function DashboardPage(){
    <HomeAsk memberId={active?.id} name={name}/>
   </div>
   {!!data?.unclaimed?.length&&<section className="section unclaimed-panel"><div className="section-heading"><div><Titled icon="person"><h2>Whose {data.unclaimed.length===1?"document is this":"documents are these"}?</h2></Titled></div></div>
-   <p className="unclaimed-lead">Choose who {data.unclaimed.length===1?"this document belongs":"these documents belong"} to. Until you do, DearPolicy doesn&rsquo;t use {data.unclaimed.length===1?"it":"them"}.</p>
-   <p className="muted">Covers more than one person, like a group booklet? <Link href="/policies" className="text-link">Choose everyone it covers on the Documents page →</Link></p>
+   <p className="unclaimed-lead">{canManage?<>Choose who {data.unclaimed.length===1?"this document belongs":"these documents belong"} to. Until you do</>:<>The household owner can choose who {data.unclaimed.length===1?"this document belongs":"these documents belong"} to. Until they do</>}, DearPolicy doesn&rsquo;t use {data.unclaimed.length===1?"it":"them"}.</p>
+   {canManage&&<p className="muted">Covers more than one person, like a group booklet? <Link href="/policies" className="text-link">Choose everyone it covers on the Documents page →</Link></p>}
    {claimError&&<div className="alert error" role="alert">{claimError}</div>}
    <div className="unclaimed-list">{data.unclaimed.map(doc=><div className="unclaimed-row" key={doc.id}>
     <div><strong>{doc.product_name??doc.original_filename}</strong><span>{[doc.insurer,(doc.document_role??"").replaceAll("_"," ")].filter(Boolean).join(" · ")||doc.original_filename}</span></div>
-    <div className="declare-owner">{data.family.map(m=><button key={m.id} type="button" className="button secondary" disabled={claiming===doc.id} onClick={()=>void claim(doc.id,m.id)}>{m.display_name}</button>)}</div>
+    {canManage&&<div className="declare-owner">{data.family.map(m=><button key={m.id} type="button" className="button secondary" disabled={claiming===doc.id} onClick={()=>void claim(doc.id,m.id)}>{m.display_name}</button>)}</div>}
    </div>)}</div></section>}
   {returning&&<HomeAttention/>}
   </>}

@@ -198,7 +198,10 @@ async function main() {
 
       asUser(memberX);
       const res = await deleteMember(requestFor(`http://localhost/api/household/members/${memberY}`, { household: householdId, method: "DELETE" }), { params: Promise.resolve({ userId: memberY }) } as any);
-      assert.equal(res.status, 404, "RLS's household_members_delete policy (owner OR self) must refuse a non-owner removing someone else");
+      // One owner per household: the route checks for the owner before removing anyone else (403 "Only the household
+      // owner can do this."); RLS's household_members_delete (owner OR self) still stands underneath. Before, RLS's
+      // filtered DELETE surfaced as 404.
+      assert.equal(res.status, 403, "a non-owner removing someone else must be refused by the owner check");
 
       const row = await pool.query(`SELECT 1 FROM household_members WHERE household_id=$1 AND user_id=$2`, [householdId, memberY]);
       assert.equal(row.rows.length, 1);
