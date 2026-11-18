@@ -1643,6 +1643,11 @@ function householdCurrencyFor(household: Household, doc: HouseholdDocument, page
   // decision Home made at upload, which also weighed the currencies the page image names and the related documents of every
   // policy number the reading found (Critic #546 HIGH-1: page text alone can lose an "RM" the image check confirmed).
   if (!household.currency || !doc.settingCurrencyPages?.includes(page)) return null;
+  // A page that names more than one insured person (a joint schedule, "Life assured 1 … Life assured 2") is not filled: a
+  // bare figure there is held to its person only by the document, not the line, so it stays "currency not stated" as
+  // before (TE #546 W1).
+  const text = doc.pages.find((p) => p.page === page)?.text ?? "";
+  if (membersNamedIn(household, text).length > 1 || /\b(?:life|person|lives)\s+(?:assured|insured)\s*(?:no\.?\s*)?[2-9]\b|\b(?:second|joint)\s+(?:life|insured|assured)\b/i.test(text)) return null;
   const key = (n: string | null | undefined) => String(n ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const related = key(doc.policyNumber) ? household.documents.filter((o) => o !== doc && !o.supersededAt && key(o.policyNumber) === key(doc.policyNumber)).flatMap((o) => o.pages.map((p) => p.text)) : [];
   // A page that could not be read may print another currency: it is not known, so it blocks the fill (unknownPage).

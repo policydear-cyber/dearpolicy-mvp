@@ -149,6 +149,9 @@ test("H6 Home did not give this page the setting's currency (say the image check
   assert.deepEqual(ask(build(LINES, { currency: "SGD", settled: [] }), /^Total and Permanent Disability/).cards.map((c) => [c.text, c.currencyResolved]), [["100,000", false]]);
   assert.deepEqual(ask(build(LINES, { currency: "SGD", settled: [1] }), /^Total and Permanent Disability/).cards.map((c) => [c.text, c.currencyResolved]), [["100,000", false]]);
 });
+test("H7 a page naming two insured people is never filled (TE #546 W1)", () => {
+  assert.deepEqual(ask(build(LINES, { currency: "SGD", head: "Life assured 2:\tTan Wei Ming\nComponent\tStatus\tSum Assured\tComponent Premium\tCover Start Date\tCover Expiry Date" }), /^Total and Permanent Disability/).cards.map((c) => [c.text, c.currencyResolved]), [["100,000", false]]);
+});
 test("H5 a count is never money, even with a household currency", () => {
   assert.deepEqual(ask(build([["Harbour Protector", "100,000.00"], ["Physiotherapy visits per year", "12.00"]], { currency: "SGD" }), /^Physiotherapy/).cards, []);
 });
