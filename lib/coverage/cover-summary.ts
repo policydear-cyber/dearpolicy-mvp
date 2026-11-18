@@ -11,7 +11,7 @@ import { homeCardShowsAmount, homePolicyName } from "@/lib/coverage/home-card";
 export type SummaryPart = { name: string; amount: number | null; currency: string | null; accelerates?: boolean; conditional?: boolean; period?: string | null; noFigure?: boolean; otherTile?: boolean };
 export type SummaryCover = { status: string; amount: number | null; displayAmount: string | null; currency: string | null; count?: number | null; policyNames?: string[] | null;
   sources?: string[] | null; parts?: SummaryPart[] | null; reviewRequired?: boolean | null; partial?: boolean | null;
-  /** A partly confirmed cover's confirmed figure: the dashboard keeps it off `amount`, and this page shows it only as one line's amount, never as a total (DC 18 Nov). */
+  /** A partly confirmed cover's one confirmed line, sent only when one policy is the whole cover (route.ts oneConfirmed): kept off `amount`; this page shows it as that line's amount, never as a total (DC 18 Nov). */
   partialAmount?: number | null; partialDisplay?: string | null };
 export type SummaryLine = { name: string; amount: string | null; notes: string[] };
 export type CoverSummary = { lines: SummaryLine[]; total: string | null; why: string | null };
@@ -32,7 +32,7 @@ export function coverSummary(c: SummaryCover): CoverSummary | null {
   const why: string[] = [];
   // DC 18 Nov: a confirmed amount still shows when other lines of the cover are not confirmed yet; those show none, and
   // there is no total, since the confirmed amounts may not be all the cover pays.
-  if (c.partial) why.push("Some of this cover's lines are not confirmed against the document yet: they show no amount here, no total is shown, and the amounts shown may not be all this cover pays.");
+  if (c.partial) why.push("Some of this cover's lines are not confirmed against the document yet, so no total is shown, and the amounts shown may not be all this cover pays.");
   const amountIn = c.partial ? c.partialAmount ?? null : c.amount;
   const displayIn = c.partial ? c.partialDisplay ?? null : c.displayAmount;
   if (c.reviewRequired) why.push("One policy prints more than one amount for this cover, so each is listed with its page below instead of a total.");
@@ -46,7 +46,7 @@ export function coverSummary(c: SummaryCover): CoverSummary | null {
     if (!amount) return { lines: [{ name: label, amount: null, notes: [NO_CURRENCY] }], total: null, why: why.join(" ") || null };
     // A single part keeps what qualifies it ("paid instead of the death benefit"), as the list does (TE PR 535 F2).
     const notes = parts.length === 1 ? partNotes(parts[0]) : [];
-    if (c.partial) return { lines: [{ name: label, amount, notes: [...notes, "confirmed in your document; other lines of this cover are not confirmed yet"] }], total: null, why: why.join(" ") };
+    if (c.partial) return { lines: [{ name: label, amount, notes: [...notes, "confirmed in your document"] }], total: null, why: why.join(" ") };
     return { lines: [{ name: label, amount, notes }], total: amount, why: null };
   }
   if (parts.length) {

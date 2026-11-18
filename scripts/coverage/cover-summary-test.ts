@@ -41,6 +41,12 @@ test("the page clears an earlier cover's summary before loading another person's
   assert.match(page, /activeMember\?\.id!==member\)\{setSummary\(null\);return;\}/);
   assert.match(page, /catch\(\(\)=>\{if\(live\)setSummary\(null\);\}\)/);
 });
+test("the dashboard sends a partly confirmed figure only for one policy's one line (TE PR 542 F1)", () => {
+  const route = readFileSync("app/api/dashboard/route.ts", "utf8");
+  assert.match(route, /partialAmount:oneConfirmed\(category,row\)\?/);
+  assert.match(route, /partialDisplay:oneConfirmed\(category,row\)\?/);
+  assert.match(route, /const oneConfirmed=[^\n]*partial\(category\)&&!!row&&homeCardShowsAmount\([^\n]*reviewRequired:conflictCategories\.has\(category\)/);
+});
 test("a figure with no stated currency (or a bare $) is never shown", () => {
   for (const currency of [null, "$", ""]) {
     const s = coverSummary({ ...base, amount: 120000, currency, policyNames: ["Term Life"] })!;
@@ -76,8 +82,9 @@ test("a partly confirmed cover shows its confirmed amount as a line, never as a 
   const s = coverSummary({ ...base, amount: null, partialAmount: 1000000, currency: "SGD", partial: true, policyNames: ["Term Life"] })!;
   assert.equal(s.total, null);
   assert.match(s.lines[0].amount!, /1,000,000/);
-  assert.match(s.lines[0].notes.join(" "), /other lines of this cover are not confirmed yet/);
+  assert.match(s.lines[0].notes.join(" "), /confirmed in your document/);
   assert.match(s.why!, /not confirmed[^]*no total[^]*may not be all/);
+  assert.doesNotMatch(s.why!, /show no amount here/);
   const d = coverSummary({ ...base, partialDisplay: "S$30 a day", currency: null, partial: true, policyNames: ["Hospital Cash"] })!;
   assert.equal(d.total, null); assert.equal(d.lines[0].amount, "S$30 a day");
 });

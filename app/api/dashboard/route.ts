@@ -24,7 +24,7 @@ import { coverVerdict } from "@/lib/coverage/cover-verdict";
 import { heldLines } from "@/lib/coverage/held-line";
 import { documentName, isMachineFilename, prettifyFilename } from "@/lib/policies/document-name";
 import { onFileDocumentName } from "@/lib/coverage/on-file-note";
-import { pickCoverByName, readablePolicyName } from "@/lib/coverage/home-card";
+import { homeCardShowsAmount, pickCoverByName, readablePolicyName } from "@/lib/coverage/home-card";
 /** The document's own naming fields, read beside an on-file line or wording (documentName). */
 type OnFileDoc={doc_product:string|null;original_filename:string;doc_insurer:string|null;document_role:string|null;policy_number:string|null;doc_type:string|null};
 const ON_FILE_DOC_COLUMNS="p.product_name AS doc_product,p.original_filename,p.insurer AS doc_insurer,p.document_role,p.policy_number,p.policy_type AS doc_type";
@@ -223,7 +223,10 @@ export async function GET(request:NextRequest){
   benefitUnmatched.forEach((r,i)=>{const c=normalizeCoverageCategory(r.category);unmatchedLines.set(c,(unmatchedLines.get(c)??0)+1);noteDoc(c,r);if(held[i]){heldCategories.set(c,(heldCategories.get(c)??0)+1);if(!coverageMap.has(c))addSource(c,r.policy_number??r.policy_id,r.doc_product,r.doc_insurer,ownFileName(r.original_filename));}});
   const statusOf=(category:string)=>({covered:"covered",on_file:"on_file",not_found:"not_covered"} as const)[coverVerdict({proven:coverageMap.has(category)?1:0,unmatchedLines:unmatchedLines.get(category)??0,referenceOnly:referenceOnly.get(category)??0,held:heldCategories.get(category)??0})];
   const partial=(category:string)=>(unmatchedLines.get(category)??0)>0;
-  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:statusOf(category),reviewRequired:conflictCategories.has(category),partial:partial(category),amount:partial(category)?null:row?.total??null,displayAmount:partial(category)?null:row?.displayAmount??null,partialAmount:partial(category)?row?.total??null:null,partialDisplay:partial(category)?row?.displayAmount??null:null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,sources:statusOf(category)==="covered"?[...(sources.get(category)?.values()??[])]:[],onFileDocuments:statusOf(category)==="on_file"?[...(onFileDocs.get(category)??[])].sort():[]};});
+  // A partly confirmed cover's figure is sent only when it is one policy's one confirmed line: row.total can add policies
+  // together, or be one of a policy's conflicting amounts (TE PR 542 F1), and neither is ever a cover's figure.
+  const oneConfirmed=(category:string,row:{count:number;parts?:unknown[];policyNames:string[]}|undefined)=>partial(category)&&!!row&&homeCardShowsAmount({count:row.count,parts:row.parts??null,policyNames:row.policyNames,reviewRequired:conflictCategories.has(category)});
+  const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:statusOf(category),reviewRequired:conflictCategories.has(category),partial:partial(category),amount:partial(category)?null:row?.total??null,displayAmount:partial(category)?null:row?.displayAmount??null,partialAmount:oneConfirmed(category,row)?row?.total??null:null,partialDisplay:oneConfirmed(category,row)?row?.displayAmount??null:null,currency:row?.currency??null,count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false,fromTable:row?.fromTable??false,parts:row?.parts??null,known:row?.known??null,planNote:row?.planNote??null,sources:statusOf(category)==="covered"?[...(sources.get(category)?.values()??[])]:[],onFileDocuments:statusOf(category)==="on_file"?[...(onFileDocs.get(category)??[])].sort():[]};});
 
   // The premiums Home counts, from the same computation Payments shows (lib/policies/counted-premiums.ts).
   const premiums=await countedPremiums(accountId,{id:active.id,display_name:active.display_name,preferred_name:null,relationship:active.relationship},tableCovers);
