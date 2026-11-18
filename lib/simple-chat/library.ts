@@ -63,6 +63,20 @@ export type Household = {
    * the model. */
   members: { name: string; relationship: string; date_of_birth?: string | null }[];
   documents: HouseholdDocument[];
+  /** The household's policy folders (sql/policy-folders.sql, lib/policies/folders.ts): the documents it put together as one
+   * policy, and who that policy is for. Absent or empty when it made none, and nothing about folders is then sent. Only
+   * documents in the library (not superseded) are listed. */
+  folders?: HouseholdFolder[];
+};
+export type HouseholdFolder = {
+  id: string;
+  name: string | null;
+  /** Its people still in the household, by display name. */
+  people: string[];
+  /** The household said these are all the documents for this policy. */
+  complete: boolean;
+  /** Its documents' policy ids, in the order added. */
+  documents: string[];
 };
 
 type Row = Record<string, unknown>;
@@ -73,7 +87,7 @@ const text = (v: unknown) => (v == null ? null : v instanceof Date ? v.toISOStri
 /** Builds a Household from four account-scoped reads. `run` is injected so tests can supply a fake database.
  * `notExcluded` is lib/policies/member-exclusions' clause for (pm.account_id, pm.policy_id, pm.family_member_id), so a
  * person the household removed from a document is not listed as linked to it. */
-export async function readHousehold(accountId: string, run: ReadOnlyQuery, notExcluded = "", prototype = false): Promise<Household> {
+export async function readHousehold(accountId: string, run: ReadOnlyQuery, notExcluded = "", prototype = false, withFolders = false): Promise<Household> {
   const members = await run(
     "SELECT account_id, display_name, preferred_name, relationship, to_char(date_of_birth, 'YYYY-MM-DD') AS date_of_birth FROM family_members WHERE account_id=$1 AND lifecycle_state='active' ORDER BY created_at",
     [accountId]);
@@ -93,10 +107,30 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
   const pages = ids.length ? await run(
     "SELECT account_id, policy_id, page_number, text, to_jsonb(pp)->>'extraction_method' AS method FROM policy_pages pp WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) ORDER BY policy_id, page_number",
     [accountId, ids]) : [];
-  for (const row of [...members, ...docs, ...links, ...pages])
+  // The household's policy folders, when sql/policy-folders.sql is applied (withFolders): their people still in the
+  // household, and their documents still in the library.
+  const folderRows = withFolders ? await run(
+    "SELECT account_id, id, name, complete FROM policy_folders WHERE account_id=$1 ORDER BY created_at, id", [accountId]) : [];
+  const folderIds = folderRows.map((f) => String(f.id));
+  const folderPeople = folderIds.length ? await run(
+    `SELECT fp.account_id, fp.folder_id, f.display_name FROM policy_folder_people fp
+       JOIN family_members f ON f.id=fp.family_member_id AND f.account_id=fp.account_id AND f.lifecycle_state='active'
+      WHERE fp.account_id=$1 AND fp.folder_id = ANY($2::uuid[]) ORDER BY f.display_name`, [accountId, folderIds]) : [];
+  const folderDocs = folderIds.length ? await run(
+    `SELECT fd.account_id, fd.folder_id, fd.policy_id FROM policy_folder_documents fd
+       JOIN policies p ON p.id=fd.policy_id AND p.account_id=fd.account_id AND p.lifecycle_state='active' AND p.superseded_at IS NULL
+      WHERE fd.account_id=$1 AND fd.folder_id = ANY($2::uuid[]) ORDER BY fd.created_at, fd.policy_id`, [accountId, folderIds]) : [];
+  for (const row of [...members, ...docs, ...links, ...pages, ...folderRows, ...folderPeople, ...folderDocs])
     if (String(row.account_id) !== accountId) throw new Error("A row from another household was returned; refusing to build a prompt");
+  const inLibrary = new Set(ids);
+  const folders: HouseholdFolder[] = folderRows.map((f) => ({
+    id: String(f.id), name: text(f.name), complete: f.complete === true || f.complete === "true",
+    people: folderPeople.filter((p) => String(p.folder_id) === String(f.id)).map((p) => String(p.display_name)),
+    documents: folderDocs.filter((d) => String(d.folder_id) === String(f.id) && inLibrary.has(String(d.policy_id))).map((d) => String(d.policy_id)),
+  }));
   return {
     accountId,
+    ...(folders.length ? { folders } : {}),
     members: members.map((m) => ({
       name: m.preferred_name && m.preferred_name !== m.display_name ? `${m.display_name} (${m.preferred_name})` : String(m.display_name),
       relationship: String(m.relationship),
@@ -141,7 +175,8 @@ export async function loadHousehold(accountId: string): Promise<Household> {
   const { notExcludedClause } = await import("@/lib/policies/member-exclusions");
   const notExcluded = await notExcludedClause("pm.account_id", "pm.policy_id", "pm.family_member_id");
   const { malwareScanningIntentionallyDisabled } = await import("@/lib/scanning/adapter");
-  return readHousehold(accountId, async (sql, params) => (await query(sql, params)).rows, notExcluded, malwareScanningIntentionallyDisabled());
+  const { foldersReady } = await import("@/lib/policies/folders");
+  return readHousehold(accountId, async (sql, params) => (await query(sql, params)).rows, notExcluded, malwareScanningIntentionallyDisabled(), await foldersReady());
 }
 
 /** Uploaded text is data: < and > are escaped so a page cannot close or open a document tag (R36-4). */
@@ -208,8 +243,28 @@ export const readInPart = (doc: HouseholdDocument) => {
     part.length ? `some amounts on ${pageList(part)} could not be checked against the page image and show as "[amount not checked]"; they are not used` : null].filter(Boolean).join("; ");
 };
 
-export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?: Set<string>): string {
-  const head = `<document id="${documentId(index)}" name="${escapeText(doc.name.replace(/"/g, "'"))}"` +
+/** Folders are numbered P1, P2, ... in the order the household made them. */
+export const folderId = (index: number) => `P${index + 1}`;
+/** The folders a document is in, as "P1, P3", or null. */
+function documentFolders(doc: HouseholdDocument, folders: HouseholdFolder[] | undefined): string | null {
+  const ids = (folders ?? []).flatMap((f, i) => f.documents.includes(doc.policyId) ? [folderId(i)] : []);
+  return ids.length ? ids.join(", ") : null;
+}
+export const FOLDERS_NOTE = "The household put these documents together as one policy each, and said who it is for. A percentage of the sum assured (or sum insured) printed in one document of a policy is worked out on that person's own sum printed in another document of the same policy, never a document of another policy. A document may be in two policies (a shared wording). A document in no policy is still the household's: answer from it as from any other. \"all_documents\" says whether the household confirmed it uploaded every document of that policy.";
+export function renderFolders(household: Household): string {
+  const folders = household.folders ?? [];
+  if (!folders.length) return "";
+  const index = new Map(household.documents.map((d, i) => [d.policyId, documentId(i)]));
+  const rows = folders.map((f, i) => {
+    const docs = f.documents.map((id) => index.get(id)).filter((d): d is string => !!d);
+    return `<policy id="${folderId(i)}"` + attr("name", f.name) + attr("for", f.people.length ? f.people.join(", ") : LINKED_TO_NOBODY) +
+      ` documents="${docs.length ? docs.join(", ") : "none yet"}" all_documents="${f.complete ? "yes, confirmed by the household" : "not confirmed"}"/>`;
+  });
+  return `<policies note="${escapeText(FOLDERS_NOTE.replace(/"/g, "'"))}">\n${rows.join("\n")}\n</policies>\n`;
+}
+
+export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?: Set<string>, folders?: HouseholdFolder[]): string {
+  const head = `<document id="${documentId(index)}" name="${escapeText(doc.name.replace(/"/g, "'"))}"` + attr("policy", documentFolders(doc, folders)) +
     attr("insurer", doc.insurer) + attr("product", doc.productName) + attr("policy_number", doc.policyNumber) +
     attr("type", doc.documentType) + attr("role", doc.documentRole) + attr("effective", doc.effectiveDate) +
     attr("expiry_or_renewal", doc.expiryDate) + attr("uploaded", doc.uploadedAt) + attr("uploaded_for", doc.uploadedFor) +
@@ -233,7 +288,7 @@ export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?
 export function renderLibrary(household: Household, pagesSent?: Set<string>): string {
   const people = household.members.map((m) => `${m.name} (${m.relationship})`).join(", ") || "none recorded";
   const note = pagesSent ? `\n<pages_note>${PAGES_NOTE}</pages_note>` : "";
-  return `<household_members>${escapeText(people)}</household_members>${note}\n<documents>\n${household.documents.map((d, i) => renderDocument(d, i, pagesSent)).join("\n")}\n</documents>`;
+  return `<household_members>${escapeText(people)}</household_members>${note}\n${renderFolders(household)}<documents>\n${household.documents.map((d, i) => renderDocument(d, i, pagesSent, household.folders)).join("\n")}\n</documents>`;
 }
 export const PAGES_NOTE = "Only the pages the benefit table's rows come from, and those documents' pages that print a waiting period, an exclusion or a rule on when a benefit is not paid, are sent below; each document's other pages are left out, though the app has read them. Before giving an amount, check those rule pages for the event asked about. When the pages sent do not say something, say that the pages shown here do not say it (never that the document does not), and that the full document is on the Documents page.";
 

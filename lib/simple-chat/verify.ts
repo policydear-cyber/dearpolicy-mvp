@@ -1418,6 +1418,18 @@ const CAP_WORD = /\b(?:up\s+to|maximum|max\.?|not\s+exceeding|limited\s+to|cappe
  * - it is a sum insured (its lines or the table heading above say "sum insured" or "sum assured"), not a limit or an
  *   expense amount (TE #103 A10b), and its lines print nothing but the heading's benefit words, "sum insured" and the
  *   amount (A10c). */
+/** Whether the household put two documents into one policy folder for this person (sql/policy-folders.sql): both are in
+ * the same folder, that folder is for this person, neither is a superseded copy, and they do not print two different
+ * policy numbers (a document put in the wrong folder is not joined on the folder's word alone). A folder for someone else,
+ * or two folders, is not the same policy. Every other check (the base line names the person, prints the cover's sum)
+ * still applies. */
+function sameFolder(household: Household, a: HouseholdDocument, b: HouseholdDocument, person: string): boolean {
+  if (a.supersededAt || b.supersededAt) return false;
+  const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (number(a) && number(b) && number(a) !== number(b)) return false;
+  return (household.folders ?? []).some((f) => f.documents.includes(a.policyId) && f.documents.includes(b.policyId) &&
+    f.people.some((p) => baseName(p) === baseName(person)));
+}
 function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string, serverWords: ReadonlySet<string> = new Set()): Found | null {
   const po = st.percentOf!;
   if (!po.baseQuote) return null;
@@ -1426,7 +1438,7 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
   if (!bf) return null;
   const wdoc = household.documents[wording.docIndex], bdoc = household.documents[bf.docIndex];
   const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
-  const samePolicy = bf.docIndex === wording.docIndex || !!(number(wdoc) && number(wdoc) === number(bdoc));
+  const samePolicy = bf.docIndex === wording.docIndex || !!(number(wdoc) && number(wdoc) === number(bdoc)) || sameFolder(household, wdoc, bdoc, person);
   if (samePolicy && quotedLineIsWhole(bf, wording, household, person)) return bf;
   // Otherwise the plan's own Sum Assured cell, in the wording's document or the base's (when it is the same policy).
   const want = moneyFiguresIn(po.baseAmount)[0]?.value ?? numbersIn(po.baseAmount)[0];
