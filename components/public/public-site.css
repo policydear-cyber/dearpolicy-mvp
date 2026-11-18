@@ -13,7 +13,7 @@
 .public-nav-link:hover, .public-nav-link.active { color: var(--brand-ink); }
 .public-nav-link:focus-visible, .public-brand:focus-visible { outline: none; box-shadow: var(--focus); }
 .public-main { flex: 1; min-width: 0; }
-.public-footer { background: var(--bg-2); padding: 24px clamp(16px, 4vw, 56px) calc(24px + env(safe-area-inset-bottom, 0px)); color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.6; }
+.public-footer { background: var(--bg-2); padding: 24px max(clamp(16px, 4vw, 40px), calc((100% - 1120px) / 2 + clamp(16px, 4vw, 40px))) calc(24px + env(safe-area-inset-bottom, 0px)); color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.6; }
 .public-footer p { max-width: 72ch; margin: 0 0 8px; }
 .public-footer-links { margin: 0; }
 
@@ -23,7 +23,6 @@
 .landing h3 { font-size: var(--fs-lg); margin: 0 0 6px; color: var(--ink); }
 .landing p { line-height: 1.6; }
 .landing-lead { color: var(--ink-2); font-size: var(--fs-lg); max-width: 60ch; margin: 0 0 20px; }
-.landing-small { color: var(--muted); font-size: var(--fs-sm); margin: 12px 0 0; }
 .landing-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .landing-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 56px); align-items: center; padding-bottom: 32px; }
 .landing-example { margin: 0; background: var(--surface); border-radius: var(--r-lg); padding: 20px; display: flex; flex-direction: column; gap: 12px; }
@@ -35,42 +34,40 @@
 .landing-bubble-dp { background: var(--surface-2); color: var(--ink); }
 .landing-cite { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--brand-ink); }
 .landing-cite .icon { width: 16px; height: 16px; flex: none; }
-.landing-section { padding: clamp(48px, 7vw, 96px) 0 8px; }
-.landing-icon { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; flex: none; border-radius: var(--r-md); background: var(--brand-tint); color: var(--brand-ink); }
-.landing-icon .icon { width: 22px; height: 22px; }
+.landing-section { padding: clamp(40px, 6vw, 72px) 0 0; }
+.landing-icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; border-radius: var(--r-md); background: var(--brand-tint); color: var(--brand-ink); }
+.landing-icon .icon { width: 20px; height: 20px; }
 .landing-steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 .landing-steps li { display: flex; gap: 14px; align-items: flex-start; }
 .landing-steps p, .landing-grid p { margin: 0; color: var(--ink-2); }
-.landing-step-no { color: var(--muted); }
-.landing-grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.landing-grid li { background: var(--surface); border-radius: var(--r-lg); padding: 24px; }
-.landing-grid .landing-icon { margin-bottom: 12px; }
-.landing-limits ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; max-width: 72ch; }
-.landing-limits li { display: flex; gap: 10px; align-items: flex-start; color: var(--ink-2); line-height: 1.6; }
-.landing-limits li .icon { display: none; }
-.landing-guides { list-style: none; padding: 0; margin: 0 0 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.landing-guide { display: flex; flex-direction: column; gap: 4px; height: 100%; padding: 18px; border-radius: var(--r-md); background: var(--surface); color: var(--ink); text-decoration: none; transition: background var(--t-hover) var(--ease); }
-.landing-guide:hover { background: var(--bg-2); }
-.landing-guide:focus-visible { outline: none; box-shadow: var(--focus); }
-.landing-guide span { color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.5; }
+.landing-step-no { display: inline-grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; background: var(--brand-tint); color: var(--brand-ink); font-size: var(--fs-sm); font-weight: 700; font-variant-numeric: tabular-nums; }
+.landing-steps h3 { margin-top: 4px; }
+.landing-grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.landing-grid li { display: flex; flex-direction: column; gap: 12px; background: var(--surface); border-radius: var(--r-lg); padding: 20px; }
+.landing-learn { margin: 24px 0 0; color: var(--ink-2); }
 .landing-section .text-link .icon { width: 16px; height: 16px; vertical-align: -3px; }
-.landing-cta { text-align: left; }
+/* The closing call to action sits on its own panel, so the page has a clear end. */
+.landing-cta { margin-top: clamp(40px, 6vw, 72px); padding: clamp(24px, 4vw, 40px); background: var(--surface); border-radius: var(--r-lg); }
+.landing-cta h2 { margin-bottom: 20px; }
+.landing-cta .landing-actions { align-items: center; }
+.landing-signin { color: var(--muted); font-size: var(--fs-sm); }
 
 @media (max-width: 860px) {
-  .landing-hero, .landing-steps { grid-template-columns: 1fr; }
+  .landing-hero, .landing-steps, .landing-grid { grid-template-columns: 1fr; }
+  .landing-grid li { flex-direction: row; align-items: center; }
 }
 @media (max-width: 640px) {
-  .landing-grid, .landing-guides { grid-template-columns: 1fr; }
+  .landing-grid { grid-template-columns: 1fr; }
   .public-header { padding: 8px 16px; gap: 8px; }
   .public-brand .brand-logo { height: 24px; }
   .public-nav-link { padding: 0 8px; }
   .landing-actions .button { flex: 1 1 auto; }
 }
-/* On a phone the header keeps the way in (Sign in, Create account); Learn is in the page and the footer. */
-@media (max-width: 420px) {
-  .public-nav .public-nav-link:first-child { display: none; }
-  .public-header .button.compact { padding: 8px 12px; }
-}
+/* On a narrow phone the header keeps the logo, Sign in and the light/dark switch. Learn and "Create an account" are in the
+   page (the hero's button is just below the header) and in the footer. */
+@media (max-width: 520px) { .public-nav .public-nav-link:first-child { display: none; } }
+@media (max-width: 460px) { .public-header .button.compact { display: none; } }
+.public-brand { flex: none; }
 .public-main:focus { outline: none; }
 
 /* Sign-in, sign-up and password pages inside the public top bar: the form sits centred, its links look like links. */
@@ -87,6 +84,9 @@
 .landing-fan { position: relative; height: 290px; }
 /* The example answer is laid over the bottom of the front sheet, like a note clipped onto it. */
 .landing-wallet .landing-example { position: relative; z-index: 4; box-shadow: var(--sheet-shadow); }
+/* On the dark page the sheet shadow is lost on black: the floating shadow and a lighter card keep the example apart. */
+:root[data-theme="dark"] .landing-wallet .landing-example { background: var(--surface-2); box-shadow: var(--shadow-float); }
+:root[data-theme="dark"] .landing-wallet .landing-bubble-dp { background: var(--surface); }
 .landing-fan .policy-sheet { position: absolute; width: min(230px, 56%); transform-origin: 0 0; }
 .landing-fan .policy-sheet:nth-child(1) { left: 4%; top: 6px; transform: rotate(-3deg); z-index: 1; }
 .landing-fan .policy-sheet:nth-child(2) { left: 20%; top: 56px; transform: rotate(-.5deg); z-index: 2; }

@@ -1,5 +1,6 @@
 import { Fragment, useId, useRef } from "react";
 import type { ChatAnswer, ChatCitation } from "@/types";
+import { COVER_NOTE_ID } from "@/lib/chat/cover-note";
 
 /** One checked statement of an answer, as the server sends it alongside the
  * prose (the Developer's answer-fields change). Only calculation and
@@ -158,7 +159,10 @@ function WhereFrom({ statements, citations, sources, idFor, detailsRef }: { stat
  * per amount, other statements as short points, any sentence of the prose no statement covers, and the source detail
  * collapsed underneath. `prose` is the answer's own text (content, then details): the cards never drop any of it. */
 export function AnswerCards({ answer, render, sources, prose = [], after }: { answer: StructuredAnswer; render: (text: string) => string; sources?: React.ReactNode; prose?: string[]; after?: React.ReactNode }) {
-  const statements = answer.statements ?? [];
+  // The server's one line on documents not fully read is said last and quietly, after the answer and its next steps
+  // (DC, 18 Nov 2026: a limitation never opens an answer).
+  const coverNote = (answer.statements ?? []).find((s) => s.id === COVER_NOTE_ID) ?? null;
+  const statements = (answer.statements ?? []).filter((s) => s !== coverNote);
   const uid = useId();
   const where = useRef<HTMLDetailsElement>(null);
   const idFor = (id: string) => `where-${uid.replace(/[^a-zA-Z0-9_-]/g, "")}-${id}`;
@@ -243,6 +247,7 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
     <div className="answer-more">
       <WhereFrom statements={statements} citations={answer.citations} sources={sources} idFor={idFor} detailsRef={where} />
     </div>
+    {coverNote ? <p className="answer-cards-foot" data-testid="answer-cover-note">{render(coverNote.text)}</p> : null}
     {illustrations ? <p className="answer-cards-foot">Worked out from your documents, not a payment or an insurer&rsquo;s decision.</p> : null}
   </div>;
 }
