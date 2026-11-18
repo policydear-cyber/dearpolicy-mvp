@@ -71,17 +71,35 @@ test("a part paid instead of the death benefit, a conditional part and an unconf
   assert.match(s.lines[1].notes.join(" "), /conditions apply/);
   assert.equal(s.lines[2].amount, null); assert.match(s.lines[2].notes.join(" "), /not confirmed/);
 });
-test("a partly confirmed cover shows no total and says some lines are not confirmed", () => {
-  const s = coverSummary({ ...base, amount: 100000, currency: "SGD", partial: true, policyNames: ["Term Life"], parts: [{ name: "Term Life", amount: 100000, currency: "SGD" }] })!;
+test("a partly confirmed cover shows its confirmed amount as a line, never as a total (DC 18 Nov)", () => {
+  // The dashboard keeps a partial cover's figure off `amount` (route.ts) and sends it as partialAmount.
+  const s = coverSummary({ ...base, amount: null, partialAmount: 1000000, currency: "SGD", partial: true, policyNames: ["Term Life"] })!;
   assert.equal(s.total, null);
-  assert.match(s.why!, /not confirmed/);
+  assert.match(s.lines[0].amount!, /1,000,000/);
+  assert.match(s.lines[0].notes.join(" "), /other lines of this cover are not confirmed yet/);
+  assert.match(s.why!, /not confirmed[^]*no total[^]*may not be all/);
+  const d = coverSummary({ ...base, partialDisplay: "S$30 a day", currency: null, partial: true, policyNames: ["Hospital Cash"] })!;
+  assert.equal(d.total, null); assert.equal(d.lines[0].amount, "S$30 a day");
 });
-test("a partly confirmed cover shows no amount on any part, so a confirmed part is never shown as the policy's amount", () => {
-  const s = coverSummary({ ...base, partial: true, count: 1, policyNames: ["Policy A"], parts: [{ name: "Policy A", amount: 100000, currency: "SGD" }] })!;
-  assert.equal(s.total, null); assert.equal(s.lines[0].amount, null);
-  assert.ok(!JSON.stringify(s).includes("100,000"));
-  const two = coverSummary({ ...base, partial: true, count: 2, parts: [{ name: "A", amount: 1000, currency: "SGD" }, { name: "B", amount: 2000, currency: "SGD" }] })!;
-  assert.deepEqual(two.lines.map((l) => l.amount), [null, null]);
+test("a partly confirmed cover lists each part's confirmed amount, unconfirmed parts show none, and nothing is added up", () => {
+  const s = coverSummary({ ...base, partial: true, count: 3, parts: [{ name: "A Life", amount: 1000000, currency: "SGD" },
+    { name: "B Life", amount: 2000, currency: "SGD" }, { name: "C Life", amount: null, currency: null }] })!;
+  assert.equal(s.total, null);
+  assert.match(s.lines[0].amount!, /1,000,000/); assert.match(s.lines[1].amount!, /2,000/);
+  assert.equal(s.lines[2].amount, null); assert.match(s.lines[2].notes.join(" "), /not confirmed/);
+  assert.ok(!JSON.stringify(s).includes("1,002,000"));
+  assert.match(s.why!, /may not be all/);
+});
+test("a partly confirmed cover still never shows a figure without a stated currency", () => {
+  const s = coverSummary({ ...base, partialAmount: 1000000, currency: "$", partial: true, policyNames: ["Term Life"] })!;
+  assert.equal(s.lines[0].amount, null); assert.equal(s.total, null);
+  const d = coverSummary({ ...base, partialDisplay: "30 (currency unknown) a day", partial: true, policyNames: ["Hospital Cash"] })!;
+  assert.equal(d.lines[0].amount, null);
+});
+test("a partly confirmed cover with several policies never shows a single amount from the combined figure", () => {
+  // partialAmount for a lump-sum cover can be the dashboard's sum across policies: shown only when one policy is the cover.
+  const s = coverSummary({ ...base, partialAmount: 3000, currency: "SGD", partial: true, count: 2, policyNames: ["A", "B"] })!;
+  assert.ok(!JSON.stringify(s).includes("3,000"));
 });
 test("a policy printing several amounts shows none of them on its line", () => {
   const s = coverSummary({ ...base, reviewRequired: true, count: 1, policyNames: ["Policy A"], parts: [{ name: "Policy A", amount: 100000, currency: "SGD" }] })!;
