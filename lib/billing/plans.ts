@@ -29,7 +29,7 @@ export type Plan = {
 
 export const PLANS: Record<PlanId, Plan> = {
   free: { id: "free", name: "Free", priceMonthlySgd: 0, priceYearlySgd: 0, documents: 5, unlimitedDocuments: false, questionsPerMonth: 10, tagline: "Try it with one person’s main policies." },
-  plus: { id: "plus", name: "Plus", priceMonthlySgd: 7.9, priceYearlySgd: 79, documents: 20, unlimitedDocuments: false, questionsPerMonth: 60, tagline: "Most households." },
+  plus: { id: "plus", name: "Plus", priceMonthlySgd: 7.9, priceYearlySgd: 79, documents: 20, unlimitedDocuments: false, questionsPerMonth: 60, tagline: "A couple or a young family." },
   family: { id: "family", name: "Family", priceMonthlySgd: 14.9, priceYearlySgd: 149, documents: 100, unlimitedDocuments: true, questionsPerMonth: 150, tagline: "Big families and parents’ policies too." },
 };
 export const PLAN_ORDER: readonly PlanId[] = ["free", "plus", "family"];

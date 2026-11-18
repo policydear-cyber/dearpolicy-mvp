@@ -71,7 +71,7 @@ export default function PlanUsagePage(){
     {upgraded&&<div className="alert" role="status" data-testid="plan-upgraded"><strong>Thank you.</strong><span> Your new plan shows here within a minute. Refresh the page if it hasn&rsquo;t changed yet.</span></div>}
     {sub&&plan&&<section className="section" data-testid="plan-current">
       <div className="section-heading"><div>
-        <div className="eyebrow">{plan.id==="free"?"Free":sub.interval==="year"?`${formatSgd(plan.priceYearlySgd)} a year`:`${formatSgd(plan.priceMonthlySgd)} a month`}</div>
+        <div className="eyebrow">{plan.id==="free"?formatSgd(0):sub.interval==="year"?`${formatSgd(plan.priceYearlySgd)} a year`:`${formatSgd(plan.priceMonthlySgd)} a month`}</div>
         <h3>{plan.name} plan</h3>
         {paid&&renews?<p>{sub.status==="past_due"?`Your last payment didn’t go through. Update your card in Manage subscription to keep ${plan.name}.`:`Paid up to ${renews}.`}</p>:null}
       </div>
