@@ -187,7 +187,7 @@ async function main() {
   await test("no verdict before the data is in: cover detail and Payments say nothing found only once loaded", () => {
     const cover = read("app/coverage/page.tsx");
     assert.match(cover, /const ready=Boolean\(data&&!data\.error\)/, "the cover page knows when its answer is in");
-    assert.match(cover, /\{ready\?<>\s*<section className="section evidence-section">[^]*?Not found in your documents/, "the ANSWER section renders only once ready");
+    assert.match(cover, /\{ready\?<>\s*(?:\{covered&&summary[^\n]*?:null\}\s*)?<section className="section evidence-section">[^]*?Not found in your documents/, "the ANSWER section renders only once ready");
     assert.match(cover, /!ready\?"This cover could not be loaded\."/, "a failed load is not read as not found");
     const payments = read("app/records/page.tsx");
     assert.match(payments, /useState<RecordRow\[\]\|null>\(null\)/, "payments start unknown, not empty");

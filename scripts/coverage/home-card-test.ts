@@ -123,11 +123,12 @@ test("columns: the last row is never one card alone where 3 or 4 columns avoid i
   assert.equal(homeGridColumns(7), 4); assert.equal(homeGridColumns(6), 3); assert.equal(homeGridColumns(8), 4); assert.equal(homeGridColumns(9), 3);
   for (const n of [0, 1, 2, 3]) assert.equal(homeGridColumns(n), 3, "a few cards keep card size");
 });
-test("the page shows the amount only when there is one, names the source, and sets the columns", () => {
+test("Home cards never show a figure (DC 18 Nov), name the source, link to the detail page, and set the columns", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(page, /const amount=!homeCardShowsAmount\(c\)\?null:c\.amount!=null\?money\(c\.amount,c\.currency\):c\.displayAmount;const source=homeCardSource\(c\);/);
+  assert.match(page, /const source=homeCardSource\(c\);/);
   assert.match(page, /\{source&&<span className="coverage-source" title=\{source\}>\{source\}<\/span>\}/);
-  assert.match(page, /\{amount&&<span className="coverage-amount">\{homeAmountText\(amount\)\}<\/span>\}/);
+  assert.doesNotMatch(page, /coverage-amount|formatMoney|c\.amount|c\.displayAmount/, "no figure on a Home card");
+  assert.match(page, /href=\{`\/coverage\?member=\$\{encodeURIComponent\(active\?\.id\?\?""\)\}&category=\$\{encodeURIComponent\(c\.category\)\}`\}/);
   // A period wraps as a unit (TE A9): "S$3,000 a month" may break only before "a".
   assert.equal(homeAmountText("S$3,000 a month"), "S$3,000 a\u00a0month");
   assert.equal(homeAmountText("S$150.00 per day"), "S$150.00 per\u00a0day");
