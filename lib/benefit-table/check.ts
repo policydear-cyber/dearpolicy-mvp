@@ -224,6 +224,9 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
    * policy's own headline sum by one of HEADLINE_SUM's names ("25% of the Sum Covered"): percentOf is "sum_insured", and
    * the table works it out only when the person's policy prints one such sum (assemble.ts headlineSumProblem). */
   baseFromWords?: boolean;
+  /** A row paid as its words say whose printed money figures only say when or how a large claim is paid in parts (verify.ts
+   * scheduleFigure): shown as a payment schedule, not as "no figure printed". */
+  paymentSchedule?: boolean;
   /** The currency the row's cap itself prints ("up to S$15,000"), when it prints one: a cap in another currency than the
    * amount it limits cannot be compared with it, so no amount is worked out (assemble.ts). */
   capCurrency?: string | null;
@@ -875,6 +878,7 @@ const NEW_ROW = new RegExp(String.raw`^\p{Lu}[^\t]*\t\s*(?:\d|${CELL_MONEY}|(?:n
  * <the policy's headline sum>" with only closed phrases after it (HEADLINE_CELL). `cell` is every printed line the row's
  * quote is on; `next` is the line after it, which must start a new row (a label before a tab) or be empty; `words` are the
  * row's name, section, column and conditions, which must name no life (SHARE_LIFE) and take nothing off (TAKES_OFF). */
+const PAY_VERB = /\b(?:will|shall|would|must)\s+(?:\w+\s+){0,2}pay\b|\b(?:we|the\s+company|the\s+insurer|the\s+plan|the\s+policy|it)\s+pays\b|\bwe\s+pay\b/i;
 export function headlineSumShare(cell: string, value: number, next = "", words = ""): boolean {
   const all = cell.normalize("NFKC");
   if (SHARE_LIFE.test(`${all}\n${next}\n${words}`) || TAKES_OFF.test(`${all}\n${next}\n${words}`)) return false;
@@ -887,7 +891,133 @@ export function headlineSumShare(cell: string, value: number, next = "", words =
   // Only the label may come before the share; every later line is the share's own (continuations start with a tab or are
   // wrapped words), and is read with it.
   const from = all.slice(pcts[0].index!).replace(/\s+/g, " ").trim();
+  // A label is words before a table cell, never a sentence that pays ("We will pay 100% of the Sum Assured."): such a
+  // sentence is prose, settled only by proseHeadlineShare, which reads its whole provision (Critic on #544, NEW-HIGH A).
+  // Only the share's own cell, after the last tab: a label may say who pays ("Amount we pay<TAB>100% of Sum Insured",
+  // Critic on #544 re-check 2), a sentence has no tab.
+  const lead = all.slice(0, pcts[0].index!);
+  if (PAY_VERB.test(lead.slice(lead.lastIndexOf("\t") + 1))) return false;
   return HEADLINE_CELL.test(from);
+}
+/** What may follow the headline sum's name in a sentence: "of this Basic Benefit", "of this Policy", "under this Plan" (the
+ * plan the wording is for). A rider's own words ("of this Rider") are not here: assemble.ts settles a "basic" wording only
+ * on the basic plan's cover, and a rider's sum is not this rule's to settle. */
+const OF_THIS_PLAN = String.raw`(?:\s+(?:of|under)\s+(?:this|the)\s+(?:(?:basic|base)\s+)?(?:benefit|plan|policy|certificate))?`;
+/** A sentence that pays a share of the policy's own headline sum, in prose, for a row whose reading left the share's base
+ * unsettled (live re-read 18 Nov: "We will pay one hundred percent (100%) of the Sum Assured of this Basic Benefit in one
+ * (1) lump sum." was read once as of the sum insured and once as of "other", so the same page lost its S$300,000). The
+ * sentence holding the row's one percentage must be, whole, "We/The Company/The Insurer will/shall pay", the share (its
+ * figure may be spelled out before it in words and printed in brackets), "of <the policy's headline sum>", optionally
+ * "of this (Basic) Benefit/Plan/Policy", then only the closed phrases of CELL_TAIL, and its full stop. Like
+ * headlineSumShare, the cell, the line after it, the row's words and the whole provision it is in (provisionAround) must
+ * name no other life (SHARE_LIFE) and take nothing off (TAKES_OFF), so "less any amount paid under Early Stage" anywhere in
+ * the clause leaves the share as read. */
+/** The words a share's figure is spelled out in before its digits ("one hundred percent (100%)"); no other word ("up to",
+ * "a further", "the balance of") may stand between the pay verb and the share. */
+const SPELLED_NUMBER = String.raw`(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|and|point|per\s?cent)`;
+/** A prose sentence's closed tail: CELL_TAIL, and "in one (1) lump sum" as wordings print it. Not in CELL_TAIL: a table cell
+ * never needs it, and a sentence must take the provision check (Critic on #544, NEW-HIGH A). */
+const PROSE_TAIL = String.raw`(?:${CELL_TAIL}|(?:(?:payable|paid)\s+)?in\s+one\s+\(\s*1\s*\)\s+lump\s+sum)`;
+const PROSE_SHARE = new RegExp(String.raw`\b(?:we|the\s+company|the\s+insurer|the\s+plan|the\s+policy|it)\s+(?:(?:will|shall)\s+pay|pays?)\s+(?:${SPELLED_NUMBER}[\s-]+){0,10}\(?\s*(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent)\s*\)?\s+of\s+${HEADLINE_SUM_NAME}${OF_THIS_PLAN}(?:\s*,?\s*${PROSE_TAIL})*\s*\.(?:\s|$)`, "iu");
+/** Words that make a benefit share its sum with another payment: "counted towards this benefit", "together pay at most",
+ * "combined". Such a provision's share is left as read (Critic on #544, MEDIUM). */
+const SHARED_WITH = /\b(?:count(?:ed|s)?\s+(?:towards|against)|together\b[^.;]{0,60}\bat\s+most|in\s+total\b[^.;]{0,60}\bat\s+most|combined|aggregate|what\s+remains|what\s+is\s+left|remaining\s+(?:sum|amount|balance))\b/i;
+const REPEATED = /\b(?:monthly|weekly|quarterly|annually|yearly|every\s+(?:month|week|year|quarter)|each\s+(?:month|week|year|quarter)|per\s+(?:month|week|annum|year)|instal+ments?|for\s+\w+\s*(?:\(\d+\)\s*)?(?:consecutive\s+)?(?:months|years|weeks))\b/i;
+export function proseHeadlineShare(cell: string, value: number, next = "", words = "", provision = ""): boolean {
+  // Spaces and line breaks read as one space; a tab stays, so a row's label cell before the sentence is seen as one.
+  const all = cell.normalize("NFKC").replace(/[^\S\t]+/g, " ").replace(/ *\t[\s]*/g, "\t");
+  // The whole provision the sentence is in (provisionAround), not only its own lines: "Subject to the deduction of any amount
+  // previously paid," on the line above, "If Life Assured 2 is diagnosed," or a later paragraph's "will be reduced by any
+  // amount paid under the Early Stage Benefit" each leave the share as read (Critic on #544, NEW-HIGH).
+  const around = `${all}\n${next}\n${words}\n${provision.normalize("NFKC")}`;
+  if (SHARE_LIFE.test(around) || TAKES_OFF.test(around) || SHARED_WITH.test(around)) return false;
+  // A share paid again and again ("This is paid monthly for 24 months", "each year") is not one sum: a percentage row has no
+  // period, so it is left as read (TE on #544).
+  // The next line only when it continues the sentence, never another table row ("Monthly Hospital Income<TAB>S$100 a
+  // day", Critic on #544, U7).
+  if (REPEATED.test(all) || (!NEW_ROW.test(next) && REPEATED.test(next) && !/\b(?:premiums?|contributions?)\b/i.test(next))) return false;
+  // Any sentence of the provision that says how this is paid, again and again ("It is paid monthly for 24 months", "in
+  // 10 equal instalments"); a premium's own schedule is not the benefit's (TE on #544).
+  if (provision.normalize("NFKC").replace(/\s+/g, " ").split(/(?<=[.;])\s+/).some((t) => /\b(?:paid|payable|pay|payment|payout)\b/i.test(t) && REPEATED.test(t) && !/\b(?:premiums?|contributions?)\b/i.test(t))) return false;
+  const pcts = [...all.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent\b)/gi)];
+  if (pcts.length !== 1 || Math.abs(Number(pcts[0][1].replace(",", ".")) - value) > 0.0001) return false;
+  const m = PROSE_SHARE.exec(all);
+  // The pay verb opens the sentence (nothing but a clause's comma before it), and the matched share is the row's own.
+  if (!m || m.index! > pcts[0].index! || m.index! + m[0].length <= pcts[0].index!) return false;
+  const before = all.slice(0, m.index!).trimEnd();
+  // Nothing before the pay verb, a clause ending in punctuation, or a table row's label cell ("Death<TAB>We will pay ...").
+  return before === "" || /[.,:;]$/.test(before) || /\t$/.test(all.slice(0, m.index!)) && !before.includes("\t");
+}
+/** A numbered clause line ("3.1 Critical Illness Benefit", "4. Exclusions") and its number: the number is followed by a word
+ * with a capital, so a wrapped line that opens "12 months of the diagnosis" or "30 days of the claim" is never a clause. */
+const CLAUSE_LINE = /^\s*(\d+(?:\.\d+)*)\.?[ \t]+\p{Lu}/u;
+/** The provision a sentence at [start, end) of a page is in: back to the nearest numbered clause line above it (or the page's
+ * top), and on to the next numbered clause that is not one of that clause's own sub-clauses ("3.2" or "4" after "3.1", but
+ * not "3.1.1"), or the page's end when no clause number was found above. At most 80 lines each way; the caller joins the pages around it. */
+/** Whether clause number `a` comes after `b` in a document's order ("3.2" and "4" after "3.1"; "1" and "3" do not). */
+function clauseAfter(a: string, b: string): boolean {
+  const x = a.split(".").map(Number), y = b.split(".").map(Number);
+  for (let k = 0; k < Math.max(x.length, y.length); k++) { const p = x[k] ?? -1, q = y[k] ?? -1; if (p !== q) return p > q; }
+  return false;
+}
+/** Whether a numbered line is a clause heading: a dotted number ("3.1"), a number before a heading in capitals ("4
+ * EXCLUSIONS"), or, only on a page that numbers no clause with dots, one number before a short heading alone on its line
+ * ("3. Critical Illness Benefit": at most six words, no closing punctuation), or on a dotted page the next top-level
+ * clause after `after` ("4 Death Benefit" after "3.1"), that is not one of a list (another such line
+ * numbered one more or one less within two lines: "1 Major Cancer" / "A malignant tumour." / "2 Heart Attack").
+ * Critic on #544 re-checks 7 and 8, TE R1. */
+const CAPS_HEADING = /^[A-Z][A-Z0-9 &'()\/,-]{2,}$/;
+function clauseHeading(lines: string[], i: number, num: string, dotted: boolean, after: string | null = null): boolean {
+  if (num.includes(".")) return true;
+  const rest = lines[i].replace(/^\s*\d+\.?[ \t]+/, "").trim();
+  if (CAPS_HEADING.test(rest)) return true;
+  if (/[.;:!?]$/.test(rest) || rest.split(/\s+/).length > 6 || !/^\p{Lu}/u.test(rest)) return false;
+  // On a page with dotted clauses a one-number heading is only the next top-level clause ("4 Death Benefit" after "3.1"),
+  // never a list item that happens to count past it ("3 Stroke" inside "2.1").
+  if (dotted && !(after && Number(num) === Number(after.split(".")[0]) + 1)) return false;
+  const n = Number(num);
+  for (let j = Math.max(0, i - 2); j <= Math.min(lines.length - 1, i + 2); j++) {
+    const m = j !== i ? CLAUSE_LINE.exec(lines[j]) : null;
+    if (m && !m[1].includes(".") && Math.abs(Number(m[1]) - n) === 1) return false;
+  }
+  return true;
+}
+const DOTTED_CLAUSE = /^\s*\d+\.\d+(?:\.\d+)*\.?[ \t]+\p{Lu}/u;
+export function provisionAround(text: string, start: number, end: number): string {
+  const lines = text.split("\n");
+  const dotted = lines.some((l) => DOTTED_CLAUSE.test(l));
+  let at = 0, first = 0, last = lines.length - 1;
+  for (let i = 0, pos = 0; i < lines.length; pos += lines[i].length + 1, i++) { if (pos <= start) at = i; if (pos <= end) last = i; }
+  const own = last;
+  let num: string | null = null, nearest: string | null = null, nearestAt = -1;
+  // Upwards the clause starts only at a dotted number or a heading in capitals; a one-number line ("1 Major Cancer",
+  // "3. Critical Illness Benefit") may be a list item inside it, so the text is read past it, to the top of the page if
+  // need be (Critic on #544, U1, U10, X1, X3). The nearest one-number heading still sets where the clause ends below.
+  for (let i = at; i >= Math.max(0, at - 80); i--) {
+    const m = CLAUSE_LINE.exec(lines[i]); first = i;
+    if (!m) continue;
+    const rest = lines[i].replace(/^\s*\d+\.?[ \t]+/, "").trim();
+    if (m[1].includes(".") || CAPS_HEADING.test(rest)) { num = m[1]; break; }
+    if (!nearest && clauseHeading(lines, i, m[1], dotted)) { nearest = m[1]; nearestAt = i; }
+  }
+  num = num ?? nearest;
+  last = Math.min(lines.length - 1, own + 80);
+  // Only a later clause heading ends it: "3.2" or "4 EXCLUSIONS" after "3.1"; never a sub-clause ("3.1.1") or a list in
+  // the clause, however it counts ("1. The illness ...", "4. The claim is made within 6 months.", "3 Stroke").
+  // Once a one-number line has appeared in the clause, any later one is the same list counting on, however long its items'
+  // descriptions ("3 Stroke" ... "4 Kidney Failure" inside 3.1; Critic on #544 re-check 9, Y1, X2).
+  const bare = (l: string) => { const m = CLAUSE_LINE.exec(l); return !!m && !m[1].includes(".") && !CAPS_HEADING.test(l.replace(/^\s*\d+\.?[ \t]+/, "").trim()); };
+  // Counted from the clause's own heading line (a one-number heading is the clause's, not a list item).
+  let listOpen = lines.slice(Math.max(first, num === nearest ? nearestAt : first) + 1, own + 1).some(bare);
+  for (let i = own + 1; i <= Math.min(lines.length - 1, own + 80); i++) {
+    const m = CLAUSE_LINE.exec(lines[i]);
+    // A line introduced by a colon ("The illness covered is:") opens a list too (Critic on #544 re-check 10, Y2, X2).
+    const prev = lines.slice(0, i).reverse().find((l) => l.trim()) ?? "";
+    const listItem = (listOpen || /:\s*$/.test(prev)) && bare(lines[i]);
+    if (bare(lines[i])) listOpen = true;
+    if (m && num && !listItem && clauseHeading(lines, i, m[1], dotted, num) && m[1] !== num && !m[1].startsWith(`${num}.`) && clauseAfter(m[1], num)) { last = i - 1; break; }
+  }
+  return lines.slice(first, last + 1).join("\n");
 }
 /** A share's fixed base printed over its own table, for a row whose reading left the base unsettled (live walk 17 Nov:
  * the Product Summary's "Arm, Elbow, Wrist or Ribs<TAB>25%" under "Simple Fracture Benefit Limit: S$5,000" and "(% of
@@ -2186,12 +2316,19 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // A figure that only says when or how a large claim is paid in parts ("If the sum payable ... is above S$200,000, the
     // Company will first pay a lump sum of S$200,000 and pay the balance in ... instalments"), read with the whole sentence
     // its quote is in: how the benefit is paid, never what it pays (verify.ts scheduleFigure). The row stays, with no figure.
+    const scheduleWords = (() => { const p = placed.get(source), text = pageText(source.page);
+      return p ? (() => { const back = text.slice(Math.max(0, p.start - 400), p.start), after = text.slice(p.end, p.end + 800), ends = [...after.matchAll(/[.;](?:\s|$)/g)].map((e) => e.index! + 1);
+        return back.slice(Math.max(0, back.search(/[^.;]*$/))) + text.slice(p.start, p.end) + after.slice(0, ends[2] ?? after.length); })() : source.excerpt; })();
     if (value != null && pays !== "percent") {
-      const p = placed.get(source), text = pageText(source.page);
-      const whole = p ? (() => { const back = text.slice(Math.max(0, p.start - 400), p.start), after = text.slice(p.end, p.end + 800), ends = [...after.matchAll(/[.;](?:\s|$)/g)].map((e) => e.index! + 1);
-        return back.slice(Math.max(0, back.search(/[^.;]*$/))) + text.slice(p.start, p.end) + after.slice(0, ends[2] ?? after.length); })() : source.excerpt;
-      if (scheduleFigure(source.excerpt, value) || scheduleFigure(whole, value)) { out.dropped.push({ what: label, why: `figure ${value} is when or how a large claim is paid in parts, not what it pays; kept the row without it` }); pays = "words"; value = null; }
+      if (scheduleFigure(source.excerpt, value) || scheduleFigure(scheduleWords, value)) { out.dropped.push({ what: label, why: `figure ${value} is when or how a large claim is paid in parts, not what it pays; kept the row without it` }); pays = "words"; value = null; }
     }
+    // A row paid as its words say whose printed money is only a payment schedule's (its threshold or first part) says so,
+    // never "no figure printed": the figure is printed, it is just not an amount of cover (live check of #545, 18 Nov).
+    const paymentSchedule = pays === "words" && value == null && (() => {
+      // Every money figure: one with a currency sign or code at any size ("S$500"), or one with thousands separators.
+      const figures = [...source.excerpt.matchAll(/(?:(?:[A-Z]{1,3}\$|RM|£|€|\$|\b(?:SGD|USD|MYR|HKD|GBP|EUR|AUD))\s?(\d[\d,]*(?:\.\d+)?))|(?<![\d.,])(\d{1,3}(?:,\d{3})+(?:\.\d+)?)(?![\d,])/g)].map((m) => Number((m[1] ?? m[2]).replace(/,/g, "")));
+      return figures.length > 0 && figures.every((v) => scheduleFigure(source.excerpt, v) || scheduleFigure(scheduleWords, v));
+    })();
     // The most cover a plan offers, on a document that names no one's own cover ("Be insured up to a maximum coverage of
     // S$1,000,000 at S$1.37 per day"): the most anyone may buy, not what this person holds or a limit on a claim. The row
     // is no benefit and is left out; the person's own sum is on their certificate or schedule (live 17 Nov).
@@ -2217,7 +2354,14 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     const cellOf = () => { const p = placed.get(source); if (!p) return null; const text = pageText(source.page), from = text.lastIndexOf("\n", p.start - 1) + 1, to = lineEndAt(text, p.end);
       return { cell: text.slice(from, to), next: to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "" }; };
     const cell = pays === "percent" && value != null && (percentOf === "other" || percentOf == null) ? cellOf() : null;
-    const baseFromWords = !!cell && headlineSumShare(cell.cell, value!, cell.next, [benefit, str(b.section) ?? "", str(b.column) ?? "", ...(Array.isArray(b.conditions) ? b.conditions.map((c) => str(c) ?? "") : [])].join("\n"));
+    const rowWords = [benefit, str(b.section) ?? "", str(b.column) ?? "", ...(Array.isArray(b.conditions) ? b.conditions.map((c) => str(c) ?? "") : [])].join("\n");
+    const baseFromWords = !!cell && (headlineSumShare(cell.cell, value!, cell.next, rowWords)
+      || proseHeadlineShare(cell.cell, value!, cell.next, rowWords, (() => {
+        // The pages before and after too: a clause runs across a page break (Critic on #544, NEW-HIGH B).
+        const before = pageText(source.page - 1), at = placed.get(source)!, shift = before ? before.length + 1 : 0;
+        const joined = [before, pageText(source.page), pageText(source.page + 1)].filter((t, k) => k === 1 || t).join("\n");
+        return provisionAround(joined, at.start + shift, at.end + shift);
+      })()));
     if (baseFromWords) percentOf = "sum_insured";
     let baseAmount: number | null = null, baseSource: Source | null = null;
     if (percentOf === "fixed_amount") {
@@ -2389,7 +2533,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}), ...(columnMarks.length ? { columnMarks } : {}),
-      ...(ownShareNamed ? { ownShareNamed } : {}), ...(baseFromWords && percentOf === "sum_insured" ? { baseFromWords } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}), ...(childNote ? { childNote } : {}),
+      ...(ownShareNamed ? { ownShareNamed } : {}), ...(baseFromWords && percentOf === "sum_insured" ? { baseFromWords } : {}), ...(paymentSchedule && pays === "words" ? { paymentSchedule } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}), ...(childNote ? { childNote } : {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}),
       ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
   }
