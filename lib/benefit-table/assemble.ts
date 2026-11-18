@@ -466,7 +466,13 @@ function headlineSumProblem(b: CheckedBenefit, cover: PersonCover, personCovers:
   // cover's line and every line whose name has all the row's words prints that one sum ("3.1 Critical Illness Benefit":
   // critical, illness). A name two lines with different sums share, or one this cover's line does not carry, stays doubt.
   const rowWords = new Set([...benefitWords(rowHead(b.benefit))].filter((w) => !/^\d+$/.test(w)));
-  const byName = rowWords.size ? policy.filter((x) => { const w = benefitWords(x.cover ?? ""); return [...rowWords].every((r) => w.has(r)); }) : [];
+  // Words naming the basic plan's sum ("50% of the Basic Sum Assured") are not the named line's own sum: no name match. Only
+  // "this Basic Benefit" (the clause's own benefit) may be, and not when another of the policy's lines is named basic or
+  // base, which is the basic plan those words may mean (Critic S1, S8).
+  const said = `${b.source.excerpt}\n${b.rowText ?? ""}`;
+  const basicPlanWords = /\b(?:basic|base)\b/i.test(said.replace(/\bthis\s+(?:basic|base)\b/gi, " "));
+  const basicLine = /\b(?:basic|base)\b/i.test(said) && policy.some((x) => x.coverKey !== cover.coverKey && /\b(?:basic|base)\b/i.test(x.cover ?? ""));
+  const byName = rowWords.size && !basicPlanWords && !basicLine ? policy.filter((x) => { const w = benefitWords(x.cover ?? ""); return [...rowWords].every((r) => w.has(r)); }) : [];
   const settled = labelled.length ? one(labelled) : one(policy) || byName.some((x) => x.coverKey === cover.coverKey) && one(byName);
   if (!settled)
     return `${b.value}% of the policy's sum, but ${cover.cover ?? "this policy"} prints more than one sum for this person, so which one is not settled`;

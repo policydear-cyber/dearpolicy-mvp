@@ -667,6 +667,20 @@ test("C control: two lines that both carry the row's name, with different sums, 
   assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
   assert.doesNotMatch(JSON.stringify(r.figure), /300,000|50,000/);
 });
+for (const [what, covers, quote] of [
+  ["the Basic Sum Assured, beside a whole life basic plan's line", [{ cover: "Whole Life Basic Plan", sum: 100000, line: "Whole Life Basic Plan\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }], "We will pay fifty percent (50%) of the Basic Sum Assured in one (1) lump sum."],
+  ["the Basic Sum Assured, beside a plan line with no basic in its name", [{ cover: "Whole Life Plan", sum: 100000, line: "Whole Life Plan\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }], "We will pay fifty percent (50%) of the Basic Sum Assured in one (1) lump sum."],
+  ["this Basic Benefit, beside a line named basic plan", [{ cover: "Basic Plan Death Benefit", sum: 100000, line: "Basic Plan Death Benefit\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }], PROSE_QUOTE],
+] as const) test(`C control (Critic S1/S8): a share of ${what} is not worked out on the critical illness line's sum`, () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+    page1: [CCI_PAGE1.replace(/\nCritical Illness Plan\tS\$300,000$/, ""), ...covers.map((c) => c.line)].join("\n"),
+    page2: `3 BENEFITS\n3.1 Critical Illness Benefit\nWhile this policy is in force, if the Life Assured is diagnosed with a covered illness, ${quote}`, link: "Critical Illness Benefit", covers: [...covers],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: quote === PROSE_QUOTE ? 100 : 50, quote }] });
+  const r = rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+  assert.doesNotMatch(JSON.stringify(r.figure), /25,000|50,000|100,000/);
+});
 test("C control: the sentence followed by a line that takes earlier payments off stays with no amount", () => {
   const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
     page1: CCI_PAGE1, page2: `3 BENEFITS\n${PROSE}\nAny amount paid earlier under the Early Stage benefit will be deducted.`, covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
