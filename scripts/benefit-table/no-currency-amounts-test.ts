@@ -25,7 +25,7 @@ const ID = "eeeeeeee-0000-4000-8000-0000000000c1";
 const PERSON = "Tan Mei Ling Rachel";
 
 /** A two-page component schedule. `lines` are the component rows [name, sum]; `extra` adds a line to page 1. */
-function build(lines: [string, string][], o: { extra?: string; head?: string } = {}) {
+function build(lines: [string, string][], o: { extra?: string; head?: string; currency?: string | null } = {}) {
   const row = ([n, s]: [string, string]) => `${n}\tIn Force\t${s}\t0.00\t02-Mar-2015\t02-Mar-2040`;
   const page1 = ["Client Information", `Policyowner:\t${PERSON}`, "Policy Number:\t70112233", o.extra ?? "Policy Status:\tIn Force"].join("\n");
   const page2 = ["Benefit Details:", `Life Assured Name:\t${PERSON}`, o.head ?? "Component\tStatus\tSum Assured\tComponent Premium\tCover Start Date\tCover Expiry Date", ...lines.map(row),
@@ -33,7 +33,7 @@ function build(lines: [string, string][], o: { extra?: string; head?: string } =
   const doc: Household["documents"][number] = { policyId: ID, name: "Harbour Protector.pdf", insurer: "Example Assurance", productName: "Harbour Protector", policyNumber: "70112233",
     documentType: null, documentRole: "personal_schedule", effectiveDate: null, expiryDate: null, uploadedAt: "2026-10-01", uploadedFor: null, linkedPeople: [PERSON], supersededAt: null,
     processingStatus: "ready", pages: [{ page: 1, text: page1 }, { page: 2, text: page2 }] };
-  const house: Household = { accountId: ACC, members: [{ name: PERSON, relationship: "self" }], documents: [doc] };
+  const house: Household = { accountId: ACC, members: [{ name: PERSON, relationship: "self" }], documents: [doc], currency: o.currency ?? null };
   const src: SourceDoc = { id: ID, name: doc.name, readable: true, pages: doc.pages };
   const num = (s: string) => Number(s.replace(/[^\d.]/g, ""));
   const covers = lines.map(([n, s], i) => ({ person: PERSON, product: "Harbour Protector", cover: n, plan: null, riderOf: i ? lines[0][0] : null, policyNumber: "70112233", premium: null,
@@ -58,7 +58,7 @@ function ask(h: ReturnType<typeof build>, benefit: RegExp) {
   const { answer } = verifyAnswer(h.house, readModelAnswer(fromRows.json)!, [q], new Set(fromRows.report.labels), fromRows.report.figures ?? []);
   const { kept } = keepLabelledAmounts(answer.statements ?? [], fromRows.report);
   const cards = kept.filter((s) => s.amount);
-  return { cards: cards.map((s) => s.amount as unknown as { text: string; currencyResolved: boolean }), all: answer.statements ?? [] };
+  return { cards: cards.map((s) => s.amount as unknown as { text: string; currencyResolved: boolean }), basis: cards.map((s) => s.basis ?? null), all: answer.statements ?? [] };
 }
 const LEFT_OUT = /couldn.t find printed/i;
 
@@ -119,6 +119,32 @@ test("C4 a ringgit schedule declared in words stays ringgit", () => {
 test("C5 a count is never money, currency or not", () => {
   const r = ask(build([["Harbour Protector", "100,000.00"], ["Physiotherapy visits per year", "12.00"]]), /^Physiotherapy/);
   assert.deepEqual(r.cards, []);
+});
+
+// The household's own currency (Account settings), as Home and Coverage use it (live f954eb2: PW9 and EJ7 chat cards said
+// "Currency not stated" while Home showed S$). Only where nothing the document prints names another currency.
+test("H1 household chose S$, no currency anywhere: S$, resolved, and the card says the currency is from settings", () => {
+  const r = ask(build(LINES, { currency: "SGD" }), /^Total and Permanent Disability/);
+  assert.deepEqual(r.cards.map((c) => [c.text, c.currencyResolved]), [["S$100,000", true]]);
+  assert.deepEqual(r.basis, ["Currency from your account settings."]);
+  assert.deepEqual(ask(build(LINES, { currency: "SGD" }), /^Accelerated Disability/).cards.map((c) => c.text), ["S$13,500"]);
+});
+test("H2 household chose S$ but the document prints USD, a bare $ or ringgit: never filled", () => {
+  assert.deepEqual(ask(build(LINES, { currency: "SGD", extra: "Premium Paid:\tUSD 150.00" }), /^Total and Permanent Disability/).cards, []);
+  assert.deepEqual(ask(build(LINES, { currency: "SGD", extra: "Premium Amount:\t$181.44" }), /^Total and Permanent Disability/).cards, []);
+  const myr = ask(build(LINES, { currency: "SGD", head: "Currency : Ringgit Malaysia\nComponent\tStatus\tSum Assured\tComponent Premium\tCover Start Date\tCover Expiry Date" }), /^Total and Permanent Disability/);
+  assert.ok(myr.cards.every((c) => !c.text.startsWith("S$")), JSON.stringify(myr.cards));
+});
+test("H3 the document states the currency itself: no settings note", () => {
+  const r = ask(build(LINES, { currency: "SGD", head: "Currency : Singapore Dollar\nComponent\tStatus\tSum Assured\tComponent Premium\tCover Start Date\tCover Expiry Date" }), /^Total and Permanent Disability/);
+  assert.deepEqual(r.cards.map((c) => [c.text, c.currencyResolved]), [["S$100,000", true]]);
+  assert.deepEqual(r.basis, [null]);
+});
+test("H4 household chose no currency: as before, currency not stated", () => {
+  assert.deepEqual(ask(build(LINES, { currency: null }), /^Total and Permanent Disability/).cards.map((c) => [c.text, c.currencyResolved]), [["100,000", false]]);
+});
+test("H5 a count is never money, even with a household currency", () => {
+  assert.deepEqual(ask(build([["Harbour Protector", "100,000.00"], ["Physiotherapy visits per year", "12.00"]], { currency: "SGD" }), /^Physiotherapy/).cards, []);
 });
 
 console.log(`no-currency amounts: ${passed} passed, ${failures.length} failed`);

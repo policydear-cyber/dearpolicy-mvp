@@ -4,6 +4,7 @@
  *
  * Household isolation: every query filters on account_id, and readHousehold re-checks each returned row's account_id
  * in code before anything reaches a prompt. */
+import { effectiveHouseholdCurrency } from "@/lib/documents/household-currency";
 import { isCodeName } from "@/lib/policies/document-name";
 import { uncheckedText } from "@/lib/documents/layout-check";
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
@@ -63,6 +64,10 @@ export type Household = {
    * the model. */
   members: { name: string; relationship: string; date_of_birth?: string | null }[];
   documents: HouseholdDocument[];
+  /** The household's own currency (Account settings, lib/documents/household-currency): a code, or null when it chose
+   * "Don't assume" or has not chosen. Read by the verifier only, for a figure on a page that names no other currency
+   * (householdCurrencyPages), never sent to the model. */
+  currency?: string | null;
 };
 
 type Row = Record<string, unknown>;
@@ -95,8 +100,13 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
     [accountId, ids]) : [];
   for (const row of [...members, ...docs, ...links, ...pages])
     if (String(row.account_id) !== accountId) throw new Error("A row from another household was returned; refusing to build a prompt");
+  // The household's currency choice: a database without the column, or any failed read, is "not chosen" (nothing assumed).
+  const currency = await run(`SELECT a.id AS account_id, to_jsonb(a)->>'currency' AS currency FROM accounts a WHERE a.id=$1`, [accountId])
+    .then((rows) => rows.find((r) => String(r.account_id) === accountId && typeof r.currency === "string")?.currency as string | undefined)
+    .catch(() => undefined);
   return {
     accountId,
+    currency: effectiveHouseholdCurrency(currency ?? null),
     members: members.map((m) => ({
       name: m.preferred_name && m.preferred_name !== m.display_name ? `${m.display_name} (${m.preferred_name})` : String(m.display_name),
       relationship: String(m.relationship),

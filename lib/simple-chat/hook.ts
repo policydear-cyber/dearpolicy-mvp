@@ -29,7 +29,7 @@ import { SUPERSEDED_NOTICE, supersededAnswerIds } from "@/lib/chat/stale-answers
 import { resolveSubjects, subjectsNote, supersededBy, unknownPersonAnswer, type Subjects } from "./subjects";
 import { docLabel, matchMember, membersNamedIn } from "./verify";
 import { declutterAnswer } from "./declutter";
-import { tablesFromPrintedRows } from "./printed-table";
+import { dropQuoteFragments, tablesFromPrintedRows } from "./printed-table";
 import { contactsHelp, insurerContactsFor } from "./insurer-contacts";
 import { amountsFromRows, withheldRows, asksForNobody, namesSomeone, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, dropQuotePointers, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
@@ -418,7 +418,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     // And what the checks built (an owner's label, a card) for anyone the turn is not about goes too.
     report.sentencesLeftOut.push(...keepAnswerToSubjects(answer, subjects, household));
     // Amounts shown while some of that person's documents gave nothing: never read as the person's whole cover.
-    noteCoverNotCounted(answer, household, live?.states ?? null, new Set(fromRows.report?.premiumLabels ?? []));
+    noteCoverNotCounted(answer, household, live?.states ?? null, new Set(fromRows.report?.premiumLabels ?? []), new Set(report.filesListed ?? []));
     // Points were given, none survived the checks, and the bottom line introduces them: the answer says so, never a bare
     // introduction to nothing. A bottom line that answers on its own stands alone (live run 23 Oct, E2).
     if (parsed?.statements.length && !(answer.statements ?? []).length && INTRODUCES.test(answer.bottomLine ?? answer.summary ?? "")) answer.statements = [{ id: "nothing-shown", kind: "uncertainty", text: NOTHING_SHOWN, fullText: NOTHING_SHOWN, conditions: [] }];
@@ -464,6 +464,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   // they left out stays in the turn's report).
   // Rows of a printed figures table are shown as a table, not as quoted strings.
   if (answer.statements) answer.statements = tablesFromPrintedRows(answer.statements, household, (d) => docLabel(household, d));
+  report.sentencesLeftOut.push(...dropQuoteFragments(answer));
   report.sentencesLeftOut.push(...declutterAnswer(answer));
   // How to reach the insurer, as the household's own documents print it, when the answer gives next steps or is about
   // claiming. Read by the server from the stored pages; never the model's words.
