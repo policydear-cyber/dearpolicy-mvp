@@ -37,6 +37,11 @@ export type HouseholdPlan = {
   stored: boolean;
 };
 
+/** The plan a stored row grants: its plan while the status keeps one, otherwise Free. */
+export function effectivePlanId(plan: string | null | undefined, status: string | null | undefined): PlanId {
+  return status && PLAN_KEEPING_STATUSES.has(status) && isPlanId(plan) ? plan : "free";
+}
+
 const FREE: HouseholdPlan = { planId: "free", status: null, interval: null, currentPeriodEnd: null, hasBillingAccount: false, stored: false };
 
 /** Thrown when the plan or a count can't be read while limits are on: nothing is refused or allowed on a guess. */
@@ -65,9 +70,8 @@ export async function readHouseholdPlan(householdId: string, db: Reader = shared
     throw new PlanCheckUnavailable(error);
   }
   if (!row) return { ...FREE, stored: true };
-  const keeps = PLAN_KEEPING_STATUSES.has(row.status) && isPlanId(row.plan);
   return {
-    planId: keeps ? (row.plan as PlanId) : "free",
+    planId: effectivePlanId(row.plan, row.status),
     status: row.status,
     interval: row.billing_interval === "month" || row.billing_interval === "year" ? row.billing_interval : null,
     currentPeriodEnd: row.current_period_end,
