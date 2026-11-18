@@ -224,6 +224,9 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
    * policy's own headline sum by one of HEADLINE_SUM's names ("25% of the Sum Covered"): percentOf is "sum_insured", and
    * the table works it out only when the person's policy prints one such sum (assemble.ts headlineSumProblem). */
   baseFromWords?: boolean;
+  /** A row paid as its words say whose printed money figures only say when or how a large claim is paid in parts (verify.ts
+   * scheduleFigure): shown as a payment schedule, not as "no figure printed". */
+  paymentSchedule?: boolean;
   /** The currency the row's cap itself prints ("up to S$15,000"), when it prints one: a cap in another currency than the
    * amount it limits cannot be compared with it, so no amount is worked out (assemble.ts). */
   capCurrency?: string | null;
@@ -2313,12 +2316,18 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // A figure that only says when or how a large claim is paid in parts ("If the sum payable ... is above S$200,000, the
     // Company will first pay a lump sum of S$200,000 and pay the balance in ... instalments"), read with the whole sentence
     // its quote is in: how the benefit is paid, never what it pays (verify.ts scheduleFigure). The row stays, with no figure.
+    const scheduleWords = (() => { const p = placed.get(source), text = pageText(source.page);
+      return p ? (() => { const back = text.slice(Math.max(0, p.start - 400), p.start), after = text.slice(p.end, p.end + 800), ends = [...after.matchAll(/[.;](?:\s|$)/g)].map((e) => e.index! + 1);
+        return back.slice(Math.max(0, back.search(/[^.;]*$/))) + text.slice(p.start, p.end) + after.slice(0, ends[2] ?? after.length); })() : source.excerpt; })();
     if (value != null && pays !== "percent") {
-      const p = placed.get(source), text = pageText(source.page);
-      const whole = p ? (() => { const back = text.slice(Math.max(0, p.start - 400), p.start), after = text.slice(p.end, p.end + 800), ends = [...after.matchAll(/[.;](?:\s|$)/g)].map((e) => e.index! + 1);
-        return back.slice(Math.max(0, back.search(/[^.;]*$/))) + text.slice(p.start, p.end) + after.slice(0, ends[2] ?? after.length); })() : source.excerpt;
-      if (scheduleFigure(source.excerpt, value) || scheduleFigure(whole, value)) { out.dropped.push({ what: label, why: `figure ${value} is when or how a large claim is paid in parts, not what it pays; kept the row without it` }); pays = "words"; value = null; }
+      if (scheduleFigure(source.excerpt, value) || scheduleFigure(scheduleWords, value)) { out.dropped.push({ what: label, why: `figure ${value} is when or how a large claim is paid in parts, not what it pays; kept the row without it` }); pays = "words"; value = null; }
     }
+    // A row paid as its words say whose printed money is only a payment schedule's (its threshold or first part) says so,
+    // never "no figure printed": the figure is printed, it is just not an amount of cover (live check of #545, 18 Nov).
+    const paymentSchedule = pays === "words" && value == null && (() => {
+      const figures = [...source.excerpt.matchAll(/(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\d,])/g)].map((m) => Number(m[0].replace(/,/g, "")));
+      return figures.length > 0 && figures.every((v) => scheduleFigure(source.excerpt, v) || scheduleFigure(scheduleWords, v));
+    })();
     // The most cover a plan offers, on a document that names no one's own cover ("Be insured up to a maximum coverage of
     // S$1,000,000 at S$1.37 per day"): the most anyone may buy, not what this person holds or a limit on a claim. The row
     // is no benefit and is left out; the person's own sum is on their certificate or schedule (live 17 Nov).
@@ -2523,7 +2532,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}), ...(columnMarks.length ? { columnMarks } : {}),
-      ...(ownShareNamed ? { ownShareNamed } : {}), ...(baseFromWords && percentOf === "sum_insured" ? { baseFromWords } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}), ...(childNote ? { childNote } : {}),
+      ...(ownShareNamed ? { ownShareNamed } : {}), ...(baseFromWords && percentOf === "sum_insured" ? { baseFromWords } : {}), ...(paymentSchedule && pays === "words" ? { paymentSchedule } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}), ...(childNote ? { childNote } : {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}),
       ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
   }

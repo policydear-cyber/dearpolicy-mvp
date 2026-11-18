@@ -392,6 +392,7 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
   // A child's share read two ways (check.ts foldChildColumns): no amount for anyone.
   if (b.pays === "percent" && b.childLimitConflict) return { kind: "none", why: "the row's share for an insured child was read two ways: see the document" };
   if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row"
+    : b.pays === "words" && b.paymentSchedule ? "payment schedule, not a cover amount"
     : b.pays === "words" && /\d\s*%/.test(b.source.excerpt) ? "paid as a share printed in the row's words, with no amount worked out: see the document" : "no figure printed" };
   // A row whose words say it is capped, with no cap read and checked (or a reading from before caps were read), is never
   // worked out: the uncapped figure could be more than it pays.

@@ -101,6 +101,16 @@ test("table: a row read from the payment schedule keeps no figure; the certifica
   assert.equal(r.covers[0].sumInsured, 500000);
 });
 
+test("table: a words row that prints only the schedule's figures is a payment schedule, not \"no figure printed\"", () => {
+  const pages = [SCHEDULE, TERMS].map((text, i) => ({ page: i + 1, text }));
+  const row = (benefit: string, quote: string, pays = "words") => checkReading({ id: "d1", name: "group.pdf", readable: true, pages }, {
+    document: { kind: "personal_proof", product: "Group Term Life", insurer: "Example Group Life", namedPeople: [PERSON], plan: null, periodFrom: null, periodTo: null },
+    covers: [], benefits: [{ section: "4. Total and Permanent Disability Benefit", benefit, column: null, pays, value: null, period: null, basis: null, asOf: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 2, quote }] } as never).benefits.find((b) => b.benefit === benefit);
+  assert.equal(row("TPD payment above S$200,000", "If the sum payable in respect of a valid claim is above S$200,000, the Company\nwill first pay a lump sum of S$200,000 and pay the balance in three (3) equal annual\ninstalments.")?.paymentSchedule, true);
+  assert.equal(row("TPD", "We will pay the Sum Assured if the Insured Person suffers Total and Permanent Disability.")?.paymentSchedule, undefined);
+});
+
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.error(`simple payment schedule: ${passed} passed, ${failures.length} failed`);
