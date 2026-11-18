@@ -198,11 +198,18 @@ export async function removeMember(callerUserId: string, householdId: string, ta
     // remove someone else, or anyone to remove themselves (leave) -- a
     // caller who is neither gets rowCount 0, surfaced the same way as
     // "not found" below.
-    const { rowCount } = await client.query(`delete from household_members where household_id = $1 and user_id = $2`, [
-      householdId,
-      targetUserId,
-    ]);
-    if (rowCount === 0) throw new ForbiddenError("Not permitted to remove this member");
+    // Only a member row is deleted here: if a transfer made this person the owner after the read above, the delete
+    // re-checks the committed row (it waits on the transfer's row lock) and removes nothing, so a household is never
+    // left with no owner (Test engineer #538 F1). The rare legacy co-owner case was already checked above.
+    const { rowCount } = await client.query(
+      `delete from household_members where household_id = $1 and user_id = $2 and (role <> 'owner' or $3::boolean)`,
+      [householdId, targetUserId, target.rows[0].role === "owner"],
+    );
+    if (rowCount === 0) {
+      const now = await client.query<{ role: Role }>(`select role from household_members where household_id = $1 and user_id = $2`, [householdId, targetUserId]);
+      if (now.rows[0]?.role === "owner") throw new ConflictError("Cannot remove the owner of a household. Transfer ownership first.");
+      throw new ForbiddenError("Not permitted to remove this member");
+    }
   }, poolOverride);
 }
 

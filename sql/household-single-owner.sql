@@ -5,10 +5,12 @@
 -- removes, exports and deletes. Members view and use Ask, and can leave.
 -- Ownership moves only by transfer (lib/household/repo.ts transferOwnership).
 --
--- Apply this file, then re-run sql/household-rls.sql (which makes browser
--- writes to documents, people, benefits and claims owner-only). Both are
--- idempotent. The app enforces the same rules on the server whether or not
--- these have been applied.
+-- Apply this file, then re-run, in this order (docs/migration-runbook.md
+-- step 20): sql/household-rls.sql, sql/infrastructure-rls.sql,
+-- sql/policy-member-exclusions.sql, sql/detected-name-dismissals.sql. They
+-- make browser writes to documents, people, benefits, claims and
+-- whose-document rows owner-only. All are idempotent. The app enforces the
+-- same rules on the server whether or not these have been applied.
 --
 -- Production on 18 Nov 2026 (read-only check before writing this): 2
 -- households, each with exactly one owner and no other members, and no

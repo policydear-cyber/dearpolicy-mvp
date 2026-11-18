@@ -126,6 +126,32 @@ async function main() {
     await assert.rejects(() => removeMember(OWNER, HOUSEHOLD, MEMBER, pool as unknown as Pool), NotFoundError);
   }
 
+  {
+    // A member leaving while the owner hands the household to them (TE #538 F1): the delete only removes a member row,
+    // so when the transfer wins, nothing is removed and the household keeps its new owner.
+    let reads = 0;
+    const { pool, executed } = scriptedPool([
+      { match: /^delete from household_members/i, result: { rows: [], rowCount: 0 } },
+    ]);
+    const realConnect = pool.connect;
+    (pool as { connect: typeof realConnect }).connect = async () => {
+      const client = await realConnect();
+      const query = client.query.bind(client) as (sql: string, values?: unknown[]) => Promise<unknown>;
+      (client as unknown as { query: typeof query }).query = async (sql: string, values?: unknown[]) => {
+        if (/^select role from household_members/i.test(sql.trim())) {
+          reads++;
+          await query(sql, values);
+          return { rows: [{ role: reads === 1 ? "member" : "owner" }], rowCount: 1 };
+        }
+        return query(sql, values);
+      };
+      return client;
+    };
+    await assert.rejects(() => removeMember(MEMBER, HOUSEHOLD, MEMBER, pool as unknown as Pool), ConflictError);
+    const del = executed.find((q) => /^delete from household_members/i.test(q)) ?? "";
+    assert.match(del, /role <> 'owner'/, "the delete itself refuses an owner row, whatever was read before");
+  }
+
   // --- setMemberRole: last-owner demotion protection ---------------------
   {
     const { pool } = scriptedPool([

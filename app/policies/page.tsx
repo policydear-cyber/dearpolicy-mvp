@@ -91,6 +91,9 @@ function foundLine(labels: string[]) {
   return l.length <= 3 ? l.join(l.length === 2 ? " and " : ", ").replace(/, ([^,]*)$/, " and $1") : `${l.slice(0, 3).join(", ")} and ${l.length - 3} more`;
 }
 
+/** What a member is told where the owner would see a next step (one owner per household). */
+const OWNER_NEXT = "The household owner can read it again or upload a clearer copy. You can still ask about it.";
+
 export default function PoliciesPage() {
   // Only the household owner uploads, reads again, deletes or links documents; a member sees them (components/household-role).
   const canManage = useCanManageHousehold();
@@ -532,10 +535,10 @@ export default function PoliciesPage() {
             // makes this document's cover unavailable for a minute, and that row says so).
             const readAgainButton = !canManage ? null : <div className="row-error-actions"><button type="button" className="mini-button" data-testid="read-again-pages" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => pressRead(policy)}>{retryingId === policy.id ? "Starting…" : confirmRereadId === policy.id ? CONFIRM_READ_AGAIN : "Read again"}</button></div>;
             return <>
-              {missing && <div className="accuracy-warning" data-testid="pages-not-read"><b>{missing.title}</b><span>{missing.what}</span><small>{missing.next}</small>{readAgainButton}</div>}
-              {unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>{unread.title}</b><span>{unread.what}</span><small>{unread.next}</small>{!missing && readAgainButton}</div>}
-              {part && <div className="accuracy-warning compact partial" data-testid="read-in-part"><span>{part.what}</span><details className="warning-next"><summary>What can I do?</summary><small>{part.next}</small></details></div>}
-              {pending && <div className="accuracy-warning" data-testid="cover-reading-pending"><b>Not fully read yet</b><span>{pending.what}</span><small>{pending.next}</small>{!missing && !unread && /Read again/.test(pending.next) && readAgainButton}</div>}
+              {missing && <div className="accuracy-warning" data-testid="pages-not-read"><b>{missing.title}</b><span>{missing.what}</span><small>{canManage ? missing.next : OWNER_NEXT}</small>{readAgainButton}</div>}
+              {unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>{unread.title}</b><span>{unread.what}</span><small>{canManage ? unread.next : OWNER_NEXT}</small>{!missing && readAgainButton}</div>}
+              {part && <div className="accuracy-warning compact partial" data-testid="read-in-part"><span>{part.what}</span><details className="warning-next"><summary>What can I do?</summary><small>{canManage ? part.next : OWNER_NEXT}</small></details></div>}
+              {pending && <div className="accuracy-warning" data-testid="cover-reading-pending"><b>Not fully read yet</b><span>{pending.what}</span><small>{canManage ? pending.next : OWNER_NEXT}</small>{!missing && !unread && /Read again/.test(pending.next) && readAgainButton}</div>}
               {!part && !pending && !processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Some details not used yet</b><span>DearPolicy couldn&rsquo;t find the page some details in this document came from, so it doesn&rsquo;t use those details in answers yet.</span></div>}
             </>;
           })()}

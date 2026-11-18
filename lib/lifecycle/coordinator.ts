@@ -1216,16 +1216,31 @@ async function performMembershipRemoval(args: {
   });
 
   if (!created) {
-    return { status: mapRequestStateToStatus(request), deletionRequestId: request.id, resourceId: args.targetUserId };
+    // A refused attempt removed nothing (removeMember() runs synchronously, in one transaction). With one owner per
+    // household, "make someone else the owner, then leave" is the owner's only way out, and the route's default key
+    // (delete:<userId>) is the same each time -- so a refused attempt must not answer every later one with its stale
+    // "pending" (Test engineer #538 F2). A refusal is marked "blocked" below; a row left pending by a refusal before
+    // that marking existed is recognised by its age.
+    const refused =
+      request.lifecycle_state === "blocked" ||
+      (request.lifecycle_state === "pending_deletion" && Date.now() - new Date(request.updated_at).getTime() > 60_000);
+    if (!refused) {
+      return { status: mapRequestStateToStatus(request), deletionRequestId: request.id, resourceId: args.targetUserId };
+    }
+    await transitionDeletionRequest(pool, { id: request.id, fromStates: ["blocked", "pending_deletion"], toState: "pending_deletion" });
   }
 
   // The actual removal -- see this function's own doc comment on why
-  // removeMember() is called rather than reimplemented. A thrown error
-  // here leaves this deletion_requests row at its default
-  // pending_deletion state; a retry with the same idempotencyKey is
-  // caught by the `!created` branch above and safely returns without
-  // attempting the removal again.
-  await removeMember(args.callerUserId, args.accountId, args.targetUserId);
+  // removeMember() is called rather than reimplemented. A refusal marks this
+  // request "blocked" (nothing was removed), so the same request can be
+  // tried again once what blocked it has changed; an attempt in flight
+  // stays pending_deletion and a retry of it returns without acting.
+  try {
+    await removeMember(args.callerUserId, args.accountId, args.targetUserId);
+  } catch (error) {
+    await transitionDeletionRequest(pool, { id: request.id, fromStates: ["pending_deletion"], toState: "blocked" }).catch(() => undefined);
+    throw error;
+  }
 
   await transitionDeletionRequest(pool, {
     id: request.id,

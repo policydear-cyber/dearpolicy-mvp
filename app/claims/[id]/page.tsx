@@ -212,7 +212,7 @@ export default function ClaimEvidencePage() {
             <ul>{items.map(({ text, sent }) => <li key={text} className={sent ? "sent" : ""}>
               <span className="claim-needed-mark" aria-hidden="true">{sent ? "✓" : ""}</span>
               <span className="claim-needed-text">{text}{sent ? <small>Uploaded: {sent.original_filename}</small> : <small>Still needed</small>}</span>
-              {!sent && <button type="button" className="button secondary compact" onClick={() => startUpload(text)} aria-label={`Upload ${text}`}>Upload</button>}
+              {!sent && canManage && <button type="button" className="button secondary compact" onClick={() => startUpload(text)} aria-label={`Upload ${text}`}>Upload</button>}
             </li>)}</ul>
           </div>;
         })() : null}

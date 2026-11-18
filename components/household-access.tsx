@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
 import { sgDate } from "@/components/format-date";
 
@@ -17,6 +18,8 @@ export function HouseholdAccess() {
   const [confirmMemberId, setConfirmMemberId] = useState<string | null>(null);
   const [confirmInvitationId, setConfirmInvitationId] = useState<string | null>(null);
   const [confirmTransferId, setConfirmTransferId] = useState<string | null>(null);
+  // A refused handover is said on that person's card, where it was asked (Test engineer #538 F5).
+  const [transferError, setTransferError] = useState<{ userId: string; message: string; signIn: boolean } | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState("");
@@ -65,6 +68,7 @@ export function HouseholdAccess() {
     if (confirmTransferId !== member.userId) { setConfirmTransferId(member.userId); setConfirmMemberId(null); return; }
     setConfirmTransferId(null);
     setStatus("");
+    setTransferError(null);
     const response = await fetch(`/api/household/members/${member.userId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -73,7 +77,12 @@ export function HouseholdAccess() {
     const payload = await response.json().catch(() => ({}));
     // Every page on screen now has to show what a member can do, so it is loaded afresh; this list then shows the new owner.
     if (response.ok) { window.location.reload(); return; }
-    setStatus(customerMessage(payload.error, "Could not change the owner. Please try again in a moment."));
+    setTransferError({
+      userId: member.userId,
+      message: customerMessage(payload.error, "Could not change the owner. Please try again in a moment."),
+      // Handing over needs a recently confirmed sign-in, as deleting the household does.
+      signIn: response.status === 401,
+    });
   }
 
   async function createInvitation(event: FormEvent) {
@@ -151,6 +160,7 @@ export function HouseholdAccess() {
                     <button className="mini-button" onClick={() => setConfirmTransferId(null)}>Cancel</button>
                     <small className="muted">They become the owner and you become a member. You&apos;ll still see everything and can use Ask DearPolicy, but only they can change things.</small>
                   </>}
+                  {transferError?.userId === member.userId && <small className="alert error" role="alert">{transferError.message}{transferError.signIn && <> <Link href={`/login?next=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "/family")}`}>Sign in again</Link></>}</small>}
                   {soleOwner && <small className="muted">You&apos;re the owner, so you can&apos;t leave. To leave, make someone else the owner first. Or delete the household on the Household tab.</small>}
                 </div>
               </div>
