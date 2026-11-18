@@ -1,6 +1,7 @@
 /** What the Documents page shows for policy folders (components/policy-folders.tsx), worked out from the folders and the
  * documents the page already has. Client-safe: no server imports. */
 import type { FolderSlot } from "@/lib/policies/folders";
+import { insurerShortName, isCodeName } from "@/lib/policies/document-name";
 
 export type FolderView = {
   id: string;
@@ -33,14 +34,22 @@ export const SLOT_HINTS: Record<FolderSlot, string> = {
   other: "Anything else for this policy",
 };
 
-/** A folder's name: the household's own; else its schedule's (or first document's) product and insurer as read; else who
- * it is for. Never a guess from another folder. */
+/** A product name a person reads: not a system's code or a file name ("SGGRP_COI_APP", "cert_v2.pdf"). */
+const plainName = (name: string | null | undefined) => {
+  const t = name?.trim();
+  return t && !isCodeName(t) && !/\.(pdf|jpe?g|png|heic|docx?)$/i.test(t) ? t : null;
+};
+
+/** A folder's name: the household's own; else the insurer's plain product name from any document in it, the schedule's
+ * first ("Singapore Life MINDEF & MHA Group Insurance", never "SGGRP_COI_APP"); else who it is for. Never a code, a file
+ * name, or a guess from another folder. */
 export function folderTitle(folder: FolderView, docs: Map<string, FolderDoc>): string {
   if (folder.name) return folder.name;
   const inIt = folder.documents.map((d) => ({ slot: d.slot, doc: docs.get(d.policyId) })).filter((d): d is { slot: FolderSlot | null; doc: FolderDoc } => !!d.doc);
-  const named = [...inIt.filter((d) => d.slot === "schedule"), ...inIt].find((d) => d.doc.product_name?.trim());
+  const named = [...inIt.filter((d) => d.slot === "schedule"), ...inIt].find((d) => plainName(d.doc.product_name));
   if (named) {
-    const product = named.doc.product_name!.trim(), insurer = named.doc.insurer?.trim();
+    const product = plainName(named.doc.product_name)!;
+    const insurer = named.doc.insurer?.trim() ? insurerShortName(named.doc.insurer) : "";
     return insurer && !product.toLowerCase().includes(insurer.toLowerCase()) ? `${insurer} ${product}` : product;
   }
   const people = folder.people.map((p) => p.name);

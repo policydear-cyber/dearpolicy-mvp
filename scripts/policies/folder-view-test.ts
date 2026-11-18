@@ -27,6 +27,19 @@ test("T4 nothing read yet (new uploads, or an unreadable photo): who it is for",
   assert.equal(folderTitle(f({ people: [] }), map([])), "Policy");
 });
 
+test("T5 a schedule whose product is a system code: the plain product name from another document in the folder", () => {
+  const docs = [d("s", { product_name: "XXGRP_COI_APP", insurer: "Example Assurance Ltd" }), d("p", { product_name: "Harbour Group Insurance", insurer: "Example Assurance Ltd" })];
+  assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }, { policyId: "p", slot: "other" }] }), map(docs)), "Example Assurance Harbour Group Insurance");
+});
+test("T6 only codes or file names as products: never shown; who it is for instead", () => {
+  const docs = [d("s", { product_name: "POL_SCHED_V2" }), d("w", { product_name: "wording_final.pdf" }), d("x", { product_name: "Terms.pdf" })];
+  assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }, { policyId: "w", slot: "wording" }, { policyId: "x", slot: null }] }), map(docs)), "Policy for Jane Doe");
+});
+test("T7 the insurer's legal suffix is dropped, and not repeated when the product names it", () => {
+  assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: "Shield Plan", insurer: "Example Life Pte. Ltd." })])), "Example Life Shield Plan");
+  assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: "Example Life Shield", insurer: "Example Life Ltd" })])), "Example Life Shield");
+});
+
 test("S1 two documents with the same number (spaces and dashes aside), both Jane's: suggested for Jane", () => {
   const s = folderSuggestions([d("a", { policy_number: "AB-123 456" }), d("b", { policy_number: "ab123456" }), d("c")], []);
   assert.deepEqual(s, [{ policyNumber: "AB-123 456", policyIds: ["a", "b"], personIds: ["jane"] }]);
