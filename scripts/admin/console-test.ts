@@ -283,3 +283,35 @@ test("Test engineer findings on #553: id case, members without an account row, d
     await db.exec("ALTER TABLE chat_messages_moved RENAME TO chat_messages");
   }
 });
+
+test("Test engineer re-check on #553: no DDL on a usage view; the overview shows — when the questions table is missing", async () => {
+  const db = await database(true);
+  const C = await import("@/lib/admin/console");
+  const { ensureProvenanceSchema } = await import("@/lib/ai/provenance");
+  await ensureProvenanceSchema();
+  // A: with the table there, a fresh server instance's first household view must not run the schema script.
+  await db.exec("DROP INDEX IF EXISTS idx_model_executions_correlation");
+  (globalThis as { __dearpolicyProvenanceSchema?: unknown }).__dearpolicyProvenanceSchema = undefined;
+  const usage = await C.readHouseholdUsage(A);
+  assert.ok(usage.ok);
+  const idx = (await db.query<{ present: boolean }>("SELECT to_regclass('public.idx_model_executions_correlation') IS NOT NULL AS present")).rows[0];
+  assert.equal(idx?.present, false, "the usage read ran no CREATE INDEX");
+
+  // B: limits off and no chat table, or limits on and no count table: "—", never 0.
+  await db.exec("ALTER TABLE chat_messages RENAME TO chat_messages_moved");
+  try {
+    const l = await C.readHouseholds();
+    assert.ok(l.ok && !l.data.questionsAvailable && l.data.rows.every((h) => h.questionsThisMonth === null));
+  } finally {
+    await db.exec("ALTER TABLE chat_messages_moved RENAME TO chat_messages");
+  }
+  process.env.DEARPOLICY_PLAN_LIMITS = "on";
+  try {
+    const l = await C.readHouseholds();
+    assert.ok(l.ok && !l.data.questionsAvailable && l.data.rows.every((h) => h.questionsThisMonth === null));
+  } finally {
+    delete process.env.DEARPOLICY_PLAN_LIMITS;
+  }
+  const ok = await C.readHouseholds();
+  assert.ok(ok.ok && ok.data.questionsAvailable && ok.data.rows.find((h) => h.id === A)!.questionsThisMonth === 2, "with the chat table, A's two questions show");
+});

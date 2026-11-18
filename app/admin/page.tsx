@@ -102,7 +102,7 @@ export default async function AdminOverviewPage() {
             <p className="muted">
               Plans: {planCounts.map((p) => `${PLANS[p.id].name} ${p.n}`).join(" · ")}.
               {!households.data.plansStored && " The plans table isn’t set up yet, so every household shows as Free."}
-              {" "}Questions this month are {households.data.questionsSource === "kept_count" ? "the counted questions plan limits use" : "the questions still on file (plan limits are off, so nothing is counted yet)"}.
+              {" "}{!households.data.questionsAvailable ? "Questions this month aren’t available: the table they come from isn’t set up yet." : households.data.questionsSource === "kept_count" ? "Questions this month are the counted questions plan limits use." : "Questions this month are the questions still on file (plan limits are off, so nothing is counted yet)."}
               {households.data.spendUnattributedUsd > 0 && ` ${usd(households.data.spendUnattributedUsd)} of this month’s model spend isn’t tied to a listed household (sign-in, background or test calls${households.data.truncated ? ", or households beyond the list" : ""}).`}
             </p>
             <div className="schedule-table-scroll"><table className="schedule-table">
@@ -116,7 +116,7 @@ export default async function AdminOverviewPage() {
                     <td>{PLANS[h.plan].name}{h.planStatus && h.planStatus !== "active" ? <><br /><small className="muted">{h.planStatus.replace(/_/g, " ")}</small></> : null}</td>
                     <td>{h.members}</td><td>{h.people}</td><td>{h.documents}</td><td>{h.documentsRead}</td>
                     <td>{h.documentsUnreadable ? <span className="status failed">{h.documentsUnreadable}</span> : 0}</td>
-                    <td>{h.questionsThisMonth}</td>
+                    <td>{h.questionsThisMonth ?? "—"}</td>
                     <td>{usd(h.spendUsd)}</td>
                     <td>{when(h.lastSignInAt)}</td>
                   </tr>

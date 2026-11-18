@@ -1,7 +1,7 @@
 /**
  * Read-only data for the admin console (/admin). Called only from app/admin pages, after requireAdminOrNotFound().
- * It writes nothing: readHouseholdUsage() checks model_executions exists before the shared usage query (which would
- * otherwise create it).
+ * It writes nothing: readHouseholdUsage() checks model_executions exists, then runs the shared usage query with
+ * ensureSchema: false, so no page view runs DDL.
  *
  * Runs on the trusted server connection (lib/db/client.ts), which is how it can see every household; nothing here is
  * reachable from a browser role, and no household's RLS or grants change. It reads counts, statuses and metadata
@@ -135,7 +135,7 @@ export type HouseholdRow = {
   documentsUnreadable: number;
   documentsInProgress: number;
   lastSignInAt: string | null;
-  questionsThisMonth: number;
+  questionsThisMonth: number | null;
   plan: PlanId;
   planStatus: string | null;
   spendUsd: number;
@@ -149,6 +149,8 @@ export type HouseholdList = {
   plansStored: boolean;
   /** Where "questions this month" comes from (limits on: the kept count; off: messages still on file). */
   questionsSource: "kept_count" | "messages_on_file";
+  /** False when that source table isn't there: the column shows "—", never 0. */
+  questionsAvailable: boolean;
   spendUnattributedUsd: number;
   spendTotalUsd: number;
 };
@@ -190,6 +192,7 @@ export async function readHouseholds(): Promise<Section<HouseholdList>> {
     const kept = new Map<string, number>();
     const questionsSource = planLimitsEnforced() ? "kept_count" as const : "messages_on_file" as const;
     const onFile = new Map<string, number>();
+    let questionsAvailable = true;
     if (questionsSource === "messages_on_file") {
       try {
         for (const r of (await query<{ account_id: string; n: number }>(
@@ -197,6 +200,7 @@ export async function readHouseholds(): Promise<Section<HouseholdList>> {
             WHERE m.role = 'user' AND m.created_at >= (date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') GROUP BY 1`)).rows) onFile.set(r.account_id, num(r.n));
       } catch (e) {
         if (!isMissingRelation(e)) throw e;
+        questionsAvailable = false;
       }
     }
     if (questionsSource === "kept_count") {
@@ -205,6 +209,7 @@ export async function readHouseholds(): Promise<Section<HouseholdList>> {
           `SELECT account_id::text AS account_id, questions FROM household_question_counts WHERE month = date_trunc('month', now() AT TIME ZONE 'UTC')::date`)).rows) kept.set(r.account_id, num(r.questions));
       } catch (e) {
         if (!isMissingRelation(e)) throw e;
+        questionsAvailable = false;
       }
     }
 
@@ -221,13 +226,13 @@ export async function readHouseholds(): Promise<Section<HouseholdList>> {
         id: r.id, name: r.name, createdAt: r.created_at, ownerEmail: r.owner_email, members: num(r.members), people: num(r.people),
         documents: num(r.documents), documentsRead: num(r.ready), documentsUnreadable: num(r.failed),
         documentsInProgress: Math.max(0, num(r.documents) - num(r.ready) - num(r.failed)), lastSignInAt: r.last_sign_in_at,
-        questionsThisMonth: questionsSource === "kept_count" ? (kept.get(r.id) ?? 0) : (onFile.get(r.id) ?? 0),
+        questionsThisMonth: !questionsAvailable ? null : questionsSource === "kept_count" ? (kept.get(r.id) ?? 0) : (onFile.get(r.id) ?? 0),
         plan: effectivePlanId(p?.plan, p?.status), planStatus: p?.status ?? null,
         spendUsd: s?.usd ?? 0, modelCalls: s?.calls ?? 0,
       };
     });
     // Households beyond the list limit also fall into "unattributed" here, which the page says when it's truncated.
-    return { rows: out, truncated, plansStored, questionsSource,
+    return { rows: out, truncated, plansStored, questionsSource, questionsAvailable,
       spendTotalUsd: round6(spend.totalUsd), spendUnattributedUsd: round6(Math.max(0, spend.totalUsd - attributed)) };
   });
 }
@@ -354,7 +359,7 @@ export async function readHouseholdUsage(id: string): Promise<Section<UsageRepor
   return section(async () => {
     const present = (await query<{ present: boolean }>(`SELECT to_regclass('public.model_executions') IS NOT NULL AS present`)).rows[0]?.present;
     if (!present) throw Object.assign(new Error("model_executions missing"), { code: "42P01" });
-    return usageByOperationAndModel(id, startOfMonth());
+    return usageByOperationAndModel(id, startOfMonth(), { ensureSchema: false });
   });
 }
 
