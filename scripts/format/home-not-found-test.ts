@@ -57,6 +57,26 @@ test("with documents not fully read, it says so", () => {
   const t = text(html(["Travel"], "One of Ama's documents could not be read in full."));
   assert.match(t, /found in what DearPolicy could read of Ama’s documents\./); assert.match(t, /could not be read in full/);
 });
+test("a document whose kinds of cover are not known yet: no kind is named a gap, one line says when (design review 2)", () => {
+  // Ama's travel schedule is on file but not read: "no Travel cover found" would be wrong.
+  const page = renderToStaticMarkup(createElement(HomeNotFound, { missing: ["Travel", "Death"], onFile: ["Hospitalisation"], memberId: "m", name: "Ama",
+    note: "4 of Ama’s documents were not fully read, so cover in them may be missing here. Documents shows which and what to do.", pending: true }));
+  const t = text(page);
+  assert.match(t, /Gaps show once DearPolicy has read all of Ama’s documents\./);
+  assert.match(t, /4 of Ama’s documents were not fully read, so cover in them may be missing here/);
+  assert.doesNotMatch(page, /category=Travel|category=Death|category=Hospitalisation/, "no gap chip while pending");
+  assert.doesNotMatch(t, /No cover of these kinds|Upload it/);
+  assert.match(page, /types-of-cover/);
+});
+test("gaps always say a policy not uploaded may still cover them", () => {
+  assert.match(text(html(["Travel"])), /A policy that is not uploaded may still cover these\./);
+});
+test("the dashboard sends the whole not-fully-read note and whether gaps wait for unread documents", () => {
+  const route = readFileSync("app/api/dashboard/route.ts", "utf8");
+  assert.match(route, /const notReadNote=notFullyReadNote\(notRead,active\.display_name\);/);
+  assert.match(route, /gapsPending:notRead\.coverUnknown>0/);
+  assert.match(readFileSync("app/page.tsx", "utf8"), /pending=\{data\?\.gapsPending===true\}/);
+});
 test("nothing missing: nothing shown", () => { assert.equal(html([]), ""); });
 test("Home: cards only for Covered; gaps only once the person has a card and nothing is still being read", () => {
   const page = readFileSync("app/page.tsx", "utf8");
