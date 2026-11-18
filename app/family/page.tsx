@@ -1,13 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
 import { AccountTabs } from "@/components/account-tabs";
 import { Icon } from "@/components/icons";
 import { HouseholdAccess } from "@/components/household-access";
-import { profileGaps, PROFILE_GAP_WHY, PROFILE_GAP_FIELD } from "@/lib/household/member-profile";
-import { kindsOfTable, ledgerKindsByPerson, namedCoverKinds, type KindRow, type ScheduleLine, type TableKindCover, type TableKindRow } from "@/components/cover-kinds";
+import { profileGaps, PROFILE_GAP_FIELD } from "@/lib/household/member-profile";
 
 type Member = {
   id: string; display_name: string; relationship: string; date_of_birth: string | null;
@@ -71,12 +70,6 @@ export default function FamilyPage() {
   const [statusIsError, setStatusIsError] = useState(false);
   /** Whose details are open for editing: the card shows who they are first, and the form only when asked for. */
   const [editing, setEditing] = useState<string | null>(null);
-  /** What each person is covered for, by kind, from the Coverage rows. Optional: the page works without it. */
-  const [kinds, setKinds] = useState<Record<string, string[]>>({});
-  /** Whether the cover list has answered yet. Until it has, no card may say "No cover found": that would be a guess,
-      and it flipped to "Covered for …" seconds later on a real household. "failed" says nothing about cover at all. */
-  const [coverState, setCoverState] = useState<"loading" | "loaded" | "failed">("loading");
-  const coverTurn = useRef(0);
 
   async function refresh() {
     const data = await fetch("/api/family").then((r) => r.json());
@@ -85,27 +78,6 @@ export default function FamilyPage() {
     setSexField(data.profile?.sexField === true);
     setLoaded(true);
     setBaseline(Object.fromEntries(members.map((m) => [m.id, m])));
-    // A household on the benefit table: its rows say what each person is covered for (its Coverage rows stopped updating).
-    // Optional, like the Coverage rows: the page works without it.
-    // A failed or hung (30 s) cover list shows nothing about cover, never the last list: it may be out of date after a save.
-    // Only the latest refresh may change it: an older one answering late (after a save) is dropped.
-    const turn = ++coverTurn.current;
-    // Older browsers (before Safari 16, Chrome 103) have no AbortSignal.timeout: no time limit there rather than a throw.
-    const coverTimeout = () => typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(30_000) : undefined;
-    const coverFailed = () => { if (turn !== coverTurn.current) return; setKinds({}); setCoverState("failed"); };
-    void fetch("/api/benefit-table", { cache: "no-store", signal: coverTimeout() }).then((r) => r.ok ? r.json() : null).catch(() => null)
-      .then((table: { enabled?: boolean; people?: { id: string; rows?: TableKindRow[]; covers?: TableKindCover[]; scheduleLines?: { policyId: string; category: string }[] }[] } | null) => {
-        // Not loaded (an error, offline): nothing is shown, never the stale Coverage rows (Critic R199-3).
-        if (!table) return coverFailed();
-        if (turn !== coverTurn.current) return;
-        if (table.enabled) { setKinds(Object.fromEntries((table.people ?? []).map((p) => [p.id, kindsOfTable(p.rows ?? [], p.covers ?? [], p.scheduleLines ?? [])]))); return setCoverState("loaded"); }
-        return fetch("/api/ledger", { cache: "no-store", signal: coverTimeout() }).then((r) => r.ok ? r.json() : null).then((l: { rows?: (KindRow & { familyMemberId: string; status: string })[]; scheduleLines?: ScheduleLine[] } | null) => {
-          if (!l) return coverFailed();
-          if (turn !== coverTurn.current) return;
-          setKinds(ledgerKindsByPerson(l.rows ?? [], l.scheduleLines ?? []));
-          setCoverState("loaded");
-        });
-      }).catch(() => coverFailed());
   }
   useEffect(() => { void refresh(); }, []);
 
@@ -183,10 +155,10 @@ export default function FamilyPage() {
         <div className="profile-list">
           {family.map((member, i) => (
             <div className="profile-card" key={member.id} data-testid="profile-card" data-person={i % 4}>
-              {/* At a glance: who, how they are linked to documents, and what they are covered for. */}
+              {/* Kept simple (DC, 18 Nov): who they are. Their name opens their cover; documents and kinds of cover live there. */}
               <div className="profile-summary">
                 <div className="avatar profile-avatar">{(baseline[member.id]?.display_name ?? member.display_name).slice(0,1).toUpperCase()}</div>
-                <div><strong>{baseline[member.id]?.display_name ?? member.display_name}</strong><small>{[relationshipLabel(baseline[member.id]?.relationship ?? member.relationship),
+                <div><strong><a className="profile-name" href={`/ledger?member=${member.id}`} data-testid="family-see-cover" aria-label={`See ${baseline[member.id]?.display_name ?? member.display_name}’s cover`}>{baseline[member.id]?.display_name ?? member.display_name}<span className="profile-name-go" aria-hidden="true">→</span></a></strong><small>{[relationshipLabel(baseline[member.id]?.relationship ?? member.relationship),
                   ((a) => a == null ? null : `${a} ${a === 1 ? "year" : "years"} old`)(ageToday(baseline[member.id]?.date_of_birth ?? null, today)),
                   baseline[member.id]?.sex === "unspecified" ? null : sexLabel(baseline[member.id]?.sex),
                   baseline[member.id]?.preferred_name ? `goes by ${baseline[member.id]?.preferred_name}` : null].filter(Boolean).join(" · ")}</small></div>
@@ -195,20 +167,7 @@ export default function FamilyPage() {
                 {/* Details still missing (people added before they were asked for): one plain line and a way to add them. */}
                 {(() => { const gaps = profileGaps(baseline[member.id] ?? member, sexField); if (!gaps.length || editing === member.id) return null;
                   const who = baseline[member.id]?.display_name ?? member.display_name;
-                  const why = gaps.map((g) => PROFILE_GAP_WHY[g]).join("; ");
-                  return <p className="profile-missing" data-testid="profile-missing">Add {who}&rsquo;s {listWords(gaps)}. {why.charAt(0).toUpperCase() + why.slice(1)}. <button type="button" className="text-link" onClick={() => { setEditing(member.id); setTimeout(() => document.getElementById(`fm-${member.id}-${PROFILE_GAP_FIELD[gaps[0]]}`)?.focus(), 0); }}>Add now</button></p>; })()}
-                <p>{member.policy_count ? <Link className="text-link" href={`/policies?person=${member.id}`}><b>{member.policy_count === 1 ? "1 document" : `${member.policy_count} documents`}</b>&nbsp;linked →</Link> : <>No documents linked yet. <Link className="text-link" href="/policies">Link one on Documents →</Link></>}</p>
-                {/* Never "Covered for Other": only named kinds are listed, and cover whose kind nothing names yet is said in
-                    words, as on Documents (namedCoverKinds). */}
-                {(() => { const { named, unknownOnly, unknownToConfirm } = namedCoverKinds(kinds[member.id] ?? []); const name = baseline[member.id]?.display_name ?? member.display_name;
-                  const see = <a className="text-link" href={`/ledger?member=${member.id}`}>See {name}&rsquo;s cover →</a>;
-                  return named.length ? <p data-testid="family-covered-for"><b>Covered for</b> {named.join(" · ")}. {see}</p>
-                    : unknownOnly ? <p data-testid="family-covered-for"><b>Found</b> cover for {name}, but not yet what kind of cover it is. {see}</p>
-                    : unknownToConfirm ? <p data-testid="family-covered-for"><b>Possible cover</b> for {name}, still to confirm: not yet what kind of cover it is. {see}</p>
-                    : null; })() ?? (!member.policy_count ? null
-                    : coverState === "loading" ? <p className="muted" data-testid="family-cover-loading" aria-busy="true">Checking what {baseline[member.id]?.display_name ?? member.display_name} is covered for&hellip;</p>
-                    : coverState === "failed" ? null
-                    : <p data-testid="family-no-cover">No cover found in {member.policy_count === 1 ? "this document" : "these documents"} yet. You can still ask about {member.policy_count === 1 ? "it" : "them"} in <Link className="text-link" href="/chat">Ask DearPolicy</Link>.</p>)}
+                  return <p className="profile-missing" data-testid="profile-missing">Add {who}&rsquo;s {listWords(gaps)}. <button type="button" className="text-link" onClick={() => { setEditing(member.id); setTimeout(() => document.getElementById(`fm-${member.id}-${PROFILE_GAP_FIELD[gaps[0]]}`)?.focus(), 0); }}>Add now</button></p>; })()}
               </div>
               <div className="profile-fields" id={`fm-${member.id}-details`} hidden={editing !== member.id && !isDirty(member)}>
                 <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name <Req /></label><input id={`fm-${member.id}-name`} required value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} {...invalid(`fm-${member.id}-name`, editShows(member, "name"))} /><Missing id={`fm-${member.id}-name`} show={editShows(member, "name")} /></div>

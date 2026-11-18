@@ -403,6 +403,10 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .profile-summary strong { display: block; font-size: var(--fs-lg); }
 .profile-summary small { color: var(--muted); font-size: var(--fs-sm); }
 .profile-glance { display: grid; gap: 4px; font-size: var(--fs-sm); color: var(--ink-2); }
+.profile-glance:empty { display: none; }
+.profile-summary a.profile-name { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+.profile-summary .profile-name-go { color: var(--muted); font-weight: 400; }
+.profile-summary a.profile-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .profile-glance p { margin: 0; }
 .profile-glance b { color: var(--ink); }
 .profile-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-items: start; justify-content: flex-start; }
