@@ -107,10 +107,12 @@ export function listFromBottomLine(answer: Listable, opts: { names: string[]; ab
     const parts = itemsOf(m.rest);
     // Three or more named things, each short enough to be a name with its description and none a clause: a list.
     // Anything else stays as the model wrote it.
-    // When some items carry a description in brackets, all must, so a trailing remark ("all in force") or a name cut at a
+    // Every item is a name with its description in brackets, as the overview rule asks: a sentence about amounts that
+    // happens to have commas ("death cover under his group term life, …, the amounts are below") is never cut into
+    // fragments (Live site tester, post-#546). So a trailing remark ("all in force") or a name cut at a
     // comma never becomes an item; a colon means the list is something else's (TE #546 F2, F3).
     const described = parts.filter((p) => /[)\]]$/.test(p)).length;
-    if (parts.length >= 3 && !m.rest.includes(":") && (described === 0 || described === parts.length)
+    if (parts.length >= 3 && !m.rest.includes(":") && described === parts.length
       && parts.every((p) => p.length <= 160 && !CLAUSE_START.test(p) && !/[.!?]/.test(p.replace(/\([^)]*\)/g, "").replace(/\b(?:Pte|Ltd|Co|Inc|No|St)\./g, "")))) {
       items.push(...parts);
       // The lead introduces the list only: what else the bottom line says follows the list, as a point (Critic #546 LOW-1).

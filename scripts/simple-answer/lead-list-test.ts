@@ -36,9 +36,9 @@ t("the screenshot's shape: a subject, five policies with descriptions, then an '
 });
 
 t("a name with 'and' in it is never cut (Critic #546 MED-2)", () => {
-  const a = answer("Jun has Alpha Life, Beta Hospital and Surgical Plan, and Gamma Accident.");
+  const a = answer("Jun has Alpha Life (life), Beta Hospital and Surgical Plan (hospital), and Gamma Accident (accidents).");
   listFromBottomLine(a, OPTS);
-  assert.deepEqual(items(a), ["Alpha Life", "Beta Hospital and Surgical Plan", "Gamma Accident"]);
+  assert.deepEqual(items(a), ["Alpha Life (life)", "Beta Hospital and Surgical Plan (hospital)", "Gamma Accident (accidents)"]);
   const b = answer("Jun has Singlife Shield, AIA Term Life, Hospital and Surgical Plan.");
   listFromBottomLine(b, OPTS);
   assert.ok(!items(b).includes("Hospital") && !items(b).includes("Surgical Plan"), JSON.stringify(items(b)));
@@ -182,6 +182,19 @@ t("a preferred name in brackets is the person too (TE #546 F4); no statements ar
   listFromBottomLine(b, OPTS);
   assert.equal(b.bottomLine, "Mei has:");
   assert.deepEqual(b.statements!.map((x) => x.id), ["lead-item-1", "lead-item-2", "lead-item-3", "lead-after"]);
+});
+
+t("a sentence that is not a list of described policies is never cut into fragments (Live site tester, post-#546)", () => {
+  for (const bottom of [
+    "Desmond has death cover under his Singlife group term life, group personal accident and Comprehensive Critical Illness II policies, plus accidental death under his travel policy; the amounts are below.",
+    "Charmaine has death cover through the MINDEF & MHA group scheme, her AIA, PruLink and PruFlexiCash plans and her Manulife ReadyBuilder; the amounts are below.",
+    "Mei has life cover, hospital cover, accident cover.",
+  ]) {
+    const a = answer(bottom);
+    listFromBottomLine(a, { names: ["Desmond Tan", "Tan Hui Min (Charmaine)", "Mei Tan"] });
+    assert.equal(a.bottomLine, bottom, bottom);
+    assert.deepEqual(items(a), [], bottom);
+  }
 });
 
 console.log(`lead list: ${passed} passed, ${failures.length} failed`);
