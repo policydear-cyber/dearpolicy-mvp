@@ -1194,6 +1194,8 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .answer-stopped-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .answer-stopped-actions .mini-button { min-height: 44px; }
 .answer-point { margin: 0; }
+/* An overview's items (lib/simple-chat/lead-list.ts): one policy per line, normal weight. */
+.answer-lead-list { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; color: var(--ink); font-weight: 400; line-height: 1.45; }
 .answer-point.caution { background: var(--warn-tint); border-radius: var(--r-sm); padding: 8px 10px; color: var(--ink); }
 .answer-card { background: var(--surface); border: 1px solid var(--edge); border-radius: var(--r-md); padding: 12px 14px; display: grid; gap: 4px; }
 .answer-card-amount { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }

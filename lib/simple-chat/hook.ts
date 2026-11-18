@@ -30,6 +30,7 @@ import { resolveSubjects, subjectsNote, supersededBy, unknownPersonAnswer, type 
 import { docLabel, matchMember, membersNamedIn } from "./verify";
 import { declutterAnswer } from "./declutter";
 import { dropQuoteFragments, tablesFromPrintedRows } from "./printed-table";
+import { listFromBottomLine } from "./lead-list";
 import { contactsHelp, insurerContactsFor } from "./insurer-contacts";
 import { amountsFromRows, withheldRows, asksForNobody, namesSomeone, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, dropQuotePointers, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
@@ -470,6 +471,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   // introduction to nothing (Critic #546 LOW-3; the same rule as after the checks).
   if (fragments.length && !(answer.statements ?? []).length && INTRODUCES.test(answer.bottomLine ?? answer.summary ?? "")) answer.statements = [{ id: "nothing-shown", kind: "uncertainty", text: NOTHING_SHOWN, fullText: NOTHING_SHOWN, conditions: [] }];
   report.sentencesLeftOut.push(...declutterAnswer(answer));
+  // An overview's bottom line that names three or more things becomes its subject and a list (DC, 18 Nov 2026).
+  report.sentencesLeftOut.push(...listFromBottomLine(answer));
   // How to reach the insurer, as the household's own documents print it, when the answer gives next steps or is about
   // claiming. Read by the server from the stored pages; never the model's words.
   if (reply.model !== "no-documents" && reply.model !== "unknown-person" && contactsHelp(answer, message)) {

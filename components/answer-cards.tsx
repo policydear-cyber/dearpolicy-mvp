@@ -215,6 +215,13 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
   const drawn = new Set<string>();
   for (const s of statements) {
     if (drawn.has(s.id)) continue;
+    // The items of an overview's bottom line (lib/simple-chat/lead-list.ts), in order: one list, in normal weight.
+    if (s.id.startsWith("lead-item-")) {
+      const run: AnswerStatement[] = [];
+      for (const m of statements.slice(statements.indexOf(s))) { if (!m.id.startsWith("lead-item-")) break; run.push(m); drawn.add(m.id); }
+      blocks.push(<ul key={"list-" + s.id} className="answer-lead-list" data-testid="answer-lead-list">{run.map((m) => <li key={m.id}>{render(m.text)}</li>)}</ul>);
+      continue;
+    }
     const g = s.group?.kind === "either_or" ? s.group : null;
     const members = g ? statements.filter((m) => m.group?.kind === "either_or" && m.group.id === g.id) : [];
     if (!g || members.length < 2) { blocks.push(one(s)); drawn.add(s.id); continue; }
