@@ -13,6 +13,16 @@ import assert from "node:assert/strict";
 import { offersTryAgain, readHousehold, renderLibrary, stalledReading, stillReading, type Household, type HouseholdDocument } from "../../lib/simple-chat/library";
 import { libraryFact, libraryGroups, verifyAnswer } from "../../lib/simple-chat/verify";
 import { SIMPLE_SYSTEM_PROMPT, type ModelStatement } from "../../lib/simple-chat/prompt";
+import { documentCardTitle } from "../../lib/policies/document-name";
+
+/** The server's points name a file as its Documents page card titles it, never by file name (post-#539 check on live
+ * f954eb2: "0b5b92fa-….pdf" and "InformationBookletForTheNewlyInsured.pdf" in an answer). */
+const T = (h: Household, file: string) => {
+  const d = h.documents.find((x) => x.name === file);
+  assert.ok(d, file);
+  return documentCardTitle({ product_name: d.productName, original_filename: d.name, insurer: d.insurer, document_role: d.documentRole, policy_number: d.policyNumber });
+};
+const noFileName = (text: string) => assert.doesNotMatch(text, /\.(pdf|jpe?g|png)\b/i, text);
 
 let passed = 0;
 const failed: string[] = [];
@@ -86,7 +96,8 @@ async function main() {
   await check("server's point about one file: still being read vs could not be read", () => {
     const fact = (name: string) => libraryFact(HOUSE, HOUSE.documents.find((d) => d.name === name)!);
     for (const name of IN_PROGRESS) {
-      assert.match(fact(name), new RegExp(`^${name.replace(/\./g, "\\.")} is still being read, so nothing in it is used yet; ask again in a minute\\.`), name);
+      assert.ok(fact(name).startsWith(`${T(HOUSE, name)} is still being read, so nothing in it is used yet; ask again in a minute.`), fact(name));
+      noFileName(fact(name));
       assert.doesNotMatch(fact(name), /could not be read/, name);
     }
     for (const name of NOT_READ) {
@@ -108,9 +119,11 @@ async function main() {
       st("The other files (D1, D3) were read.", null),
     ] });
     const texts = answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text);
-    assert.ok(texts.some((t) => t.startsWith("queued.pdf is still being read, so nothing in it is used yet; ask again in a minute.")), texts.join("\n"));
-    assert.ok(texts.some((t) => t.startsWith("failed.pdf could not be read (status: failed), so nothing in it was used.")), texts.join("\n"));
-    assert.ok(texts.includes("Of your 11 uploaded files, 1 was read, 4 are still being read (queued.pdf, extracting.pdf, indexing.pdf, uploaded.pdf) and 6 could not be read (failed.pdf, odd.pdf, rejected.pdf, gone.pdf, stalled-queued.pdf, stalled-extracting.pdf)."), texts.join("\n"));
+    const t = (f: string) => T(HOUSE, f);
+    assert.ok(texts.some((x) => x.startsWith(`${t("queued.pdf")} is still being read, so nothing in it is used yet; ask again in a minute.`)), texts.join("\n"));
+    assert.ok(texts.some((x) => x.startsWith(`${t("failed.pdf")} could not be read (status: failed), so nothing in it was used.`)), texts.join("\n"));
+    assert.ok(texts.includes(`Of your 11 uploaded files, 1 was read, 4 are still being read (${IN_PROGRESS.map(t).join(", ")}) and 6 could not be read (${NOT_READ.map(t).join(", ")}).`), texts.join("\n"));
+    noFileName(texts.join("\n"));
     assert.ok(!texts.join("\n").includes(SECRET));
   });
 
@@ -118,15 +131,16 @@ async function main() {
     const st = (text: string): ModelStatement => ({ kind: "fact", text, person: null, document: null, quote: null, amount: null, alternativeGroup: null, percentOf: null, conditions: [] });
     const two: Household = { ...HOUSE, documents: [HOUSE.documents[0], HOUSE.documents[5]] };
     const { answer } = verifyAnswer(two, { bottomLine: "", nextSteps: [], question: null, statements: [st("The files (D1, D2) were read.")] });
-    assert.deepEqual(answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text), ["Of your 2 uploaded files, 1 was read and 1 could not be read (failed.pdf). failed.pdf: DearPolicy couldn’t finish reading it. Press “Try reading it again” on the Documents page. If it still can’t be read, delete it and upload a clearer copy or the original file."]);
+    assert.deepEqual(answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text), [`Of your 2 uploaded files, 1 was read and 1 could not be read (${T(HOUSE, "failed.pdf")}). ${T(HOUSE, "failed.pdf")}: DearPolicy couldn’t finish reading it. Press “Try reading it again” on the Documents page. If it still can’t be read, delete it and upload a clearer copy or the original file.`]);
     // (The count is the only point naming failed.pdf here, so it carries the Documents page's reason and next step; the
     // count sentence itself is unchanged.)
   });
 
   await check("benefit-table library groups use the same words", () => {
     const lines = libraryGroups(HOUSE, HOUSE.documents);
-    assert.ok(lines.some((l) => l.startsWith("queued.pdf is still being read")), lines.join("\n"));
-    assert.ok(lines.some((l) => l.startsWith("failed.pdf could not be read")), lines.join("\n"));
+    assert.ok(lines.some((l) => l.startsWith(`${T(HOUSE, "queued.pdf")} is still being read`)), lines.join("\n"));
+    assert.ok(lines.some((l) => l.startsWith(`${T(HOUSE, "failed.pdf")} could not be read`)), lines.join("\n"));
+    noFileName(lines.join("\n"));
   });
 
   await check("household read carries the scan status, so a scan-rejected upload is never called 'still being read'", async () => {
@@ -249,7 +263,7 @@ async function main() {
     assert.equal(stillReading(d), true);
     assert.equal(offersTryAgain(d), false);
     assert.match(tagOf(renderLibrary(SCAN_HOUSE), "scan-retry-live.pdf"), /reading_status="still being read/);
-    assert.match(libraryFact(SCAN_HOUSE, d), /^scan-retry-live\.pdf is still being read, so nothing in it is used yet; ask again in a minute\./);
+    assert.match(libraryFact(SCAN_HOUSE, d), /^Scan Retry Live is still being read, so nothing in it is used yet; ask again in a minute\./);
   });
 
   await check("scan hold: a held upload with no live job is on hold for its scan, not stalled, no Try again", () => {
@@ -263,17 +277,18 @@ async function main() {
       assert.doesNotMatch(tag, /could not be read|still being read/, name);
       assert.match(tag, /<no_readable_text\/>/, name);
       assert.ok(!tag.includes(SECRET), name);
-      assert.match(fact, new RegExp(`^${name.replace(/\./g, "\\.")} is on hold`), name);
+      assert.ok(fact.startsWith(`${T(SCAN_HOUSE, name)} is on hold`), fact);
+      noFileName(fact);
       assert.doesNotMatch(fact, /could not be read|still being read|tried again|Try again/i, name);
     }
     assert.match(tagOf(lib, "held.pdf"), /reading_status="on hold for its scan, so it is not being read yet \(Waiting for malware scan\)"/);
-    assert.match(libraryFact(SCAN_HOUSE, scanDoc("held.pdf")), /^held\.pdf is on hold for its scan \(Waiting for malware scan\), so nothing in it is used yet\./);
+    assert.match(libraryFact(SCAN_HOUSE, scanDoc("held.pdf")), /^Held is on hold for its scan \(Waiting for malware scan\), so nothing in it is used yet\./);
   });
 
   await check("scan hold: prototype mode says on hold with no malware wording", () => {
     const tag = tagOf(renderLibrary(SCAN_HOUSE), "held-prototype.pdf"), fact = libraryFact(SCAN_HOUSE, scanDoc("held-prototype.pdf"));
     assert.match(tag, /reading_status="on hold, so it is not being read yet"/);
-    assert.match(fact, /^held-prototype\.pdf is on hold, so nothing in it is used yet\./);
+    assert.match(fact, /^Held Prototype is on hold, so nothing in it is used yet\./);
     for (const t of [tag, fact]) assert.doesNotMatch(t, /malware|scan/i);
   });
 
@@ -281,7 +296,7 @@ async function main() {
     const st = (text: string): ModelStatement => ({ kind: "fact", text, person: null, document: null, quote: null, amount: null, alternativeGroup: null, percentOf: null, conditions: [] });
     const { answer } = verifyAnswer(SCAN_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [st("The files (D1, D2) were read.")] });
     const texts = answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text);
-    assert.ok(texts.includes("Of your 9 uploaded files, 1 was read, 1 is still being read (scan-retry-live.pdf), 4 are on hold for their scan (held.pdf, held-uploaded.pdf, held-quarantined.pdf, held-prototype.pdf) and 3 could not be read (clean-stalled.pdf, clean-stalled-scanjob.pdf, rejected-scanjob.pdf)."), texts.join("\n"));
+    assert.ok(texts.includes("Of your 9 uploaded files, 1 was read, 1 is still being read (Scan Retry Live), 4 are on hold for their scan (Held, Held Uploaded, Held Quarantined, Held Prototype) and 3 could not be read (Clean Stalled, Clean Stalled Scanjob, Rejected Scanjob)."), texts.join("\n"));
   });
 
   await check("scan hold controls: a clean stalled upload still offers Try again, a scan retry or not; a rejected one does not", () => {
@@ -439,7 +454,7 @@ async function main() {
     for (const [file, error, pages, kind] of FAILED) {
       const advice = fa.failedDocumentChatAdvice(error, { hasPages: !!pages });
       const fact = libraryFact(h, h.documents.find((x) => x.name === file)!);
-      assert.ok(fact.startsWith(`${file} could not be read (status: failed), so nothing in it was used. ${advice.why.charAt(0).toUpperCase()}${advice.why.slice(1)}. ${advice.step} `), `${file}: ${fact}`);
+      assert.ok(fact.startsWith(`${T(h, file)} could not be read (status: failed), so nothing in it was used. ${advice.why.charAt(0).toUpperCase()}${advice.why.slice(1)}. ${advice.step} `), `${file}: ${fact}`);
       noRaw(fact); noScan(kind, fact);
       if (kind === "service") assert.match(fact, /connection problem on our side — nothing is wrong with the file\. Press “Try reading it again” on the Documents page in a little while\./, fact);
       if (kind === "limit") assert.match(fact, /after the limit resets at the start of next month/, fact);
@@ -450,18 +465,18 @@ async function main() {
     const { answer } = verifyAnswer(h, { bottomLine: "", nextSteps: [], question: null, statements: [st("The files (D1, D14) were read.")] });
     const count = answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text);
     assert.equal(count.length, 1, count.join("\n"));
-    assert.ok(count[0].startsWith(`Of your 14 uploaded files, 1 was read and 13 could not be read (${FAILED.map((f) => f[0]).join(", ")}).`), count[0]);
-    assert.ok(count[0].includes(" service.pdf and provider-quota.pdf: for each, DearPolicy couldn’t finish reading it because of a connection problem on our side — nothing is wrong with the file. Press “Try reading it again” on the Documents page in a little while."), count[0]);
-    assert.ok(count[0].includes(" limit.pdf: Reading was paused when the monthly reading limit was reached"), count[0]);
-    assert.ok(count[0].includes(" locked.pdf: It is password-protected and was uploaded without its password. Enter its password on the Documents page"), count[0]);
-    assert.ok(count[0].includes(" no-text.pdf: DearPolicy found no readable text in it."), count[0]);
+    assert.ok(count[0].startsWith(`Of your 14 uploaded files, 1 was read and 13 could not be read (${FAILED.map((f) => T(h, f[0])).join(", ")}).`), count[0]);
+    assert.ok(count[0].includes(` ${T(h, "service.pdf")} and ${T(h, "provider-quota.pdf")}: for each, DearPolicy couldn’t finish reading it because of a connection problem on our side — nothing is wrong with the file. Press “Try reading it again” on the Documents page in a little while.`), count[0]);
+    assert.ok(count[0].includes(` ${T(h, "limit.pdf")}: Reading was paused when the monthly reading limit was reached`), count[0]);
+    assert.ok(count[0].includes(` ${T(h, "locked.pdf")}: It is password-protected and was uploaded without its password. Enter its password on the Documents page`), count[0]);
+    assert.ok(count[0].includes(` ${T(h, "no-text.pdf")}: DearPolicy found no readable text in it.`), count[0]);
     assert.equal(count[0].match(/connection problem on our side/g)?.length, 1, "one reason for the files that share it");
-    noRaw(count[0]);
+    noRaw(count[0]); noFileName(count[0]);
     // With each file's own point in the answer, the count does not say the reasons a second time.
     const both = verifyAnswer(h, { bottomLine: "", nextSteps: [], question: null, statements: [st("D7 could not be read."), st("The files (D1, D14) were read.")].map((x, i) => i === 0 ? { ...x, document: "D7" } : x) });
     const texts = both.answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text).join("\n");
     assert.equal(texts.match(/connection problem on our side/g)?.length, 2, texts);
-    assert.ok(texts.includes("service.pdf could not be read (status: failed), so nothing in it was used. DearPolicy couldn’t finish reading it because of a connection problem on our side"), texts);
+    assert.ok(texts.includes(`${T(h, "service.pdf")} could not be read (status: failed), so nothing in it was used. DearPolicy couldn’t finish reading it because of a connection problem on our side`), texts);
   });
 
   await check("failed documents (real database): the household read maps the stored reason to the advice", async () => {

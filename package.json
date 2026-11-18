@@ -115,6 +115,7 @@
     "simple:style-test": "node --import tsx scripts/simple-answer/style-test.ts",
     "simple:declutter-contacts-test": "node --import tsx scripts/simple-answer/declutter-contacts-test.ts",
     "simple:printed-table-test": "node --import tsx scripts/simple-answer/printed-table-test.ts",
+    "simple:lead-list-test": "node --import tsx scripts/simple-answer/lead-list-test.ts",
     "chat:no-expiry-wording-test": "node --import tsx scripts/chat/no-expiry-wording-test.ts",
     "db:start": "docker compose up -d db",
     "db:status": "docker compose ps",

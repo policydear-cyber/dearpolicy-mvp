@@ -508,6 +508,9 @@ jobs:
       - name: Printed figures rows shown as a table with the page's own headings; no cell moved
         run: npm run simple:printed-table-test
 
+      - name: An overview answer reads as a list of its policies; no 'also linked to' document lists
+        run: npm run simple:lead-list-test
+
       - name: Member profile (sex and date of birth on the Family page; used only when the document prints nothing; works before the migration)
         run: npm run family:member-profile-test
 

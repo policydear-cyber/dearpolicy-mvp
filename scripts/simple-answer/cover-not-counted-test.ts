@@ -234,6 +234,62 @@ async function main() {
     assert.equal(old.bottomLine, BOTTOM);
   });
 
+  await check("a document the answer's own points already list is not counted again; others still are (post-#539 check)", () => {
+    const a = answer([{ person: JANE }]);
+    assert.equal(noteCoverNotCounted(a, HOUSE([READ, FAILED, IN_PART]), null, new Set(), new Set([FAILED.policyId, IN_PART.policyId])), null);
+    assert.equal(noteOf(a).length, 0);
+    const b = answer([{ person: JANE }]);
+    noteCoverNotCounted(b, HOUSE([READ, FAILED, IN_PART]), null, new Set(), new Set([FAILED.policyId]));
+    assert.equal(oneNote(b), "Plover Accident Plan is not fully read, so some details may be missing.");
+  });
+  // Live f954eb2, post-#539 check: "How much death cover does Desmond have, and which of his documents aren't fully read?"
+  // gave three counts in one answer: the lead said "Two", the server's list named four and the note line said "Three".
+  const mixed = async (question: string, bottomLine: string) => {
+    const house = HOUSE([READ, FAILED, IN_PART]);
+    const model: SimpleModel = { choice: { provider: "anthropic", model: "test" }, async call() {
+      return { json: { bottomLine, statements: [
+        { kind: "amount", person: JANE, text: "Death Benefit (Harbour Term Life).", amount: "S$5,000", quote: "Death Benefit S$5,000", document: "D1" },
+        { kind: "fact", person: null, text: "Osprey Critical Care could not be read.", amount: null, quote: null, document: "D2" }],
+      nextSteps: [], question: null }, stopReason: "end_turn", model: "test", usage: { input: 1, cacheWrite: 0, cacheRead: 0, output: 1 } }; } };
+    const context = {
+      request: { accountId: house.accountId, familyMemberId: null, question, submittedQuestion: question },
+      family: [{ id: "m1", display_name: JANE, preferred_name: null, relationship: "self" }], people: [],
+      conversation: { id: "c1", account_id: house.accountId, family_member_id: null, title: "t", revision: 1, state: { subjects: {} } },
+      token: {}, holdings: [],
+    } as unknown as ChatContext;
+    const saved: { answer: StructuredAnswer }[] = [];
+    await runSimpleChat(context, {}, { model, household: async () => house, history: async () => [], save: (async (x: unknown) => { saved.push(x as never); }) as never, ledger: false, table: async () => null,
+      today: () => new Date("2026-11-10T04:00:00Z") });
+    return saved[0].answer;
+  };
+  await check("a question about cover and about reading: one count only, the record's list (post-#539 check)", async () => {
+    const a = await mixed("How much death cover does Jane have, and which of her documents aren't fully read?",
+      "Jane has a death benefit from Harbour Term Life. Two of her documents are not fully read.");
+    const said = [a.bottomLine, ...a.statements!.map((s) => s.text)].join("\n");
+    assert.ok(a.statements!.some((s) => s.amount?.text === "S$5,000"), said);
+    assert.equal(a.bottomLine, "Jane has a death benefit from Harbour Term Life.", said);
+    assert.equal(noteOf(a).length, 0, said);
+    assert.match(said, /Osprey Critical Care could not be read/);
+    assert.match(said, /Plover Accident Plan was read in part/);
+    assert.doesNotMatch(said, /\b(?:two|three|four)\b[^.]*\bdocuments?\b[^.]*not fully read/i, said);
+    assert.doesNotMatch(said, /\.pdf\b/, said);
+  });
+  await check("every way of counting files about reading goes; a count of cover that says nothing of reading stays (Critic #546 MED-2)", async () => {
+    const q = "How much death cover does Jane have, and which of her documents aren't fully read?";
+    for (const count of ["Three documents could not be read.", "Two of your documents haven't been fully read.", "Two documents aren't fully read.",
+      "Two of Jane's documents are not fully read.", "Three of your documents are unreadable.", "Two documents are still being read."]) {
+      const a = await mixed(q, `Jane has a death benefit from Harbour Term Life. ${count}`);
+      assert.equal(a.bottomLine, "Jane has a death benefit from Harbour Term Life.", count);
+    }
+    const lead = "Jane has death cover under two policies.";
+    assert.equal((await mixed(q, lead)).bottomLine, lead);
+  });
+  await check("a count the model gives when the question is not about reading stays (negative control)", async () => {
+    const lead = "Jane has a death benefit from Harbour Term Life. Two of her documents are not fully read.";
+    const a = await mixed("How much death cover does Jane have?", lead);
+    assert.equal(a.bottomLine, lead);
+  });
+
   console.log(`\n${passed} passed, ${failed.length} failed`);
   if (failed.length) process.exit(1);
 }

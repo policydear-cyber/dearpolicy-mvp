@@ -38,7 +38,9 @@ check("every file not read in full is listed, even when the model named one", ()
   const { answer } = verifyAnswer(HOUSE, { bottomLine: "Nothing here is unreadable.", nextSteps: [], question: null, statements: [st("Plan E was read in part.", "D4")] },
     ["Which of our documents haven't been fully read?"]);
   const t = answer.statements!.map((x) => x.text).join("\n");
-  assert.match(t, /Booklet\.pdf[^\n]* has not had its benefits read, so no cover or amount from it is counted in answers\./, t);
+  // Named as its Documents page card is titled, never by its file name when that only repeats the title (post-#539 check).
+  assert.match(t, /^Booklet was read\. It has not had its benefits read, so no cover or amount from it is counted in answers\./m, t);
+  assert.doesNotMatch(t, /\.pdf/, t);
   assert.match(t, /Plan W[^\n]*could not be matched to the page they came from/, t);
   assert.match(t, /Plan E[^\n]*was read in part/, t);
   assert.match(t, /Plan C[^\n]*Its benefits were read in part: pages 7 and 8 could not be read/, t);

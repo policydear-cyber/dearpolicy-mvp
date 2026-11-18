@@ -104,7 +104,7 @@ async function main() {
     assert.match(lib, /reading_status="read in part: page 4 could not be read at all, so nothing printed only there is known; it is not sent; page 2 could not be checked against the page image; no amount from it is used"/);
     assert.doesNotMatch(lib, /9,8OO|Fr4ctur3/);
     assert.doesNotMatch(lib, /<page n="4">/);
-    assert.match(libraryFact(h, h.documents[0]), /^Example Shield Plan \(Schedule scan\.pdf\) was read in part: Page 4 couldn't be read, so anything printed only there is not known\. Page 2 couldn't be checked/);
+    assert.match(libraryFact(h, h.documents[0]), /^Example Shield Plan was read in part: Page 4 couldn't be read, so anything printed only there is not known\. Page 2 couldn't be checked/);
     // Several pages, and the page alone with nothing unchecked.
     const only = { ...h.documents[0], uncheckedPages: [], unreadablePages: [5, 7, 9] };
     assert.match(renderLibrary({ ...h, documents: [only] }), /reading_status="read in part: pages 5, 7 and 9 could not be read at all, so nothing printed only there is known; they are not sent"/);
@@ -118,7 +118,7 @@ async function main() {
     // Every page unreadable: never "read in part" (Critic #327 L2).
     const none = { ...h.documents[0], uncheckedPages: [], unreadablePages: [1, 2, 3, 4, 5], pages: [] };
     assert.match(renderLibrary({ ...h, documents: [none] }), /reading_status="could not be read: no page of it could be read, so nothing in it is known"[^>]*>\n<no_readable_text\/>/);
-    assert.match(libraryFact(h, none), /\(Schedule scan\.pdf\) could not be read: no page of it could be read, so nothing in it was used\./);
+    assert.match(libraryFact(h, none), /^Example Shield Plan could not be read: no page of it could be read, so nothing in it was used\./);
     // A failed document says it could not be read, never "read in part".
     assert.match(renderLibrary({ ...h, documents: [{ ...only, processingStatus: "failed" }] }), /reading_status="could not be read \(failed\)"/);
     // Since 18 Nov (DC: answers that narrate reading read as unsure) the pages are named only when the question is about
@@ -137,22 +137,29 @@ async function main() {
     const lib = renderLibrary(h, new Set([`${pid}#1`]));
     assert.match(lib, /reading_status="read in part: pages 3 and 4 could not be checked against the page image; no amount from them is used"/);
     assert.doesNotMatch(lib, /100,000/);
-    assert.match(libraryFact(h, h.documents[0]), /^PruLink Enhanced Protector \(PruLink\.pdf\) was read in part: pages 3 and 4 couldn't be checked against the page image, so no amounts from them are used\./);
+    assert.match(libraryFact(h, h.documents[0]), /^PruLink Enhanced Protector was read in part: pages 3 and 4 couldn't be checked against the page image, so no amounts from them are used\./);
     const whole = { ...h.documents[0], uncheckedPages: [] };
     assert.doesNotMatch(renderLibrary({ ...h, documents: [whole] }), /reading_status/);
     assert.match(libraryFact(h, whole), /was read\./);
     // A page checked line by line is named too: only its unconfirmed amounts are left out (Critic R211-4).
     assert.match(libraryFact(h, { ...whole, partCheckedPages: [3] }), /was read in part: Some amounts on page 3 couldn't be checked against the page image, so they are not used\./);
-    // A file whose name says nothing is named by what the app takes it to be, with the file name after it; two such files
-    // of the same kind are told apart by the day each was uploaded (overnight run 23 Oct, N195, N282).
+    // A file whose name says nothing is named as its Documents page card is titled, by what the app takes it to be, never
+    // by its machine-made file name; two such files of the same kind are told apart by the day each was uploaded
+    // (overnight run 23 Oct, N195, N282; post-#539 check: a raw "0b5b92fa-....pdf" in an answer).
     const plain = { ...whole, productName: null, insurer: "Example Insurance", documentRole: "endorsement", uploadedAt: "2026-09-28T03:46:05Z" };
     const files = [{ ...plain, name: "output_202601010900001.pdf" }, { ...plain, name: "0a1b2c3d-0000-4000-8000-00000000abcd.pdf", uploadedAt: "2026-10-20T03:00:00Z" }];
     const two = { ...h, documents: files };
-    assert.match(libraryFact(two, files[0]), /^Example Insurance endorsement \(uploaded 28 Sept 2026\) \(output_202601010900001\.pdf\) was read\./);
-    assert.match(libraryFact(two, files[1]), /^Example Insurance endorsement \(uploaded 20 Oct 2026\) \(0a1b2c3d-0000-4000-8000-00000000abcd\.pdf\) was read\./);
-    assert.match(libraryFact({ ...h, documents: [files[0]] }, files[0]), /^Example Insurance endorsement \(output_202601010900001\.pdf\) was read\./);
-    // A name a person gave the file stays as it is.
-    assert.match(libraryFact(h, { ...plain, name: "Lim travel.pdf" }), /^Lim travel\.pdf was read\./);
+    assert.match(libraryFact(two, files[0]), /^Example Insurance endorsement \(uploaded 28 Sept 2026\) was read\./);
+    assert.match(libraryFact(two, files[1]), /^Example Insurance endorsement \(uploaded 20 Oct 2026\) was read\./);
+    assert.match(libraryFact({ ...h, documents: [files[0]] }, files[0]), /^Example Insurance endorsement was read\./);
+    assert.doesNotMatch(libraryFact(two, files[1]), /0a1b2c3d|output_/);
+    // Uploaded the same day too: told apart by their order that day, never the same words twice (Critic #546 LOW-4).
+    const sameDay = [files[0], { ...files[1], uploadedAt: "2026-09-28T05:00:00Z" }];
+    const day = { ...h, documents: sameDay };
+    assert.match(libraryFact(day, sameDay[0]), /^Example Insurance endorsement \(upload 1 of 2 on 28 Sept 2026\) was read\./);
+    assert.match(libraryFact(day, sameDay[1]), /^Example Insurance endorsement \(upload 2 of 2 on 28 Sept 2026\) was read\./);
+    // A name a person gave the file is the card's title, said once.
+    assert.match(libraryFact(h, { ...plain, name: "Lim travel.pdf" }), /^Lim travel was read\./);
   });
 
   await check("request: prompt and library in a cached system block, structured JSON output, history alternates", () => {
@@ -807,8 +814,9 @@ async function main() {
     assert.deepEqual(answer.statements!.filter((x) => x.kind === "fact").map((x) => x.text), [
       // A failed file also gets the Documents page's reason and next step (lib/documents/failure-advice.ts); its stored
       // reason is not in this made-up household, so the generic advice.
-      "output_2026.pdf could not be read (status: failed), so nothing in it was used. DearPolicy couldn’t finish reading it. Press “Try reading it again” on the Documents page. If it still can’t be read, delete it and upload a clearer copy or the original file. It is not linked to anyone in DearPolicy; it can be linked on the Documents page. It was uploaded for Lim Ah Kow.",
-      "Of your 6 uploaded files, 5 were read and 1 could not be read (output_2026.pdf).",
+      // Named as its Documents page card is titled, never by its machine-made file name (post-#539 check).
+      "Testlife product summary (ending T1) could not be read (status: failed), so nothing in it was used. DearPolicy couldn’t finish reading it. Press “Try reading it again” on the Documents page. If it still can’t be read, delete it and upload a clearer copy or the original file. It is not linked to anyone in DearPolicy; it can be linked on the Documents page. It was uploaded for Lim Ah Kow.",
+      "Of your 6 uploaded files, 5 were read and 1 could not be read (Testlife product summary (ending T1)).",
     ]);
     assert.equal(report.dropped.length, 1);
   });
