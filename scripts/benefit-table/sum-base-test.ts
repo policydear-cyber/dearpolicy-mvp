@@ -688,12 +688,15 @@ for (const [what, covers, quote] of [
 for (const [what, printed] of [
   ["on the same line", "We will pay fifty percent (50%) of the Sum Assured of the Policy in one (1) lump sum."],
   ["wrapped onto the next line", "We will pay fifty percent (50%) of the Sum Assured\nof the Policy in one (1) lump sum."],
-] as const) test(`C control (Critic Q1): a quote that stops before "of the Policy" ${what} is not worked out on the line's own sum`, () => {
+  ["after the plan's name earlier in the sentence", "For the Whole Life Plan, we will pay fifty percent (50%) of the Sum Assured in one (1) lump sum."],
+  ["after the policy's sum named on the line above", "As a share of the sum assured of the Policy,\nwe will pay fifty percent (50%) of the Sum Assured in one (1) lump sum."],
+  ["after a label cell naming the basic plan", "Basic Plan\twe will pay fifty percent (50%) of the Sum Assured in one (1) lump sum."],
+] as const) test(`C control (Critic Q1, P1-P3): a quote that leaves out "of the Policy" ${what} is not worked out on the line's own sum`, () => {
   const covers = [{ cover: "Whole Life Plan", sum: 100000, line: "Whole Life Plan\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }];
   const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
     page1: [CCI_PAGE1.replace(/\nCritical Illness Plan\tS\$300,000$/, ""), ...covers.map((c) => c.line)].join("\n"),
     page2: `3 BENEFITS\n3.1 Critical Illness Benefit\nIf the Life Assured is diagnosed with a covered illness:\n${printed}`, link: "Critical Illness Benefit", covers,
-    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 50, quote: "We will pay fifty percent (50%) of the Sum Assured" }] });
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 50, quote: printed.includes("we will pay") ? "we will pay fifty percent (50%) of the Sum Assured" : "We will pay fifty percent (50%) of the Sum Assured" }] });
   const r = rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!;
   assert.ok(r);
   assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));

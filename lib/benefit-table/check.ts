@@ -2356,10 +2356,15 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // sum ("25% of the Sum Covered") is of the sum insured (HEADLINE_SUM): stored readings are settled here too, unread.
     const cellOf = () => { const p = placed.get(source); if (!p) return null; const text = pageText(source.page), from = text.lastIndexOf("\n", p.start - 1) + 1, to = lineEndAt(text, p.end);
       const next = to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "";
-      // The share's own words as printed, from the quote to the end of its sentence (at most the next line): a quote that
+      // The share's own words as printed, the whole sentence the quote is in (at most the next line): a quote that
       // stops before "of the Policy" still carries the words that name whose sum it is (Critic Q1 on the share-sum fix).
       const upTo = to < text.length ? lineEndAt(text, to + 1) : to, after = text.slice(p.end, upTo), stop = /[.;](?=\s|$)/.exec(after);
-      return { cell: text.slice(from, to), next, sentence: text.slice(p.start, stop ? p.end + stop.index + 1 : upTo) }; };
+      // ...and back to its sentence's own start (the last "." ";" or ":" before it, a blank line, or at most three lines up),
+      // label cells included: "For the Whole Life Plan, we will pay 50% of the Sum Assured" (Critic P1 to P3).
+      let back = from;
+      for (let k = 0; k < 3 && back > 0; k++) { const up = text.lastIndexOf("\n", back - 2) + 1; if (!text.slice(up, back - 1).trim()) break; back = up; }
+      const lead = text.slice(back, p.start), mark = /[\s\S]*[.;:](?=\s)/.exec(lead), begin = mark ? back + mark[0].length : back;
+      return { cell: text.slice(from, to), next, sentence: text.slice(begin, stop ? p.end + stop.index + 1 : upTo) }; };
     const cell = pays === "percent" && value != null && (percentOf === "other" || percentOf == null) ? cellOf() : null;
     const rowWords = [benefit, str(b.section) ?? "", str(b.column) ?? "", ...(Array.isArray(b.conditions) ? b.conditions.map((c) => str(c) ?? "") : [])].join("\n");
     const baseFromWords = !!cell && (headlineSumShare(cell.cell, value!, cell.next, rowWords)
