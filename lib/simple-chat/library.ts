@@ -51,9 +51,9 @@ export type HouseholdDocument = {
   tableState?: string | null;
   /** Pages the upload check could not check against the page image: no amount on them is used. */
   uncheckedPages?: number[];
-  /** Pages on which the stored reading (policy_coverages, as Home shows it) gave a figure the household's currency from the
-   * setting (its note, HOUSEHOLD_CURRENCY_NOTE): only there may the chat do the same. */
-  settingCurrencyPages?: number[];
+  /** The figures the stored reading (policy_coverages, as Home shows them) gave the household's currency from the setting
+   * (its note, HOUSEHOLD_CURRENCY_NOTE), by page and person: only those may the chat show the same way. */
+  settingCurrencyFigures?: { page: number; amount: number; person: string }[];
   /** Pages on which some lines could not be checked against the page image: those lines show "[amount not checked]". */
   partCheckedPages?: number[];
   /** Pages that could not be read at all (an illegible scan, or a reader that gave nothing back): nothing printed only
@@ -109,8 +109,10 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
     .catch(() => undefined);
   const chosen = effectiveHouseholdCurrency(currency ?? null);
   const settled = chosen && ids.length ? await run(
-    `SELECT account_id, policy_id, source_page FROM policy_coverages
-      WHERE account_id=$1 AND policy_id = ANY($2::uuid[]) AND currency=$3 AND position($4 in coalesce(notes,''))>0 AND source_page IS NOT NULL`,
+    `SELECT c.account_id, c.policy_id, c.source_page, c.amount, f.display_name FROM policy_coverages c
+       JOIN family_members f ON f.id=c.family_member_id AND f.account_id=c.account_id
+      WHERE c.account_id=$1 AND c.policy_id = ANY($2::uuid[]) AND c.currency=$3 AND position($4 in coalesce(c.notes,''))>0
+        AND c.source_page IS NOT NULL AND c.amount IS NOT NULL`,
     [accountId, ids, chosen, HOUSEHOLD_CURRENCY_NOTE]).catch(() => [] as Row[]) : [];
   return {
     accountId,
@@ -136,7 +138,8 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       matchedOnly: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))]
         .filter((n) => links.every((l) => String(l.policy_id) !== String(d.id) || String(l.display_name) !== n || l.source === "scheme_reference_match")),
       uncheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unchecked").map((p) => Number(p.page_number)),
-      settingCurrencyPages: [...new Set((Array.isArray(settled) ? settled : []).filter((r) => String(r.account_id) === accountId && String(r.policy_id) === String(d.id)).map((r) => Number(r.source_page)))],
+      settingCurrencyFigures: (Array.isArray(settled) ? settled : []).filter((r) => String(r.account_id) === accountId && String(r.policy_id) === String(d.id))
+        .map((r) => ({ page: Number(r.source_page), amount: Number(r.amount), person: String(r.display_name) })),
       partCheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "part_checked").map((p) => Number(p.page_number)),
       unreadablePages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unreadable").map((p) => Number(p.page_number)),
       // A page whose table text could not be checked (lib/documents/layout-check.ts) gives the answer no words to quote. A

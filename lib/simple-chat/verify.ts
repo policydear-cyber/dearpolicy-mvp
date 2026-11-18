@@ -1638,16 +1638,17 @@ const TERM_OR_PLAN_BEFORE = /\b(?:term|plans?)(?:\s*\((?:years?|yrs?|months?)\))
 /** The household's own currency for a figure on this page of this document, as the document reading decides it
  * (lib/documents/household-currency householdCurrencyPages): null unless the household chose one and nothing the document
  * or its other documents of the same policy print names another currency. */
-function householdCurrencyFor(household: Household, doc: HouseholdDocument, page: number): string | null {
+function householdCurrencyFor(household: Household, doc: HouseholdDocument, page: number, value: number, person: string | null): string | null {
   // Only on a page where the stored reading already gave a figure the household's currency from the setting: the same
   // decision Home made at upload, which also weighed the currencies the page image names and the related documents of every
   // policy number the reading found (Critic #546 HIGH-1: page text alone can lose an "RM" the image check confirmed).
-  if (!household.currency || !doc.settingCurrencyPages?.includes(page)) return null;
-  // A page that names more than one insured person (a joint schedule, "Life assured 1 … Life assured 2") is not filled: a
-  // bare figure there is held to its person only by the document, not the line, so it stays "currency not stated" as
-  // before (TE #546 W1).
-  const text = doc.pages.find((p) => p.page === page)?.text ?? "";
-  if (membersNamedIn(household, text).length > 1 || /\b(?:life|person|lives)\s+(?:assured|insured)\s*(?:no\.?\s*)?[2-9]\b|\b(?:second|joint)\s+(?:life|insured|assured)\b/i.test(text)) return null;
+  // And only for the very figure Home shows that way, for the same person: a bare figure is held to its person by the
+  // document, not the line, so on a page with more than one insured person (named in the household or not, in any
+  // wording) the figure must be the one Home gave this person (TE #546 W1, W1b).
+  if (!household.currency) return null;
+  const same = (doc.settingCurrencyFigures ?? []).filter((f) => f.page === page && sameValue(f.amount, value));
+  const whose = new Set(same.map((f) => baseName(f.person)));
+  if (!same.length || (person ? !whose.has(baseName(person)) : whose.size !== 1)) return null;
   const key = (n: string | null | undefined) => String(n ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const related = key(doc.policyNumber) ? household.documents.filter((o) => o !== doc && !o.supersededAt && key(o.policyNumber) === key(doc.policyNumber)).flatMap((o) => o.pages.map((p) => p.text)) : [];
   // A page that could not be read may print another currency: it is not known, so it blocks the fill (unknownPage).
@@ -1698,7 +1699,7 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
     // amount, on a page where nothing the document or its related documents print names another currency (a bare "$"
     // blocks it), and only when the amount given is in that currency. Home and Coverage show the same figure in it (live
     // f954eb2: PW9 and EJ7 cards said "Currency not stated" in chat while Home showed S$).
-    const ownCurrency = !declared && amountShaped && (!signed || signed === "$" || signed === household.currency) ? householdCurrencyFor(household, doc, found.page) : null;
+    const ownCurrency = !declared && amountShaped && (!signed || signed === "$" || signed === household.currency) ? householdCurrencyFor(household, doc, found.page, value, st.person ?? null) : null;
     if (!(declared || ownCurrency || noCurrencyAnywhere) || !(plainAmountsIn(found.excerpt).some((v) => sameValue(v, value)) || cells.some((v) => sameValue(v, value) && inQuote(v))) || (declared && signed && signed !== "$" && signed !== declared)) return { ok: false, why: "the amount is not printed with its currency in the quoted words" };
     const at = [...found.excerpt.matchAll(PLAIN_AMOUNT)].find((m) => sameValue(Number(m[1].replace(/,/g, "")), value)) ?? [...found.excerpt.matchAll(/(?<![\d.,])\d[\d,]*(?:\.\d+)?(?![\d.,]*\d)/g)].find((m) => sameValue(Number(m[0].replace(/,/g, "")), value));
     // A figure whose row names a count or a rate is not money, whatever the page's currency (R59-6).
