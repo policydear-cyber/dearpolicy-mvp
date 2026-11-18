@@ -44,6 +44,7 @@ const MIGRATIONS = [
   "sql/benefit-figure-confirmations.sql",
   "sql/member-profile.sql",
   "sql/household-currency.sql",
+  "sql/household-plans.sql",
   "sql/policy-folders.sql",
 ];
 

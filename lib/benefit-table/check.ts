@@ -21,7 +21,7 @@ import { RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { namesWaiverRider } from "@/lib/documents/waiver-rider";
 import { NOT_CHECKED as NOT_CHECKED_MARK } from "@/lib/documents/layout-check";
 import { NO_SCALE_AFTER, printedNumber } from "@/lib/format/printed-number";
-import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency, type Found } from "@/lib/simple-chat/verify";
+import { CAPPED, ORDINAL_DAY, locateQuote, pageCurrency, scheduleFigure, type Found } from "@/lib/simple-chat/verify";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { moneyCapPrinted, ownRowText, printedOnlyAsCount } from "./own-row";
 import { BASES, DOCUMENT_KINDS, PAYS, PERCENT_OF, PERIODS, type ReadBenefit, type ReadCover, type Reading } from "./reading";
@@ -2310,6 +2310,15 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // projection is not this benefit's: the row stays, paid as its words say, with no figure (lib/documents/own-figure).
     const valueWhy = OWN_FIGURE_CHECKS.on && value != null && pays !== "percent" ? amountOnlyInContext(source.excerpt, value, { title: pageText(source.page) }) : null;
     if (valueWhy) { out.dropped.push({ what: label, why: `figure ${value} is printed only as ${figureContextWords(valueWhy)}; kept the row without it` }); pays = "words"; value = null; }
+    // A figure that only says when or how a large claim is paid in parts ("If the sum payable ... is above S$200,000, the
+    // Company will first pay a lump sum of S$200,000 and pay the balance in ... instalments"), read with the whole sentence
+    // its quote is in: how the benefit is paid, never what it pays (verify.ts scheduleFigure). The row stays, with no figure.
+    if (value != null && pays !== "percent") {
+      const p = placed.get(source), text = pageText(source.page);
+      const whole = p ? (() => { const back = text.slice(Math.max(0, p.start - 400), p.start), after = text.slice(p.end, p.end + 800), ends = [...after.matchAll(/[.;](?:\s|$)/g)].map((e) => e.index! + 1);
+        return back.slice(Math.max(0, back.search(/[^.;]*$/))) + text.slice(p.start, p.end) + after.slice(0, ends[2] ?? after.length); })() : source.excerpt;
+      if (scheduleFigure(source.excerpt, value) || scheduleFigure(whole, value)) { out.dropped.push({ what: label, why: `figure ${value} is when or how a large claim is paid in parts, not what it pays; kept the row without it` }); pays = "words"; value = null; }
+    }
     // The most cover a plan offers, on a document that names no one's own cover ("Be insured up to a maximum coverage of
     // S$1,000,000 at S$1.37 per day"): the most anyone may buy, not what this person holds or a limit on a claim. The row
     // is no benefit and is left out; the person's own sum is on their certificate or schedule (live 17 Nov).

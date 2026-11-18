@@ -183,7 +183,8 @@ test("Plan usage page: allowance only, no infrastructure", () => {
   const usage = read("app/usage/page.tsx");
   const text = visibleText(usage);
   assert.ok(!/model|token|routing|hard stop|cost|\$/i.test(text.replace(/\$\{/g, "")), "no model, token, routing or cost text");
-  assert.match(usage, /includedChatTurns/);
+  // The household's own plan (Free, Plus or Family; lib/plans/catalogue.ts): its question allowance is shown.
+  assert.match(usage, /questionsPerMonth/);
   // Plan usage is reached from the Account settings tabs (Household, People, Plan usage).
   assert.match(read("components/account-tabs.tsx"), /\bhref\s*:\s*(["'`])\/usage\1/);
   assert.match(read("app/household/page.tsx"), /<AccountTabs/);
