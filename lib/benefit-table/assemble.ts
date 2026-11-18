@@ -466,11 +466,13 @@ function headlineSumProblem(b: CheckedBenefit, cover: PersonCover, personCovers:
   // cover's line and every line whose name has all the row's words prints that one sum ("3.1 Critical Illness Benefit":
   // critical, illness). A name two lines with different sums share, or one this cover's line does not carry, stays doubt.
   const rowWords = new Set([...benefitWords(rowHead(b.benefit))].filter((w) => !/^\d+$/.test(w)));
-  // Words naming the basic plan's sum ("50% of the Basic Sum Assured") are not the named line's own sum: no name match. Only
-  // "this Basic Benefit" (the clause's own benefit) may be, and not when another of the policy's lines is named basic or
-  // base, which is the basic plan those words may mean (Critic S1, S8).
+  // The name match stands only for a share of "the Sum Assured" or "the Sum Assured of this (Basic) Benefit". Words naming
+  // another owner of the sum ("the Basic Sum Assured", "of the Policy", "under the Plan", "of the Certificate") may mean
+  // the policy's or basic plan's sum, not the named line's own: no name match. An allow-list: any such word anywhere in the
+  // row's own words, other than "this (Basic) Benefit", stops it (Critic S1, S8 to S12). Nor when another of the policy's
+  // lines is named basic or base, which is the basic plan "this Basic Benefit" may mean.
   const said = `${b.source.excerpt}\n${b.rowText ?? ""}`;
-  const basicPlanWords = /\b(?:basic|base)\b/i.test(said.replace(/\bthis\s+(?:basic|base)\b/gi, " "));
+  const basicPlanWords = /\b(?:basic|base|policy|policies|plans?|certificates?|contracts?)\b/i.test(b.source.excerpt.replace(/\bthis\s+(?:(?:basic|base)\s+)?benefit\b/gi, " "));
   const basicLine = /\b(?:basic|base)\b/i.test(said) && policy.some((x) => x.coverKey !== cover.coverKey && /\b(?:basic|base)\b/i.test(x.cover ?? ""));
   const byName = rowWords.size && !basicPlanWords && !basicLine ? policy.filter((x) => { const w = benefitWords(x.cover ?? ""); return [...rowWords].every((r) => w.has(r)); }) : [];
   const settled = labelled.length ? one(labelled) : one(policy) || byName.some((x) => x.coverKey === cover.coverKey) && one(byName);
