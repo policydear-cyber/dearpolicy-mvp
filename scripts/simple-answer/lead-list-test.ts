@@ -197,6 +197,19 @@ t("a sentence that is not a list of described policies is never cut into fragmen
   }
 });
 
+t("an 'and' inside nested brackets never splits an item; a booklet's own product name never keeps its 'also linked' line (TE #550 N1, N2)", () => {
+  const a = answer("Jun has Osprey Term Plan (life (death) and TPD), Plover Shield (hospital) and Wren Accident Plan (accidents).");
+  listFromBottomLine(a, OPTS);
+  assert.deepEqual(items(a), ["Osprey Term Plan (life (death) and TPD)", "Plover Shield (hospital)", "Wren Accident Plan (accidents)"]);
+  const b = answer("Jun has Osprey Term Plan (life), Plover Shield (hospital) and Wren Accident Plan (accidents). He is also linked to the Information Booklet.");
+  const removed = listFromBottomLine(b, { ...OPTS, products: ["Osprey Term Plan", "Information Booklet", "Plover Shield"] });
+  assert.deepEqual(removed, ["He is also linked to the Information Booklet."]);
+  assert.ok(!JSON.stringify(b).includes("Information Booklet"));
+  const c = answer("Jun has Osprey Term Plan (life), Plover Shield (hospital) and Wren Accident Plan (accidents). He is also linked to the Plover Shield brochure.");
+  listFromBottomLine(c, { ...OPTS, products: ["Plover Shield"] });
+  assert.ok(JSON.stringify(c).includes("Plover Shield brochure"));
+});
+
 console.log(`lead list: ${passed} passed, ${failures.length} failed`);
 for (const f of failures) console.log(`  FAIL ${f}`);
 if (failures.length) process.exit(1);

@@ -61,7 +61,24 @@ function itemsOf(rest: string): string[] {
   }
   parts.push(rest.slice(start));
   // In every part, "and" straight after a closing bracket joins two items ("B (z) and C (w)"; TE #546 F2).
-  return parts.flatMap((p) => p.trim().replace(/^and\s+/i, "").split(/(?<=[)\]])\s+and\s+/)).map((p) => p.trim()).filter(Boolean);
+  return parts.flatMap((p) => splitAfterBracket(p.trim().replace(/^and\s+/i, ""))).map((p) => p.trim()).filter(Boolean);
+}
+
+/** "B (z) and C (w)" -> B (z) | C (w), only at the top level: "Plan (life (death) and TPD)" is one item (TE #550 N1). */
+function splitAfterBracket(part: string): string[] {
+  const out: string[] = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < part.length; i++) {
+    const c = part[i];
+    if (c === "(" || c === "[") depth++;
+    else if ((c === ")" || c === "]") && depth > 0) {
+      depth--;
+      const m = depth === 0 ? /^\s+and\s+/i.exec(part.slice(i + 1)) : null;
+      if (m) { out.push(part.slice(start, i + 1)); start = i + 1 + m[0].length; i = start - 1; }
+    }
+  }
+  out.push(part.slice(start));
+  return out;
 }
 
 /** The parts of a list of names, split at every top-level comma and "and": for telling whether everything an "also
@@ -85,7 +102,8 @@ function namesOf(rest: string): string[] {
  * members. Returns the sentences taken out (the turn's report keeps them). */
 export function listFromBottomLine(answer: Listable, opts: { names: string[]; aboutDocuments?: boolean; products?: string[] }): string[] {
   const removed: string[] = [];
-  const products = (opts.products ?? []).map((p) => p.trim().toLowerCase()).filter((p) => p.length >= 3);
+  // A product whose own name is a document that holds no cover ("Information Booklet") never keeps a sentence (TE #550 N2).
+  const products = (opts.products ?? []).map((p) => p.trim().toLowerCase()).filter((p) => p.length >= 3 && !(NOT_COVER.test(p) && !NAMES_COVER.test(p)));
   const filler = (s: string) => {
     if (opts.aboutDocuments || !ALSO_LINKED.test(s.trim())) return false;
     const named = namesOf(s.trim().replace(/^.*?\blinked\b(?:\s+in\s+DearPolicy)?(?:\s+to\b)?\s*:?\s*/i, "").replace(/[.!]$/, ""));
