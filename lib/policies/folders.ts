@@ -84,7 +84,8 @@ export async function listFolders(accountId: string): Promise<PolicyFolder[]> {
 export function stillComplete(complete: boolean, confirmed: readonly string[] | null | undefined, live: readonly string[]): boolean {
   if (!complete) return false;
   const now = new Set(live.map(String));
-  return now.size > 0 && (confirmed ?? []).every((id) => now.has(String(id)));
+  // Saying yes always records at least one document, so an empty record is never a confirmation.
+  return now.size > 0 && !!confirmed?.length && confirmed.every((id) => now.has(String(id)));
 }
 
 type Tx = { query: (text: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[]; rowCount?: number | null }> };

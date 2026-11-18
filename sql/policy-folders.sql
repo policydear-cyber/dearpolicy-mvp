@@ -57,6 +57,11 @@ CREATE TABLE IF NOT EXISTS policy_folder_documents (
 CREATE INDEX IF NOT EXISTS idx_policy_folder_documents_account ON policy_folder_documents(account_id);
 CREATE INDEX IF NOT EXISTS idx_policy_folder_documents_policy ON policy_folder_documents(policy_id);
 
+-- A folder confirmed before confirmed_documents existed (an earlier draft of this file): what it holds now is what was
+-- confirmed. A database with no such folder changes nothing.
+UPDATE policy_folders f SET confirmed_documents = ARRAY(SELECT fd.policy_id FROM policy_folder_documents fd WHERE fd.folder_id = f.id)
+ WHERE f.complete AND f.confirmed_documents = '{}';
+
 -- A folder's document and person must be its own household's.
 CREATE OR REPLACE FUNCTION policy_folder_same_household() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

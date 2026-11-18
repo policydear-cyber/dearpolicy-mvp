@@ -115,21 +115,27 @@ async function main() {
 
   // An earlier draft of the file (5ebe6cb) made policy_folders with no confirmed_documents: with only that, nothing is
   // ready, so nothing reads the missing column; applying today's file adds it (TE #541 F1).
-  await db.exec(`CREATE TABLE policy_folders (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), account_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-    name text, complete boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE (id, account_id));
-    CREATE TABLE policy_folder_documents (folder_id uuid NOT NULL, account_id uuid NOT NULL, policy_id uuid NOT NULL, PRIMARY KEY (folder_id, policy_id));`);
+  await db.exec(await readFile(path.resolve("scripts/fixtures/policy-folders-5ebe6cb.sql"), "utf8"));
   await test("U1 an earlier draft's tables without the new column: not ready, chat unchanged", async () => {
     folders.resetFoldersReady();
     assert.equal(await folders.foldersReady(), false);
     asUser(ownerA);
     assert.equal((await (await GET(req("/api/policies/folders", "GET", A))).json()).ready, false);
   });
-  await db.exec("DROP TABLE policy_folder_documents");
+  // A folder the draft had confirmed, with one document in it.
+  const draftFolder = id("c9800000", 1);
+  await db.query("INSERT INTO policy_folders(id,account_id,complete) VALUES($1,$2,true)", [draftFolder, A]);
+  await db.query("INSERT INTO policy_folder_documents(folder_id,account_id,policy_id) VALUES($1,$2,$3)", [draftFolder, A, sched]);
   await db.exec(await readFile(path.resolve("sql/policy-folders.sql"), "utf8"));
   await db.exec(await readFile(path.resolve("sql/policy-folders.sql"), "utf8")); // applying it twice is harmless
   folders.resetFoldersReady();
-  await test("U2 applying the file over the earlier draft adds confirmed_documents", async () => {
+  await test("U2 applying the file over the earlier draft adds confirmed_documents, filled from a confirmed folder's documents", async () => {
     assert.equal(await folders.foldersReady(), true);
+    assert.deepEqual((await pool.query("SELECT confirmed_documents FROM policy_folders WHERE id=$1", [draftFolder])).rows[0].confirmed_documents, [sched]);
+    assert.equal((await folders.listFolders(A)).find((f) => f.id === draftFolder)!.complete, true);
+    await pool.query("UPDATE policy_folders SET confirmed_documents='{}' WHERE id=$1", [draftFolder]);
+    assert.equal((await folders.listFolders(A)).find((f) => f.id === draftFolder)!.complete, false, "an empty record is never a confirmation");
+    await pool.query("DELETE FROM policy_folders WHERE id=$1", [draftFolder]);
   });
 
   let janeFolder = "";

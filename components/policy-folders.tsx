@@ -160,7 +160,7 @@ function Folder({ folder, title, allFolders, titleOf, docs, documents, family, n
 
     {canManage && (folder.replacements ?? []).map((r) => { const copy = docs.get(r.by); return copy ? <div className="folder-suggestion" key={r.by} data-testid="folder-replacement">
       <span>{withFile(copy, name)} replaced a document in this policy. Add it here too?</span>
-      <button type="button" className="mini-button" disabled={busy} onClick={() => void patch({ add: [{ policyId: r.by, slot: r.slot }] }, `Added ${name(copy)} to ${title}.`)}>Add it</button>
+      <button type="button" className="mini-button" disabled={busy} aria-label={`Add ${withFile(copy, name)} to this policy`} onClick={() => void patch({ add: [{ policyId: r.by, slot: r.slot }] }, `Added ${name(copy)} to ${title}.`)}>Add it</button>
     </div> : null; })}
 
     {canManage && !folder.complete && folder.documents.length > 0 && !adding && <div className="folder-confirm" data-testid="folder-confirm">
@@ -282,7 +282,7 @@ function AddDocuments({ folder, folders, title, documents, family, name, onCance
   const inFolder = new Set(folder.documents.map((d) => d.policyId));
   return <div className="folder-add" data-testid="folder-add-form" onKeyDown={(e) => { if (e.key === "Escape" && !progress) onCancel(); }}>
     <div className="field"><label htmlFor={`kind-${folder.id}`}>What is it?</label>
-      <select id={`kind-${folder.id}`} value={slot} onChange={(e) => { const s = e.target.value as FolderSlot; choice.setFiles({ schedule: [], wording: [], rider: [], other: [], [s]: SLOTS.flatMap((k) => choice.files[k]) }); setSlot(s); }}>
+      <select id={`kind-${folder.id}`} autoFocus value={slot} onChange={(e) => { const s = e.target.value as FolderSlot; choice.setFiles({ schedule: [], wording: [], rider: [], other: [], [s]: SLOTS.flatMap((k) => choice.files[k]) }); setSlot(s); }}>
         {SLOTS.map((s) => <option key={s} value={s}>{SLOT_LABELS[s]}</option>)}
       </select></div>
     <SlotPicker slot={slot} files={choice.files[slot]} onChange={(f) => choice.setFiles({ ...choice.files, [slot]: f })}/>

@@ -129,7 +129,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
     return {
       id: String(f.id), name: text(f.name), documents,
       // Said complete only while every document it held when the household said yes is still in the library (as the page says).
-      complete: (f.complete === true || f.complete === "true") && documents.length > 0 && confirmed.every((id) => documents.includes(id)),
+      complete: (f.complete === true || f.complete === "true") && documents.length > 0 && confirmed.length > 0 && confirmed.every((id) => documents.includes(id)),
       people: folderPeople.filter((p) => String(p.folder_id) === String(f.id)).map((p) => String(p.display_name)),
     };
   });
