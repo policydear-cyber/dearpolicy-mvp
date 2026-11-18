@@ -16,6 +16,8 @@ import { coversPlanPrompt } from "@/lib/policies/plan-choice";
 import { documentCardTitle } from "@/lib/policies/document-name";
 import { authorityLabel, isOwnDocument, readAsPolicyDocument } from "@/lib/policies/document-filter";
 import { uploadOverrideLine } from "@/lib/policies/upload-override";
+import { PolicyFolders } from "@/components/policy-folders";
+import type { FolderView } from "@/lib/policies/folder-view";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -120,6 +122,13 @@ export default function PoliciesPage() {
   // A ready document is read again only after a second click: it re-runs the reading on the PDF already kept.
   const [confirmRereadId, setConfirmRereadId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
+  /** The policy folders each document is in, by name, for the "In" line on its card (components/policy-folders.tsx). */
+  const [folderNames, setFolderNames] = useState<Record<string, string[]>>({});
+  const onFolders = useCallback((folders: FolderView[], title: (f: FolderView) => string) => {
+    const next: Record<string, string[]> = {};
+    for (const f of folders) for (const d of f.documents) (next[d.policyId] ??= []).push(title(f));
+    setFolderNames(next);
+  }, []);
   const previousActiveCount = useRef(0);
   const fileInput = useRef<HTMLInputElement | null>(null);
   const statusBox = useRef<HTMLDivElement | null>(null);
@@ -429,6 +438,8 @@ export default function PoliciesPage() {
     {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>This usually takes under a minute. This page updates on its own, and you can keep using DearPolicy.</small></div></div>}
 
 
+    {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={refresh} onFolders={onFolders}/>}
+
     <section className="upload-panel">
       {/* On a phone the file comes first, as one large target; who it is for is optional, and a password is asked
           only once a PDF is chosen. What happened shows right under the button, where the thumb just was. */}
@@ -497,6 +508,7 @@ export default function PoliciesPage() {
 
           {/* Whose it is, then what was found in it: the two things a person checks first. */}
           {!processing && policy.personal_coverage_confirmed && !!personalLinks.length && <p className="document-for"><b>For</b> {personalLinks.map((p) => p.name).join(", ")}</p>}
+          {!!folderNames[policy.id]?.length && <p className="document-for" data-testid="document-in-policy"><b>In</b> {folderNames[policy.id].join(", ")}</p>}
 
 
           {(quarantineHeld || scanRejected) && <div className={`accuracy-warning ${scanRejected ? "danger" : ""}`}>

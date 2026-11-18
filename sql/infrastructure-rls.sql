@@ -45,7 +45,8 @@ DECLARE
     'storage_cleanup_locks', 'storage_cleanup_audit_log', 'storage_purge_queue',
     'model_executions', 'model_usage',
     'scan_provider_events', 'processing_failure_diagnostics',
-    'claim_reviewers', 'claim_review_assignments', 'claim_reviewer_audit_log'
+    'claim_reviewers', 'claim_review_assignments', 'claim_reviewer_audit_log',
+    'household_plans', 'household_question_counts'
   ];
 BEGIN
   FOREACH t IN ARRAY infra LOOP
