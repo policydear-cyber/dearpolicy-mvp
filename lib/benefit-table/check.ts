@@ -858,7 +858,7 @@ const CELL_MONEY = String.raw`(?:[A-Z]{1,3}\$\s?|RM\s?|£\s?|€\s?|(?:SGD|USD|M
 /** What may follow the name, each a closed phrase: a printed maximum with its figure, "whichever is lower", "once per
  * lifetime", "payable in one lump sum". Nothing else: "per day", "in instalments", "plus bonuses", "under the rider",
  * "for each child", "of the basic plan", "less any amount already paid", "ditolak ..." all leave the share as read. */
-const CELL_TAIL = String.raw`(?:(?:up\s+to|subject\s+to|to|not\s+exceeding|limited\s+to|capped\s+at)\s+(?:a\s+)?(?:(?:maximum|max\.?)\s+)?(?:amount\s+)?(?:of\s+)?${CELL_MONEY}|(?:maximum|max\.?)\s+(?:of\s+)?${CELL_MONEY}|whichever\s+is\s+(?:lower|less|lesser|smaller)|once\s+(?:per|in\s+a|in\s+the)\s+lifetime|once\s+only|(?:(?:payable|paid)\s+)?(?:in\s+one|as\s+a|in\s+a)\s+lump\s+sum)`;
+const CELL_TAIL = String.raw`(?:(?:up\s+to|subject\s+to|to|not\s+exceeding|limited\s+to|capped\s+at)\s+(?:a\s+)?(?:(?:maximum|max\.?)\s+)?(?:amount\s+)?(?:of\s+)?${CELL_MONEY}|(?:maximum|max\.?)\s+(?:of\s+)?${CELL_MONEY}|whichever\s+is\s+(?:lower|less|lesser|smaller)|once\s+(?:per|in\s+a|in\s+the)\s+lifetime|once\s+only|(?:(?:payable|paid)\s+)?(?:in\s+one(?:\s+\(\s*1\s*\))?|as\s+a|in\s+a)\s+lump\s+sum)`;
 /** The whole cell from the percentage on: "<n>% of <name>", then only closed phrases, each after an optional comma. */
 const HEADLINE_CELL = new RegExp(String.raw`^\d+(?:[.,]\d+)?\s*(?:%|per\s?cent)\s+(?:of|daripada|dari)\s+${HEADLINE_SUM_NAME}(?:\s*,?\s*${CELL_TAIL})*\s*\.?$`, "iu");
 /** Words for one life among several, a second life or a role ("Wife", "Death (Life 2)", "Juvenile", "Isteri"): such a
@@ -888,6 +888,33 @@ export function headlineSumShare(cell: string, value: number, next = "", words =
   // wrapped words), and is read with it.
   const from = all.slice(pcts[0].index!).replace(/\s+/g, " ").trim();
   return HEADLINE_CELL.test(from);
+}
+/** What may follow the headline sum's name in a sentence: "of this Basic Benefit", "of this Policy", "under this Plan" (the
+ * plan the wording is for). A rider's own words ("of this Rider") are not here: assemble.ts settles a "basic" wording only
+ * on the basic plan's cover, and a rider's sum is not this rule's to settle. */
+const OF_THIS_PLAN = String.raw`(?:\s+(?:of|under)\s+(?:this|the)\s+(?:(?:basic|base)\s+)?(?:benefit|plan|policy|certificate))?`;
+/** A sentence that pays a share of the policy's own headline sum, in prose, for a row whose reading left the share's base
+ * unsettled (live re-read 18 Nov: "We will pay one hundred percent (100%) of the Sum Assured of this Basic Benefit in one
+ * (1) lump sum." was read once as of the sum insured and once as of "other", so the same page lost its S$300,000). The
+ * sentence holding the row's one percentage must be, whole, "We/The Company/The Insurer will/shall pay", the share (its
+ * figure may be spelled out before it in words and printed in brackets), "of <the policy's headline sum>", optionally
+ * "of this (Basic) Benefit/Plan/Policy", then only the closed phrases of CELL_TAIL, and its full stop. Like
+ * headlineSumShare, the cell, the line after it and the row's words must name no other life (SHARE_LIFE) and take
+ * nothing off (TAKES_OFF), so "less any amount paid under Early Stage" on the next line leaves the share as read. */
+/** The words a share's figure is spelled out in before its digits ("one hundred percent (100%)"); no other word ("up to",
+ * "a further", "the balance of") may stand between the pay verb and the share. */
+const SPELLED_NUMBER = String.raw`(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|and|point|per\s?cent)`;
+const PROSE_SHARE = new RegExp(String.raw`\b(?:we|the\s+company|the\s+insurer)\s+(?:will|shall)\s+pay\s+(?:${SPELLED_NUMBER}[\s-]+){0,10}\(?\s*(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent)\s*\)?\s+of\s+${HEADLINE_SUM_NAME}${OF_THIS_PLAN}(?:\s*,?\s*${CELL_TAIL})*\s*\.(?:\s|$)`, "iu");
+export function proseHeadlineShare(cell: string, value: number, next = "", words = ""): boolean {
+  const all = cell.normalize("NFKC").replace(/\s+/g, " ");
+  if (SHARE_LIFE.test(`${all}\n${next}\n${words}`) || TAKES_OFF.test(`${all}\n${next}\n${words}`)) return false;
+  const pcts = [...all.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent\b)/gi)];
+  if (pcts.length !== 1 || Math.abs(Number(pcts[0][1].replace(",", ".")) - value) > 0.0001) return false;
+  const m = PROSE_SHARE.exec(all);
+  // The pay verb opens the sentence (nothing but a clause's comma before it), and the matched share is the row's own.
+  if (!m || m.index! > pcts[0].index! || m.index! + m[0].length <= pcts[0].index!) return false;
+  const before = all.slice(0, m.index!).trimEnd();
+  return before === "" || /[.,:;]$/.test(before);
 }
 /** A share's fixed base printed over its own table, for a row whose reading left the base unsettled (live walk 17 Nov:
  * the Product Summary's "Arm, Elbow, Wrist or Ribs<TAB>25%" under "Simple Fracture Benefit Limit: S$5,000" and "(% of
@@ -2208,7 +2235,8 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     const cellOf = () => { const p = placed.get(source); if (!p) return null; const text = pageText(source.page), from = text.lastIndexOf("\n", p.start - 1) + 1, to = lineEndAt(text, p.end);
       return { cell: text.slice(from, to), next: to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "" }; };
     const cell = pays === "percent" && value != null && (percentOf === "other" || percentOf == null) ? cellOf() : null;
-    const baseFromWords = !!cell && headlineSumShare(cell.cell, value!, cell.next, [benefit, str(b.section) ?? "", str(b.column) ?? "", ...(Array.isArray(b.conditions) ? b.conditions.map((c) => str(c) ?? "") : [])].join("\n"));
+    const rowWords = [benefit, str(b.section) ?? "", str(b.column) ?? "", ...(Array.isArray(b.conditions) ? b.conditions.map((c) => str(c) ?? "") : [])].join("\n");
+    const baseFromWords = !!cell && (headlineSumShare(cell.cell, value!, cell.next, rowWords) || proseHeadlineShare(cell.cell, value!, cell.next, rowWords));
     if (baseFromWords) percentOf = "sum_insured";
     let baseAmount: number | null = null, baseSource: Source | null = null;
     if (percentOf === "fixed_amount") {

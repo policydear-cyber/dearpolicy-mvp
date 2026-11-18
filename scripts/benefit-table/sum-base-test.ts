@@ -14,7 +14,7 @@
  *   npm run benefit-table:sum-base-test */
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
-import { checkReading, headlineSumShare } from "@/lib/benefit-table/check";
+import { checkReading, headlineSumShare, proseHeadlineShare } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
 import { capIntroduces, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
@@ -596,6 +596,53 @@ test("R4-H4 control: a bare \"$\" after the cap word in a wrapped cell gives no 
   const line = "Angioplasty and other invasive treatment for 10% of the Sum Covered, up to a maximum of\ncoronary artery $40,000";
   const a = ask(capCase(line, line), AINA, /Angioplasty/);
   assert.deepEqual(a.amounts.filter((t) => /30,000|40,000/.test(t)), [], JSON.stringify(a.amounts));
+});
+
+// ---------- C. A share of the headline sum paid in a provision's sentence ----------
+// Live re-read 18 Nov: "We will pay one hundred percent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum."
+// was read once with its base as the sum insured and once as "other"; the second reading lost the S$300,000.
+const PROSE = "3.1 Critical Illness Benefit\nWhile this Basic Benefit is in force, if the Life Assured is diagnosed with a covered illness listed in Clause 4, We will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.";
+const PROSE_QUOTE = "We will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.";
+test("C: proseHeadlineShare takes a provision that pays a share of the plan's own sum", () => {
+  for (const [cell, pct] of [
+    ["listed in Clause 4, We will pay one hundred percent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.", 100],
+    ["We will pay 25% of the Sum Insured.", 25], ["We shall pay fifty per cent (50%) of the sum assured of this Policy, up to a maximum of S$100,000.", 50],
+    ["On diagnosis, the Company will pay twenty-five percent (25%) of the Sum Covered under this Plan.", 25],
+  ] as const) assert.equal(proseHeadlineShare(cell, pct), true, cell);
+});
+test("C control: a prose share of another sum, with a reduction, an upper bound, another life or another share stays as read", () => {
+  for (const [cell, pct, next] of [
+    ["We will pay 100% of the Sum Assured of this Rider.", 100, ""], ["We will pay 100% of the Sum Assured less any amount paid under Clause 3.2.", 100, ""],
+    ["We will pay 100% of the Sum Assured.", 100, "Any amount paid under the Early Stage benefit will be deducted."],
+    ["We will pay up to 100% of the Sum Assured.", 100, ""], ["We will pay the balance of 75% of the Sum Assured.", 75, ""],
+    ["We will pay 100% of the death sum assured.", 100, ""], ["We will pay 100% of the Sum Assured per insured child.", 100, ""],
+    ["We will pay 100% of the Sum Assured of Life Assured 2.", 100, ""], ["We will pay 100% of the Sum Assured in instalments.", 100, ""],
+    ["We will pay 20% of the Sum Assured, and a further 5% for each year.", 20, ""], ["We will pay 50% of the Sum Assured.", 25, ""],
+    ["If the claim is admitted and we will pay 50% of the Sum Assured.", 50, ""], ["We will pay 100% of the Sum Assured", 100, ""],
+  ] as const) assert.equal(proseHeadlineShare(cell, pct, next), false, cell);
+});
+const CCI_PAGE1 = "Example Life\nCRITICAL ILLNESS PLAN - POLICY SCHEDULE\nLife assured: Lee Wei Ming\tCurrency: Singapore Dollars (S$)\nBenefit\tSum assured\nCritical Illness Plan\tS$300,000";
+const CCI = (benefit: string, percentOf: string | null) => build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+  page1: CCI_PAGE1, page2: `3 BENEFITS\n${PROSE}`, covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+  benefits: [{ section: "3 BENEFITS", benefit, value: 100, percentOf, quote: PROSE_QUOTE }] });
+for (const [benefit, percentOf] of [["3.1 Critical Illness Benefit", "other"], ["Critical Illness Benefit", "other"], ["3.1 Critical Illness Benefit", null], ["3.1 Critical Illness Benefit", "sum_insured"]] as const)
+  test(`C: "${benefit}" read with its base as ${percentOf} is worked out on the schedule's S$300,000`, () => {
+    assert.equal(amountOf(CCI(benefit, percentOf), "Lee Wei Ming", /Critical Illness Benefit/), 300000);
+  });
+test("C control: the same sentence linked to a rider's cover is not worked out on the rider's sum", () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+    page1: `${CCI_PAGE1}\nEarly CI Rider\tS$100,000`, page2: `3 BENEFITS\n${PROSE}`, link: "Early CI Rider",
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }, { cover: "Early CI Rider", sum: 100000, line: "Early CI Rider\tS$100,000", riderOf: "Critical Illness Plan" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  const r = rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+});
+test("C control: the sentence followed by a line that takes earlier payments off stays with no amount", () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+    page1: CCI_PAGE1, page2: `3 BENEFITS\n${PROSE}\nAny amount paid earlier under the Early Stage benefit will be deducted.`, covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
 });
 
 if (failures.length) {
