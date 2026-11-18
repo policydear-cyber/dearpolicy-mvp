@@ -1,6 +1,7 @@
 /** What the Documents page shows for policy folders (components/policy-folders.tsx), worked out from the folders and the
  * documents the page already has. Client-safe: no server imports. */
 import type { FolderSlot } from "@/lib/policies/folders";
+import { insurerShortName, isCodeName } from "@/lib/policies/document-name";
 
 export type FolderView = {
   id: string;
@@ -33,18 +34,40 @@ export const SLOT_HINTS: Record<FolderSlot, string> = {
   other: "Anything else for this policy",
 };
 
-/** A folder's name: the household's own; else its schedule's (or first document's) product and insurer as read; else who
- * it is for. Never a guess from another folder. */
+/** One word that is a system's code, not a name: joined by underscores ("SGGRP_COI_APP"), letters and digits together
+ * ("PW9", "COI2026", "POL.SCHED.V2", an id), or capitals joined by hyphens or dots ("SGGRP-COI-APP"). One-word names a
+ * person reads ("Eldershield", "MINDEF", "Kestrel-Care") are kept. */
+const codeWord = (t: string) => !/\s/.test(t) && (isCodeName(t) || (/\d/.test(t) && /[a-z]/i.test(t)) || /^[A-Z0-9]+(?:[-.][A-Z0-9]+)+$/.test(t));
+/** A product name a person reads: not a system's code or a file name ("SGGRP_COI_APP", "cert_v2.pdf"). */
+const plainName = (name: string | null | undefined) => {
+  const t = name?.trim();
+  return t && !codeWord(t) && !/\.(pdf|jpe?g|png|webp|tiff?|heic|docx?)$/i.test(t) ? t : null;
+};
+
+/** An insurer's short name a person reads ("Osprey Life" from "Osprey Life Pte. Ltd."), or null: never a code, a file
+ * name, or only a legal suffix ("Pte. Ltd.", which insurerShortName gives back whole when nothing else is left). */
+const plainInsurer = (insurer: string | null | undefined) => {
+  if (!insurer?.trim() || /^(?:[\s,.&()]*(?:pte|pty|private|pvt|sdn|ltd|limited|berhad|bhd|plc|inc|llc|co|company)\b)+[\s,.&()]*$/i.test(insurer)) return null;
+  return plainName(insurerShortName(insurer));
+};
+
+/** A folder's name: the household's own; else the insurer's plain product name from any document in it, the schedule's
+ * first ("Singapore Life MINDEF & MHA Group Insurance", never "SGGRP_COI_APP"); else who it is for. Never a code, a file
+ * name, or a guess from another folder. */
 export function folderTitle(folder: FolderView, docs: Map<string, FolderDoc>): string {
   if (folder.name) return folder.name;
   const inIt = folder.documents.map((d) => ({ slot: d.slot, doc: docs.get(d.policyId) })).filter((d): d is { slot: FolderSlot | null; doc: FolderDoc } => !!d.doc);
-  const named = [...inIt.filter((d) => d.slot === "schedule"), ...inIt].find((d) => d.doc.product_name?.trim());
+  const named = [...inIt.filter((d) => d.slot === "schedule"), ...inIt].find((d) => plainName(d.doc.product_name));
   if (named) {
-    const product = named.doc.product_name!.trim(), insurer = named.doc.insurer?.trim();
+    const product = plainName(named.doc.product_name)!;
+    const insurer = plainInsurer(named.doc.insurer);
     return insurer && !product.toLowerCase().includes(insurer.toLowerCase()) ? `${insurer} ${product}` : product;
   }
+  // No plain product name: the insurer, when one was read, tells two such policies apart ("Osprey Life policy for Jane").
+  const insurer = [...inIt.filter((d) => d.slot === "schedule"), ...inIt].map((d) => plainInsurer(d.doc.insurer)).find(Boolean);
   const people = folder.people.map((p) => p.name);
-  return people.length ? `Policy for ${people.length <= 2 ? people.join(" and ") : `${people.slice(0, -1).join(", ")} and ${people.at(-1)}`}` : "Policy";
+  const whose = people.length ? ` for ${people.length <= 2 ? people.join(" and ") : `${people.slice(0, -1).join(", ")} and ${people.at(-1)}`}` : "";
+  return insurer ? `${insurer} policy${whose}` : `Policy${whose}`;
 }
 
 const numberKey = (n: string | null) => (n ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
