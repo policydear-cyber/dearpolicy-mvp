@@ -13,6 +13,7 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { BillingInterval, PlanId } from "@/lib/plans/catalogue";
 
 type PaidPlan = Exclude<PlanId, "free">;
@@ -198,7 +199,7 @@ export function planWriteFor(config: BillingConfig, subscription: StripeSubscrip
 export async function savePlan(write: PlanWrite): Promise<void> {
   await query(
     `INSERT INTO household_plans(account_id,plan,status,billing_interval,stripe_customer_id,stripe_subscription_id,current_period_end,stripe_event_created,updated_at)
-     SELECT $1,$2,$3,$4,$5,$6,$7,$8,now() WHERE EXISTS (SELECT 1 FROM accounts WHERE id=$1)
+     SELECT $1,$2,$3,$4,$5,$6,$7,$8,now() WHERE EXISTS (SELECT 1 FROM accounts WHERE id=$1 AND ${activePredicate()})
      ON CONFLICT (account_id) DO UPDATE SET plan=excluded.plan,status=excluded.status,billing_interval=excluded.billing_interval,
        stripe_customer_id=excluded.stripe_customer_id,stripe_subscription_id=excluded.stripe_subscription_id,
        current_period_end=excluded.current_period_end,stripe_event_created=excluded.stripe_event_created,updated_at=now()
