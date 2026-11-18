@@ -37,7 +37,7 @@ test("T6 only codes or file names as products: never shown; who it is for instea
 });
 test("T8 one-word codes without underscores are never a name; one-word plain names are", () => {
   for (const code of ["SGGRP-COI-APP", "PW9", "ABC123", "COI2026", "POL.SCHED.V2", "817d6e8b-874f-4527-9a3c-1f2e3d4c5b6a"])
-    assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: code, insurer: "Example Life" })])), "Policy for Jane Doe", code);
+    assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: code, insurer: "Example Life Ltd" })])), "Example Life policy for Jane Doe", code);
   for (const name of ["Eldershield", "MINDEF", "Kestrel-Care", "CareShield"])
     assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: name })])), name, name);
 });
@@ -46,6 +46,12 @@ test("T7 the insurer's legal suffix is dropped, and not repeated when the produc
   assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: "Example Life Shield", insurer: "Example Life Ltd" })])), "Example Life Shield");
 });
 
+test("T9 no plain product name: the insurer read from the folder's documents tells two policies apart", () => {
+  const docs = [d("a", { product_name: "PW9", insurer: "Osprey Life Pte. Ltd." }), d("b", { product_name: "COI2026", insurer: "Plover Insurance" })];
+  assert.equal(folderTitle(f({ documents: [{ policyId: "a", slot: "schedule" }] }), map(docs)), "Osprey Life policy for Jane Doe");
+  assert.equal(folderTitle(f({ documents: [{ policyId: "b", slot: null }] }), map(docs)), "Plover Insurance policy for Jane Doe");
+  assert.equal(folderTitle(f({ people: [], documents: [{ policyId: "b", slot: null }] }), map(docs)), "Plover Insurance policy");
+});
 test("S1 two documents with the same number (spaces and dashes aside), both Jane's: suggested for Jane", () => {
   const s = folderSuggestions([d("a", { policy_number: "AB-123 456" }), d("b", { policy_number: "ab123456" }), d("c")], []);
   assert.deepEqual(s, [{ policyNumber: "AB-123 456", policyIds: ["a", "b"], personIds: ["jane"] }]);

@@ -56,8 +56,11 @@ export function folderTitle(folder: FolderView, docs: Map<string, FolderDoc>): s
     const insurer = named.doc.insurer?.trim() ? insurerShortName(named.doc.insurer) : "";
     return insurer && !product.toLowerCase().includes(insurer.toLowerCase()) ? `${insurer} ${product}` : product;
   }
+  // No plain product name: the insurer, when one was read, tells two such policies apart ("Osprey Life policy for Jane").
+  const insurer = [...inIt.filter((d) => d.slot === "schedule"), ...inIt].map((d) => plainName(d.doc.insurer ? insurerShortName(d.doc.insurer) : null)).find(Boolean);
   const people = folder.people.map((p) => p.name);
-  return people.length ? `Policy for ${people.length <= 2 ? people.join(" and ") : `${people.slice(0, -1).join(", ")} and ${people.at(-1)}`}` : "Policy";
+  const whose = people.length ? ` for ${people.length <= 2 ? people.join(" and ") : `${people.slice(0, -1).join(", ")} and ${people.at(-1)}`}` : "";
+  return insurer ? `${insurer} policy${whose}` : `Policy${whose}`;
 }
 
 const numberKey = (n: string | null) => (n ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
