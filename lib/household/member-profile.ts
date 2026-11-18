@@ -44,14 +44,6 @@ export function profileGaps(m: { relationship?: string | null; date_of_birth?: s
   return gaps;
 }
 
-/** Why each detail is asked, one short clause each, for the line that asks a household to complete a profile. */
-export const PROFILE_GAP_WHY: Record<string, string> = {
-  "relationship": "the relationship tells who \u201cmy wife\u201d or \u201cmy son\u201d is",
-  "date of birth": "a date of birth tells adult cover from child cover",
-  "sex": "sex tells \u201cmy son\u201d from \u201cmy daughter\u201d",
-  "preferred name": "the preferred name is what you call them when you ask DearPolicy",
-};
-
 /** The id suffix of the Family page field for a gap, so "Add now" can put the cursor in the first one missing. */
 export const PROFILE_GAP_FIELD: Record<string, string> = { "relationship": "relationship", "date of birth": "dob", "sex": "sex", "preferred name": "preferred" };
 

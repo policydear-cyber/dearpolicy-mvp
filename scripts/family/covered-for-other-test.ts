@@ -70,12 +70,12 @@ async function main() {
   });
 
   const read = (p: string) => readFileSync(path.join(process.cwd(), p), "utf8");
-  await test("S1 Family renders through namedCoverKinds, never joins the raw kinds", () => {
+  await test("S1 Family lists no kinds of cover at all (kept simple, DC 18 Nov 2026), so it can never show \"Other\"", () => {
+    // Was: Family renders through namedCoverKinds. The cover line was removed from Family cards; each name links to
+    // the person's cover page instead. Changed in the PR that removed it, not to make a candidate green.
     const src = read("app/family/page.tsx");
-    assert.match(src, /namedCoverKinds\(kinds\[member\.id\]/);
-    assert.ok(!/kinds\[member\.id\]\.join/.test(src), "Family must not join the raw kinds (that showed \"Other\")");
-    assert.match(src, /but not yet what kind of cover it is/);
-    assert.match(src, /unknownToConfirm \? <p[^>]*><b>Possible cover<\/b> for \{name\}, still to confirm/);
+    assert.ok(!/Covered for|kinds\[member\.id\]/.test(src), "Family cards show no cover kinds");
+    assert.match(src, /href=\{`\/ledger\?member=\$\{member\.id\}`\}/);
   });
   await test("S2 Documents says the same words for a document (Family matches it)", () => {
     const src = read("app/policies/page.tsx");
