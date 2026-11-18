@@ -17,6 +17,9 @@ export type PolicyFolder = {
   people: { id: string; name: string }[];
   /** Its documents that are still in the library, in the order they were added. */
   documents: { policyId: string; slot: FolderSlot | null }[];
+  /** A document in it that a newer copy replaced, with that copy (not in the folder): offered as "Add it", never added
+   * on its own. */
+  replacements: { policyId: string; slot: FolderSlot | null; by: string }[];
   createdAt: string;
 };
 export type FolderDocumentInput = { policyId: string; slot?: FolderSlot | null };
@@ -27,8 +30,11 @@ export class FolderInputError extends Error {}
 
 let ready: Promise<boolean> | null = null;
 export function foldersReady(): Promise<boolean> {
-  ready ??= query<{ t: string | null }>("SELECT to_regclass('public.policy_folder_documents')::text AS t")
-    .then((r) => !!r.rows[0]?.t).catch(() => false)
+  // The tables and the newest column: a database with an earlier draft's tables and no confirmed_documents is not ready,
+  // so nothing reads a column that is missing (TE #541 F1).
+  ready ??= query<{ t: string | null; c: boolean }>(`SELECT to_regclass('public.policy_folder_documents')::text AS t,
+      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='policy_folders' AND column_name='confirmed_documents') AS c`)
+    .then((r) => !!r.rows[0]?.t && r.rows[0]?.c === true).catch(() => false)
     // Only a present table is remembered, so applying the file needs no restart.
     .then((ok) => { if (!ok) ready = null; return ok; });
   return ready;
@@ -53,7 +59,15 @@ export async function listFolders(accountId: string): Promise<PolicyFolder[]> {
          JOIN policies p ON p.id=fd.policy_id AND p.account_id=fd.account_id AND p.lifecycle_state='active' AND p.superseded_at IS NULL
         WHERE fd.account_id=$1 AND fd.folder_id = ANY($2::uuid[]) ORDER BY fd.created_at, fd.policy_id`, [accountId, ids]),
   ]);
-  for (const row of [...folders.rows, ...people.rows, ...documents.rows])
+  // Documents in a folder that a newer copy has replaced since, with that copy when it is in the library.
+  const replaced = await query<{ folder_id: string; account_id: string; policy_id: string; slot: FolderSlot | null; by: string }>(
+    `SELECT fd.folder_id, fd.account_id, fd.policy_id, fd.slot, n.id AS by FROM policy_folder_documents fd
+       JOIN policies p ON p.id=fd.policy_id AND p.account_id=fd.account_id AND p.lifecycle_state='active' AND p.superseded_at IS NOT NULL
+       JOIN policies n ON n.supersedes_id=p.id AND n.account_id=fd.account_id AND n.lifecycle_state='active' AND n.superseded_at IS NULL
+      WHERE fd.account_id=$1 AND fd.folder_id = ANY($2::uuid[])
+        AND NOT EXISTS (SELECT 1 FROM policy_folder_documents x WHERE x.folder_id=fd.folder_id AND x.policy_id=n.id)
+      ORDER BY fd.created_at, fd.policy_id`, [accountId, ids]);
+  for (const row of [...folders.rows, ...people.rows, ...documents.rows, ...replaced.rows])
     if (String(row.account_id) !== accountId) throw new Error("A folder row from another household was returned");
   return folders.rows.map((f) => ({
     id: f.id, name: f.name,
@@ -61,6 +75,7 @@ export async function listFolders(accountId: string): Promise<PolicyFolder[]> {
     createdAt: f.created_at instanceof Date ? f.created_at.toISOString() : String(f.created_at),
     people: people.rows.filter((p) => p.folder_id === f.id).map((p) => ({ id: p.id, name: p.name })),
     documents: documents.rows.filter((d) => d.folder_id === f.id).map((d) => ({ policyId: d.policy_id, slot: d.slot })),
+    replacements: replaced.rows.filter((d) => d.folder_id === f.id).map((d) => ({ policyId: d.policy_id, slot: d.slot, by: d.by })),
   }));
 }
 

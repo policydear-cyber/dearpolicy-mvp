@@ -143,6 +143,7 @@ function Folder({ folder, title, allFolders, titleOf, docs, documents, family, n
     finally { setBusy(false); setArmed(null); }
   };
   const forWhom = folder.people.map((p) => p.name).join(", ");
+  const docName = (id: string) => { const d = docs.get(id); return d ? withFile(d, name) : "this document"; };
   return <div className={`document-card policy-folder${folder.complete ? "" : " unfinished"}`} data-testid="policy-folder" data-folder-id={folder.id}>
     <div className="document-head">
       <div className="policy-logo"><Icon name="folder"/></div>
@@ -153,9 +154,14 @@ function Folder({ folder, title, allFolders, titleOf, docs, documents, family, n
       <span className="folder-doc-kind">{kindLabel(d.slot, docs.get(d.policyId))}</span>
       <span className="folder-doc-name"><DocLine doc={docs.get(d.policyId)} name={name}/></span>
       {canManage && (armed === d.policyId
-        ? <span className="folder-doc-actions"><button type="button" className="mini-button danger" disabled={busy} onClick={() => void patch({ remove: [d.policyId] }, `Removed it from ${title}. It is still on file.`)}>Remove from this policy</button><button type="button" className="mini-button" onClick={() => setArmed(null)}>Keep</button></span>
-        : <button type="button" className="mini-button" disabled={busy} onClick={() => setArmed(d.policyId)}>Remove</button>)}
+        ? <span className="folder-doc-actions"><button type="button" className="mini-button danger" disabled={busy} autoFocus aria-label={`Remove ${docName(d.policyId)} from this policy`} onClick={() => void patch({ remove: [d.policyId] }, `Removed it from ${title}. It is still on file.`)}>Remove from this policy</button><button type="button" className="mini-button" onClick={() => setArmed(null)}>Keep</button></span>
+        : <button type="button" className="mini-button" disabled={busy} aria-label={`Remove ${docName(d.policyId)}`} onClick={() => setArmed(d.policyId)}>Remove</button>)}
     </li>)}</ul> : <p className="muted" data-testid="folder-empty">No documents in it yet.</p>}
+
+    {canManage && (folder.replacements ?? []).map((r) => { const copy = docs.get(r.by); return copy ? <div className="folder-suggestion" key={r.by} data-testid="folder-replacement">
+      <span>{withFile(copy, name)} replaced a document in this policy. Add it here too?</span>
+      <button type="button" className="mini-button" disabled={busy} onClick={() => void patch({ add: [{ policyId: r.by, slot: r.slot }] }, `Added ${name(copy)} to ${title}.`)}>Add it</button>
+    </div> : null; })}
 
     {canManage && !folder.complete && folder.documents.length > 0 && !adding && <div className="folder-confirm" data-testid="folder-confirm">
       <span>Are these all the documents for this policy?</span>
@@ -169,7 +175,7 @@ function Folder({ folder, title, allFolders, titleOf, docs, documents, family, n
     {canManage && !adding && <div className="folder-actions">
       <button type="button" className="mini-button" disabled={busy} onClick={() => setAdding(true)} data-testid="folder-add"><Icon name="plus"/> Add a document</button>
       {armed === "__folder"
-        ? <><button type="button" className="mini-button danger" disabled={busy} onClick={() => void remove()}>Delete folder, keep documents</button><button type="button" className="mini-button" onClick={() => setArmed(null)}>Keep</button></>
+        ? <><button type="button" className="mini-button danger" disabled={busy} autoFocus onClick={() => void remove()}>Delete folder, keep documents</button><button type="button" className="mini-button" onClick={() => setArmed(null)}>Keep</button></>
         : <button type="button" className="mini-button" disabled={busy} onClick={() => setArmed("__folder")}>Delete folder</button>}
     </div>}
   </div>;
@@ -232,8 +238,8 @@ function CreatePolicy({ family, documents, name, folders, title, initial, onCanc
     }
   }
 
-  return <div className="upload-panel folder-create" data-testid="create-policy-form">
-    <h3>Create a policy</h3>
+  return <div className="upload-panel folder-create" data-testid="create-policy-form" onKeyDown={(e) => { if (e.key === "Escape" && !busy) onCancel(); }}>
+    <h3 tabIndex={-1} ref={(h) => { if (h && !h.dataset.focused) { h.dataset.focused = "1"; h.focus(); } }}>Create a policy</h3>
     <fieldset className="field" aria-describedby={errors.people ? "folder-people-error" : undefined}>
       <legend>Who is this policy for?</legend>
       {family.map((m) => <label key={m.id} className="folder-check"><input type="checkbox" checked={people.includes(m.id)} onChange={(e) => setPeople(e.target.checked ? [...people, m.id] : people.filter((x) => x !== m.id))}/><span>{m.display_name}</span></label>)}
@@ -274,7 +280,7 @@ function AddDocuments({ folder, folders, title, documents, family, name, onCance
     }
   }
   const inFolder = new Set(folder.documents.map((d) => d.policyId));
-  return <div className="folder-add" data-testid="folder-add-form">
+  return <div className="folder-add" data-testid="folder-add-form" onKeyDown={(e) => { if (e.key === "Escape" && !progress) onCancel(); }}>
     <div className="field"><label htmlFor={`kind-${folder.id}`}>What is it?</label>
       <select id={`kind-${folder.id}`} value={slot} onChange={(e) => { const s = e.target.value as FolderSlot; choice.setFiles({ schedule: [], wording: [], rider: [], other: [], [s]: SLOTS.flatMap((k) => choice.files[k]) }); setSlot(s); }}>
         {SLOTS.map((s) => <option key={s} value={s}>{SLOT_LABELS[s]}</option>)}

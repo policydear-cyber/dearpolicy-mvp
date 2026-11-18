@@ -1874,7 +1874,7 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 .policy-folders { display: grid; gap: 12px; }
 .folder-list { display: grid; gap: 12px; }
 .policy-folder .policy-logo { display: grid; place-items: center; }
-.policy-folder .status { text-transform: none; }
+.policy-folder .status { text-transform: none; white-space: nowrap; }
 .policy-folder .status.partial { background: var(--warn-tint); color: var(--warn-text); }
 .folder-docs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .folder-docs li { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 8px 10px; background: var(--surface-2); border-radius: var(--r-sm); }

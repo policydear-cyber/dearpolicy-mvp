@@ -113,9 +113,24 @@ async function main() {
     assert.ok(!/<policies/.test(renderLibrary(h)));
   });
 
+  // An earlier draft of the file (5ebe6cb) made policy_folders with no confirmed_documents: with only that, nothing is
+  // ready, so nothing reads the missing column; applying today's file adds it (TE #541 F1).
+  await db.exec(`CREATE TABLE policy_folders (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), account_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    name text, complete boolean NOT NULL DEFAULT false, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE (id, account_id));
+    CREATE TABLE policy_folder_documents (folder_id uuid NOT NULL, account_id uuid NOT NULL, policy_id uuid NOT NULL, PRIMARY KEY (folder_id, policy_id));`);
+  await test("U1 an earlier draft's tables without the new column: not ready, chat unchanged", async () => {
+    folders.resetFoldersReady();
+    assert.equal(await folders.foldersReady(), false);
+    asUser(ownerA);
+    assert.equal((await (await GET(req("/api/policies/folders", "GET", A))).json()).ready, false);
+  });
+  await db.exec("DROP TABLE policy_folder_documents");
   await db.exec(await readFile(path.resolve("sql/policy-folders.sql"), "utf8"));
   await db.exec(await readFile(path.resolve("sql/policy-folders.sql"), "utf8")); // applying it twice is harmless
   folders.resetFoldersReady();
+  await test("U2 applying the file over the earlier draft adds confirmed_documents", async () => {
+    assert.equal(await folders.foldersReady(), true);
+  });
 
   let janeFolder = "";
   await test("C1 the owner creates a policy for Jane with its schedule and wording, not yet complete", async () => {
@@ -252,6 +267,26 @@ async function main() {
     assert.equal((await item.PATCH(req(`/api/policies/folders/${janeFolder}`, "PATCH", A, { complete: true }), params(janeFolder))).status, 200);
     assert.equal((await folders.listFolders(A))[0].complete, true);
     assert.equal((await household(A)).folders![0].complete, true);
+  });
+  await test("D1c a document replaced by a newer copy: the copy is offered for the folder, not added on its own; Add it", async () => {
+    asUser(ownerA);
+    const old = id("f9800000", 10), copy = id("f9800000", 11);
+    await doc(old, A, jane, "Schedule 2025.pdf");
+    const res = await POST(req("/api/policies/folders", "POST", A, { people: [jane], documents: [{ policyId: old, slot: "schedule" }], complete: true }));
+    const fid = (await res.json()).id;
+    await doc(copy, A, jane, "Schedule 2026.pdf");
+    await pool.query("UPDATE policies SET supersedes_id=$1 WHERE id=$2", [old, copy]);
+    await pool.query("UPDATE policies SET superseded_at=now() WHERE id=$1", [old]);
+    let f = (await folders.listFolders(A)).find((x) => x.id === fid)!;
+    assert.deepEqual(f.documents, []);
+    assert.equal(f.complete, false);
+    assert.deepEqual(f.replacements, [{ policyId: old, slot: "schedule", by: copy }]);
+    assert.deepEqual((await household(A)).folders!.find((x) => x.id === fid)!.documents, [], "chat does not join the copy before the household adds it");
+    assert.equal((await item.PATCH(req(`/api/policies/folders/${fid}`, "PATCH", A, { add: [{ policyId: copy, slot: "schedule" }] }), params(fid))).status, 200);
+    f = (await folders.listFolders(A)).find((x) => x.id === fid)!;
+    assert.deepEqual(f.documents, [{ policyId: copy, slot: "schedule" }]);
+    assert.deepEqual(f.replacements, []);
+    await item.DELETE(req(`/api/policies/folders/${fid}`, "DELETE", A), params(fid));
   });
   await test("D1b a confirmed folder whose document is permanently removed (its row gone) reads as not complete", async () => {
     asUser(ownerA);

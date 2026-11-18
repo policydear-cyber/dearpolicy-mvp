@@ -8,6 +8,8 @@ export type FolderView = {
   complete: boolean;
   people: { id: string; name: string }[];
   documents: { policyId: string; slot: FolderSlot | null }[];
+  /** Documents a newer copy replaced, with that copy, offered as "Add it" (lib/policies/folders.ts). */
+  replacements?: { policyId: string; slot: FolderSlot | null; by: string }[];
 };
 export type FolderDoc = {
   id: string;
