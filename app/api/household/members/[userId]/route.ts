@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireRecentAuthentication } from "@/lib/auth/session";
 import { removeMember, setMemberRole, type Role } from "@/lib/household/repo";
 import { requestHouseholdLeave, requestHouseholdMemberRemoval } from "@/lib/lifecycle/coordinator";
 import { isUuid } from "@/lib/db/client";
@@ -31,6 +32,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!isRole(body.role)) {
       return NextResponse.json({ error: "role must be \"owner\" or \"member\"." }, { status: 400 });
     }
+    // Handing over the household gives away delete and export, and the old owner can't take it back: like deleting
+    // the household, it needs a recently confirmed sign-in (Critic #538 MED1).
+    if (body.role === "owner") requireRecentAuthentication(ctx.user);
     await setMemberRole(ctx.userId, ctx.householdId, targetUserId, body.role);
     return NextResponse.json({ ok: true });
   } catch (error) {

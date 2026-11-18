@@ -51,6 +51,9 @@ const SQL_FILES = [
   "sql/lifecycle.sql",
   "sql/household-rls.sql",
   "sql/household-single-owner.sql",
+  // Whose document it is (a person taken off it, a printed name that isn't family): owner-only writes too.
+  "sql/policy-member-exclusions.sql",
+  "sql/detected-name-dismissals.sql",
 ];
 
 const uuid = (n: number) => `20000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -241,6 +244,18 @@ async function main() {
       [householdA],
     );
     assert.equal(docDeleted.affectedRows ?? 0, 0, "a member must not be able to delete a document");
+    await expectRejected(
+      db,
+      () => db.query("INSERT INTO policy_member_exclusions(policy_id, family_member_id, account_id) VALUES ($1,$2,$3)", [policyA, familyA, householdA]),
+      /row-level security/i,
+      "a member must not be able to take a person off a document",
+    );
+    await expectRejected(
+      db,
+      () => db.query("INSERT INTO policy_name_dismissals(policy_id, account_id, name_key, detected_name) VALUES ($1,$2,'tan mei ling','Tan Mei Ling')", [policyA, householdA]),
+      /row-level security/i,
+      "a member must not be able to mark a printed name as not family",
+    );
     // Ask writes through the server connection; the chat tables' policies still let a member's own session write them.
     const asked = await db.query("UPDATE chat_messages SET content = content WHERE account_id = $1", [householdA]);
     assert.equal(asked.affectedRows, 1, "a member must still be able to use Ask (chat tables stay writable)");
@@ -255,6 +270,8 @@ async function main() {
       [householdA],
     );
     assert.equal(docDeleted.affectedRows, 1, "the owner must be able to delete a document");
+    const excluded = await db.query("INSERT INTO policy_member_exclusions(policy_id, family_member_id, account_id) VALUES ($1,$2,$3)", [policyA, familyA, householdA]);
+    assert.equal(excluded.affectedRows, 1, "the owner must be able to take a person off a document");
   });
 
   // --- Exactly one owner (sql/household-single-owner.sql) -----------------

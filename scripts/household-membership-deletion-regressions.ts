@@ -44,7 +44,7 @@ import { setTelemetryAdapter } from "@/lib/telemetry";
 import { NoopTelemetryAdapter } from "@/lib/telemetry/adapters";
 import { ACTIVE_HOUSEHOLD_COOKIE } from "@/lib/auth/request-context";
 
-const SQL_FILES = ["sql/schema.sql", "sql/household-rls.sql", "sql/lifecycle.sql"];
+const SQL_FILES = ["sql/schema.sql", "sql/household-rls.sql", "sql/lifecycle.sql", "sql/household-single-owner.sql"];
 
 let cases = 0;
 async function testAsync(name: string, fn: () => Promise<void>) {
@@ -120,7 +120,7 @@ async function main() {
   }) as typeof pool.connect;
 
   try {
-    const { DELETE: deleteMember } = await import("@/app/api/household/members/[userId]/route");
+    const { DELETE: deleteMember, PATCH: patchMember } = await import("@/app/api/household/members/[userId]/route");
     const { GET: getMembers } = await import("@/app/api/household/members/route");
 
     await testAsync("DELETE /api/household/members/[userId]: owner removes another member -- real removal, membership row really gone", async () => {
@@ -205,6 +205,59 @@ async function main() {
 
       const row = await pool.query(`SELECT 1 FROM household_members WHERE household_id=$1 AND user_id=$2`, [householdId, memberY]);
       assert.equal(row.rows.length, 1);
+    });
+
+    // --- One owner per household: ownership moves only by transfer ---------
+    const patchRole = (household: string, target: string, role: string) => {
+      const req = new NextRequest(`http://localhost/api/household/members/${target}`, {
+        method: "PATCH",
+        headers: { cookie: `${ACTIVE_HOUSEHOLD_COOKIE}=${household}`, "content-type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      return patchMember(req, { params: Promise.resolve({ userId: target }) } as any);
+    };
+    const roles = async (household: string) =>
+      Object.fromEntries((await pool.query<{ user_id: string; role: string }>(`SELECT user_id, role FROM household_members WHERE household_id=$1`, [household])).rows.map((r) => [r.user_id, r.role]));
+
+    await testAsync("PATCH /api/household/members/[userId] {role:owner}: the owner hands the household over and becomes a member (exactly one owner after)", async () => {
+      const householdId = await seedHousehold("Household Transfer");
+      const owner = "f1000000-0000-4000-8000-000000000001", member = "f1000000-0000-4000-8000-000000000002";
+      await addMember(householdId, owner, "owner");
+      await addMember(householdId, member, "member");
+      asUser(owner);
+      const res = await patchRole(householdId, member, "owner");
+      assert.equal(res.status, 200);
+      assert.deepEqual(await roles(householdId), { [owner]: "member", [member]: "owner" });
+      // The old owner is now a member: handing it on again is refused.
+      const again = await patchRole(householdId, owner, "owner");
+      assert.equal(again.status, 403, "a member can't take or give ownership");
+      assert.deepEqual(await roles(householdId), { [owner]: "member", [member]: "owner" });
+    });
+
+    await testAsync("PATCH transfer needs a recently confirmed sign-in (Critic #538 MED1): a stale session is refused and nothing changes", async () => {
+      const householdId = await seedHousehold("Household Stale Transfer");
+      const owner = "f1000000-0000-4000-8000-000000000003", member = "f1000000-0000-4000-8000-000000000004";
+      await addMember(householdId, owner, "owner");
+      await addMember(householdId, member, "member");
+      asUser(owner);
+      process.env.DEV_LAST_SIGN_IN_AT = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+      try {
+        const res = await patchRole(householdId, member, "owner");
+        assert.equal(res.status, 401);
+      } finally {
+        delete process.env.DEV_LAST_SIGN_IN_AT;
+      }
+      assert.deepEqual(await roles(householdId), { [owner]: "owner", [member]: "member" });
+    });
+
+    await testAsync("PATCH {role:member} on the only owner is refused: the owner steps down only by naming a new owner", async () => {
+      const householdId = await seedHousehold("Household Step Down");
+      const owner = "f1000000-0000-4000-8000-000000000005";
+      await addMember(householdId, owner, "owner");
+      asUser(owner);
+      const res = await patchRole(householdId, owner, "member");
+      assert.equal(res.status, 409);
+      assert.deepEqual(await roles(householdId), { [owner]: "owner" });
     });
 
     await testAsync("a removed member is excluded from GET /api/household/members (the real downstream roster-read path) immediately", async () => {

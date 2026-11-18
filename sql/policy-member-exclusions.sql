@@ -7,7 +7,7 @@
 -- ticking the person again deletes the record.
 --
 -- Additive only: one new table, nothing existing is changed or dropped.
--- Requires sql/schema.sql and sql/household-rls.sql (is_household_member).
+-- Requires sql/schema.sql and sql/household-rls.sql (is_household_member, is_household_owner). Writes are the owner's: one owner per household (sql/household-single-owner.sql).
 -- Code deployed before this file is applied keeps working without it (every
 -- reader checks to_regclass first). Rollback: DROP TABLE policy_member_exclusions;
 -- (removals made since are then forgotten, as before this file).
@@ -30,12 +30,12 @@ DROP POLICY IF EXISTS household_member_update ON public.policy_member_exclusions
 DROP POLICY IF EXISTS household_member_delete ON public.policy_member_exclusions;
 CREATE POLICY household_member_select ON public.policy_member_exclusions FOR SELECT TO authenticated USING (is_household_member(account_id));
 -- A row may only name a document and a person of its own household.
-CREATE POLICY household_member_insert ON public.policy_member_exclusions FOR INSERT TO authenticated WITH CHECK (is_household_member(account_id)
+CREATE POLICY household_member_insert ON public.policy_member_exclusions FOR INSERT TO authenticated WITH CHECK (is_household_owner(account_id)
   AND EXISTS (SELECT 1 FROM public.policies p WHERE p.id = policy_member_exclusions.policy_id AND p.account_id = policy_member_exclusions.account_id)
   AND EXISTS (SELECT 1 FROM public.family_members f WHERE f.id = policy_member_exclusions.family_member_id AND f.account_id = policy_member_exclusions.account_id));
-CREATE POLICY household_member_update ON public.policy_member_exclusions FOR UPDATE TO authenticated USING (is_household_member(account_id)) WITH CHECK (is_household_member(account_id)
+CREATE POLICY household_member_update ON public.policy_member_exclusions FOR UPDATE TO authenticated USING (is_household_owner(account_id)) WITH CHECK (is_household_owner(account_id)
   AND EXISTS (SELECT 1 FROM public.policies p WHERE p.id = policy_member_exclusions.policy_id AND p.account_id = policy_member_exclusions.account_id)
   AND EXISTS (SELECT 1 FROM public.family_members f WHERE f.id = policy_member_exclusions.family_member_id AND f.account_id = policy_member_exclusions.account_id));
-CREATE POLICY household_member_delete ON public.policy_member_exclusions FOR DELETE TO authenticated USING (is_household_member(account_id));
+CREATE POLICY household_member_delete ON public.policy_member_exclusions FOR DELETE TO authenticated USING (is_household_owner(account_id));
 REVOKE ALL ON public.policy_member_exclusions FROM anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.policy_member_exclusions TO authenticated;
