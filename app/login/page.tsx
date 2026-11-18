@@ -14,7 +14,15 @@ const LINK_ERRORS: Record<string, string> = {
   invalid_credentials: "Incorrect email or password.",
   missing_credentials: "Enter your email and password.",
   confirm_email: "Check your email. We sent you a link to confirm your address. Opening it signs you in.",
+  other_browser: "That link opened in a different browser from the one you used here, so it could not sign you in. Sign in again in the browser you signed up in, and open the new link we email you there.",
+  different_account: "That link was for a different account, so we signed you out. Sign in to the account you want to use.",
   invite_only: "DearPolicy is open by invitation only at the moment. If you were invited, use the email address the invitation was sent to.",
+};
+
+/** Good news shown above the form. email_confirmed: the emailed link was opened in another browser than the one that
+ * asked for it, so the address is confirmed but this browser is not signed in yet (lib/auth/email-link.ts). */
+const LINK_NOTICES: Record<string, string> = {
+  email_confirmed: "If you just confirmed your email address, you can now sign in with your email and password.",
 };
 
 /**
@@ -47,6 +55,7 @@ function LoginForm() {
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const linkError = params.get("error");
+  const linkNotice = params.get("notice");
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -92,6 +101,11 @@ function LoginForm() {
       {linkError && LINK_ERRORS[linkError] ? (
         <div className="alert error" role="alert">
           {LINK_ERRORS[linkError]}
+        </div>
+      ) : null}
+      {!linkError && linkNotice && LINK_NOTICES[linkNotice] ? (
+        <div className="alert" role="status">
+          {LINK_NOTICES[linkNotice]}
         </div>
       ) : null}
       <form onSubmit={submit} className="field" method="post" action="/api/auth/signin" noValidate>

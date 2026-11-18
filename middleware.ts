@@ -30,6 +30,9 @@ const OPEN_PATHS = new Set([
   "/api/auth/signup",
   "/api/auth/signin",
   "/api/auth/callback",
+  // Emailed links that work in any browser (lib/auth/email-link.ts): the one-button page and its POST.
+  "/confirm",
+  "/api/auth/confirm",
   "/api/auth/reset-password",
   "/api/health",
 ]);

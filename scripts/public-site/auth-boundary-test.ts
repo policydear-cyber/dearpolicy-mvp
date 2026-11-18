@@ -52,10 +52,14 @@ function apiRoutes(): string[] {
   return out.sort();
 }
 
-const SIGN_IN_PAGES = new Set(["/login", "/signup", "/reset-password", "/privacy"]);
+const SIGN_IN_PAGES = new Set(["/login", "/signup", "/reset-password", "/privacy",
+  // 18 Nov: the emailed-link page (lib/auth/email-link.ts); it signs the visitor in as its first step, like the callback.
+  "/confirm"]);
 const PUBLIC_PAGES = ["/", "/learn", "/learn/making-a-claim", "/learn/sg-medishield-life", "/learn/terms", "/learn/no-such-guide"];
 /** API routes that were already reachable signed out before this change (sign-in, health, signed callbacks). */
 const OPEN_APIS = new Set(["/api/auth/signup", "/api/auth/signin", "/api/auth/callback", "/api/auth/reset-password", "/api/health",
+  // 18 Nov: the emailed-link check behind /confirm's button (verifyOtp with the link's token_hash).
+  "/api/auth/confirm",
   "/api/policies/scan-callback", "/api/internal/jobs/run",
   // Stripe's billing webhook: signed by Stripe (lib/billing/stripe.ts verifyStripeSignature), 404 while billing is off.
   "/api/billing/webhook"]);
