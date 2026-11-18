@@ -1,13 +1,12 @@
 "use client";
 import Link from "next/link";
 import { useEffect,useMemo,useRef,useState } from "react";
-import { formatMoney } from "@/lib/format/currency";
 import { customerError } from "@/components/customer-text";
 import { HomeAsk, HomeAttention } from "@/components/home-attention";
 import { HomeNotFound, homeGaps } from "@/components/home-not-found";
 import { homeView } from "@/lib/format/home-view";
 import { Icon, coverCard, coverIcon, type IconName } from "@/components/icons";
-import { homeAmountText, homeCardShowsAmount, homeCardSource, homeGridColumns } from "@/lib/coverage/home-card";
+import { homeCardSource, homeGridColumns } from "@/lib/coverage/home-card";
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 type Coverage={category:string;status:"covered"|"on_file"|"not_covered";reviewRequired:boolean;amount:number|null;displayAmount:string|null;currency:string|null;count:number;policyNames:string[];sources?:string[];derived:boolean;parts?:TilePart[]|null;known?:KnownSum|null;planNote?:string|null;onFileDocuments?:string[]};
@@ -18,7 +17,6 @@ type Reminder={kind:string;title:string;detail:string;href:string};
 type Unclaimed={id:string;original_filename:string;product_name:string|null;insurer:string|null;document_role:string|null};
 type Dashboard={family:Member[];activeMember:Member|null;coverages:Coverage[];reading?:number;premiums:{monthly:number|null;annual:number|null;currency?:string|null;note?:string|null;totals?:{currency:string;monthly:number;annual:number}[];items:PremiumItem[]};reminders:Reminder[];unclaimed:Unclaimed[];quality:{needsReview:number;referenceDocs:number;personalDocs:number};notFullyRead?:string|null;gapsPending?:boolean;error?:string};
 // A card shows a figure only in the currency its document states, never a default (RM180 is not S$180).
-const money=(v:number,c:string|null|undefined)=>formatMoney(v,c);
 // A heading with its icon in front, in place of the uppercase label that used to sit above it.
 const Titled=({icon,children}:{icon:IconName;children:React.ReactNode})=><div className="icon-heading"><span className="title-icon"><Icon name={icon}/></span>{children}</div>;
 
@@ -96,7 +94,7 @@ export default function DashboardPage(){
     <div className="home-cards-head"><h1 id="home-cards-title">{name?`${name}\u2019s protection`:"Your family\u2019s protection"}</h1><Link href="/policies" className="text-link"><Icon name="upload"/>Upload</Link></div>
     {people}
     {!loading&&!!data?.reading&&<p className="summary-sub">{data.reading===1?"A document is":`${data.reading} documents are`} still being read. This page updates on its own when reading is done.</p>}
-    {loading&&!data?<div className="empty-card">Loading…</div>:personEmpty?<PersonNothingYet name={name??"This person"} paidFor={view.paidFor}/>:covered.length?<div className="coverage-grid" data-testid="home-cards" data-cols={homeGridColumns(covered.length)}>{covered.map(c=>{const amount=!homeCardShowsAmount(c)?null:c.amount!=null?money(c.amount,c.currency):c.displayAmount;const source=homeCardSource(c);return <Link href={`/coverage?member=${encodeURIComponent(active?.id??"")}&category=${encodeURIComponent(c.category)}`} className="coverage-card covered" data-card={coverCard(c.category)} key={c.category}><div className="coverage-top"><span className="coverage-icon"><Icon name={coverIcon(c.category)}/></span><div className="coverage-name">{c.category}</div></div>{source&&<span className="coverage-source" title={source}>{source}</span>}<strong className="coverage-status"><Icon name="checkCircle"/>Covered</strong>{amount&&<span className="coverage-amount">{homeAmountText(amount)}</span>}</Link>;})}</div>
+    {loading&&!data?<div className="empty-card">Loading…</div>:personEmpty?<PersonNothingYet name={name??"This person"} paidFor={view.paidFor}/>:covered.length?<div className="coverage-grid" data-testid="home-cards" data-cols={homeGridColumns(covered.length)}>{covered.map(c=>{const source=homeCardSource(c);return <Link href={`/coverage?member=${encodeURIComponent(active?.id??"")}&category=${encodeURIComponent(c.category)}`} className="coverage-card covered" data-card={coverCard(c.category)} key={c.category}><div className="coverage-top"><span className="coverage-icon"><Icon name={coverIcon(c.category)}/></span><div className="coverage-name">{c.category}</div></div>{source&&<span className="coverage-source" title={source}>{source}</span>}<strong className="coverage-status"><Icon name="checkCircle"/>Covered</strong></Link>;})}</div>
      :<div className="empty-card" data-testid="home-no-cards">{(active?.policy_count??0)>0?<>No cover card for {name??"this person"} yet. {active!.policy_count===1?"Their document is":`Their ${active!.policy_count} documents are`} on file: <Link href={`/chat?member=${encodeURIComponent(active!.id)}`} className="text-link">ask DearPolicy what {active!.policy_count===1?"it covers":"they cover"}</Link> or <Link href="/policies" className="text-link">open Documents</Link>.</>:<>No document for {name??"this person"} is on file yet. <Link href="/policies" className="text-link">Upload a policy</Link></>}</div>}
     {/* Gaps (DC 17 Nov): the main kinds of cover with no card, once the person has a card and nothing is still being read,
         so a gap is never shown for a document DearPolicy has not finished. Never "not covered". */}

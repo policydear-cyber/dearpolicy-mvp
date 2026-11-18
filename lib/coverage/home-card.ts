@@ -1,9 +1,9 @@
-/** Home's protection cards (DC 16-17 Nov): each card says Covered, with its amount only when the cover rests on ONE
- * confirmed figure. Where the dashboard adds several lines or policies into a total (app/api/dashboard/route.ts), Home
- * shows no total: different schedules are not added together without explicit support (project rule, 17 Nov); the card
- * names the covers instead and its Coverage page shows each amount. Every card names what pays (the policy, or how many),
- * so a card with no amount never reads as an empty box. This file never builds or shows a figure. The grid picks its column count so the last row is never one card alone
- * when another count avoids it. Pure; used by app/page.tsx. Works for any household and any insurer.
+/** Home's protection cards (DC 16-18 Nov): each card says only Covered, never a figure (DC 18 Nov: "it should all not
+ * show a figure, just whether they are covered or not"); tapping it opens the cover's detail page, which lists what each
+ * policy gives and a total only where one confirmed figure supports it (lib/coverage/cover-summary.ts). Every card names
+ * what pays (the policy, or how many), so a card never reads as an empty box. This file never builds or shows a figure.
+ * The grid picks its column count so the last row is never one card alone when another count avoids it. Pure; used by
+ * app/page.tsx and the detail page. Works for any household and any insurer.
  *   Test: scripts/coverage/home-card-test.ts */
 
 import { isMachineFilename } from "@/lib/policies/document-name";

@@ -1854,3 +1854,18 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
    edge, a cover sheet's stacked pages) never hides it. */
 :root .button.secondary:focus-visible, :root .coverage-card:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 
+
+/* What pays for a cover (app/coverage/page.tsx): each policy's amount on its own line; a total only where one confirmed figure is the whole cover. */
+.cover-summary-total { color: var(--money); font-variant-numeric: tabular-nums; }
+.cover-summary-from { color: var(--muted); margin: 0; }
+.cover-summary-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; border: 1px solid var(--edge); border-radius: var(--r-lg); background: var(--surface); }
+.cover-summary-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 14px 16px; border-top: 1px solid var(--edge); }
+.cover-summary-list li:first-child { border-top: 0; }
+.cover-summary-name { font-weight: 600; overflow-wrap: anywhere; }
+.cover-summary-amount { font-variant-numeric: tabular-nums; text-align: right; color: var(--money); font-weight: 650; }
+.cover-summary-list small { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-xs); }
+/* A phone narrower than the name plus "No amount shown here": the amount goes under the name (TE PR 535 F3). */
+@media (max-width: 420px) {
+  .cover-summary-list li { grid-template-columns: minmax(0, 1fr); }
+  .cover-summary-amount { text-align: left; }
+}
