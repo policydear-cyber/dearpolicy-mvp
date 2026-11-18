@@ -32,8 +32,8 @@ test("T5 a schedule whose product is a system code: the plain product name from 
   assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }, { policyId: "p", slot: "other" }] }), map(docs)), "Example Assurance Harbour Group Insurance");
 });
 test("T6 only codes or file names as products: never shown; who it is for instead", () => {
-  const docs = [d("s", { product_name: "POL_SCHED_V2" }), d("w", { product_name: "wording_final.pdf" }), d("x", { product_name: "Terms.pdf" })];
-  assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }, { policyId: "w", slot: "wording" }, { policyId: "x", slot: null }] }), map(docs)), "Policy for Jane Doe");
+  const docs = [d("s", { product_name: "POL_SCHED_V2" }), d("w", { product_name: "wording_final.pdf" }), d("x", { product_name: "Terms.pdf" }), d("y", { product_name: "scan.TIFF" })];
+  assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }, { policyId: "w", slot: "wording" }, { policyId: "x", slot: null }, { policyId: "y", slot: null }] }), map(docs)), "Policy for Jane Doe");
 });
 test("T7 the insurer's legal suffix is dropped, and not repeated when the product names it", () => {
   assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: "Shield Plan", insurer: "Example Life Pte. Ltd." })])), "Example Life Shield Plan");

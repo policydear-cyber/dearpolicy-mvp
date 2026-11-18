@@ -37,7 +37,7 @@ export const SLOT_HINTS: Record<FolderSlot, string> = {
 /** A product name a person reads: not a system's code or a file name ("SGGRP_COI_APP", "cert_v2.pdf"). */
 const plainName = (name: string | null | undefined) => {
   const t = name?.trim();
-  return t && !isCodeName(t) && !/\.(pdf|jpe?g|png|heic|docx?)$/i.test(t) ? t : null;
+  return t && !isCodeName(t) && !/\.(pdf|jpe?g|png|webp|tiff?|heic|docx?)$/i.test(t) ? t : null;
 };
 
 /** A folder's name: the household's own; else the insurer's plain product name from any document in it, the schedule's
