@@ -2188,8 +2188,8 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // its quote is in: how the benefit is paid, never what it pays (verify.ts scheduleFigure). The row stays, with no figure.
     if (value != null && pays !== "percent") {
       const p = placed.get(source), text = pageText(source.page);
-      const whole = p ? (() => { const back = text.slice(Math.max(0, p.start - 400), p.start), after = text.slice(p.end, p.end + 400), stop = after.search(/[.;](?:\s|$)/);
-        return back.slice(Math.max(0, back.search(/[^.;]*$/))) + text.slice(p.start, p.end) + (stop < 0 ? after : after.slice(0, stop + 1)); })() : source.excerpt;
+      const whole = p ? (() => { const back = text.slice(Math.max(0, p.start - 400), p.start), after = text.slice(p.end, p.end + 800), ends = [...after.matchAll(/[.;](?:\s|$)/g)].map((e) => e.index! + 1);
+        return back.slice(Math.max(0, back.search(/[^.;]*$/))) + text.slice(p.start, p.end) + after.slice(0, ends[2] ?? after.length); })() : source.excerpt;
       if (scheduleFigure(source.excerpt, value) || scheduleFigure(whole, value)) { out.dropped.push({ what: label, why: `figure ${value} is when or how a large claim is paid in parts, not what it pays; kept the row without it` }); pays = "words"; value = null; }
     }
     // The most cover a plan offers, on a document that names no one's own cover ("Be insured up to a maximum coverage of

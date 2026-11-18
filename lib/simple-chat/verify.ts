@@ -1641,25 +1641,37 @@ const TERM_OR_PLAN_CELL = /^(?:(?:premium|policy|benefit|cover(?:age)?|payment|c
 /** Whether every printing of `value` in `text` is part of a rule for paying a large claim in parts, never an amount of cover
  * (live 18 Nov, a group policy's TPD terms: "If the sum payable in respect of a valid claim is above S$200,000, the Company
  * will first pay a lump sum of S$200,000 and pay the balance in three (3) equal annual instalments."). Such a figure is
- * the threshold above which instalments apply ("above", "over", "exceeds", "more than", "in excess of"; never "not
- * exceeding", a cap) or the first part paid before the balance ("first pay a lump sum of", "pay RM 100,000 first"), in a sentence that pays the
- * rest in instalments. The figure says how a benefit is paid, not how much it is, so it is never an amount. */
-const SCHEDULE_THRESHOLD = /(?<!\bnot\s)\b(?:above|over|exceeds?|exceeding|more\s+than|greater\s+than|in\s+excess\s+of)\s*$/i;
-const SCHEDULE_FIRST = /\b(?:first|initial(?:ly)?)\b[^.;]{0,40}\blump[\s-]+sum(?:\s+payment)?\s+(?:of\s+)?$/i;
-const SCHEDULE_REST = /\b(?:instal+ments?|(?:annual|monthly|yearly)\s+payments)\b/i;
+ * - the threshold of a condition ("if / where / when ... is above", "claims of more than", "exceeds", "in excess of"), with
+ *   no negation between the condition and the figure: a cap ("shall not at any time exceed S$3,000", "cannot be more
+ *   than") is never one (Critic on #545, NEW-HIGH); or
+ * - the first part paid before the rest ("first pay a lump sum of", "the first S$200,000", "S$200,000 upfront /
+ *   immediately / first / at once / in a lump sum");
+ * and the figure's sentence, or the next two, pay the rest in instalments or yearly / monthly payments or payouts and name
+ * that rest ("the balance", "the remainder", "any amount above that"). The figure says how a benefit is paid, not how
+ * much it is, so it is never an amount. */
+const SCHEDULE_CONDITION = /\b(?:if|where|when(?:ever)?|in\s+the\s+event|claims?\s+(?:of|that|which)|any\s+claim\s+(?:of|that|which))\b(?![^.;,:]*\b(?:not|never|no|cannot)\b|[^.;,:]*n't\b)[^.;,:]{0,100}\b(?:above|over|exceeds?|exceeding|more\s+than|greater\s+than|in\s+excess\s+of)\s*$/i;
+const SCHEDULE_FIRST = /\b(?:(?:first|initial(?:ly)?)\b[^.;]{0,40}\blump[\s-]+sum(?:\s+payment)?\s+(?:of\s+)?|the\s+first\s+)$/i;
+const SCHEDULE_FIRST_AFTER = /^\s*(?:(?:will\s+be|shall\s+be|is|are)\s+)?(?:(?:paid|payable)\s+)?(?:first|initially|up\s*front|immediately|at\s+once|(?:as\s+|in\s+)(?:a|one)\s+lump[\s-]+sum)\b/i;
+const SCHEDULE_REST = /\b(?:instal+ments?|(?:annual|monthly|yearly|quarterly|half[\s-]?yearly|equal|regular)\s+(?:payments|payouts|amounts))\b/i;
+const SCHEDULE_BALANCE = /\b(?:balance|remaining\s+(?:amount|sum|benefit)|remainder|rest\s+of\s+the|any\s+(?:amount|sum)\s+(?:above|over|in\s+excess\s+of)\s+(?:that|this|it))\b/i;
 export function scheduleFigure(text: string, value: number): boolean {
   const flat = text.normalize("NFKC").replace(/\s+/g, " ");
   const at = [...flat.matchAll(/(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\d,])|(?<![\d.,])\d+(?:\.\d+)?(?![\d.,]*\d)/g)].filter((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
   if (!at.length) return false;
+  const END = /[.;](?:\s|$)/g;
   return at.every((m) => {
     const before = flat.slice(0, m.index);
     const start = Math.max(before.search(/[^.;]*$/), 0);
-    const endAt = flat.slice(m.index! + m[0].length).search(/[.;](?:\s|$)/);
-    const sentence = flat.slice(start, endAt < 0 ? flat.length : m.index! + m[0].length + endAt);
+    // The figure's sentence and the next two: a schedule's rest is often its own sentence ("... a lump sum of S$200,000.
+    // The balance will be paid in three (3) equal annual instalments.").
+    const after = m.index! + m[0].length;
+    END.lastIndex = after;
+    let end = flat.length;
+    for (let k = 0; k < 3; k++) { const e = END.exec(flat); if (!e) { end = flat.length; break; } end = e.index + 1; }
+    const window = flat.slice(start, end);
     const lead = flat.slice(start, m.index).replace(/(?:[A-Z]{1,3}\$|RM|SGD|USD|MYR|HKD|GBP|EUR|AUD|£|€|\$)\s*$/i, "");
-    if (!SCHEDULE_REST.test(sentence)) return false;
-    const firstPart = SCHEDULE_FIRST.test(lead) || /^\s*(?:first|initially|upfront)\b/i.test(flat.slice(m.index! + m[0].length));
-    return SCHEDULE_THRESHOLD.test(lead) || (firstPart && /\b(?:balance|remaining|remainder|rest)\b/i.test(sentence));
+    if (!SCHEDULE_REST.test(window) || !SCHEDULE_BALANCE.test(window)) return false;
+    return SCHEDULE_CONDITION.test(lead) || SCHEDULE_FIRST.test(lead) || SCHEDULE_FIRST_AFTER.test(flat.slice(after));
   });
 }
 function plainAmount(st: ModelStatement, found: Found, household: Household): AmountCheck {
@@ -1676,9 +1688,10 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
   {
     const pageText = doc.pages.find((p) => p.page === found.page)?.text ?? "";
     const from = Math.max(0, Math.min(found.offset, pageText.length)), quoteEnd = Math.min(pageText.length, found.end ?? found.offset + found.excerpt.length);
-    const back = pageText.slice(Math.max(0, from - 400), from), after = pageText.slice(quoteEnd, quoteEnd + 400);
-    const stop = after.search(/[.;](?:\s|$)/);
-    const sentences = back.slice(Math.max(0, back.search(/[^.;]*$/))) + pageText.slice(from, quoteEnd) + (stop < 0 ? after : after.slice(0, stop + 1));
+    const back = pageText.slice(Math.max(0, from - 400), from), after = pageText.slice(quoteEnd, quoteEnd + 800);
+    // The quote's own sentence, back to its start and on through the two sentences after it (scheduleFigure reads that far).
+    const ends = [...after.matchAll(/[.;](?:\s|$)/g)].map((e) => e.index! + 1);
+    const sentences = back.slice(Math.max(0, back.search(/[^.;]*$/))) + pageText.slice(from, quoteEnd) + after.slice(0, ends[2] ?? after.length);
     if (scheduleFigure(found.excerpt, value) || (moneyFiguresIn(found.excerpt).some((f) => sameValue(f.value, value)) && scheduleFigure(sentences, value)))
       return { ok: false, why: "the figure is when or how a large claim is paid in parts, not an amount of cover" };
   }

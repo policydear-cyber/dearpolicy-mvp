@@ -35,7 +35,14 @@ function say(h: Household, text: string, quote: string, amount: string) {
 test("scheduleFigure: the threshold and the first lump sum before instalments", () => {
   assert.equal(scheduleFigure(TERMS, 200000), true);
   for (const [t, v] of [["Where the benefit exceeds RM 100,000, we will pay RM 100,000 first and the balance in 12 monthly instalments.", 100000],
-    ["Claims of more than US$250,000 are paid as an initial lump sum of US$250,000 and the remainder in two annual instalments.", 250000]] as const)
+    ["Claims of more than US$250,000 are paid as an initial lump sum of US$250,000 and the remainder in two annual instalments.", 250000],
+    // Critic on #545: wordings the first rule missed.
+    ["Where a claim is above S$500,000, the first S$200,000 will be paid as a lump sum and the balance in three annual instalments.", 200000],
+    ["If the sum payable is above S$200,000, the Company will first pay a lump sum of S$200,000. The balance will be paid in three (3) equal annual instalments.", 200000],
+    ["If the TPD benefit exceeds S$200,000, S$200,000 will be paid immediately and the balance in instalments.", 200000],
+    ["Claims of more than S$300,000 are paid as follows: S$300,000 in a lump sum and the remainder in two annual instalments.", 300000],
+    ["If the sum payable is above S$200,000, we will first pay a lump sum of S$200,000 and the balance in three yearly payouts.", 200000],
+    ["The TPD benefit is limited to S$200,000 upfront. Any amount above that is paid in instalments.", 200000]] as const)
     assert.equal(scheduleFigure(t, v), true, t);
 });
 test("scheduleFigure control: a sum, a cap or an instalment benefit's own figure is an amount", () => {
@@ -46,6 +53,13 @@ test("scheduleFigure control: a sum, a cap or an instalment benefit's own figure
     ["If the bill is above S$1,000, we pay 80% of it.", 1000],
     ["We will pay a lump sum of S$50,000 on diagnosis.", 50000],
     ["We will pay S$200,000 on diagnosis. Premiums are payable in monthly instalments.", 200000],
+    // Critic on #545, NEW-HIGH: a cap is never a threshold, however it is negated.
+    ["The benefit shall not at any time exceed S$3,000 and is paid in monthly payments.", 3000],
+    ["The monthly benefit cannot be more than S$6,000 and is paid in monthly instalments.", 6000],
+    ["The benefit is no more than S$5,000 and the balance of the year is paid in monthly instalments.", 5000],
+    ["The benefit never exceeds S$4,000 and is paid in monthly instalments.", 4000],
+    ["The benefit doesn't exceed S$2,500, paid in monthly instalments.", 2500],
+    ["If your income is above S$3,000, you receive monthly payments of S$500.", 3000],
   ] as const) assert.equal(scheduleFigure(t, v), false, t);
 });
 test("chat: the first lump sum of a TPD payment schedule is never the person's TPD amount", () => {
@@ -56,6 +70,12 @@ test("chat: the first lump sum of a TPD payment schedule is never the person's T
     const a = say(h, text, quote, "S$200,000");
     assert.deepEqual(a.amounts, [], `${text}: ${JSON.stringify(a)}`);
   }
+});
+test("chat: the first lump sum is refused when the balance is paid in the next sentence (Critic on #545, FN2)", () => {
+  const split = TERMS.replace("will first pay a lump sum of S$200,000 and pay the balance in three (3) equal annual\ninstalments.", "will first pay a lump sum of S$200,000.\nThe balance will be paid in three (3) equal annual instalments.");
+  assert.notEqual(split, TERMS);
+  const a = say(house([SCHEDULE, split]), "TPD initial payment", "will first pay a lump sum of S$200,000", "S$200,000");
+  assert.deepEqual(a.amounts, [], JSON.stringify(a));
 });
 test("chat control: the TPD sum on the certificate, and a critical illness sum of the same figure, stay amounts", () => {
   const h = house([SCHEDULE, TERMS]);
