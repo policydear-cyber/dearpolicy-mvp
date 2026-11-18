@@ -25,7 +25,10 @@ type Listable = { bottomLine?: string | null; summary?: string; statements?: Ans
 const ALSO_LINKED = /^(?:(?:she|he|they|it|[\p{Lu}][\p{L}'’-]*(?:\s+[\p{Lu}][\p{L}'’-]*){0,3})\s+(?:is|are)\s+also\s+linked\b|also\s+linked\s+to\b)/iu;
 /** What a document that holds no cover is called: an "also linked" sentence goes only when everything it names is one. A
  * scheme or plan it names (CareShield Life, a home protection scheme) is cover, and the sentence stays (Critic #546 MED-3). */
-const NOT_COVER = /\b(?:booklets?|summar(?:y|ies)|wordings?|brochures?|guides?|letters?|notices?|illustrations?|terms|conditions|forms?|receipts?|statements?|fact ?sheets?|leaflets?|endorsements?|documents?|files?)\b/i;
+const NOT_COVER = /\b(?:booklets?|summar(?:y|ies)|brochures?|guides?|letters?|notices?|illustrations?|forms?|receipts?|fact ?sheets?|leaflets?)\b/i;
+/** A part that names cover, whatever else it says: a scheme, a plan, a policy, a rider ("the Kestrel Shield policy
+ * document", "the Critical Illness Endorsement", "CareShield Life"; TE #546 F1). */
+const NAMES_COVER = /\b(?:schemes?|shields?|plans?|policy|policies|covers?|insurance|assurance|riders?|endorsements?|protect(?:or|ion)|life|care)\b/i;
 /** A first sentence that denies, contrasts or limits is never a list: "has no cover for A, B and C" would read as has A,
  * B and C (Critic #546 HIGH-1). */
 const NOT_A_LIST = /\b(?:no|not|none|without|except|but|neither|nor|only|never|unless|excluded?|excludes)\b|n['’]t\b/i;
@@ -37,7 +40,8 @@ function leadOf(sentence: string, names: string[]): { lead: string; rest: string
   const m = /^(.{1,60}?)\s+(has|have|holds?)\s*:?\s+(.+?)[.!]?$/u.exec(sentence.trim());
   if (!m) return null;
   const subject = m[1].trim();
-  const words = new Set(names.flatMap((n) => n.replace(/\s*\([^)]*\)/g, " ").split(/\s+/)).filter((w) => w.length >= 2).map((w) => w.toLowerCase()));
+  // A preferred name in brackets ("Tan Hui Min (Charmaine)") counts as the person too (TE #546 F4).
+  const words = new Set(names.flatMap((n) => n.replace(/[()]/g, " ").split(/\s+/)).filter((w) => w.length >= 2).map((w) => w.toLowerCase()));
   const person = /^(?:she|he|they|you|i|we)$/i.test(subject)
     || subject.split(/\s+/).length <= 4 && subject.split(/\s+/).every((w) => words.has(w.replace(/['’]s$/i, "").toLowerCase()));
   return person ? { lead: `${subject} ${m[2]}`, rest: m[3] } : null;
@@ -55,23 +59,40 @@ function itemsOf(rest: string): string[] {
     else if ((c === ")" || c === "]") && depth > 0) depth--;
     else if (depth === 0 && (c === "," || c === ";")) { parts.push(rest.slice(start, i)); start = i + 1; }
   }
-  const last = rest.slice(start).trim();
-  const pair = /^(.*?[)\]])\s+and\s+(.+)$/s.exec(last);
-  if (!/^and\s+/i.test(last) && pair) parts.push(pair[1], pair[2]);
-  else parts.push(last);
+  parts.push(rest.slice(start));
+  // In every part, "and" straight after a closing bracket joins two items ("B (z) and C (w)"; TE #546 F2).
+  return parts.flatMap((p) => p.trim().replace(/^and\s+/i, "").split(/(?<=[)\]])\s+and\s+/)).map((p) => p.trim()).filter(Boolean);
+}
+
+/** The parts of a list of names, split at every top-level comma and "and": for telling whether everything an "also
+ * linked" sentence names holds no cover (TE #546 F1). */
+function namesOf(rest: string): string[] {
+  const parts: string[] = [];
+  let depth = 0, start = 0;
+  for (let i = 0; i < rest.length; i++) {
+    const c = rest[i];
+    if (c === "(" || c === "[") depth++;
+    else if ((c === ")" || c === "]") && depth > 0) depth--;
+    else if (depth === 0 && (c === "," || c === ";")) { parts.push(rest.slice(start, i)); start = i + 1; }
+    else if (depth === 0 && rest.slice(i, i + 5).toLowerCase() === " and ") { parts.push(rest.slice(start, i)); start = i + 5; i += 4; }
+  }
+  parts.push(rest.slice(start));
   return parts.map((p) => p.trim().replace(/^and\s+/i, "").trim()).filter(Boolean);
 }
 
 /** Takes the list out of an overview's bottom line, and the "also linked to" sentences that name only documents out of the
  * answer (not when the question is about the documents themselves: then they are the answer). `names`: the household's
  * members. Returns the sentences taken out (the turn's report keeps them). */
-export function listFromBottomLine(answer: Listable, opts: { names: string[]; aboutDocuments?: boolean }): string[] {
+export function listFromBottomLine(answer: Listable, opts: { names: string[]; aboutDocuments?: boolean; products?: string[] }): string[] {
   const removed: string[] = [];
+  const products = (opts.products ?? []).map((p) => p.trim().toLowerCase()).filter((p) => p.length >= 3);
   const filler = (s: string) => {
     if (opts.aboutDocuments || !ALSO_LINKED.test(s.trim())) return false;
-    const named = itemsOf(s.trim().replace(/^.*?\blinked\b(?:\s+in\s+DearPolicy)?(?:\s+to\b)?\s*:?\s*/i, "").replace(/[.!]$/, ""));
-    return named.length > 0 && named.every((n) => NOT_COVER.test(n));
+    const named = namesOf(s.trim().replace(/^.*?\blinked\b(?:\s+in\s+DearPolicy)?(?:\s+to\b)?\s*:?\s*/i, "").replace(/[.!]$/, ""));
+    // Every part a document that holds no cover, and none naming cover or a cover-holding product of the household.
+    return named.length > 0 && named.every((n) => NOT_COVER.test(n) && !NAMES_COVER.test(n) && !products.some((p) => n.toLowerCase().includes(p)));
   };
+  answer.statements ??= [];
   const bottom = (answer.bottomLine ?? "").trim();
   const kept = sentences(bottom).filter((s) => {
     if (filler(s)) { removed.push(s); return false; }
@@ -86,7 +107,11 @@ export function listFromBottomLine(answer: Listable, opts: { names: string[]; ab
     const parts = itemsOf(m.rest);
     // Three or more named things, each short enough to be a name with its description and none a clause: a list.
     // Anything else stays as the model wrote it.
-    if (parts.length >= 3 && parts.every((p) => p.length <= 160 && !CLAUSE_START.test(p) && !/[.!?]/.test(p.replace(/\([^)]*\)/g, "").replace(/\b(?:Pte|Ltd|Co|Inc|No|St)\./g, "")))) {
+    // When some items carry a description in brackets, all must, so a trailing remark ("all in force") or a name cut at a
+    // comma never becomes an item; a colon means the list is something else's (TE #546 F2, F3).
+    const described = parts.filter((p) => /[)\]]$/.test(p)).length;
+    if (parts.length >= 3 && !m.rest.includes(":") && (described === 0 || described === parts.length)
+      && parts.every((p) => p.length <= 160 && !CLAUSE_START.test(p) && !/[.!?]/.test(p.replace(/\([^)]*\)/g, "").replace(/\b(?:Pte|Ltd|Co|Inc|No|St)\./g, "")))) {
       items.push(...parts);
       // The lead introduces the list only: what else the bottom line says follows the list, as a point (Critic #546 LOW-1).
       lead = `${m.lead}:`;
@@ -99,7 +124,8 @@ export function listFromBottomLine(answer: Listable, opts: { names: string[]; ab
   }
   if (answer.statements) {
     answer.statements = answer.statements.flatMap((s) => {
-      if (s.amount || s.table) return [s];
+      // A point with its own source is the documents' words, never filler (TE #546 F1).
+      if (s.amount || s.table || s.source) return [s];
       const all = sentences(s.text);
       const left = all.filter((x) => !filler(x));
       if (left.length === all.length) return [s];

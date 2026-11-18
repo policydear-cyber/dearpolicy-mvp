@@ -451,7 +451,8 @@ async function integration() {
     assert.equal((t.saved.answer.statements ?? []).filter((s) => s.amount).length, 0);
     assert.ok(!(t.saved.answer.statements ?? []).some((s) => s.text === LEFT_OUT_AMOUNT));
     assert.ok(t.saved.state.simpleChat.turns[0].report.dropped.some((d) => d.kind === "amount"), "the dropped amount is in the turn's report");
-    assert.ok(!JSON.stringify(t.saved.answer).includes("777"));
+    // The figure itself, never the digits inside a random id ("…a777b…" once failed this 1 run in 5; TE #546).
+    assert.doesNotMatch(JSON.stringify(t.saved.answer), /(?<![\w-])777(?![\w])/);
   });
 }
 // ------------------------------------------------------------------ chat test 01 follow-ups: stays, cover lines, premiums
