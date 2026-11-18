@@ -27,8 +27,9 @@ test("a critical illness plan's confirmed death benefit keeps its amount on Deat
 test("a death-tile line whose benefit pays on another cover still shows no amount there", () => {
   const { parts } = lumpSumParts([], [line("Acme Life Plan", "Accidental Death Benefit", 50000)], [], "Death");
   assert.equal(parts[0].amount, null); assert.equal(parts[0].otherTile, true);
+  // A benefit naming another cover (no accident word) leaves the line as its product name placed it, as on main.
   const ci = lumpSumParts([], [line("Acme Life Plan", "Critical Illness Benefit", 50000)], [], "Death");
-  assert.equal(ci.parts[0].amount, null);
+  assert.equal(ci.parts[0].amount, lumpSumParts([], [line("Acme Life Plan", null, 50000)], [], "Death").parts[0].amount);
 });
 test("with no benefit kept, the product's name is judged as before", () => {
   const { parts } = lumpSumParts([], [line("Acme Critical Illness Plan", null, 5000)], [], "Death");
@@ -43,6 +44,15 @@ test("an accident-only product never lands on Death through its kept benefit (Cr
     assert.equal(parts[0].amount, null, `${product} · ${benefit}`);
     assert.notEqual(total, 300000, `${product} · ${benefit}`);
   }
+});
+test("a kept benefit never takes away an amount the product's name kept (Critic PR 548 HIGH-2)", () => {
+  for (const [product, benefit] of [["Acme Personal Accident Plan", "Death Benefit"], ["Acme PA Guard", "Death Benefit"], ["Group Personal Accident", "Death"], ["Acme Personal Accident Plan", "Accidental Death Benefit"]]) {
+    const { parts } = lumpSumParts([], [line(product, benefit, 100000)], [], "Personal Accident");
+    assert.equal(parts[0].amount, 100000, `${product} · ${benefit}`);
+  }
+  const eci = lumpSumParts([], [line("Acme Critical Illness Plan", "Early Critical Illness", 100000)], [], "Critical Illness");
+  const main = lumpSumParts([], [line("Acme Critical Illness Plan", null, 100000)], [], "Critical Illness");
+  assert.equal(eci.parts[0].amount, main.parts[0].amount);
 });
 test("a free note that names no cover never clears a line, and a trailing note is ignored", () => {
   const { parts } = lumpSumParts([], [line("Acme Critical Illness Plan", "Lump sum payable", 5000)], [], "Death");
