@@ -915,12 +915,13 @@ const SPELLED_NUMBER = String.raw`(?:zero|one|two|three|four|five|six|seven|eigh
 /** A prose sentence's closed tail: CELL_TAIL, and "in one (1) lump sum" as wordings print it. Not in CELL_TAIL: a table cell
  * never needs it, and a sentence must take the provision check (Critic on #544, NEW-HIGH A). */
 const PROSE_TAIL = String.raw`(?:${CELL_TAIL}|(?:(?:payable|paid)\s+)?in\s+one\s+\(\s*1\s*\)\s+lump\s+sum)`;
-const PROSE_SHARE = new RegExp(String.raw`\b(?:we|the\s+company|the\s+insurer|the\s+plan|the\s+policy|it)\s+(?:(?:will|shall)\s+pay|pays)\s+(?:${SPELLED_NUMBER}[\s-]+){0,10}\(?\s*(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent)\s*\)?\s+of\s+${HEADLINE_SUM_NAME}${OF_THIS_PLAN}(?:\s*,?\s*${PROSE_TAIL})*\s*\.(?:\s|$)`, "iu");
+const PROSE_SHARE = new RegExp(String.raw`\b(?:we|the\s+company|the\s+insurer|the\s+plan|the\s+policy|it)\s+(?:(?:will|shall)\s+pay|pays?)\s+(?:${SPELLED_NUMBER}[\s-]+){0,10}\(?\s*(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent)\s*\)?\s+of\s+${HEADLINE_SUM_NAME}${OF_THIS_PLAN}(?:\s*,?\s*${PROSE_TAIL})*\s*\.(?:\s|$)`, "iu");
 /** Words that make a benefit share its sum with another payment: "counted towards this benefit", "together pay at most",
  * "combined". Such a provision's share is left as read (Critic on #544, MEDIUM). */
 const SHARED_WITH = /\b(?:count(?:ed|s)?\s+(?:towards|against)|together\b[^.;]{0,60}\bat\s+most|in\s+total\b[^.;]{0,60}\bat\s+most|combined|aggregate)\b/i;
 export function proseHeadlineShare(cell: string, value: number, next = "", words = "", provision = ""): boolean {
-  const all = cell.normalize("NFKC").replace(/\s+/g, " ");
+  // Spaces and line breaks read as one space; a tab stays, so a row's label cell before the sentence is seen as one.
+  const all = cell.normalize("NFKC").replace(/[^\S\t]+/g, " ").replace(/ *\t[\s]*/g, "\t");
   // The whole provision the sentence is in (provisionAround), not only its own lines: "Subject to the deduction of any amount
   // previously paid," on the line above, "If Life Assured 2 is diagnosed," or a later paragraph's "will be reduced by any
   // amount paid under the Early Stage Benefit" each leave the share as read (Critic on #544, NEW-HIGH).
@@ -932,7 +933,8 @@ export function proseHeadlineShare(cell: string, value: number, next = "", words
   // The pay verb opens the sentence (nothing but a clause's comma before it), and the matched share is the row's own.
   if (!m || m.index! > pcts[0].index! || m.index! + m[0].length <= pcts[0].index!) return false;
   const before = all.slice(0, m.index!).trimEnd();
-  return before === "" || /[.,:;]$/.test(before);
+  // Nothing before the pay verb, a clause ending in punctuation, or a table row's label cell ("Death<TAB>We will pay ...").
+  return before === "" || /[.,:;]$/.test(before) || /\t$/.test(all.slice(0, m.index!)) && !before.includes("\t");
 }
 /** A numbered clause line ("3.1 Critical Illness Benefit", "4. Exclusions") and its number: the number is followed by a word
  * with a capital, so a wrapped line that opens "12 months of the diagnosis" or "30 days of the claim" is never a clause. */

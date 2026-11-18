@@ -694,7 +694,8 @@ test("A (Critic re-check 2 on #544): a label that says who pays is still a table
   for (const row of ["Amount we pay\t100% of Sum Insured", "What we pay\t100% of the Sum Assured", "What the plan pays\t100% of Sum Insured",
     "Death (we pay)\t100% of Sum Insured", "We pay on death\t100% of Sum Assured", "Amount we will pay\t100% of Sum Insured"]) assert.equal(headlineSumShare(row, 100), true, row);
   assert.equal(headlineSumShare("We will pay 100% of the Sum Assured.", 100), false);
-  for (const cell of ["The Company pays 100% of the Sum Assured.", "It pays 100% of the Sum Assured."]) assert.equal(proseHeadlineShare(cell, 100), true, cell);
+  for (const cell of ["The Company pays 100% of the Sum Assured.", "It pays 100% of the Sum Assured.", "We pay 100% of the Sum Assured.", "Death\tWe will pay 100% of the Sum Assured."]) assert.equal(proseHeadlineShare(cell, 100), true, cell);
+  assert.equal(proseHeadlineShare("Death\tChild\tWe will pay 100% of the Sum Assured.", 100), false, "two cells before the sentence");
 });
 
 if (failures.length) {
