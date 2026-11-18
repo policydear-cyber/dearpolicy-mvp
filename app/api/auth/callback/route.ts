@@ -3,6 +3,7 @@ import { sameSitePath } from "@/lib/auth/same-site-path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { finishEmailLink } from "@/lib/auth/finish-email-link";
 import { isMissingCodeVerifier, otherBrowserDestination } from "@/lib/auth/email-link";
+import { signupMode } from "@/lib/auth/signup-gate";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "public" as const;
@@ -39,7 +40,7 @@ export async function GET(request: Request) {
   if (error || !data.user) {
     // Opened in another browser than the one that asked for the link (lib/auth/email-link.ts): Supabase has already
     // confirmed the address, only this browser cannot finish signing in. Say so, instead of "expired".
-    if (isMissingCodeVerifier(error)) return NextResponse.redirect(new URL(otherBrowserDestination(next), url.origin));
+    if (isMissingCodeVerifier(error)) return NextResponse.redirect(new URL(otherBrowserDestination(next, signupMode()), url.origin));
     return NextResponse.redirect(new URL("/login?error=invalid_or_expired_link", url.origin));
   }
 

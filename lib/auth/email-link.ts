@@ -59,7 +59,15 @@ export function isMissingCodeVerifier(error: unknown): boolean {
   return e.code === "pkce_code_verifier_not_found" || e.name === "AuthPKCECodeVerifierMissingError";
 }
 
-/** The sign-in page's address after a link opened in another browser (see isMissingCodeVerifier). */
-export function otherBrowserDestination(next: string | null): string {
-  return next === "/update-password" ? "/reset-password?error=other_browser" : "/login?notice=email_confirmed";
+/**
+ * The sign-in page's address after a link opened in another browser (see isMissingCodeVerifier).
+ * Open sign-up: the only links sent are sign-up confirmations and resets, and a sign-up confirmation is complete once
+ * Supabase sends the code, so a password sign-in works. Invite-only: the link is also the proof that makes the
+ * household (lib/auth/signup-gate.ts), which needs the session this browser could not get, so a password sign-in would
+ * only email another link; say plainly to open it in the browser that asked for it instead.
+ * The wording never claims more than this browser knows: a `code` alone is not proof anything was confirmed.
+ */
+export function otherBrowserDestination(next: string | null, mode: "open" | "invite" = "open"): string {
+  if (next === "/update-password") return "/reset-password?error=other_browser";
+  return mode === "invite" ? "/login?error=other_browser" : "/login?notice=email_confirmed";
 }

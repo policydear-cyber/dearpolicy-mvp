@@ -23,8 +23,15 @@ export async function POST(request: Request) {
   const reset = type === "recovery";
 
   const supabase = await createSupabaseServerClient();
+  // A token_hash link is not tied to the browser that asked for it, so someone could send theirs to another person.
+  // Never swap a browser that is already signed in to one account into another without saying so.
+  const before = (await supabase.auth.getUser().catch(() => null))?.data.user?.id ?? null;
   const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
   if (error || !data.user) return go(reset ? "/reset-password?error=expired" : "/login?error=invalid_or_expired_link");
+  if (before && before !== data.user.id) {
+    await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+    return go("/login?error=different_account");
+  }
 
   // A reset link always goes on to choosing a new password, whatever `next` says.
   const next = reset ? "/update-password" : rawNext ?? "/";

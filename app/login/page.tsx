@@ -14,13 +14,15 @@ const LINK_ERRORS: Record<string, string> = {
   invalid_credentials: "Incorrect email or password.",
   missing_credentials: "Enter your email and password.",
   confirm_email: "Check your email. We sent you a link to confirm your address. Opening it signs you in.",
+  other_browser: "That link opened in a different browser from the one you used here, so it could not sign you in. Open the newest link from the email in the browser you signed up in.",
+  different_account: "That link was for a different account, so we signed you out. Sign in to the account you want to use.",
   invite_only: "DearPolicy is open by invitation only at the moment. If you were invited, use the email address the invitation was sent to.",
 };
 
 /** Good news shown above the form. email_confirmed: the emailed link was opened in another browser than the one that
  * asked for it, so the address is confirmed but this browser is not signed in yet (lib/auth/email-link.ts). */
 const LINK_NOTICES: Record<string, string> = {
-  email_confirmed: "Your email address is confirmed. Sign in with your email and password.",
+  email_confirmed: "If you just confirmed your email address, you can now sign in with your email and password.",
 };
 
 /**

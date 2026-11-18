@@ -63,9 +63,17 @@ async function main() {
     assert.equal(otherBrowserDestination("/"), "/login?notice=email_confirmed");
     assert.equal(otherBrowserDestination("/invite?token=abc"), "/login?notice=email_confirmed");
     assert.equal(otherBrowserDestination("/update-password"), "/reset-password?error=other_browser");
+    // Critic MED-1: invite-only, the link is also the proof that makes the household, so "sign in with your password"
+    // would only email another link: say to open it in the browser that asked for it.
+    assert.equal(otherBrowserDestination("/", "invite"), "/login?error=other_browser");
+    assert.equal(otherBrowserDestination("/update-password", "invite"), "/reset-password?error=other_browser");
+    assert.match(readFileSync("app/api/auth/callback/route.ts", "utf8"), /otherBrowserDestination\(next, signupMode\(\)\)/);
     const cb = readFileSync("app/api/auth/callback/route.ts", "utf8");
     assert.ok(cb.indexOf("isMissingCodeVerifier(error)") > 0 && cb.indexOf("isMissingCodeVerifier(error)") < cb.indexOf('"/login?error=invalid_or_expired_link", url.origin));\n  }'), "checked before the generic expired message");
-    assert.match(readFileSync("app/login/page.tsx", "utf8"), /email_confirmed: "Your email address is confirmed\. Sign in with your email and password\."/);
+    // Critic LOW-1: any ?code= opened in a fresh browser lands here, so the notice claims nothing it cannot know.
+    const login = readFileSync("app/login/page.tsx", "utf8");
+    assert.match(login, /email_confirmed: "If you just confirmed your email address, you can now sign in with your email and password\."/);
+    assert.match(login, /other_browser: "That link opened in a different browser/);
     assert.match(readFileSync("app/reset-password/page.tsx", "utf8"), /other_browser: /);
   });
 
@@ -116,6 +124,15 @@ async function main() {
     assert.match(mw, /"\/confirm",\n\s+"\/api\/auth\/confirm",/, "reachable before signing in, like the callback");
   });
 
+  await t("a browser already signed in to one account is never silently switched into another by someone else's link", () => {
+    const route = readFileSync("app/api/auth/confirm/route.ts", "utf8");
+    const before = route.indexOf("const before = ");
+    assert.ok(before > 0 && before < route.indexOf("verifyOtp("), "who was signed in is read before the token is checked");
+    assert.match(route, /if \(before && before !== data\.user\.id\) \{\n\s+await supabase\.auth\.signOut\(\{ scope: "local" \}\)\.catch\(\(\) => \{\}\);\n\s+return go\("\/login\?error=different_account"\);/);
+    assert.ok(route.indexOf("before !== data.user.id") < route.indexOf("finishEmailLink("), "before any household step");
+    assert.match(readFileSync("app/login/page.tsx", "utf8"), /different_account: "That link was for a different account, so we signed you out\./);
+  });
+
   await t("a reset link always goes on to choose a new password; others go where the link says, on this site only", () => {
     const route = readFileSync("app/api/auth/confirm/route.ts", "utf8");
     assert.match(route, /const next = reset \? "\/update-password" : rawNext \?\? "\/";/);
@@ -134,6 +151,12 @@ async function main() {
     assert.equal(emailLinkNext("/family", ORIGIN), "/family");
     assert.equal(emailLinkNext(`${ORIGIN}/api/auth/callback?next=${encodeURIComponent(invite)}`, ORIGIN), invite);
     assert.equal(emailLinkNext(`${ORIGIN}/api/auth/callback`, ORIGIN), null);
+    // Critic LOW-2: the template's next={{ .RedirectTo }} may arrive encoded or not; the app's redirect carries one
+    // parameter, already encoded (app/api/auth/signup: `?next=${encodeURIComponent(inviteNext)}`), so both survive.
+    const redirectTo = `${ORIGIN}/api/auth/callback?next=${encodeURIComponent(invite)}`;
+    for (const link of [`/confirm?token_hash=x&type=email&next=${redirectTo}`, `/confirm?token_hash=x&type=email&next=${encodeURIComponent(redirectTo)}`]) {
+      assert.equal(emailLinkNext(new URL(link, ORIGIN).searchParams.get("next"), ORIGIN), invite, link);
+    }
     assert.equal(emailLinkNext(`${ORIGIN}/confirm?next=%2Fupdate-password`, ORIGIN), "/update-password");
     for (const bad of ["https://evil.example/api/auth/callback?next=/family", `${ORIGIN}/elsewhere?next=/family`, `${ORIGIN}/api/auth/callback?next=//evil.example`,
       "//evil.example", "/\\evil.example", "javascript:alert(1)", "", null, 3]) assert.equal(emailLinkNext(bad, ORIGIN), null, String(bad));
