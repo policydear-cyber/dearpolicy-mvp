@@ -329,7 +329,7 @@ export function resolveDisabilityEvidence(coverages: OwnedCoverage[], rows: Disa
           ...("deferredPeriodMonths" in rule ? { deferredPeriodMonths: rule.deferredPeriodMonths } : {}),
           ...("maximumBenefitMonths" in rule ? { maximumBenefitMonths: rule.maximumBenefitMonths } : {}),
           citation: {
-            chunkId: `page:${first.policy_id}:${rule.page}`, policyId: first.policy_id, policyName: documentCardTitle({ product_name: first.product_name, original_filename: first.original_filename, insurer: first.insurer, document_role: first.document_role, policy_number: first.group_policy_number }),
+            chunkId: `page:${first.policy_id}:${rule.page}`, policyId: first.policy_id, policyName: first.product_name ?? documentCardTitle({ product_name: null, original_filename: first.original_filename, insurer: first.insurer, document_role: first.document_role, policy_number: first.group_policy_number }),
             insurer: first.insurer ?? undefined, pageStart: rule.page, pageEnd: rule.pageEnd, documentRole: first.document_role,
             personalEvidence: false, evidenceLabel: `${rule.label} wording`,
           },
