@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS policy_folders (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (id, account_id)
 );
+ALTER TABLE policy_folders ADD COLUMN IF NOT EXISTS confirmed_documents uuid[] NOT NULL DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS idx_policy_folders_account ON policy_folders(account_id);
 
 CREATE TABLE IF NOT EXISTS policy_folder_people (
