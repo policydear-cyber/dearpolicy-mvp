@@ -44,6 +44,13 @@ const plainName = (name: string | null | undefined) => {
   return t && !codeWord(t) && !/\.(pdf|jpe?g|png|webp|tiff?|heic|docx?)$/i.test(t) ? t : null;
 };
 
+/** An insurer's short name a person reads ("Osprey Life" from "Osprey Life Pte. Ltd."), or null: never a code, a file
+ * name, or only a legal suffix ("Pte. Ltd.", which insurerShortName gives back whole when nothing else is left). */
+const plainInsurer = (insurer: string | null | undefined) => {
+  if (!insurer?.trim() || /^(?:[\s,.&()]*(?:pte|pty|private|pvt|sdn|ltd|limited|berhad|bhd|plc|inc|llc|co|company)\b)+[\s,.&()]*$/i.test(insurer)) return null;
+  return plainName(insurerShortName(insurer));
+};
+
 /** A folder's name: the household's own; else the insurer's plain product name from any document in it, the schedule's
  * first ("Singapore Life MINDEF & MHA Group Insurance", never "SGGRP_COI_APP"); else who it is for. Never a code, a file
  * name, or a guess from another folder. */
@@ -53,11 +60,11 @@ export function folderTitle(folder: FolderView, docs: Map<string, FolderDoc>): s
   const named = [...inIt.filter((d) => d.slot === "schedule"), ...inIt].find((d) => plainName(d.doc.product_name));
   if (named) {
     const product = plainName(named.doc.product_name)!;
-    const insurer = named.doc.insurer?.trim() ? insurerShortName(named.doc.insurer) : "";
+    const insurer = plainInsurer(named.doc.insurer);
     return insurer && !product.toLowerCase().includes(insurer.toLowerCase()) ? `${insurer} ${product}` : product;
   }
   // No plain product name: the insurer, when one was read, tells two such policies apart ("Osprey Life policy for Jane").
-  const insurer = [...inIt.filter((d) => d.slot === "schedule"), ...inIt].map((d) => plainName(d.doc.insurer ? insurerShortName(d.doc.insurer) : null)).find(Boolean);
+  const insurer = [...inIt.filter((d) => d.slot === "schedule"), ...inIt].map((d) => plainInsurer(d.doc.insurer)).find(Boolean);
   const people = folder.people.map((p) => p.name);
   const whose = people.length ? ` for ${people.length <= 2 ? people.join(" and ") : `${people.slice(0, -1).join(", ")} and ${people.at(-1)}`}` : "";
   return insurer ? `${insurer} policy${whose}` : `Policy${whose}`;

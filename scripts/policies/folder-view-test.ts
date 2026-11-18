@@ -52,6 +52,12 @@ test("T9 no plain product name: the insurer read from the folder's documents tel
   assert.equal(folderTitle(f({ documents: [{ policyId: "b", slot: null }] }), map(docs)), "Plover Insurance policy for Jane Doe");
   assert.equal(folderTitle(f({ people: [], documents: [{ policyId: "b", slot: null }] }), map(docs)), "Plover Insurance policy");
 });
+test("T10 an insurer that is a code, a file name or only a legal suffix is never shown, beside a product or alone", () => {
+  for (const insurer of ["EXA_INS_01", "insurer.pdf", "Ltd", "Pte. Ltd."]) {
+    assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: "Harbour Shield", insurer })])), "Harbour Shield", insurer);
+    assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: "PW9", insurer })])), "Policy for Jane Doe", insurer);
+  }
+});
 test("S1 two documents with the same number (spaces and dashes aside), both Jane's: suggested for Jane", () => {
   const s = folderSuggestions([d("a", { policy_number: "AB-123 456" }), d("b", { policy_number: "ab123456" }), d("c")], []);
   assert.deepEqual(s, [{ policyNumber: "AB-123 456", policyIds: ["a", "b"], personIds: ["jane"] }]);
