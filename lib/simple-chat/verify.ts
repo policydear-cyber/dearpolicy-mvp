@@ -1646,31 +1646,35 @@ const TERM_OR_PLAN_CELL = /^(?:(?:premium|policy|benefit|cover(?:age)?|payment|c
  *   than") is never one (Critic on #545, NEW-HIGH); or
  * - the first part paid before the rest ("first pay a lump sum of", "the first S$200,000", "S$200,000 upfront /
  *   immediately / first / at once / in a lump sum");
- * and the figure's sentence, or the next two, pay the rest in instalments or yearly / monthly payments or payouts and name
- * that rest ("the balance", "the remainder", "any amount above that"). The figure says how a benefit is paid, not how
+ * and the figure's own sentence, or a next sentence that opens by referring back to the rest ("The balance ...", "Any
+ * amount above that ..."), pays that rest in instalments or yearly / monthly payments or payouts, never the premium's. The figure says how a benefit is paid, not how
  * much it is, so it is never an amount. */
 const SCHEDULE_CONDITION = /\b(?:if|where|when(?:ever)?|in\s+the\s+event|claims?\s+(?:of|that|which)|any\s+claim\s+(?:of|that|which))\b(?![^.;,:]*\b(?:not|never|no|cannot)\b|[^.;,:]*n't\b)[^.;,:]{0,100}\b(?:above|over|exceeds?|exceeding|more\s+than|greater\s+than|in\s+excess\s+of)\s*$/i;
 const SCHEDULE_FIRST = /\b(?:(?:first|initial(?:ly)?)\b[^.;]{0,40}\blump[\s-]+sum(?:\s+payment)?\s+(?:of\s+)?|the\s+first\s+)$/i;
 const SCHEDULE_FIRST_AFTER = /^\s*(?:(?:will\s+be|shall\s+be|is|are)\s+)?(?:(?:paid|payable)\s+)?(?:first|initially|up\s*front|immediately|at\s+once|(?:as\s+|in\s+)(?:a|one)\s+lump[\s-]+sum)\b/i;
 const SCHEDULE_REST = /\b(?:instal+ments?|(?:annual|monthly|yearly|quarterly|half[\s-]?yearly|equal|regular)\s+(?:payments|payouts|amounts))\b/i;
 const SCHEDULE_BALANCE = /\b(?:balance|remaining\s+(?:amount|sum|benefit)|remainder|rest\s+of\s+the|any\s+(?:amount|sum)\s+(?:above|over|in\s+excess\s+of)\s+(?:that|this|it))\b/i;
+/** A sentence that opens by referring back to what is left: "The balance ...", "Any amount above that ...", "The remainder". */
+const SCHEDULE_BALANCE_START = /^\s*(?:the\s+(?:balance|remainder|remaining\s+(?:amount|sum|benefit))|any\s+(?:amount|sum|balance)\s+(?:above|over|in\s+excess\s+of)\s+(?:that|this|it)|any\s+balance)\b/i;
 export function scheduleFigure(text: string, value: number): boolean {
   const flat = text.normalize("NFKC").replace(/\s+/g, " ");
   const at = [...flat.matchAll(/(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\d,])|(?<![\d.,])\d+(?:\.\d+)?(?![\d.,]*\d)/g)].filter((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
   if (!at.length) return false;
   const END = /[.;](?:\s|$)/g;
+  const endFrom = (i: number) => { END.lastIndex = i; const e = END.exec(flat); return e ? e.index + 1 : flat.length; };
   return at.every((m) => {
-    const before = flat.slice(0, m.index);
-    const start = Math.max(before.search(/[^.;]*$/), 0);
-    // The figure's sentence and the next two: a schedule's rest is often its own sentence ("... a lump sum of S$200,000.
-    // The balance will be paid in three (3) equal annual instalments.").
+    const start = Math.max(flat.slice(0, m.index).search(/[^.;]*$/), 0);
     const after = m.index! + m[0].length;
-    END.lastIndex = after;
-    let end = flat.length;
-    for (let k = 0; k < 3; k++) { const e = END.exec(flat); if (!e) { end = flat.length; break; } end = e.index + 1; }
-    const window = flat.slice(start, end);
+    const own = flat.slice(start, endFrom(after));
+    const nextStart = start + own.length;
+    const next = flat.slice(nextStart, endFrom(nextStart + 1));
+    // The rest of the payment is named where the figure's own sentence pays it, or in the next sentence only when that
+    // sentence opens by referring back ("The balance will be paid in ... instalments", "Any amount above that is paid in
+    // instalments"). A neighbouring benefit's or the premium's instalments never count (Critic on #545 re-check: a lump
+    // sum death benefit beside an income rider or monthly premiums kept its figure).
+    const rest = (t: string) => SCHEDULE_REST.test(t) && SCHEDULE_BALANCE.test(t) && !/\b(?:premiums?|contributions?)\b/i.test(t);
+    if (!(rest(own) || (SCHEDULE_BALANCE_START.test(next) && rest(next)))) return false;
     const lead = flat.slice(start, m.index).replace(/(?:[A-Z]{1,3}\$|RM|SGD|USD|MYR|HKD|GBP|EUR|AUD|£|€|\$)\s*$/i, "");
-    if (!SCHEDULE_REST.test(window) || !SCHEDULE_BALANCE.test(window)) return false;
     return SCHEDULE_CONDITION.test(lead) || SCHEDULE_FIRST.test(lead) || SCHEDULE_FIRST_AFTER.test(flat.slice(after));
   });
 }

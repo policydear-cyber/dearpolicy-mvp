@@ -60,6 +60,11 @@ test("scheduleFigure control: a sum, a cap or an instalment benefit's own figure
     ["The benefit never exceeds S$4,000 and is paid in monthly instalments.", 4000],
     ["The benefit doesn't exceed S$2,500, paid in monthly instalments.", 2500],
     ["If your income is above S$3,000, you receive monthly payments of S$500.", 3000],
+    // Critic on #545 re-check: a lump sum beside another benefit's instalments, or an excess, is an amount.
+    ["Death Benefit: we will pay S$300,000 in a lump sum. Terminal Illness: we advance the Death Benefit and the balance is paid on death. Premiums are payable in monthly instalments.", 300000],
+    ["Critical Illness: we will pay S$150,000 as a lump sum. Income Rider: any remaining amount is paid in equal payments over 5 years.", 150000],
+    ["Accidental Death: S$100,000 payable immediately on proof of death. Disability Income: 75% of salary, the remainder of the benefit period is paid in monthly payments.", 100000],
+    ["You pay the first S$500 of each claim and we pay the balance. Premiums may be paid in monthly instalments.", 500],
   ] as const) assert.equal(scheduleFigure(t, v), false, t);
 });
 test("chat: the first lump sum of a TPD payment schedule is never the person's TPD amount", () => {
