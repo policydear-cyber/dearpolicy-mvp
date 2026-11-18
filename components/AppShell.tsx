@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { HouseholdCurrencyPrompt } from "@/components/household-currency-prompt";
 import { clearHouseholdDeviceMemory } from "@/components/device-memory";
 import { Icon, type IconName } from "@/components/icons";
 import PublicShell from "@/components/public/PublicShell";
@@ -225,6 +226,8 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
             {!signedOutPage && <SignOutButton />}
           </div>
         </div>
+        {/* Household pages only; Account settings has its own currency section. */}
+        {!noNav && !reviewerArea && !operatorArea && pathname !== "/household" && <HouseholdCurrencyPrompt key={pathname} />}
         {children}
         {!noNav && <p className="trust-line mobile-privacy" data-testid="mobile-privacy"><Icon name="lock" />{hosted ? "Private to your household." : "Stays on this computer."}</p>}
       </main>

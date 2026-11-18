@@ -390,7 +390,7 @@ test.describe.serial("V1.1 release journey", () => {
     if (ids.ciClaim) {
       await timed("evidence upload", async () => {
         await owner.goto(`/claims/${ids.ciClaim}`);
-        await owner.locator("select").first().selectOption("specialist_memo");
+        await owner.locator("select:has(option[value=specialist_memo])").first().selectOption("specialist_memo");
         await owner.locator("input[type=file]").setInputFiles({ name: `${PREFIX}-memo.pdf`, mimeType: "application/pdf", buffer: await syntheticMemo(seed.patientName) });
         await owner.getByRole("button", { name: /^upload$/i }).click();
         for (let i = 0; i < 240; i++) {

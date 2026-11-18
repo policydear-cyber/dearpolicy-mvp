@@ -184,6 +184,36 @@ async function main() {
     assert.equal(out.insuredPeople[0].coverages[0].evidenceVerified, false);
   });
 
+  // ---- R: compulsory at sign-up (DC 18 Nov), asked of a household that has none
+  const { readFileSync } = await import("node:fs");
+  const read = (f: string) => readFileSync(f, "utf8");
+  await test("R the sign-up form asks for the currency, nothing preselected, and can't be sent without it", () => {
+    const form = read("app/signup/SignupForm.tsx");
+    assert.match(form, /const \[currency, setCurrency\] = useState\(""\)/);
+    assert.match(form, /<option value="" disabled>Choose a currency/);
+    assert.match(form, /password\.length < 8 \|\| !currency/);
+    assert.match(form, /JSON\.stringify\(\{[^}]*currency/);
+  });
+  await test("R the sign-up route refuses a missing or unknown currency and stores the choice with the new household", () => {
+    const route = read("app/api/auth/signup/route.ts");
+    assert.match(route, /parseHouseholdCurrencySetting\(body\.currency\)/);
+    assert.match(route, /if \(!currency\) return NextResponse\.json\(\{ error: "Choose the currency your policies are in\." \}, \{ status: 400 \}\)/);
+    assert.match(route, /ensureDefaultHousehold\([\s\S]*currency,\s*\}\)/);
+    assert.match(read("lib/household/repo.ts"), /insert into accounts\(id, name, currency\)/);
+  });
+  await test("R the setting's reader accepts only the listed choices", () => {
+    for (const v of ["SGD", "sgd ", "NONE", "PHP"]) assert.ok(HC.parseHouseholdCurrencySetting(v), v);
+    for (const v of ["", "$", "S$", "JPY", null, 5, "none of these"]) assert.equal(HC.parseHouseholdCurrencySetting(v), null, String(v));
+  });
+  await test("R a household with no currency is asked on household pages, owners only, and can't dismiss it", () => {
+    const prompt = read("components/household-currency-prompt.tsx");
+    assert.match(prompt, /m\.role === "owner"/);
+    assert.match(prompt, /!data\.activeHouseholdCurrency/);
+    assert.doesNotMatch(prompt, /localStorage|sessionStorage|Not now|onDismiss|Remind me/i);
+    const shell = read("components/AppShell.tsx");
+    assert.match(shell, /!noNav && !reviewerArea && !operatorArea && pathname !== "\/household" && <HouseholdCurrencyPrompt/);
+  });
+
   console.log(`household-currency-test: ${passed} passed, ${failures.length} failed`);
   if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }
 }

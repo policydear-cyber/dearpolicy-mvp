@@ -17,14 +17,9 @@ import { UNCHECKED_PAGE } from "@/lib/documents/layout-check";
 import { currenciesNamed } from "@/lib/documents/currency-names";
 export { currenciesNamed };
 
-export { HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY, HOUSEHOLD_CURRENCY_LABELS, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
-import { HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
+export { HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY, HOUSEHOLD_CURRENCY_LABELS, parseHouseholdCurrencySetting, type HouseholdCurrency, type HouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
+import { NO_HOUSEHOLD_CURRENCY, parseHouseholdCurrencySetting, type HouseholdCurrency } from "@/lib/documents/household-currency-options";
 
-/** A stored or submitted setting, read strictly: anything else is not a setting. */
-export function parseHouseholdCurrencySetting(value: unknown): HouseholdCurrencySetting | null {
-  const v = typeof value === "string" ? value.trim().toUpperCase() : "";
-  return v === NO_HOUSEHOLD_CURRENCY || (HOUSEHOLD_CURRENCIES as readonly string[]).includes(v) ? (v as HouseholdCurrencySetting) : null;
-}
 
 /** The currency the household chose, or null when it chose "Don't assume" or has not chosen: nothing is assumed until a
  * household chooses (DC 17 Nov). */

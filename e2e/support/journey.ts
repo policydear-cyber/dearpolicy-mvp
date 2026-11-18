@@ -154,6 +154,7 @@ void ANON_KEY;
 export async function signUpThroughUi(page: Page, args: { email: string; password: string; household: string }) {
   await page.goto("/signup");
   await page.getByLabel("Household name (optional)").fill(args.household);
+  await page.getByLabel("Policy currency").selectOption("SGD");
   await page.getByLabel("Email").fill(args.email);
   await page.getByLabel("Password").fill(args.password);
   await page.getByRole("button", { name: "Create account" }).click();

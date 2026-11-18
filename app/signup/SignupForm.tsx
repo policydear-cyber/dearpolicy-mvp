@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
 import { safeInviteNext } from "@/lib/auth/invite-return";
+import { HOUSEHOLD_CURRENCIES, HOUSEHOLD_CURRENCY_LABELS, NO_HOUSEHOLD_CURRENCY } from "@/lib/documents/household-currency-options";
 
 /** Shown above the form while sign-up is invite-only (DEARPOLICY_SIGNUP_MODE=invite, read by app/signup/page.tsx). */
 export const INVITE_ONLY_NOTE = "DearPolicy is open by invitation only at the moment. Use the email address your invitation was sent to.";
@@ -22,6 +23,8 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [householdName, setHouseholdName] = useState("");
+  // Compulsory (DC 18 Nov): nothing is chosen for the person.
+  const [currency, setCurrency] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -39,7 +42,7 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, householdName, ...(inviteNext ? { next: inviteNext } : {}) }),
+        body: JSON.stringify({ email, password, householdName, currency, ...(inviteNext ? { next: inviteNext } : {}) }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -69,6 +72,12 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
         <label htmlFor="su-household">Household name (optional)</label>
         <p className="field-hint" style={{ marginTop: 0 }}>Your family shares one household. For example, &ldquo;The Tan family&rdquo;. You can change it later.</p>
         <input id="su-household" suppressHydrationWarning type="text" value={householdName} onChange={(e) => setHouseholdName(e.target.value)} />
+        <label htmlFor="su-currency" style={{ marginTop: 12 }}>Policy currency</label>
+        <p id="su-currency-hint" className="field-hint" style={{ marginTop: 0 }}>Used only for amounts a document prints without a currency. A currency the document prints always comes first. You can change it later in Account settings.</p>
+        <select id="su-currency" suppressHydrationWarning required value={currency} onChange={(e) => setCurrency(e.target.value)} aria-describedby="su-currency-hint">
+          <option value="" disabled>Choose a currency…</option>
+          {[...HOUSEHOLD_CURRENCIES, NO_HOUSEHOLD_CURRENCY].map((code) => <option value={code} key={code}>{HOUSEHOLD_CURRENCY_LABELS[code]}</option>)}
+        </select>
         <label htmlFor="su-email" style={{ marginTop: 12 }}>
           Email
         </label>
@@ -96,10 +105,11 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
             {notice}
           </div>
         ) : null}
-        <button className="button primary" type="submit" disabled={busy || !email.trim() || password.length < 8} style={{ marginTop: 10 }} aria-describedby="su-ready-hint">
+        <button className="button primary" type="submit" disabled={busy || !email.trim() || password.length < 8 || !currency} style={{ marginTop: 10 }} aria-describedby="su-ready-hint">
           {busy ? "Creating…" : "Create account"}
         </button>
-        {!busy && !email.trim() ? <p id="su-ready-hint" className="field-hint">Enter your email to continue.</p> : null}
+        {!busy && !email.trim() ? <p id="su-ready-hint" className="field-hint">Enter your email to continue.</p>
+          : !busy && !currency ? <p id="su-ready-hint" className="field-hint">Choose your policy currency to continue.</p> : null}
       </form>
       <p style={{ marginTop: 16 }}>
         Already have an account? <Link href={inviteNext ? `/login?next=${encodeURIComponent(inviteNext)}` : "/login"}>Sign in</Link>

@@ -86,6 +86,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     await owner.goto("/signup");
     const submit = owner.getByRole("button", { name: "Create account" });
     await expect(submit).toBeDisabled();
+    await owner.getByLabel("Policy currency").selectOption("SGD");
     await owner.getByLabel("Email").fill(ownerEmail);
     await owner.getByLabel("Password").fill("short");
     await expect(submit, "a password under 8 characters keeps the button disabled").toBeDisabled();
@@ -103,6 +104,12 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     const shortPassword = await api(owner, "/api/auth/signup", { method: "POST", body: { email: ownerEmail, password: "short" } });
     expect(shortPassword.status).toBe(400);
     expect(JSON.stringify(shortPassword.body)).toMatch(/at least 8 characters/);
+    // The policy currency is compulsory at sign-up (DC 18 Nov): refused without one, and nothing is chosen for the person.
+    const noCurrency = await api(owner, "/api/auth/signup", { method: "POST", body: { email: ownerEmail, password: ownerPassword } });
+    expect(noCurrency.status).toBe(400);
+    expect(JSON.stringify(noCurrency.body)).toMatch(/currency/);
+    const badCurrency = await api(owner, "/api/auth/signup", { method: "POST", body: { email: ownerEmail, password: ownerPassword, currency: "$" } });
+    expect(badCurrency.status).toBe(400);
   });
 
   test("2. sign-up leaves the account pending email confirmation; sign-in is refused until confirmed", async ({ browser }: { browser: Browser }) => {
@@ -124,6 +131,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     await again.goto("/signup");
     await again.getByLabel("Email").fill(ownerEmail);
     await again.getByLabel("Password").fill(newPassword());
+    await again.getByLabel("Policy currency").selectOption("SGD");
     await again.getByRole("button", { name: "Create account" }).click();
     await expect(again.locator(".alert[role=alert]")).toContainText(/already registered/i);
     await again.context().close();
@@ -358,7 +366,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     await expect(owner.getByTestId("indicative-estimate")).toHaveAttribute("data-has-estimate", "no");
     await expect(owner.getByTestId("indicative-estimate-notice")).toHaveText(INDICATIVE_NOTICE);
     const upload = async (file: string, bytes: Buffer) => {
-      await owner.locator("select").first().selectOption("specialist_memo");
+      await owner.locator("select:has(option[value=specialist_memo])").first().selectOption("specialist_memo");
       await owner.locator("input[type=file]").setInputFiles({ name: file, mimeType: "application/pdf", buffer: bytes });
       await owner.getByRole("button", { name: /^upload$/i }).click();
       await expect(owner.getByText(file).first()).toBeVisible({ timeout: 60_000 });

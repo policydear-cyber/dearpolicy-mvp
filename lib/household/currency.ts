@@ -30,6 +30,17 @@ export async function householdCurrencyOf(accountId: string): Promise<HouseholdC
   }
 }
 
+/** Whether the setting can be stored at all (sql/household-currency.sql applied): until then nobody is asked to choose
+ * (Critic #534 M1). A failed read counts as not available. */
+export async function householdCurrencySettingAvailable(): Promise<boolean> {
+  try {
+    const row = (await query<{ ok: boolean }>(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='accounts' AND column_name='currency') AS ok`)).rows[0];
+    return !!row?.ok;
+  } catch {
+    return false;
+  }
+}
+
 export class HouseholdCurrencyNotAvailable extends Error {}
 
 /** Owner-only, like the household's name: RLS's accounts_update policy filters a non-owner to zero rows. */

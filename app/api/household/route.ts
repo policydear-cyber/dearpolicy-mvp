@@ -5,7 +5,7 @@ import { listMemberships, renameHousehold } from "@/lib/household/repo";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { requestHouseholdDeletion } from "@/lib/lifecycle/coordinator";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { HouseholdCurrencyNotAvailable, setHouseholdCurrency, storedHouseholdCurrency, withdrawHouseholdCurrency } from "@/lib/household/currency";
+import { HouseholdCurrencyNotAvailable, householdCurrencySettingAvailable, setHouseholdCurrency, storedHouseholdCurrency, withdrawHouseholdCurrency } from "@/lib/household/currency";
 import { parseHouseholdCurrencySetting } from "@/lib/documents/household-currency";
 
 export const runtime = "nodejs";
@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
     let activeHouseholdName: string | null = null;
     // The household's own currency (lib/documents/household-currency): null = not chosen (nothing is assumed).
     let activeHouseholdCurrency: string | null = null;
+    let currencySettingAvailable = false;
     try {
       activeHouseholdId = (await requireHouseholdContext(request)).householdId;
       const active = await createUserSupabaseClient(user.id, (client) =>
@@ -38,10 +39,11 @@ export async function GET(request: NextRequest) {
       );
       activeHouseholdName = active.rows[0]?.name ?? null;
       activeHouseholdCurrency = await storedHouseholdCurrency(user.id, activeHouseholdId).catch(() => null);
+      currencySettingAvailable = await householdCurrencySettingAvailable();
     } catch {
       // No household yet -- memberships is simply [] in that case.
     }
-    return NextResponse.json({ memberships, activeHouseholdId, activeHouseholdName, activeHouseholdCurrency });
+    return NextResponse.json({ memberships, activeHouseholdId, activeHouseholdName, activeHouseholdCurrency, currencySettingAvailable });
   } catch (error) {
     if (error instanceof UnauthenticatedError) return routeErrorResponse(error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });
