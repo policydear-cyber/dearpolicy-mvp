@@ -930,7 +930,9 @@ export function proseHeadlineShare(cell: string, value: number, next = "", words
   if (SHARE_LIFE.test(around) || TAKES_OFF.test(around) || SHARED_WITH.test(around)) return false;
   // A share paid again and again ("This is paid monthly for 24 months", "each year") is not one sum: a percentage row has no
   // period, so it is left as read (TE on #544).
-  if (REPEATED.test(`${all}\n${next}`)) return false;
+  // The next line only when it continues the sentence, never another table row ("Monthly Hospital Income<TAB>S$100 a
+  // day", Critic on #544, U7).
+  if (REPEATED.test(all) || (!NEW_ROW.test(next) && REPEATED.test(next))) return false;
   const pcts = [...all.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent\b)/gi)];
   if (pcts.length !== 1 || Math.abs(Number(pcts[0][1].replace(",", ".")) - value) > 0.0001) return false;
   const m = PROSE_SHARE.exec(all);
@@ -958,7 +960,10 @@ export function provisionAround(text: string, start: number, end: number): strin
   for (let i = 0, pos = 0; i < lines.length; pos += lines[i].length + 1, i++) { if (pos <= start) at = i; if (pos <= end) last = i; }
   const own = last;
   let num: string | null = null;
-  for (let i = at; i >= Math.max(0, at - 80); i--) { const m = CLAUSE_LINE.exec(lines[i]); first = i; if (m) { num = m[1]; break; } }
+  // Upwards only a dotted clause number ("3.1") starts the clause: a list item or heading with one number ("1 Major
+  // Cancer", "2. Heart Attack") may sit inside it, so the search reads past them, to the top of the page if need be
+  // (Critic on #544, U1).
+  for (let i = at; i >= Math.max(0, at - 80); i--) { const m = CLAUSE_LINE.exec(lines[i]); first = i; if (m && m[1].includes(".")) { num = m[1]; break; } }
   last = Math.min(lines.length - 1, own + 80);
   for (let i = own + 1; i <= Math.min(lines.length - 1, own + 80); i++) {
     const m = CLAUSE_LINE.exec(lines[i]);

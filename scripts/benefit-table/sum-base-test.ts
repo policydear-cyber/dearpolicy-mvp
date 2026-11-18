@@ -712,6 +712,16 @@ for (const [what, page2] of [
   assert.ok(!r || r.figure.kind === "none", JSON.stringify(r?.figure));
 });
 
+test("C (Critic re-check 5 on #544): a deduction above an illness list in the clause is read; a next table row's period is not the share's", () => {
+  const above = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1,
+    page2: "3 BENEFITS\n3.1 Critical Illness Benefit\nAny amount paid under the Early Stage Benefit will be deducted.\n1 Major Cancer\n2 Heart Attack\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.",
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(rowOf(above, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
+  assert.equal(proseHeadlineShare("Death\tWe will pay 100% of the Sum Assured.", 100, "Monthly Hospital Income\tS$100 a day"), true);
+  assert.equal(proseHeadlineShare("We will pay 1% of the Sum Assured.", 1, "This is paid monthly for 24 months."), false);
+});
+
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.error(`benefit-table sum base: ${passed} passed, ${failures.length} failed`);
