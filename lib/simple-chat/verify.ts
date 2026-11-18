@@ -33,7 +33,7 @@ import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
-import { COVER_NOTE } from "@/lib/chat/cover-note";
+import { COVER_NOTE, COVER_NOTE_ID, coverNotePattern, isCoverNote, isOldCoverNote } from "@/lib/chat/cover-note";
 
 export const LEFT_OUT_AMOUNT = "I left out an amount I couldn’t find printed in your documents.";
 export const LEFT_OUT_FACT = "I left out a point I couldn’t find in your documents.";
@@ -1418,6 +1418,18 @@ const CAP_WORD = /\b(?:up\s+to|maximum|max\.?|not\s+exceeding|limited\s+to|cappe
  * - it is a sum insured (its lines or the table heading above say "sum insured" or "sum assured"), not a limit or an
  *   expense amount (TE #103 A10b), and its lines print nothing but the heading's benefit words, "sum insured" and the
  *   amount (A10c). */
+/** Whether the household put two documents into one policy folder for this person (sql/policy-folders.sql): both are in
+ * the same folder, that folder is for this person, neither is a superseded copy, and they do not print two different
+ * policy numbers (a document put in the wrong folder is not joined on the folder's word alone). A folder for someone else,
+ * or two folders, is not the same policy. Every other check (the base line names the person, prints the cover's sum)
+ * still applies. */
+function sameFolder(household: Household, a: HouseholdDocument, b: HouseholdDocument, person: string): boolean {
+  if (a.supersededAt || b.supersededAt) return false;
+  const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (number(a) && number(b) && number(a) !== number(b)) return false;
+  return (household.folders ?? []).some((f) => f.documents.includes(a.policyId) && f.documents.includes(b.policyId) &&
+    f.people.some((p) => baseName(p) === baseName(person)));
+}
 function wholeSumInsured(st: ModelStatement, wording: Found, household: Household, person: string, serverWords: ReadonlySet<string> = new Set()): Found | null {
   const po = st.percentOf!;
   if (!po.baseQuote) return null;
@@ -1426,7 +1438,7 @@ function wholeSumInsured(st: ModelStatement, wording: Found, household: Househol
   if (!bf) return null;
   const wdoc = household.documents[wording.docIndex], bdoc = household.documents[bf.docIndex];
   const number = (d: HouseholdDocument) => (d.policyNumber ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
-  const samePolicy = bf.docIndex === wording.docIndex || !!(number(wdoc) && number(wdoc) === number(bdoc));
+  const samePolicy = bf.docIndex === wording.docIndex || !!(number(wdoc) && number(wdoc) === number(bdoc)) || sameFolder(household, wdoc, bdoc, person);
   if (samePolicy && quotedLineIsWhole(bf, wording, household, person)) return bf;
   // Otherwise the plan's own Sum Assured cell, in the wording's document or the base's (when it is the same policy).
   const want = moneyFiguresIn(po.baseAmount)[0]?.value ?? numbersIn(po.baseAmount)[0];
@@ -3657,56 +3669,51 @@ const ownedBy = (d: HouseholdDocument, person: string) =>
 const andList = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 
 /** An answer that shows amounts for a person while some of that person's documents gave it nothing (not read, read only
- * in part, still being read, or whose benefits the table could not read) never reads as the person's whole cover: the
- * bottom line says the amounts may not be all of it, and names those documents (fresh-start run 10 Nov: a death answer
- * showed one policy's figure while another policy's benefits were unread). Documents that hold no cover (receipts,
- * letters, unless the table says one is a misfiled pack still to read) and superseded copies are not counted. With amounts for no named person, every such document counts.
+ * in part, still being read, or whose benefits the table could not read) never reads as the person's whole cover (fresh-
+ * start run 10 Nov: a death answer showed one policy's figure while another policy's benefits were unread). It says so in
+ * one short plain line, as the answer's last point (id COVER_NOTE_ID), never in the bottom line (DC, 18 Nov 2026: an
+ * overview that opened with a document count, file names, "read only in part", "not counted here" and "not a total" read
+ * as a refund request): the documents by their product names, or a count when any has none, never a file name, and never
+ * "not a total" (each amount is on its own card already). Documents that hold no cover (receipts, letters, unless the
+ * table says one is a misfiled pack still to read) and superseded copies are not counted. With amounts for no named
+ * person, every such document counts.
  * `tableStates`: each document's benefit-table state (policy id to state), when the table is on; `charged`: the premium
- * rows' labels (RowReport.premiumLabels). Returns the sentence
- * added, or null. */
-/** The note as noteCoverNotCounted writes it, for any person and documents: a bottom line the model wrote may repeat an
- * earlier turn's note (the history it is sent carries it), which is taken out before this turn's note is said (TE #402). */
+ * rows' labels (RowReport.premiumLabels). Returns the sentence added, or null. A note an earlier turn gave, which the model
+ * may repeat from the history it is sent, is taken out first (TE #402): this turn's note (or none) is the one that holds. */
 export function noteCoverNotCounted(answer: StructuredAnswer, household: Household, tableStates: ReadonlyMap<string, string> | null = null, charged: ReadonlySet<string> = new Set()): string | null {
-  // An earlier note the model repeated is never kept: this turn's note (or none) is the one that holds now.
-  const repeated = (answer.bottomLine ?? answer.summary ?? "");
-  const cleaned = repeated.replace(COVER_NOTE, "").trim();
-  if (cleaned !== repeated.trim()) { answer.bottomLine = cleaned; answer.summary = cleaned; }
   // A premium is charged, never claimed: an answer whose every amount is a premium row's own card is not about cover.
   const amounts = (answer.statements ?? []).filter((s) => s.amount && !charged.has(s.text));
+  // Today's wording is taken out only from an answer this turn's note speaks for (one with amounts): with no amounts it is
+  // the model's own answer, such as to "which of my documents haven't been fully read?", and stays (TE #539 M1). The
+  // old wording, which only the server ever wrote, is taken out of any answer, as before.
+  const products = amounts.length ? household.documents.map((d) => d.productName ?? "") : null;
+  const pattern = products ? coverNotePattern(products) : COVER_NOTE;
+  const repeated = (answer.bottomLine ?? answer.summary ?? "");
+  const cleaned = repeated.replace(pattern, "").trim();
+  if (cleaned !== repeated.trim()) { answer.bottomLine = cleaned; answer.summary = cleaned; }
+  if (answer.statements) answer.statements = answer.statements.filter((s) => s.id !== COVER_NOTE_ID && (!!s.amount || !(products ? isCoverNote(s.text, products) : isOldCoverNote(s.text))));
   if (!amounts.length) return null;
   const people = [...new Set(amounts.map((s) => s.personName ?? null))];
   // A receipt or letter holds no cover, unless the table says it is a misfiled pack waiting for Read again or being read
   // (lib/benefit-table/service.ts documentState): then its state decides, as everywhere else (Critic #402).
   const coverHolding = (d: HouseholdDocument) => !NO_COVER_READING_ROLES.includes(d.documentRole ?? "") || MISFILED_STATES.has(tableStates?.get(d.policyId) ?? "");
   const candidates = household.documents.filter((d) => !d.supersededAt && coverHolding(d));
-  const notes: string[] = [];
   const named = people.filter((p): p is string => !!p);
   const sayWho = named.length > 0 && !people.includes(null);
-  const groups = sayWho ? named.map((p) => ({ who: p, docs: candidates.filter((d) => ownedBy(d, p)) })) : [{ who: null, docs: candidates }];
-  for (const g of groups) {
-    // A document read in part that an amount shown comes from: its cover shown may be incomplete. One no amount shown
-    // comes from is not counted here at all, like any other document not read (Critic #404 M: "may be incomplete" for a
-    // document nothing was shown from made another document's figure read as the whole cover).
-    const shownFrom = (d: HouseholdDocument) => amounts.some((s) => s.source && (s.source.policyName === docLabel(household, d)
-      || s.source.citationIds.some((id) => (answer.citations ?? []).some((c) => c.chunkId === id && c.policyId === d.policyId))));
-    const missing = g.docs.flatMap((d) => {
-      const past = readPastWords(d, tableStates);
-      if (past) return shownFrom(d) ? [] : [`${labelFor(household, d)} was read only in part (${past})`];
-      const why = notCountedWhy(d, tableStates); return why ? [`${labelFor(household, d)} ${why}`] : [];
-    });
-    const partial = g.docs.flatMap((d) => { const words = readPastWords(d, tableStates); return words && shownFrom(d) ? [`The cover shown from ${labelFor(household, d)} may be incomplete (${words}), so the amounts shown may not be a total.`] : []; });
-    if (!missing.length && !partial.length) continue;
-    const whose = g.who ? `${g.who}’s` : "your household’s";
-    if (missing.length) notes.push(`This may not be all of ${whose} cover: ${andList(missing)}, so any cover in ${missing.length === 1 ? "it" : "them"} is not counted here and the amounts shown are not a total.`);
-    notes.push(...partial);
-  }
-  if (!notes.length) return null;
-  const said = notes.join(" ");
-  const head = (answer.bottomLine ?? answer.summary ?? "").trim();
-  answer.bottomLine = head ? `${head.replace(/([^.!?])$/, "$1.")} ${said}` : said;
-  answer.summary = answer.bottomLine;
-  const names = household.documents.map((d) => d.name).filter((n) => n && said.includes(n));
-  if (names.length) answer.libraryNames = [...new Set([...(answer.libraryNames ?? []), ...names])];
+  const docs = sayWho ? candidates.filter((d) => named.some((p) => ownedBy(d, p))) : candidates;
+  // Not read in full: not read, still being read, on hold, read only in part, or pages its benefits were read past.
+  const notFull = docs.filter((d) => !!readPastWords(d, tableStates) || !!notCountedWhy(d, tableStates));
+  if (!notFull.length) return null;
+  const waiting = notFull.every((d) => stillReading(d) || onHold(d) || ["waiting", "held"].includes(tableStates?.get(d.policyId) ?? ""));
+  // A document is named only by the product it is: a file name never is. Any without one makes the line a count.
+  const names = [...new Set(notFull.map((d) => d.productName?.trim() || ""))];
+  const n = notFull.length, one = n === 1;
+  const subject = names.every(Boolean) && names.length === n && n <= 2 ? andList(names)
+    : `${sentence(COUNT_WORDS[n] ?? String(n))} ${one ? "document" : "documents"}`;
+  const said = waiting
+    ? `${subject} ${one ? "is" : "are"} still being read, so ${one ? "its" : "their"} details are not included yet.`
+    : `${subject} ${one ? "is" : "are"} not fully read, so some details may be missing${names.every(Boolean) && names.length === n && n <= 2 ? "" : " (the Documents page shows which)"}.`;
+  answer.statements = [...(answer.statements ?? []), { id: COVER_NOTE_ID, kind: "uncertainty", text: said, fullText: said, conditions: [] } as AnswerStatement];
   return said;
 }
 

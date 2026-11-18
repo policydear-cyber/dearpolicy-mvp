@@ -1875,3 +1875,33 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
   .cover-summary-list li { grid-template-columns: minmax(0, 1fr); }
   .cover-summary-amount { text-align: left; }
 }
+
+/* Policy folders on the Documents page (components/policy-folders.tsx): each policy's documents together. */
+.policy-folders { display: grid; gap: 12px; }
+.folder-list { display: grid; gap: 12px; }
+.policy-folder .policy-logo { display: grid; place-items: center; }
+.policy-folder .status { text-transform: none; white-space: nowrap; }
+.policy-folder .status.partial { background: var(--warn-tint); color: var(--warn-text); }
+.folder-docs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.folder-docs li { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 8px 10px; background: var(--surface-2); border-radius: var(--r-sm); }
+.folder-doc-kind { font-size: var(--fs-xs); color: var(--muted); font-weight: 600; }
+.folder-doc-name { min-width: 0; overflow-wrap: anywhere; }
+.folder-doc-state { color: var(--muted); }
+.folder-doc-state.failed { color: var(--critical); }
+.folder-doc-actions, .folder-actions, .folder-confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.folder-confirm { padding: 10px 12px; background: var(--warn-tint); color: var(--warn-text); border-radius: var(--r-sm); }
+.folder-confirm.final { background: transparent; color: var(--ink); padding: 0; }
+.folder-confirm span { font-weight: 600; margin-right: auto; }
+.folder-suggestion { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--surface); border-radius: var(--r-sm); }
+.folder-create, .folder-add { display: grid; gap: 14px; }
+.folder-create h3 { margin: 0; }
+.folder-create fieldset, .folder-add fieldset { border: 0; padding: 0; margin: 0; }
+.folder-create legend, .folder-add legend { font-size: var(--fs-sm); font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+.folder-check { display: flex; gap: 10px; align-items: center; min-height: 44px; font-size: var(--fs-sm); }
+.folder-check input { width: 20px; height: 20px; }
+.folder-chosen { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--fs-sm); }
+.folder-chosen li { display: flex; gap: 8px; align-items: center; justify-content: space-between; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .folder-docs li { grid-template-columns: 1fr auto; }
+  .folder-doc-kind { grid-column: 1 / -1; }
+}
