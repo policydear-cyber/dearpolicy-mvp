@@ -645,6 +645,26 @@ test("C control: the sentence followed by a line that takes earlier payments off
   assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
 });
 
+for (const [what, page2] of [
+  ["a deduction on the line above, in the same sentence", "3 BENEFITS\n3.1 Critical Illness Benefit\nSubject to the deduction of any amount previously paid under this Policy,\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum."],
+  ["another life on the line above", "3 BENEFITS\n3.1 Critical Illness Benefit\nIf Life Assured 2 is diagnosed with a covered illness,\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum."],
+  ["a reduction after a blank line", `3 BENEFITS\n${PROSE}\n\nThe Sum Assured will be reduced by any amount paid under the Early Stage Benefit.`],
+  ["a deduction two lines down", `3 BENEFITS\n${PROSE}\nThis benefit is subject to the waiting period.\nAny amount paid under the Early Stage Benefit will be deducted.`],
+  ["a deduction in the clause's own sub-clause", `3 BENEFITS\n${PROSE}\n3.1.1 Any amount paid under the Early Stage Benefit will be deducted.`],
+] as const) test(`C control (Critic on #544): ${what} leaves the share with no amount`, () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
+});
+test("C: a deduction in the next clause (3.2) is another provision's, so the share is still settled", () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1,
+    page2: `3 BENEFITS\n${PROSE}\n3.1.1 This benefit is subject to the waiting period in Clause 8.\n3.2 Death Benefit\nWe will pay the Sum Assured less any amount owing to Us.`,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(amountOf(h, "Lee Wei Ming", /Critical Illness Benefit/), 300000);
+});
+
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.error(`benefit-table sum base: ${passed} passed, ${failures.length} failed`);

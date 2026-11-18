@@ -899,15 +899,20 @@ const OF_THIS_PLAN = String.raw`(?:\s+(?:of|under)\s+(?:this|the)\s+(?:(?:basic|
  * sentence holding the row's one percentage must be, whole, "We/The Company/The Insurer will/shall pay", the share (its
  * figure may be spelled out before it in words and printed in brackets), "of <the policy's headline sum>", optionally
  * "of this (Basic) Benefit/Plan/Policy", then only the closed phrases of CELL_TAIL, and its full stop. Like
- * headlineSumShare, the cell, the line after it and the row's words must name no other life (SHARE_LIFE) and take
- * nothing off (TAKES_OFF), so "less any amount paid under Early Stage" on the next line leaves the share as read. */
+ * headlineSumShare, the cell, the line after it, the row's words and the whole provision it is in (provisionAround) must
+ * name no other life (SHARE_LIFE) and take nothing off (TAKES_OFF), so "less any amount paid under Early Stage" anywhere in
+ * the clause leaves the share as read. */
 /** The words a share's figure is spelled out in before its digits ("one hundred percent (100%)"); no other word ("up to",
  * "a further", "the balance of") may stand between the pay verb and the share. */
 const SPELLED_NUMBER = String.raw`(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|and|point|per\s?cent)`;
 const PROSE_SHARE = new RegExp(String.raw`\b(?:we|the\s+company|the\s+insurer)\s+(?:will|shall)\s+pay\s+(?:${SPELLED_NUMBER}[\s-]+){0,10}\(?\s*(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent)\s*\)?\s+of\s+${HEADLINE_SUM_NAME}${OF_THIS_PLAN}(?:\s*,?\s*${CELL_TAIL})*\s*\.(?:\s|$)`, "iu");
-export function proseHeadlineShare(cell: string, value: number, next = "", words = ""): boolean {
+export function proseHeadlineShare(cell: string, value: number, next = "", words = "", provision = ""): boolean {
   const all = cell.normalize("NFKC").replace(/\s+/g, " ");
-  if (SHARE_LIFE.test(`${all}\n${next}\n${words}`) || TAKES_OFF.test(`${all}\n${next}\n${words}`)) return false;
+  // The whole provision the sentence is in (provisionAround), not only its own lines: "Subject to the deduction of any amount
+  // previously paid," on the line above, "If Life Assured 2 is diagnosed," or a later paragraph's "will be reduced by any
+  // amount paid under the Early Stage Benefit" each leave the share as read (Critic on #544, NEW-HIGH).
+  const around = `${all}\n${next}\n${words}\n${provision.normalize("NFKC")}`;
+  if (SHARE_LIFE.test(around) || TAKES_OFF.test(around)) return false;
   const pcts = [...all.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent\b)/gi)];
   if (pcts.length !== 1 || Math.abs(Number(pcts[0][1].replace(",", ".")) - value) > 0.0001) return false;
   const m = PROSE_SHARE.exec(all);
@@ -915,6 +920,25 @@ export function proseHeadlineShare(cell: string, value: number, next = "", words
   if (!m || m.index! > pcts[0].index! || m.index! + m[0].length <= pcts[0].index!) return false;
   const before = all.slice(0, m.index!).trimEnd();
   return before === "" || /[.,:;]$/.test(before);
+}
+/** A numbered clause line ("3.1 Critical Illness Benefit", "4. Exclusions") and its number. */
+const CLAUSE_LINE = /^\s*(\d+(?:\.\d+)*)\.?[ \t]+\S/;
+/** The provision a sentence at [start, end) of a page is in: back to the nearest numbered clause line above it (or the page's
+ * top), and on to the next numbered clause that is not one of that clause's own sub-clauses ("3.2" or "4" after "3.1", but
+ * not "3.1.1"), or the page's end when no clause number was found above. At most 80 lines each way. */
+export function provisionAround(text: string, start: number, end: number): string {
+  const lines = text.split("\n");
+  let at = 0, first = 0, last = lines.length - 1;
+  for (let i = 0, pos = 0; i < lines.length; pos += lines[i].length + 1, i++) { if (pos <= start) at = i; if (pos <= end) last = i; }
+  const own = last;
+  let num: string | null = null;
+  for (let i = at; i >= Math.max(0, at - 80); i--) { const m = CLAUSE_LINE.exec(lines[i]); first = i; if (m) { num = m[1]; break; } }
+  last = Math.min(lines.length - 1, own + 80);
+  for (let i = own + 1; i <= Math.min(lines.length - 1, own + 80); i++) {
+    const m = CLAUSE_LINE.exec(lines[i]);
+    if (m && num && m[1] !== num && !m[1].startsWith(`${num}.`)) { last = i - 1; break; }
+  }
+  return lines.slice(first, last + 1).join("\n");
 }
 /** A share's fixed base printed over its own table, for a row whose reading left the base unsettled (live walk 17 Nov:
  * the Product Summary's "Arm, Elbow, Wrist or Ribs<TAB>25%" under "Simple Fracture Benefit Limit: S$5,000" and "(% of
@@ -2236,7 +2260,8 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       return { cell: text.slice(from, to), next: to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "" }; };
     const cell = pays === "percent" && value != null && (percentOf === "other" || percentOf == null) ? cellOf() : null;
     const rowWords = [benefit, str(b.section) ?? "", str(b.column) ?? "", ...(Array.isArray(b.conditions) ? b.conditions.map((c) => str(c) ?? "") : [])].join("\n");
-    const baseFromWords = !!cell && (headlineSumShare(cell.cell, value!, cell.next, rowWords) || proseHeadlineShare(cell.cell, value!, cell.next, rowWords));
+    const baseFromWords = !!cell && (headlineSumShare(cell.cell, value!, cell.next, rowWords)
+      || proseHeadlineShare(cell.cell, value!, cell.next, rowWords, provisionAround(pageText(source.page), placed.get(source)!.start, placed.get(source)!.end)));
     if (baseFromWords) percentOf = "sum_insured";
     let baseAmount: number | null = null, baseSource: Source | null = null;
     if (percentOf === "fixed_amount") {
