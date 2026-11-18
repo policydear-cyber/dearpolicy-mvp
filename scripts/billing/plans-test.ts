@@ -200,6 +200,12 @@ test("counting and limits, per household", async () => {
     assert.equal((await H.mayAddDocument(A, { replacingPolicyId: "not-a-real-id" })).allowed, false, "a made-up id is no replacement (TE F5)");
     assert.equal((await H.mayAddDocument(A, { rereadingPolicyId: pid(1) })).allowed, true, "reading a counted document again adds nothing");
     assert.equal((await H.mayAddDocument(A, { rereadingPolicyId: pid(5) })).allowed, false, "reading an unreadable one again would make 6 of 5 (TE F3)");
+    // A newer copy already recorded, its original not yet marked replaced: a second newer copy has no place (TE F7).
+    await db.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,quarantine_status,supersedes_id)
+      VALUES($1,$2,$3,'copy.pdf','k-copy','h-copy','queued','scan_clean',$4)`, [pid(800), A, PERSON_A, pid(1)]);
+    assert.equal((await H.mayAddDocument(A, { replacingPolicyId: pid(1) })).allowed, false, "a document already being replaced has no place to give (TE F7)");
+    await db.query("DELETE FROM policies WHERE id=$1", [pid(800)]);
+    assert.equal((await H.mayAddDocument(A, { replacingPolicyId: pid(1) })).allowed, true, "and has it again once that copy is gone");
     assert.equal((await H.mayAddDocument(B)).allowed, false, "B has 10 on Free");
 
     // A paid plan, written by the server.

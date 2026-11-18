@@ -88,20 +88,24 @@ export async function keptDocumentCount(householdId: string, db: Reader = shared
   }
 }
 
-/** Questions the household has asked Ask DearPolicy this calendar month (UTC), every member together. Before
- * sql/household-plans.sql is applied, and only while limits are off, the messages still on file are counted instead. */
+/** Questions the household has asked Ask DearPolicy this calendar month (UTC), every member together. While limits
+ * are on, the count kept in household_question_counts (deleting chats never gives questions back). While limits are
+ * off nothing is counted on the chat path (no extra query per question), so the messages still on file are shown
+ * instead; the kept count starts on the day limits are switched on. */
 export async function questionsThisMonth(householdId: string): Promise<number> {
-  try {
-    const row = (await query<{ questions: number }>(
-      `SELECT questions FROM household_question_counts WHERE account_id=$1 AND month=date_trunc('month',now() AT TIME ZONE 'UTC')::date`, [householdId])).rows[0];
-    return Number(row?.questions ?? 0);
-  } catch (error) {
-    if (!isMissingTable(error) || planLimitsEnforced()) throw new PlanCheckUnavailable(error);
+  if (planLimitsEnforced()) {
+    try {
+      const row = (await query<{ questions: number }>(
+        `SELECT questions FROM household_question_counts WHERE account_id=$1 AND month=date_trunc('month',now() AT TIME ZONE 'UTC')::date`, [householdId])).rows[0];
+      return Number(row?.questions ?? 0);
+    } catch (error) {
+      throw new PlanCheckUnavailable(error);
+    }
   }
   try {
     const row = (await query<{ count: number }>(
       `SELECT count(*)::int AS count FROM chat_messages m JOIN chat_conversations c ON c.id=m.conversation_id
-        WHERE c.account_id=$1 AND m.role='user' AND m.created_at>=date_trunc('month',now())`, [householdId])).rows[0];
+        WHERE c.account_id=$1 AND m.role='user' AND m.created_at>=(date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')`, [householdId])).rows[0];
     return Number(row?.count ?? 0);
   } catch (error) {
     throw new PlanCheckUnavailable(error);
@@ -119,28 +123,37 @@ async function documentCounts(householdId: string, policyId: string, db: Reader 
   }
 }
 
+/** Another current copy already replaces this document (TE F7): its place is taken, until the old one is marked
+ * replaced a moment after that copy is recorded. */
+async function alreadyReplaced(householdId: string, policyId: string, db: Reader): Promise<boolean> {
+  try {
+    return (await db.query(
+      `SELECT 1 FROM policies WHERE supersedes_id=$1 AND account_id=$2 AND superseded_at IS NULL AND ${activePredicate()}`,
+      [policyId, householdId])).rows.length > 0;
+  } catch (error) {
+    throw new PlanCheckUnavailable(error);
+  }
+}
+
 /** May this household keep one more document? Always yes while limits are off. A newer copy of a document that already
  * counts takes its place; a newer copy of one that doesn't (unreadable, or not this household's) is one more (TE F4, F5).
  * `rereading`: an unreadable document read again would start to count (TE F3); a counted one already does. */
 export async function mayAddDocument(householdId: string, opts: { replacingPolicyId?: string | null; rereadingPolicyId?: string | null } = {}, db: Reader = shared): Promise<LimitCheck> {
   if (!planLimitsEnforced()) return { allowed: true };
   const existing = opts.replacingPolicyId ?? opts.rereadingPolicyId ?? null;
-  if (existing && /^[0-9a-f-]{36}$/i.test(existing) && await documentCounts(householdId, existing, db)) return { allowed: true };
+  if (existing && /^[0-9a-f-]{36}$/i.test(existing) && await documentCounts(householdId, existing, db)
+    && !(opts.replacingPolicyId && await alreadyReplaced(householdId, opts.replacingPolicyId, db))) return { allowed: true };
   const plan = await readHouseholdPlan(householdId, db);
   const kept = await keptDocumentCount(householdId, db);
   return checkDocumentLimit(plan.planId, kept);
 }
 
 /** Takes one of this month's questions for the household, or refuses when they are used up. One statement counts and
- * checks together, so questions sent at the same moment can't all slip past the limit. While limits are off nothing is
- * refused; the question is still counted when the table exists, so Plan usage shows it. */
+ * checks together, so questions sent at the same moment can't all slip past the limit. While limits are off it does nothing:
+ * nothing is refused or counted, and Plan usage counts the messages on file instead. */
 export async function takeQuestion(householdId: string): Promise<LimitCheck> {
-  if (!planLimitsEnforced()) {
-    await query(
-      `INSERT INTO household_question_counts(account_id,month,questions) VALUES($1,date_trunc('month',now() AT TIME ZONE 'UTC')::date,1)
-       ON CONFLICT (account_id,month) DO UPDATE SET questions=household_question_counts.questions+1`, [householdId]).catch(() => undefined);
-    return { allowed: true };
-  }
+  // Limits off: nothing is counted or read, so a question costs no extra query (r10 perf budgets).
+  if (!planLimitsEnforced()) return { allowed: true };
   const plan = await readHouseholdPlan(householdId);
   const limit = PLANS[plan.planId].questionsPerMonth;
   let taken: number | null;
@@ -158,6 +171,20 @@ export async function takeQuestion(householdId: string): Promise<LimitCheck> {
 
 type Executor = { query: (text: string, params?: unknown[]) => Promise<unknown> };
 
+/** Inside a transaction the caller has open on `client`: takes the household's document lock (held until that
+ * transaction ends) and checks the limit on the same connection. Every path that can make a document start to count
+ * (a new upload, a newer copy, reading an unreadable one again) goes through this, so requests sent together are
+ * checked one after another (TE F6, F8). Always allowed, with no lock, while limits are off. */
+export async function mayAddDocumentUnderLock(client: Executor, householdId: string, opts: { replacingPolicyId?: string | null; rereadingPolicyId?: string | null }): Promise<LimitCheck> {
+  if (!planLimitsEnforced()) return { allowed: true };
+  try {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('dearpolicy-plan-documents:' || $1::text))", [householdId]);
+  } catch (error) {
+    throw new PlanCheckUnavailable(error);
+  }
+  return mayAddDocument(householdId, opts, client as unknown as Reader);
+}
+
 /** Records a new document only if the household's plan still has room, with the count and the insert under one
  * per-household lock: uploads sent at the same moment can't all pass the limit (TE F6). `insert` runs inside the
  * transaction on its connection; a failure rolls it back and is thrown on. While limits are off it runs as before, with
@@ -172,10 +199,9 @@ export async function insertWithinDocumentLimit(householdId: string, opts: { rep
   try {
     await client.query("BEGIN");
     open = true;
-    await client.query("SELECT pg_advisory_xact_lock(hashtext('dearpolicy-plan-documents:' || $1::text))", [householdId]);
     let check: LimitCheck;
     try {
-      check = await mayAddDocument(householdId, opts, client as unknown as Reader);
+      check = await mayAddDocumentUnderLock(client, householdId, opts);
     } catch (error) {
       await client.query("ROLLBACK");
       open = false;

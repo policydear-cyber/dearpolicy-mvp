@@ -31,7 +31,7 @@ your plan" (never silently dropped to Free), so do step 1 before this step.
 
 In Vercel, Production environment variables: `DEARPOLICY_PLAN_LIMITS=on`, then redeploy.
 From then on a household on Free keeps 5 documents and asks 10 questions a month; Plus 20 and 60; Family up to 100
-(sold as unlimited, fair use) and 150. Questions start again on the 1st of each month (UTC).
+(sold as unlimited, fair use) and 150. Questions start again on the 1st of each month (UTC). Questions are counted from the moment limits are switched on, so the first month is generous.
 Switch off: remove the variable (or set `off`) and redeploy.
 
 ## 4. Take payments (Stripe)
