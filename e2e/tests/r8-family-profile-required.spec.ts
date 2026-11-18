@@ -59,6 +59,16 @@ test("Adding and editing need every detail; an older incomplete person is asked 
   await expect.poll(() => patches.length).toBe(1);
   expect(patches[0]).toMatchObject({ dateOfBirth: "2015-03-02", sex: "unspecified", preferredName: "Sammy", relationship: "child" });
 
+  // The "Saved" line from that save goes once Save is pressed again with a gap (no stale status beside "Required").
+  await expect(sam).toContainText("Saved Sam Tan.");
+  // (The mocked list still returns Sam's old, incomplete record, so changing the date leaves the other gaps empty.)
+  await sam.getByRole("button", { name: "Edit details" }).click();
+  await page.locator("#fm-m2-dob").fill("2015-03-03");
+  await sam.getByRole("button", { name: "Save" }).click();
+  await expect(page.locator("#fm-m2-preferred-error")).toHaveText("Required");
+  await expect(sam).not.toContainText("Saved Sam Tan.");
+  await sam.getByRole("button", { name: "Undo changes" }).click();
+
   // Editing a complete person: the full name is required too, and blanking it or a detail is caught on Save.
   await alex.getByRole("button", { name: "Edit details" }).click();
   await expect(alex.locator('label[for="fm-m1-name"] .field-required')).toHaveCount(1);
@@ -84,5 +94,18 @@ test("Adding and editing need every detail; an older incomplete person is asked 
   await page.locator("#fm-new-relationship").selectOption("spouse");
   await page.locator("#fm-new-dob").fill("1987-06-09");
   await page.locator("#fm-new-sex").selectOption("female");
+  await expect(page.locator("#fm-new-name-error")).toHaveCount(0);
+  await expect(page.locator("#fm-new-preferred-error")).toHaveText("Required");
+  expect(posts.length).toBe(0); // the first Add, with every field empty, sent nothing
+  await add.click();
+  await expect(page.locator("#fm-new-preferred")).toBeFocused();
+  expect(posts.length).toBe(0);
+  await page.locator("#fm-new-preferred").fill("Jamie");
+  await expect(page.locator("#fm-new-preferred-error")).toHaveCount(0);
+  await add.click();
+  await expect.poll(() => posts.length).toBe(1);
+  expect(posts[0]).toMatchObject({ displayName: "Jamie Tan", relationship: "spouse", dateOfBirth: "1987-06-09", sex: "female", preferredName: "Jamie" });
+  // After a successful add the cleared form shows no errors.
+  await expect(page.getByText("Family member added.")).toBeVisible();
   await expect(page.locator("#fm-new-name-error")).toHaveCount(0);
 });

@@ -37,6 +37,9 @@ const Missing = ({ id, show }: { id: string; show: boolean }) => show ? <small c
 /** Ties a field to its "Required" line while it shows. */
 const invalid = (id: string, show: boolean) => show ? { "aria-invalid": true as const, "aria-describedby": `${id}-error` } : {};
 
+/** Focuses a field once React has drawn its "Required" mark, so a screen reader announces the field with it. */
+function focusAfterRender(id: string) { requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(id)?.focus())); }
+
 /** Today as YYYY-MM-DD in the person's own time zone (a birth date can't be later). */
 function todayIso() {
   const d = new Date();
@@ -84,7 +87,7 @@ export default function FamilyPage() {
   async function add(event: FormEvent) {
     event.preventDefault(); setStatus(""); setStatusFor(null); setStatusIsError(false);
     const empty = newEmpty.find(([, isEmpty]) => isEmpty);
-    if (empty) { setNewTried(true); document.getElementById(`fm-new-${empty[0]}`)?.focus(); return; }
+    if (empty) { setNewTried(true); focusAfterRender(`fm-new-${empty[0]}`); return; }
     if (dob > todayIso()) return setStatus("A date of birth can't be in the future.");
     if (dob < "1900-01-01") return setStatus("Check the year of that date of birth.");
     const response = await fetch("/api/family", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: name, relationship, dateOfBirth: dob, preferredName: preferred.trim(), ...(sexField ? { sex } : {}) }) });
@@ -95,7 +98,11 @@ export default function FamilyPage() {
 
   async function save(member: Member) {
     const empty = editEmpty(member).find(([, isEmpty]) => isEmpty);
-    if (empty) { setEditTried((t) => ({ ...t, [member.id]: true })); document.getElementById(`fm-${member.id}-${empty[0]}`)?.focus(); return; }
+    if (empty) {
+      // An earlier "Saved …" or error line for this person would sit beside the Required marks: it no longer applies.
+      if (statusFor === member.id) { setStatus(""); setStatusFor(null); setStatusIsError(false); }
+      setEditTried((t) => ({ ...t, [member.id]: true })); focusAfterRender(`fm-${member.id}-${empty[0]}`); return;
+    }
     if (member.date_of_birth && member.date_of_birth > todayIso()) return setStatus("A date of birth can't be in the future.");
     if (member.date_of_birth && member.date_of_birth < "1900-01-01") return setStatus("Check the year of that date of birth.");
     const response = await fetch(`/api/family/${member.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: member.display_name, relationship: member.relationship, dateOfBirth: member.date_of_birth, preferredName: member.preferred_name, notes: member.notes, ...(sexField ? { sex: member.sex ?? null } : {}) }) });
