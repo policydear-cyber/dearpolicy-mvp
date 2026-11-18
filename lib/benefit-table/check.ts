@@ -890,7 +890,10 @@ export function headlineSumShare(cell: string, value: number, next = "", words =
   const from = all.slice(pcts[0].index!).replace(/\s+/g, " ").trim();
   // A label is words before a table cell, never a sentence that pays ("We will pay 100% of the Sum Assured."): such a
   // sentence is prose, settled only by proseHeadlineShare, which reads its whole provision (Critic on #544, NEW-HIGH A).
-  if (PAY_VERB.test(all.slice(0, pcts[0].index!))) return false;
+  // Only the share's own cell, after the last tab: a label may say who pays ("Amount we pay<TAB>100% of Sum Insured",
+  // Critic on #544 re-check 2), a sentence has no tab.
+  const lead = all.slice(0, pcts[0].index!);
+  if (PAY_VERB.test(lead.slice(lead.lastIndexOf("\t") + 1))) return false;
   return HEADLINE_CELL.test(from);
 }
 /** What may follow the headline sum's name in a sentence: "of this Basic Benefit", "of this Policy", "under this Plan" (the
@@ -912,7 +915,7 @@ const SPELLED_NUMBER = String.raw`(?:zero|one|two|three|four|five|six|seven|eigh
 /** A prose sentence's closed tail: CELL_TAIL, and "in one (1) lump sum" as wordings print it. Not in CELL_TAIL: a table cell
  * never needs it, and a sentence must take the provision check (Critic on #544, NEW-HIGH A). */
 const PROSE_TAIL = String.raw`(?:${CELL_TAIL}|(?:(?:payable|paid)\s+)?in\s+one\s+\(\s*1\s*\)\s+lump\s+sum)`;
-const PROSE_SHARE = new RegExp(String.raw`\b(?:we|the\s+company|the\s+insurer)\s+(?:will|shall)\s+pay\s+(?:${SPELLED_NUMBER}[\s-]+){0,10}\(?\s*(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent)\s*\)?\s+of\s+${HEADLINE_SUM_NAME}${OF_THIS_PLAN}(?:\s*,?\s*${PROSE_TAIL})*\s*\.(?:\s|$)`, "iu");
+const PROSE_SHARE = new RegExp(String.raw`\b(?:we|the\s+company|the\s+insurer|the\s+plan|the\s+policy|it)\s+(?:(?:will|shall)\s+pay|pays)\s+(?:${SPELLED_NUMBER}[\s-]+){0,10}\(?\s*(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent)\s*\)?\s+of\s+${HEADLINE_SUM_NAME}${OF_THIS_PLAN}(?:\s*,?\s*${PROSE_TAIL})*\s*\.(?:\s|$)`, "iu");
 /** Words that make a benefit share its sum with another payment: "counted towards this benefit", "together pay at most",
  * "combined". Such a provision's share is left as read (Critic on #544, MEDIUM). */
 const SHARED_WITH = /\b(?:count(?:ed|s)?\s+(?:towards|against)|together\b[^.;]{0,60}\bat\s+most|in\s+total\b[^.;]{0,60}\bat\s+most|combined|aggregate)\b/i;
