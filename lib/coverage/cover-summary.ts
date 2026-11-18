@@ -39,11 +39,15 @@ export function coverSummary(c: SummaryCover): CoverSummary | null {
     return { lines: [{ name: label, amount, notes: [] }], total: amount, why: null };
   }
   if (parts.length) {
+    const withheld = Boolean(c.partial || c.reviewRequired);
     const lines = parts.map((p): SummaryLine => {
       const notes: string[] = [];
       if (p.conditional) notes.push("conditions apply");
       if (p.accelerates) notes.push("paid instead of the death benefit, not on top of it");
       if (p.otherTile) notes.push("pays only on what another cover type covers");
+      // A partly confirmed cover, or one whose policy prints several amounts, shows no amount on any line: a confirmed
+      // part of a policy's cover is never shown as what that policy pays (Critic PR 535 H1, M1).
+      if (withheld) { notes.push(c.partial ? "not all of this cover's lines are confirmed yet" : "this policy prints more than one amount; see each with its page below"); return { name: partLabel(p.name), amount: null, notes }; }
       const figure = p.amount != null && !p.noFigure ? priced(p.amount, p.currency) : null;
       const amount = figure ? withPeriod(figure, p.period) : null;
       if (amount == null) notes.push(p.noFigure ? "see the document for how much it pays" : p.amount != null ? NO_CURRENCY : "amount not confirmed");

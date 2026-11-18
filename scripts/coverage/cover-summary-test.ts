@@ -65,6 +65,18 @@ test("a partly confirmed cover shows no total and says some lines are not confir
   assert.equal(s.total, null);
   assert.match(s.why!, /not confirmed/);
 });
+test("a partly confirmed cover shows no amount on any part, so a confirmed part is never shown as the policy's amount", () => {
+  const s = coverSummary({ ...base, partial: true, count: 1, policyNames: ["Policy A"], parts: [{ name: "Policy A", amount: 100000, currency: "SGD" }] })!;
+  assert.equal(s.total, null); assert.equal(s.lines[0].amount, null);
+  assert.ok(!JSON.stringify(s).includes("100,000"));
+  const two = coverSummary({ ...base, partial: true, count: 2, parts: [{ name: "A", amount: 1000, currency: "SGD" }, { name: "B", amount: 2000, currency: "SGD" }] })!;
+  assert.deepEqual(two.lines.map((l) => l.amount), [null, null]);
+});
+test("a policy printing several amounts shows none of them on its line", () => {
+  const s = coverSummary({ ...base, reviewRequired: true, count: 1, policyNames: ["Policy A"], parts: [{ name: "Policy A", amount: 100000, currency: "SGD" }] })!;
+  assert.equal(s.total, null); assert.equal(s.lines[0].amount, null);
+  assert.match(s.lines[0].notes.join(" "), /more than one amount/);
+});
 test("a policy with several printed amounts gives no total", () => {
   const s = coverSummary({ ...base, amount: 100000, currency: "SGD", reviewRequired: true, policyNames: ["Term Life"] })!;
   assert.equal(s.total, null); assert.match(s.why!, /more than one amount/);
