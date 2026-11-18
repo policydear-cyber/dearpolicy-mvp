@@ -9,6 +9,7 @@ const paths = {
   family: <><circle cx="9" cy="8" r="3.5" /><circle cx="17" cy="9.5" r="2.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M15.5 20a5 5 0 0 1 6 0" /></>,
   person: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
   documents: <><path d="M6 3h8l5 5v13H6z" /><path d="M14 3v5h5" /><path d="M9 13h7M9 17h7" /></>,
+  folder: <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z" />,
   payments: <><rect x="3" y="6" width="18" height="13" rx="2" /><path d="M3 10.5h18" /><path d="M7 15h4" /></>,
   benefits: <><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M4 10h16M4 15h16M10 4v16" /></>,
   ledger: <><path d="M5 4h14v16H5z" /><path d="M9 9l1.5 1.5L13 8" /><path d="M9 14.5l1.5 1.5L13 13.5" /><path d="M15 9.5h1.5M15 15h1.5" /></>,

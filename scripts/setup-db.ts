@@ -45,6 +45,7 @@ const MIGRATIONS = [
   "sql/member-profile.sql",
   "sql/household-currency.sql",
   "sql/household-plans.sql",
+  "sql/policy-folders.sql",
 ];
 
 async function main() {
