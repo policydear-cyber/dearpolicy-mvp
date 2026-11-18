@@ -12,6 +12,7 @@ import { scheduleChatDrain,scheduleRequestDrain } from "@/lib/jobs/request-drain
 import { enqueueChat } from "@/lib/chat/jobs";
 import { ChatConflict } from "@/lib/chat/store";
 import { overSpendCap, SPEND_LIMIT_TEXT, SpendCheckUnavailable, SPEND_CHECK_UNAVAILABLE_TEXT } from "@/lib/ai/ledger";
+import { mayAskQuestion, PlanCheckUnavailable } from "@/lib/billing/household-plan";
 
 const NO_FAMILY_MESSAGE="Add a family member first. Under Account settings > People, add yourself (and anyone else your policies cover), then ask again.";
 export const runtime="nodejs";
@@ -51,6 +52,12 @@ export async function POST(request:NextRequest){
     try{over=await overSpendCap(accountId);}
     catch(error){if(error instanceof SpendCheckUnavailable)return NextResponse.json({error:SPEND_CHECK_UNAVAILABLE_TEXT,code:"spend_check_unavailable"},{status:503});throw error;}
     if(over)return NextResponse.json({error:SPEND_LIMIT_TEXT,code:"spend_limit"},{status:429});
+    // The household's plan: this month's questions (lib/billing/plans.ts). Checked before anything is sent, so a refused
+    // question costs nothing and the household reads why, the reset date and the next plan up.
+    let plan;
+    try{plan=await mayAskQuestion(accountId);}
+    catch(error){if(error instanceof PlanCheckUnavailable)return NextResponse.json({error:error.message,code:"plan_check_unavailable"},{status:503});throw error;}
+    if(!plan.allowed)return NextResponse.json({error:plan.message,code:plan.code,upgradePath:"/usage"},{status:429});
     const args={...body,accountId};
     if(body.asynchronous)return NextResponse.json(await enqueueChat(args),{status:202});
     return NextResponse.json(await askDearPolicy(args));

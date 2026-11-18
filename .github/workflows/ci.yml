@@ -151,6 +151,8 @@ jobs:
 
       - name: Household currency (amounts with no printed currency)
         run: npm run documents:household-currency-test
+      - name: Plans (Free, Plus, Family) limits, Stripe webhook and pricing section (PGlite, fake Stripe)
+        run: npm run billing:plans-test
       - name: Scanned pages mark an amount whose first digit may be a misread currency letter ($520,000 for S$20,000; negative controls)
         run: npm run documents:currency-misread-test
 

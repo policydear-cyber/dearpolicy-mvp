@@ -4,6 +4,10 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 import { usageThisMonth } from "@/lib/ai/ledger";
 import { describeChoice,modelFor,priceFor } from "@/lib/ai/providers";
 import { budgetConfig,startOfMonth,usageByOperationAndModel } from "@/lib/ai/usage";
+import { keptDocumentCount,planLimitsEnforced,questionsThisMonth,readHouseholdPlan } from "@/lib/billing/household-plan";
+import { PLANS } from "@/lib/billing/plans";
+import { billingEnabled } from "@/lib/billing/stripe";
+import { requireHouseholdOwner } from "@/lib/household/repo";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -27,7 +31,15 @@ export async function GET(request:NextRequest){
     // $5 provider budget; it is not served under that name any more.
     const budget=budgetConfig();
     const {hardStopUsd:_internalStop,...plan}=usage.plan;void _internalStop;
-    return NextResponse.json({usage:{...usage,plan},routing,byOperationAndModel,budget,
+    // The household's plan (Free, Plus or Family; lib/billing/plans.ts) and what counts against it. Members see it; only
+    // the owner can upgrade.
+    const [householdPlan,documentsKept,questionsAsked,isOwner]=await Promise.all([
+      readHouseholdPlan(ctx.householdId),keptDocumentCount(ctx.householdId),questionsThisMonth(ctx.householdId),
+      requireHouseholdOwner(ctx.userId,ctx.householdId).then(()=>true,()=>false),
+    ]);
+    const subscription={plan:PLANS[householdPlan.planId],status:householdPlan.status,interval:householdPlan.interval,currentPeriodEnd:householdPlan.currentPeriodEnd,
+      hasBillingAccount:householdPlan.hasBillingAccount,documentsKept,questionsThisMonth:questionsAsked,limitsEnforced:planLimitsEnforced(),billingEnabled:billingEnabled(),isOwner};
+    return NextResponse.json({usage:{...usage,plan},subscription,routing,byOperationAndModel,budget,
       limits:{
         ownerProviderBudgetUsd:budget.ownerProviderBudget.amountUsd,ownerProviderBudgetEnforcedByDearPolicy:false,
         dearPolicyHouseholdMonthlyLimitUsd:budget.householdLimit.amountUsd,dearPolicyHouseholdLimitEnforced:true,

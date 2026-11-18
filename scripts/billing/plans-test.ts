@@ -1,0 +1,295 @@
+/**
+ * Plans: Free, Plus and Family (lib/billing/plans.ts, household-plan.ts, stripe.ts; sql/household-plans.sql).
+ *
+ *   npm run -s billing:plans-test
+ *
+ * Offline: PGlite with the production schema, made-up households, and a fake Stripe (no network, no keys). Covers:
+ * the approved numbers; the limit messages; counting (unreadable and replaced documents don't count, another
+ * household's documents and questions never count); limits off by default; a household can't write its own plan;
+ * the webhook's signature check, event order and complimentary plans; billing off until every setting is there;
+ * the upload, chat and webhook routes; and the landing page's pricing section.
+ */
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { NextRequest } from "next/server";
+import { PLANS, checkDocumentLimit, checkQuestionLimit, documentsLabel, formatSgd, questionsResetLabel } from "@/lib/billing/plans";
+
+const A = "00000000-0000-0000-0000-0000000b1a00", B = "00000000-0000-0000-0000-0000000b1b00";
+const PERSON_A = "61000000-0000-4000-8000-000000000001", PERSON_B = "61000000-0000-4000-8000-000000000002";
+const pid = (n: number) => "62000000-0000-4000-8000-" + String(n).padStart(12, "0");
+
+test("the approved plans (DC, 18 Nov 2026)", () => {
+  assert.deepEqual([PLANS.free.documents, PLANS.free.questionsPerMonth, PLANS.free.priceMonthlySgd], [5, 10, 0]);
+  assert.deepEqual([PLANS.plus.documents, PLANS.plus.questionsPerMonth, PLANS.plus.priceMonthlySgd, PLANS.plus.priceYearlySgd], [20, 60, 7.9, 79]);
+  assert.deepEqual([PLANS.family.unlimitedDocuments, PLANS.family.documents, PLANS.family.questionsPerMonth, PLANS.family.priceMonthlySgd, PLANS.family.priceYearlySgd], [true, 100, 150, 14.9, 149]);
+  assert.equal(formatSgd(7.9), "S$7.90");
+  assert.equal(formatSgd(149), "S$149");
+  assert.equal(documentsLabel(PLANS.family), "Unlimited documents");
+  assert.equal(questionsResetLabel(new Date("2026-11-30T23:59:00Z")), "1 December");
+  assert.equal(questionsResetLabel(new Date("2026-12-05T00:00:00Z")), "1 January");
+});
+
+test("limit checks: allowed below the limit, a plain message with the next plan at it", () => {
+  assert.equal(checkDocumentLimit("free", 4).allowed, true);
+  const doc = checkDocumentLimit("free", 5);
+  assert.equal(doc.allowed, false);
+  if (!doc.allowed) {
+    assert.equal(doc.code, "document_limit");
+    assert.match(doc.message, /Free plan keeps up to 5 documents, and your household has 5\. Upgrade to Plus for 20 documents, or delete/);
+    assert.ok(doc.message.length <= 220, "fits the upload message box");
+  }
+  const family = checkDocumentLimit("family", 100);
+  assert.ok(!family.allowed && /Delete a document/.test(family.message) && !/Upgrade/.test(family.message), "top plan: no upgrade offered");
+  assert.equal(checkQuestionLimit("plus", 59).allowed, true);
+  const q = checkQuestionLimit("free", 10, new Date("2026-11-18T05:00:00Z"));
+  assert.ok(!q.allowed && q.code === "question_limit");
+  if (!q.allowed) {
+    assert.match(q.message, /this month’s 10 questions on the Free plan\. Questions start again on 1 December\. Upgrade to Plus for 60 questions a month\. Your documents and earlier answers are still here\./);
+    assert.ok(!/\b(model|token|quota|billing|limit reached)\b/i.test(q.message), "household words only");
+  }
+  const top = checkQuestionLimit("family", 150);
+  assert.ok(!top.allowed && !/Upgrade/.test(top.message));
+});
+
+const STRIPE_ENV = {
+  DEARPOLICY_BILLING: "on", STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_WEBHOOK_SECRET: "whsec_fake",
+  STRIPE_PRICE_PLUS_MONTHLY: "price_pm", STRIPE_PRICE_PLUS_YEARLY: "price_py", STRIPE_PRICE_FAMILY_MONTHLY: "price_fm", STRIPE_PRICE_FAMILY_YEARLY: "price_fy",
+} as const;
+
+test("billing is off unless every setting is there", async () => {
+  const { billingConfig } = await import("@/lib/billing/stripe");
+  assert.equal(billingConfig({} as NodeJS.ProcessEnv), null);
+  assert.ok(billingConfig({ ...STRIPE_ENV } as unknown as NodeJS.ProcessEnv));
+  for (const key of Object.keys(STRIPE_ENV)) {
+    const env = { ...STRIPE_ENV, [key]: "" } as unknown as NodeJS.ProcessEnv;
+    assert.equal(billingConfig(env), null, key + " missing keeps billing off");
+  }
+  assert.equal(billingConfig({ ...STRIPE_ENV, DEARPOLICY_BILLING: "off" } as unknown as NodeJS.ProcessEnv), null);
+});
+
+const sign = (body: string, secret: string, t: number) => `t=${t},v1=${createHmac("sha256", secret).update(`${t}.${body}`).digest("hex")}`;
+
+test("webhook signature: right secret within five minutes only", async () => {
+  const { verifyStripeSignature } = await import("@/lib/billing/stripe");
+  const body = '{"id":"evt_1"}', now = 1_800_000_000;
+  assert.equal(verifyStripeSignature(body, sign(body, "whsec_fake", now), "whsec_fake", now), true);
+  assert.equal(verifyStripeSignature(body, sign(body, "whsec_other", now), "whsec_fake", now), false, "wrong secret");
+  assert.equal(verifyStripeSignature(body + " ", sign(body, "whsec_fake", now), "whsec_fake", now), false, "changed body");
+  assert.equal(verifyStripeSignature(body, sign(body, "whsec_fake", now - 301), "whsec_fake", now), false, "too old");
+  assert.equal(verifyStripeSignature(body, null, "whsec_fake", now), false, "no header");
+  assert.equal(verifyStripeSignature(body, "t=1,v1=zz", "whsec_fake", now), false, "malformed");
+});
+
+test("events: a subscription becomes a plan; unknown prices and households are ignored", async () => {
+  const { billingConfig, handleStripeEvent, planWriteFor } = await import("@/lib/billing/stripe");
+  const config = billingConfig({ ...STRIPE_ENV } as unknown as NodeJS.ProcessEnv)!;
+  const sub = (price: string, extra: Record<string, unknown> = {}) => ({ id: "sub_1", customer: "cus_1", status: "active", metadata: { household_id: A }, items: { data: [{ price: { id: price }, current_period_end: 1_900_000_000 }] }, ...extra });
+  const w = planWriteFor(config, sub("price_fy"), 1_800_000_000, null)!;
+  assert.deepEqual([w.householdId, w.plan, w.interval, w.status, w.customerId], [A, "family", "year", "active", "cus_1"]);
+  assert.equal(w.currentPeriodEnd?.toISOString(), new Date(1_900_000_000_000).toISOString());
+  assert.equal(planWriteFor(config, sub("price_someone_elses"), 1, null), null, "a price DearPolicy doesn't sell");
+  assert.equal(planWriteFor(config, sub("price_pm", { metadata: {} }), 1, null), null, "no household");
+
+  const saved: unknown[] = [];
+  const save = async (x: unknown) => { saved.push(x); };
+  // checkout.session.completed fetches the subscription from Stripe.
+  const calls: string[] = [];
+  const fakeFetch = (async (url: string, init: RequestInit) => {
+    calls.push(String(init.method) + " " + url);
+    assert.equal((init.headers as Record<string, string>).authorization, "Bearer sk_test_fake");
+    return new Response(JSON.stringify(sub("price_pm", { metadata: {} })), { status: 200 });
+  }) as unknown as typeof fetch;
+  assert.equal(await handleStripeEvent(config, { id: "e1", type: "checkout.session.completed", created: 10, data: { object: { subscription: "sub_1", client_reference_id: A } } }, { fetchImpl: fakeFetch, save }), "saved");
+  assert.deepEqual(calls, ["GET https://api.stripe.com/v1/subscriptions/sub_1"]);
+  assert.equal((saved[0] as { plan: string }).plan, "plus");
+  assert.equal(await handleStripeEvent(config, { id: "e2", type: "customer.subscription.deleted", created: 11, data: { object: sub("price_pm") } }, { save }), "saved");
+  assert.equal((saved[1] as { status: string }).status, "canceled");
+  assert.equal(await handleStripeEvent(config, { id: "e3", type: "invoice.paid", created: 12, data: { object: {} } }, { save }), "ignored");
+});
+
+test("checkout: the household id travels on the session and the subscription; Stripe's errors stay private", async () => {
+  const { billingConfig, createCheckoutSession, StripeRequestFailed } = await import("@/lib/billing/stripe");
+  const config = billingConfig({ ...STRIPE_ENV } as unknown as NodeJS.ProcessEnv)!;
+  let sent = "";
+  const ok = (async (_u: string, init: RequestInit) => { sent = String(init.body); return new Response(JSON.stringify({ url: "https://checkout.stripe.com/c/x" })); }) as unknown as typeof fetch;
+  const url = await createCheckoutSession(config, { householdId: A, plan: "plus", interval: "year", email: "owner@example.com", customerId: null, origin: "https://app.example" }, ok);
+  assert.equal(url, "https://checkout.stripe.com/c/x");
+  const p = new URLSearchParams(sent);
+  assert.equal(p.get("line_items[0][price]"), "price_py");
+  assert.equal(p.get("client_reference_id"), A);
+  assert.equal(p.get("subscription_data[metadata][household_id]"), A);
+  assert.equal(p.get("mode"), "subscription");
+  assert.equal(p.get("success_url"), "https://app.example/usage?upgraded=1");
+  const bad = (async () => new Response('{"error":{"message":"No such price: price_py; secret detail"}}', { status: 400 })) as unknown as typeof fetch;
+  await assert.rejects(createCheckoutSession(config, { householdId: A, plan: "plus", interval: "year", email: null, customerId: null, origin: "https://x" }, bad), (e: unknown) => e instanceof StripeRequestFailed && !/secret detail/.test((e as Error).message));
+});
+
+// ---- Database: PGlite with the production schema --------------------------------------------------------------------
+
+let dbReady: Promise<import("@electric-sql/pglite").PGlite> | null = null;
+async function database() {
+  dbReady ??= (async () => {
+    const { installDatabase } = await import("../r6/fixture");
+    const db = await installDatabase();
+    for (const id of [A, B]) {
+      await db.query("INSERT INTO accounts(id,name) VALUES($1,$2)", [id, id === A ? "Tan household" : "Lim household"]);
+      await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')", [id]);
+    }
+    await db.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Tan Mei Ling','self'),($3,$4,'Lim Wei Jie','self')", [PERSON_A, A, PERSON_B, B]);
+    return db;
+  })();
+  return dbReady;
+}
+async function addPolicy(db: import("@electric-sql/pglite").PGlite, n: number, account: string, status = "ready", superseded = false) {
+  await db.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,quarantine_status,superseded_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,'scan_clean',$8)`, [pid(n), account, account === A ? PERSON_A : PERSON_B, `doc-${n}.pdf`, `k-${n}`, `h-${n}`, status, superseded ? new Date() : null]);
+}
+
+test("before sql/household-plans.sql: every household reads as Free, nothing is refused", async () => {
+  await database();
+  const { readHouseholdPlan, mayAddDocument, mayAskQuestion } = await import("@/lib/billing/household-plan");
+  const plan = await readHouseholdPlan(A);
+  assert.equal(plan.planId, "free");
+  assert.equal(plan.stored, false);
+  delete process.env.DEARPOLICY_PLAN_LIMITS;
+  assert.equal((await mayAddDocument(A)).allowed, true);
+  assert.equal((await mayAskQuestion(A)).allowed, true);
+});
+
+test("counting and limits, per household", async () => {
+  const db = await database();
+  await db.exec(readFileSync("sql/household-plans.sql", "utf8"));
+  const H = await import("@/lib/billing/household-plan");
+  for (let n = 1; n <= 4; n++) await addPolicy(db, n, A);
+  await addPolicy(db, 5, A, "failed"); // couldn't be read: doesn't count
+  await addPolicy(db, 6, A, "ready", true); // replaced by a newer copy: doesn't count
+  for (let n = 20; n <= 29; n++) await addPolicy(db, n, B); // another household's: never counts for A
+  assert.equal(await H.keptDocumentCount(A), 4);
+  assert.equal(await H.keptDocumentCount(B), 10);
+
+  process.env.DEARPOLICY_PLAN_LIMITS = "on";
+  try {
+    assert.equal((await H.mayAddDocument(A)).allowed, true, "4 of 5");
+    await addPolicy(db, 7, A, "queued");
+    const full = await H.mayAddDocument(A);
+    assert.equal(full.allowed, false, "5 of 5, a document still being read counts");
+    assert.equal((await H.mayAddDocument(A, { replacing: true })).allowed, true, "a newer copy takes the old one's place");
+    assert.equal((await H.mayAddDocument(B)).allowed, false, "B has 10 on Free");
+
+    // A paid plan, written by the server.
+    await db.query("INSERT INTO household_plans(account_id,plan,status,billing_interval,stripe_customer_id) VALUES($1,'plus','active','year','cus_b')", [B]);
+    assert.equal((await H.readHouseholdPlan(B)).planId, "plus");
+    assert.equal((await H.mayAddDocument(B)).allowed, true, "10 of 20 on Plus");
+    assert.equal((await H.readHouseholdPlan(A)).planId, "free", "B's plan is not A's");
+    await db.query("UPDATE household_plans SET status='canceled' WHERE account_id=$1", [B]);
+    assert.equal((await H.readHouseholdPlan(B)).planId, "free", "a cancelled subscription is Free");
+    await db.query("UPDATE household_plans SET status='past_due' WHERE account_id=$1", [B]);
+    assert.equal((await H.readHouseholdPlan(B)).planId, "plus", "kept while Stripe retries a failed payment");
+
+    // Questions: this month's user messages, every member, this household only.
+    await db.query("INSERT INTO chat_conversations(id,account_id,title) VALUES($1,$2,'a'),($3,$4,'b')", [pid(900), A, pid(901), B]);
+    for (let i = 0; i < 9; i++) await db.query("INSERT INTO chat_messages(conversation_id,account_id,role,content) VALUES($1,$2,'user','q')", [pid(900), A]);
+    await db.query("INSERT INTO chat_messages(conversation_id,account_id,role,content) VALUES($1,$2,'assistant','a')", [pid(900), A]);
+    await db.query("INSERT INTO chat_messages(conversation_id,account_id,role,content,created_at) VALUES($1,$2,'user','old',date_trunc('month',now())-interval '1 day')", [pid(900), A]);
+    for (let i = 0; i < 30; i++) await db.query("INSERT INTO chat_messages(conversation_id,account_id,role,content) VALUES($1,$2,'user','q')", [pid(901), B]);
+    assert.equal(await H.questionsThisMonth(A), 9, "answers and last month's questions don't count");
+    assert.equal((await H.mayAskQuestion(A)).allowed, true);
+    await db.query("INSERT INTO chat_messages(conversation_id,account_id,role,content) VALUES($1,$2,'user','q')", [pid(900), A]);
+    const q = await H.mayAskQuestion(A);
+    assert.ok(!q.allowed && q.code === "question_limit", "the 11th question on Free");
+    assert.equal((await H.mayAskQuestion(B)).allowed, true, "30 of 60 on Plus");
+
+    // Limits off again: nothing refused, whatever the counts.
+    process.env.DEARPOLICY_PLAN_LIMITS = "off";
+    assert.equal((await H.mayAskQuestion(A)).allowed, true);
+    assert.equal((await H.mayAddDocument(A)).allowed, true);
+  } finally {
+    delete process.env.DEARPOLICY_PLAN_LIMITS;
+  }
+});
+
+test("a household can't give itself a plan: no browser privilege on household_plans", async () => {
+  const db = await database();
+  await db.exec("SET ROLE authenticated");
+  try {
+    await assert.rejects(db.query("INSERT INTO household_plans(account_id,plan,status) VALUES($1,'family','complimentary')", [A]), /permission denied/);
+    await assert.rejects(db.query("SELECT * FROM household_plans"), /permission denied/);
+  } finally {
+    await db.exec("RESET ROLE");
+  }
+});
+
+test("savePlan: newer events win, complimentary plans stay, unknown households are skipped", async () => {
+  const db = await database();
+  const { savePlan } = await import("@/lib/billing/stripe");
+  const base = { householdId: A, plan: "plus" as const, status: "active", interval: "month" as const, customerId: "cus_a", subscriptionId: "sub_a", currentPeriodEnd: null };
+  await savePlan({ ...base, eventCreated: new Date(2_000_000) });
+  await savePlan({ ...base, plan: "family", eventCreated: new Date(1_000_000) }); // older, arrives late
+  const row = (await db.query<{ plan: string }>("SELECT plan FROM household_plans WHERE account_id=$1", [A])).rows[0];
+  assert.equal(row.plan, "plus", "the late, older event is ignored");
+  await savePlan({ ...base, status: "canceled", eventCreated: new Date(3_000_000) });
+  assert.equal((await db.query<{ status: string }>("SELECT status FROM household_plans WHERE account_id=$1", [A])).rows[0].status, "canceled");
+
+  await db.query("UPDATE household_plans SET plan='family',status='complimentary' WHERE account_id=$1", [B]);
+  await savePlan({ ...base, householdId: B, customerId: "cus_b", status: "canceled", eventCreated: new Date(9_000_000) });
+  assert.equal((await db.query<{ status: string }>("SELECT status FROM household_plans WHERE account_id=$1", [B])).rows[0].status, "complimentary");
+
+  await savePlan({ ...base, householdId: "00000000-0000-0000-0000-0000000b1c00", customerId: "cus_c", eventCreated: new Date(1) });
+  assert.equal((await db.query("SELECT 1 FROM household_plans WHERE account_id='00000000-0000-0000-0000-0000000b1c00'")).rows.length, 0);
+});
+
+test("routes: the chat refuses the 11th Free question before anything is sent; the webhook is off without billing", async () => {
+  const db = await database();
+  await db.query("DELETE FROM household_plans WHERE account_id=$1", [A]);
+  const source = readFileSync("app/api/chat/route.ts", "utf8");
+  const limitAt = source.indexOf("mayAskQuestion(accountId)"), sendAt = source.indexOf("enqueueChat(args)");
+  assert.ok(limitAt > 0 && limitAt < sendAt, "checked before the question is queued");
+  assert.match(source, /code:plan\.code,upgradePath:"\/usage"\},\{status:429\}/);
+  const accept = readFileSync("app/api/policies/upload/accept.ts", "utf8");
+  assert.ok(accept.indexOf("mayAddDocument(") < accept.indexOf("INSERT INTO policies"), "checked before the document is recorded");
+  assert.ok(accept.indexOf("mayAddDocument(") < accept.indexOf("savePolicyFile("), "and before it is stored");
+  assert.match(readFileSync("app/api/policies/upload/start/route.ts", "utf8"), /mayAddDocument\(ctx\.householdId/);
+
+  for (const key of Object.keys(STRIPE_ENV)) delete process.env[key];
+  const { POST } = await import("../../app/api/billing/webhook/route");
+  const res = await POST(new NextRequest("http://localhost/api/billing/webhook", { method: "POST", body: "{}" }));
+  assert.equal(res.status, 404, "billing off: the webhook isn't there");
+
+  Object.assign(process.env, STRIPE_ENV);
+  try {
+    const body = JSON.stringify({ id: "evt", type: "invoice.paid", created: Math.floor(Date.now() / 1000), data: { object: {} } });
+    const unsigned = await POST(new NextRequest("http://localhost/api/billing/webhook", { method: "POST", body }));
+    assert.equal(unsigned.status, 400, "no signature, nothing recorded");
+    const signed = await POST(new NextRequest("http://localhost/api/billing/webhook", { method: "POST", body, headers: { "stripe-signature": sign(body, "whsec_fake", Math.floor(Date.now() / 1000)) } }));
+    assert.equal(signed.status, 200);
+  } finally {
+    for (const key of Object.keys(STRIPE_ENV)) delete process.env[key];
+  }
+});
+
+test("middleware: only the webhook path skips the session and Origin checks", async () => {
+  const { middleware } = await import("../../middleware");
+  const at = (p: string) => new NextRequest("http://localhost" + p, { method: "POST", body: "{}" });
+  const hook = await middleware(at("/api/billing/webhook"));
+  assert.notEqual(hook.status, 401);
+  assert.notEqual(hook.status, 403);
+  for (const p of ["/api/billing/checkout", "/api/billing/portal", "/api/billing/webhook-evil"]) {
+    const r = await middleware(at(p));
+    assert.ok(r.status === 401 || r.status === 403, p + " needs a session and a same-site Origin");
+  }
+});
+
+test("landing page: pricing before sign-up, every card starts free; Plan usage upgrades through the owner only", () => {
+  const landing = readFileSync("app/welcome/page.tsx", "utf8");
+  assert.match(landing, /<PricingSection \/>/);
+  const pricing = readFileSync("components/public/pricing-section.tsx", "utf8");
+  assert.match(pricing, /href="\/signup"/);
+  assert.match(pricing, /Start free/);
+  assert.ok(!/fetch\(|@\/lib\/db|@\/lib\/auth/.test(pricing + readFileSync("components/plan-cards.tsx", "utf8")), "static: no session, household or service");
+  const usage = readFileSync("app/usage/page.tsx", "utf8");
+  assert.match(usage, /!sub\.isOwner\)return <small>The household&rsquo;s owner can upgrade/);
+  assert.match(usage, /!sub\.billingEnabled\)return <small>Upgrades open soon/);
+  for (const r of ["checkout", "portal"]) assert.match(readFileSync(`app/api/billing/${r}/route.ts`, "utf8"), /requireHouseholdOwner\(ctx\.userId, ctx\.householdId\)/);
+});

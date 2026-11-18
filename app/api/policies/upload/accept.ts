@@ -24,6 +24,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { maskIdentityText } from "@/lib/chat/identity-numbers";
 import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
 import { noteOwnerChosen, noteOwnerUnsure } from "@/lib/policies/upload-owner";
+import { mayAddDocument, PlanCheckUnavailable } from "@/lib/billing/household-plan";
 
 /** The largest document DearPolicy accepts. Direct uploads carry it to
  * storage; the classic multipart route is only for files the platform lets
@@ -130,6 +131,17 @@ export async function acceptPolicyUpload(args: {
   } catch (error) {
     await discardStored();
     throw error;
+  }
+
+  // The household's plan: how many documents it keeps (lib/billing/plans.ts). A newer copy of a document it already keeps
+  // takes that document's place, so it never counts as one more.
+  const limit = await mayAddDocument(ctx.householdId, { replacing: Boolean(outcome.verifiedSupersedesId) }).catch(async (error) => {
+    if (error instanceof PlanCheckUnavailable) return { allowed: false as const, message: error.message, code: "plan_check_unavailable" as const };
+    throw error;
+  });
+  if (!limit.allowed) {
+    await discardStored();
+    return NextResponse.json({ error: limit.message, reasonCode: limit.code === "document_limit" ? "PLAN_DOCUMENT_LIMIT" : "PLAN_CHECK_UNAVAILABLE", upgradePath: "/usage" }, { status: limit.code === "document_limit" ? 403 : 503 });
   }
 
   // Server-generated storage path (household, authorized member, fresh policy id).

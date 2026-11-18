@@ -84,6 +84,7 @@ export const TABLE_INVENTORY: Record<string, TableInventoryEntry> = {
   claim_disability_definition_matches: { class: "reviewer_boundary", authenticated: ["select", "update"], policies: ["household_member_select", "household_member_update", "trigger guard_household_decision_retirement", "column grant superseded_at/superseded_reason"], browserGrantsRequired: true, codePath: "lib/claims/reviewers/decisions.ts via lib/claims/reviewers/boundary.ts (service)" },
 
   // --- infrastructure: no browser role holds any privilege ---
+  household_plans: { class: "service_only", authenticated: [], policies: DENY("household_plans"), browserGrantsRequired: false, codePath: "lib/billing/stripe.ts savePlan (Stripe webhook, service); lib/billing/household-plan.ts (service read)" },
   background_jobs: { class: "service_only", authenticated: [], policies: DENY("background_jobs"), browserGrantsRequired: false, codePath: "lib/jobs/queue.ts, lib/jobs/worker-runtime.ts, lib/jobs/dead-letter.ts" },
   background_job_audit_log: { class: "service_only", authenticated: [], policies: DENY("background_job_audit_log"), browserGrantsRequired: false, codePath: "lib/jobs/queue.ts appendJobAudit" },
   chat_analysis_jobs: { class: "service_only", authenticated: [], policies: DENY("chat_analysis_jobs"), browserGrantsRequired: false, codePath: "lib/chat/jobs.ts, app/api/chat/history/[id]/route.ts (service)" },

@@ -7,6 +7,7 @@ import { ACCEPTED_FORMATS_MESSAGE, FORMAT_EXTENSIONS, SUPPORTED_UPLOAD_FORMATS }
 import { MAX_DOCUMENT_BYTES, TOO_LARGE_MESSAGE, resolveUploadFamilyMember, uploadErrorResponse } from "../accept";
 import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
 import { signUploadIntent, UPLOAD_INTENT_TTL_MS } from "../intent-token";
+import { mayAddDocument, PlanCheckUnavailable } from "@/lib/billing/household-plan";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -42,6 +43,14 @@ export async function POST(request: NextRequest) {
     const known = SUPPORTED_UPLOAD_FORMATS.some((f) => FORMAT_EXTENSIONS[f].some((e) => e.replace(/^\./, "") === extension));
     if (!known) return NextResponse.json({ error: `"${extension ? "." + extension : "(none)"}" is not a supported file extension. ${ACCEPTED_FORMATS_MESSAGE}`, reasonCode: "UNSUPPORTED_EXTENSION" }, { status: 400 });
 
+    // Over the plan's document limit: say so before the file is sent, not after (finalize checks again).
+    try {
+      const limit = await mayAddDocument(ctx.householdId, { replacing: Boolean(body.supersedesPolicyId) });
+      if (!limit.allowed) return NextResponse.json({ error: limit.message, reasonCode: "PLAN_DOCUMENT_LIMIT", upgradePath: "/usage" }, { status: 403 });
+    } catch (error) {
+      if (error instanceof PlanCheckUnavailable) return NextResponse.json({ error: error.message, reasonCode: "PLAN_CHECK_UNAVAILABLE" }, { status: 503 });
+      throw error;
+    }
     const familyMemberId = await resolveUploadFamilyMember(ctx, body.familyMemberId ?? "");
     const policyId = randomUUID();
     const driver = policyUploadDriver();

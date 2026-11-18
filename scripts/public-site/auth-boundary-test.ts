@@ -56,7 +56,9 @@ const SIGN_IN_PAGES = new Set(["/login", "/signup", "/reset-password", "/privacy
 const PUBLIC_PAGES = ["/", "/learn", "/learn/making-a-claim", "/learn/sg-medishield-life", "/learn/terms", "/learn/no-such-guide"];
 /** API routes that were already reachable signed out before this change (sign-in, health, signed callbacks). */
 const OPEN_APIS = new Set(["/api/auth/signup", "/api/auth/signin", "/api/auth/callback", "/api/auth/reset-password", "/api/health",
-  "/api/policies/scan-callback", "/api/internal/jobs/run"]);
+  "/api/policies/scan-callback", "/api/internal/jobs/run",
+  // Stripe's billing webhook: signed by Stripe (lib/billing/stripe.ts verifyStripeSignature), 404 while billing is off.
+  "/api/billing/webhook"]);
 
 test("signed out, the landing page and Learn are served, and say there is no session", async () => {
   const middleware = await load();

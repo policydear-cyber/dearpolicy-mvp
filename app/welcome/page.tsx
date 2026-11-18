@@ -4,6 +4,7 @@ import { Icon, type IconName } from "@/components/icons";
 import { PolicySheet } from "@/components/policy-sheet";
 import { GUIDES } from "@/lib/learn/content";
 import { SITE_DESCRIPTION } from "@/lib/public-site/site";
+import { PricingSection } from "@/components/public/pricing-section";
 
 /**
  * The public landing page: what a signed-out visitor sees at "/" (middleware.ts serves this page there; the address
@@ -121,6 +122,8 @@ export default function WelcomePage() {
         </ul>
         <p><Link className="text-link" href="/learn">See all guides <Icon name="arrowRight" /></Link></p>
       </section>
+
+      <PricingSection />
 
       <section className="landing-section landing-cta" aria-labelledby="landing-start">
         <h2 id="landing-start">See what your own policies say</h2>
