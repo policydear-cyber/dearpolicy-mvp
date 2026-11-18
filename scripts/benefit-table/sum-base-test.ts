@@ -685,6 +685,20 @@ for (const [what, covers, quote] of [
   assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
   assert.doesNotMatch(JSON.stringify(r.figure), /25,000|50,000|100,000/);
 });
+for (const [what, printed] of [
+  ["on the same line", "We will pay fifty percent (50%) of the Sum Assured of the Policy in one (1) lump sum."],
+  ["wrapped onto the next line", "We will pay fifty percent (50%) of the Sum Assured\nof the Policy in one (1) lump sum."],
+] as const) test(`C control (Critic Q1): a quote that stops before "of the Policy" ${what} is not worked out on the line's own sum`, () => {
+  const covers = [{ cover: "Whole Life Plan", sum: 100000, line: "Whole Life Plan\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }];
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+    page1: [CCI_PAGE1.replace(/\nCritical Illness Plan\tS\$300,000$/, ""), ...covers.map((c) => c.line)].join("\n"),
+    page2: `3 BENEFITS\n3.1 Critical Illness Benefit\nIf the Life Assured is diagnosed with a covered illness:\n${printed}`, link: "Critical Illness Benefit", covers,
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 50, quote: "We will pay fifty percent (50%) of the Sum Assured" }] });
+  const r = rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+  assert.doesNotMatch(JSON.stringify(r.figure), /25,000|50,000/);
+});
 test("C control: the sentence followed by a line that takes earlier payments off stays with no amount", () => {
   const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
     page1: CCI_PAGE1, page2: `3 BENEFITS\n${PROSE}\nAny amount paid earlier under the Early Stage benefit will be deducted.`, covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],

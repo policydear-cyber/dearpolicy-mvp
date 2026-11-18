@@ -224,6 +224,9 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
    * policy's own headline sum by one of HEADLINE_SUM's names ("25% of the Sum Covered"): percentOf is "sum_insured", and
    * the table works it out only when the person's policy prints one such sum (assemble.ts headlineSumProblem). */
   baseFromWords?: boolean;
+  /** With baseFromWords: the share's own printed words, from the quote to the end of its sentence (assemble.ts
+   * headlineSumProblem reads whose sum it names there, not only in the quote). */
+  shareSentence?: string;
   /** A row paid as its words say whose printed money figures only say when or how a large claim is paid in parts (verify.ts
    * scheduleFigure): shown as a payment schedule, not as "no figure printed". */
   paymentSchedule?: boolean;
@@ -2352,7 +2355,11 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     // A share the reading left unsettled ("other", or none) whose own words print it as a share of the policy's own headline
     // sum ("25% of the Sum Covered") is of the sum insured (HEADLINE_SUM): stored readings are settled here too, unread.
     const cellOf = () => { const p = placed.get(source); if (!p) return null; const text = pageText(source.page), from = text.lastIndexOf("\n", p.start - 1) + 1, to = lineEndAt(text, p.end);
-      return { cell: text.slice(from, to), next: to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "" }; };
+      const next = to < text.length ? text.slice(to + 1, lineEndAt(text, to + 1)) : "";
+      // The share's own words as printed, from the quote to the end of its sentence (at most the next line): a quote that
+      // stops before "of the Policy" still carries the words that name whose sum it is (Critic Q1 on the share-sum fix).
+      const upTo = to < text.length ? lineEndAt(text, to + 1) : to, after = text.slice(p.end, upTo), stop = /[.;](?=\s|$)/.exec(after);
+      return { cell: text.slice(from, to), next, sentence: text.slice(p.start, stop ? p.end + stop.index + 1 : upTo) }; };
     const cell = pays === "percent" && value != null && (percentOf === "other" || percentOf == null) ? cellOf() : null;
     const rowWords = [benefit, str(b.section) ?? "", str(b.column) ?? "", ...(Array.isArray(b.conditions) ? b.conditions.map((c) => str(c) ?? "") : [])].join("\n");
     const baseFromWords = !!cell && (headlineSumShare(cell.cell, value!, cell.next, rowWords)
@@ -2363,6 +2370,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
         return provisionAround(joined, at.start + shift, at.end + shift);
       })()));
     if (baseFromWords) percentOf = "sum_insured";
+    const shareSentence = baseFromWords && cell ? cell.sentence : null;
     let baseAmount: number | null = null, baseSource: Source | null = null;
     if (percentOf === "fixed_amount") {
       baseAmount = num(b.baseAmount);
@@ -2533,7 +2541,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       fromDay, maxDays, conditions: kind === "benefit_cap" && !conditions.includes(source.excerpt) ? [...conditions, source.excerpt] : conditions,
       page: source.page, quote, source, currency, baseSource, capSource, capUnread, droppedConditions, combinedLimit: kind === "combined",
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}), ...(columnMarks.length ? { columnMarks } : {}),
-      ...(ownShareNamed ? { ownShareNamed } : {}), ...(baseFromWords && percentOf === "sum_insured" ? { baseFromWords } : {}), ...(paymentSchedule && pays === "words" ? { paymentSchedule } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}), ...(childNote ? { childNote } : {}),
+      ...(ownShareNamed ? { ownShareNamed } : {}), ...(baseFromWords && percentOf === "sum_insured" ? { baseFromWords, ...(shareSentence ? { shareSentence } : {}) } : {}), ...(paymentSchedule && pays === "words" ? { paymentSchedule } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}), ...(childNote ? { childNote } : {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}),
       ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
   }

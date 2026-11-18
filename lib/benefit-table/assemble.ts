@@ -472,7 +472,7 @@ function headlineSumProblem(b: CheckedBenefit, cover: PersonCover, personCovers:
   // row's own words, other than "this (Basic) Benefit", stops it (Critic S1, S8 to S12). Nor when another of the policy's
   // lines is named basic or base, which is the basic plan "this Basic Benefit" may mean.
   const said = `${b.source.excerpt}\n${b.rowText ?? ""}`;
-  const basicPlanWords = /\b(?:basic|base|policy|policies|plans?|certificates?|contracts?)\b/i.test(b.source.excerpt.replace(/\bthis\s+(?:(?:basic|base)\s+)?benefit\b/gi, " "));
+  const basicPlanWords = /\b(?:basic|base|policy|policies|plans?|certificates?|contracts?)\b/i.test(`${b.source.excerpt}\n${b.shareSentence ?? ""}`.replace(/\bthis\s+(?:(?:basic|base)\s+)?benefit\b/gi, " "));
   const basicLine = /\b(?:basic|base)\b/i.test(said) && policy.some((x) => x.coverKey !== cover.coverKey && /\b(?:basic|base)\b/i.test(x.cover ?? ""));
   const byName = rowWords.size && !basicPlanWords && !basicLine ? policy.filter((x) => { const w = benefitWords(x.cover ?? ""); return [...rowWords].every((r) => w.has(r)); }) : [];
   const settled = labelled.length ? one(labelled) : one(policy) || byName.some((x) => x.coverKey === cover.coverKey) && one(byName);
