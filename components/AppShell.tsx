@@ -44,12 +44,6 @@ const operatorNav: NavItem[] = [
   { href: "/", label: "Back to household", icon: "home" },
 ];
 
-/** The admin console (app/admin, allow-listed accounts only; anyone else gets "page not found"). */
-const adminNav: NavItem[] = [
-  { href: "/admin", label: "Admin console", icon: "usage" },
-  { href: "/", label: "Back to household", icon: "home" },
-];
-
 /** Pages a signed-out person uses; no sign-out control there. */
 // /privacy is public and read before signing in, so it gets no app navigation and no Sign out button.
 // /confirm is where an emailed link lands, before this browser is signed in (lib/auth/email-link.ts).
@@ -141,12 +135,11 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
   const reviewerArea = pathname.startsWith("/reviewer");
   const signedOutPage = SIGNED_OUT_PATHS.has(pathname);
   const operatorArea = pathname === "/operator" || pathname.startsWith("/operator/");
-  const adminArea = pathname === "/admin" || pathname.startsWith("/admin/");
   // Signed-out pages (sign-in, sign-up, password reset) and the page shown
   // after a household is deleted get no app navigation: every link would
   // only bounce to sign-in or fail for want of a household.
   const noNav = signedOutPage || NO_NAV_PATHS.has(pathname);
-  const items: NavItem[] = noNav ? [] : reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" }] : adminArea ? adminNav : operatorArea ? operatorNav : nav;
+  const items: NavItem[] = noNav ? [] : reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" }] : operatorArea ? operatorNav : nav;
   const under = (href: string) => pathname === href || pathname.startsWith(href + "/");
   const isActive = (href: string) => {
     const item = items.find((i) => i.href === href);

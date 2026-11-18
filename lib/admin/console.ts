@@ -1,7 +1,7 @@
 /**
  * Read-only data for the admin console (/admin). Called only from app/admin pages, after requireAdminOrNotFound().
- * It changes no household data. (The one write on the path is the existing ensureProvenanceSchema() inside
- * usageByOperationAndModel(), an idempotent CREATE ... IF NOT EXISTS the operator page already runs.)
+ * It writes nothing: readHouseholdUsage() checks model_executions exists before the shared usage query (which would
+ * otherwise create it).
  *
  * Runs on the trusted server connection (lib/db/client.ts), which is how it can see every household; nothing here is
  * reachable from a browser role, and no household's RLS or grants change. It reads counts, statuses and metadata
@@ -112,7 +112,8 @@ export async function readRecentSignups(limit = 20): Promise<Section<RecentSignu
     if (!(await authUsersPresent())) return null;
     const { rows } = await query<{ email: string | null; created_at: string; confirmed: boolean; last_sign_in_at: string | null; household_id: string | null }>(
       `SELECT u.email, u.created_at::text AS created_at, (u.email_confirmed_at IS NOT NULL) AS confirmed, u.last_sign_in_at::text AS last_sign_in_at,
-              (SELECT hm.household_id::text FROM household_members hm WHERE hm.user_id = u.id ORDER BY hm.created_at LIMIT 1) AS household_id
+              (SELECT hm.household_id::text FROM household_members hm JOIN accounts a ON a.id = hm.household_id AND ${activePredicate("a")}
+                WHERE hm.user_id = u.id ORDER BY hm.created_at LIMIT 1) AS household_id
          FROM auth.users u ORDER BY u.created_at DESC LIMIT $1`, [limit]);
     return rows.map((r) => ({ email: r.email, createdAt: r.created_at, confirmed: r.confirmed, lastSignInAt: r.last_sign_in_at, householdId: r.household_id }));
   });
@@ -162,16 +163,14 @@ export async function readHouseholds(): Promise<Section<HouseholdList>> {
       ? `(SELECT max(u.last_sign_in_at)::text FROM household_members hm JOIN auth.users u ON u.id = hm.user_id WHERE hm.household_id = a.id)`
       : `NULL::text`;
     const { rows } = await query<{ id: string; name: string; created_at: string; owner_email: string | null; members: number; people: number;
-      documents: number; ready: number; failed: number; last_sign_in_at: string | null; messages: number }>(
+      documents: number; ready: number; failed: number; last_sign_in_at: string | null }>(
       `SELECT a.id::text AS id, a.name, a.created_at::text AS created_at, ${ownerEmail} AS owner_email,
               (SELECT count(*)::int FROM household_members hm WHERE hm.household_id = a.id) AS members,
               (SELECT count(*)::int FROM family_members fm WHERE fm.account_id = a.id AND ${activePredicate("fm")}) AS people,
               (SELECT count(*)::int FROM policies p WHERE p.account_id = a.id AND p.superseded_at IS NULL AND ${activePredicate("p")}) AS documents,
               (SELECT count(*)::int FROM policies p WHERE p.account_id = a.id AND p.superseded_at IS NULL AND p.processing_status = 'ready' AND ${activePredicate("p")}) AS ready,
               (SELECT count(*)::int FROM policies p WHERE p.account_id = a.id AND p.superseded_at IS NULL AND p.processing_status = 'failed' AND ${activePredicate("p")}) AS failed,
-              ${lastSignIn} AS last_sign_in_at,
-              (SELECT count(*)::int FROM chat_messages m JOIN chat_conversations c ON c.id = m.conversation_id
-                 WHERE c.account_id = a.id AND m.role = 'user' AND m.created_at >= (date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')) AS messages
+              ${lastSignIn} AS last_sign_in_at
          FROM accounts a WHERE ${activePredicate("a")}
         ORDER BY a.created_at DESC LIMIT $1`, [HOUSEHOLD_LIMIT + 1]);
     const truncated = rows.length > HOUSEHOLD_LIMIT;
@@ -190,6 +189,16 @@ export async function readHouseholds(): Promise<Section<HouseholdList>> {
     // Questions: the kept count while limits are on (deleting chats never gives questions back), else messages on file.
     const kept = new Map<string, number>();
     const questionsSource = planLimitsEnforced() ? "kept_count" as const : "messages_on_file" as const;
+    const onFile = new Map<string, number>();
+    if (questionsSource === "messages_on_file") {
+      try {
+        for (const r of (await query<{ account_id: string; n: number }>(
+          `SELECT c.account_id::text AS account_id, count(*)::int AS n FROM chat_messages m JOIN chat_conversations c ON c.id = m.conversation_id
+            WHERE m.role = 'user' AND m.created_at >= (date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') GROUP BY 1`)).rows) onFile.set(r.account_id, num(r.n));
+      } catch (e) {
+        if (!isMissingRelation(e)) throw e;
+      }
+    }
     if (questionsSource === "kept_count") {
       try {
         for (const r of (await query<{ account_id: string; questions: number }>(
@@ -212,7 +221,7 @@ export async function readHouseholds(): Promise<Section<HouseholdList>> {
         id: r.id, name: r.name, createdAt: r.created_at, ownerEmail: r.owner_email, members: num(r.members), people: num(r.people),
         documents: num(r.documents), documentsRead: num(r.ready), documentsUnreadable: num(r.failed),
         documentsInProgress: Math.max(0, num(r.documents) - num(r.ready) - num(r.failed)), lastSignInAt: r.last_sign_in_at,
-        questionsThisMonth: questionsSource === "kept_count" ? (kept.get(r.id) ?? 0) : num(r.messages),
+        questionsThisMonth: questionsSource === "kept_count" ? (kept.get(r.id) ?? 0) : (onFile.get(r.id) ?? 0),
         plan: effectivePlanId(p?.plan, p?.status), planStatus: p?.status ?? null,
         spendUsd: s?.usd ?? 0, modelCalls: s?.calls ?? 0,
       };
@@ -279,7 +288,7 @@ export async function readHouseholdMembers(id: string): Promise<Section<Househol
     const withUsers = await authUsersPresent();
     const { rows } = await query<{ email: string | null; role: string; joined_at: string; confirmed: boolean | null; last_sign_in_at: string | null }>(
       withUsers
-        ? `SELECT u.email, hm.role, hm.created_at::text AS joined_at, (u.email_confirmed_at IS NOT NULL) AS confirmed, u.last_sign_in_at::text AS last_sign_in_at
+        ? `SELECT u.email, hm.role, hm.created_at::text AS joined_at, CASE WHEN u.id IS NULL THEN NULL ELSE (u.email_confirmed_at IS NOT NULL) END AS confirmed, u.last_sign_in_at::text AS last_sign_in_at
              FROM household_members hm LEFT JOIN auth.users u ON u.id = hm.user_id WHERE hm.household_id = $1 ORDER BY hm.role = 'owner' DESC, hm.created_at`
         : `SELECT NULL::text AS email, hm.role, hm.created_at::text AS joined_at, NULL::boolean AS confirmed, NULL::text AS last_sign_in_at
              FROM household_members hm WHERE hm.household_id = $1 ORDER BY hm.role = 'owner' DESC, hm.created_at`, [id]);
@@ -329,8 +338,7 @@ export async function readHouseholdQuestions(id: string): Promise<Section<{ ques
           `SELECT questions FROM household_question_counts WHERE account_id = $1 AND month = date_trunc('month', now() AT TIME ZONE 'UTC')::date`, [id])).rows[0];
         return { questions: num(row?.questions), source: "kept_count" as const };
       } catch (e) {
-        if (!isMissingRelation(e)) throw e;
-        return { questions: 0, source: "kept_count" as const };
+        throw e; // shown as "Not set up in the database yet." rather than a made-up 0
       }
     }
     const row = (await query<{ n: number }>(
@@ -340,8 +348,14 @@ export async function readHouseholdQuestions(id: string): Promise<Section<{ ques
   });
 }
 
+/** usageByOperationAndModel() first runs ensureProvenanceSchema() (CREATE ... IF NOT EXISTS). A page view must not
+ * create tables, so a database without model_executions shows "Not set up" instead of calling it. */
 export async function readHouseholdUsage(id: string): Promise<Section<UsageReport>> {
-  return section(() => usageByOperationAndModel(id, startOfMonth()));
+  return section(async () => {
+    const present = (await query<{ present: boolean }>(`SELECT to_regclass('public.model_executions') IS NOT NULL AS present`)).rows[0]?.present;
+    if (!present) throw Object.assign(new Error("model_executions missing"), { code: "42P01" });
+    return usageByOperationAndModel(id, startOfMonth());
+  });
 }
 
 // ---------------------------------------------------------------------------------------------------------------

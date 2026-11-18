@@ -216,3 +216,70 @@ test("times from the database show in Singapore time", async () => {
   assert.equal(when(null), "—");
   assert.equal(when("not a date"), "—");
 });
+
+test("Test engineer findings on #553: id case, members without an account row, deleted households, missing tables", async () => {
+  const db = await database(true);
+  const C = await import("@/lib/admin/console");
+  const { pseudonymizeId } = await import("@/lib/telemetry/pseudonymize");
+  const { ensureProvenanceSchema } = await import("@/lib/ai/provenance");
+  await ensureProvenanceSchema();
+  await db.query(`INSERT INTO model_executions(correlation_id,attempt_group_id,operation,role,household_ref,requested_provider,requested_model,requested_capability,requested_at,resolved_provider,status,cost_usd)
+    VALUES('c',gen_random_uuid(),'chat_reply','chat',$1,'anthropic','m','text',now(),'anthropic','succeeded',0.5)`, [pseudonymizeId(A)]);
+
+  // An upper-case id in the address still finds the household's spend (F3).
+  process.env.ADMIN_EMAILS = "dev@localhost";
+  try {
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const household = (await import("@/app/admin/households/[id]/page")).default;
+    const html = renderToStaticMarkup(await household({ params: Promise.resolve({ id: A.toUpperCase() }) }));
+    assert.match(html, /US\$0\.50/, "spend shown for an upper-case id");
+  } finally {
+    delete process.env.ADMIN_EMAILS;
+  }
+  const list = await C.readHouseholds();
+  assert.ok(list.ok && list.data.rows.find((h) => h.id === A)!.spendUsd === 0.5);
+
+  // A member with no Supabase Auth row shows "—", not "Not yet" (F4).
+  const ghost = "71000000-0000-4000-8000-0000000000ff";
+  await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$2,'member')", [B, ghost]);
+  const members = await C.readHouseholdMembers(B);
+  assert.ok(members.ok);
+  if (members.ok) assert.equal(members.data.find((m) => m.email === null)?.confirmed, null);
+
+  // Newest accounts never link to a deleted household (F6).
+  const gone = "71000000-0000-4000-8000-0000000000ee";
+  await db.query("INSERT INTO auth.users(id,email,email_confirmed_at) VALUES($1,'gone@example.com',now())", [gone]);
+  await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$2,'owner')", [GONE, gone]);
+  const recent = await C.readRecentSignups();
+  assert.ok(recent.ok && recent.data);
+  if (recent.ok && recent.data) assert.equal(recent.data.find((u) => u.email === "gone@example.com")?.householdId, null);
+
+  // Limits on and the question-count table missing: "not available", never a made-up 0 (F7).
+  process.env.DEARPOLICY_PLAN_LIMITS = "on";
+  try {
+    const q = await C.readHouseholdQuestions(A);
+    assert.equal(q.ok, false);
+  } finally {
+    delete process.env.DEARPOLICY_PLAN_LIMITS;
+  }
+
+  // No model_executions table: usage shows "not set up" and the page view does not create it (F5).
+  await db.exec("ALTER TABLE model_executions RENAME TO model_executions_moved");
+  try {
+    const usage = await C.readHouseholdUsage(A);
+    assert.equal(usage.ok, false);
+    const back = (await db.query<{ present: boolean }>("SELECT to_regclass('public.model_executions') IS NOT NULL AS present")).rows[0];
+    assert.equal(back?.present, false, "no table was created by reading");
+  } finally {
+    await db.exec("ALTER TABLE model_executions_moved RENAME TO model_executions");
+  }
+
+  // No chat tables: the households list still shows (cosmetic note from the Test engineer).
+  await db.exec("ALTER TABLE chat_messages RENAME TO chat_messages_moved");
+  try {
+    const l = await C.readHouseholds();
+    assert.ok(l.ok, "households list survives a missing chat table");
+  } finally {
+    await db.exec("ALTER TABLE chat_messages_moved RENAME TO chat_messages");
+  }
+});

@@ -17,6 +17,8 @@ function Unavailable({ s }: { s: Section<unknown> }) {
 const STATUS_LABEL: Record<string, string> = {
   ready: "Read", failed: "Couldn’t be read", uploaded: "Uploaded", queued: "Waiting", extracting: "Reading", indexing: "Indexing",
 };
+/** Only the malware-scan states worth flagging; a clean or not-yet-scanned upload adds nothing to its status. */
+const QUARANTINE_FLAG: Record<string, string> = { scan_pending: "Scan pending", scan_rejected: "Blocked by scan", deleted: "Deleted" };
 const statusLabel = (s: string) => STATUS_LABEL[s] ?? s.replace(/_/g, " ");
 
 /** One household: members, plan, usage, documents (metadata and read status only) and recent failures. Read-only. */
@@ -26,8 +28,10 @@ export default async function AdminHouseholdPage({ params }: { params: Promise<{
   const found = await readHouseholdDetail(id).catch(() => null);
   if (!found) notFound();
   const household = found;
+  // Every later read uses the id as stored, never the address as typed (an upper-case id would miss the spend lookup).
+  const hid = household.id;
   const [members, documents, failures, jobs, questions, usage] = await Promise.all([
-    readHouseholdMembers(id), readHouseholdDocuments(id), readHouseholdFailures(id), readHouseholdJobs(id), readHouseholdQuestions(id), readHouseholdUsage(id),
+    readHouseholdMembers(hid), readHouseholdDocuments(hid), readHouseholdFailures(hid), readHouseholdJobs(hid), readHouseholdQuestions(hid), readHouseholdUsage(hid),
   ]);
   const current = documents.ok ? documents.data.filter((d) => !d.replaced) : [];
   const plan = PLANS[household.plan];
@@ -44,7 +48,7 @@ export default async function AdminHouseholdPage({ params }: { params: Promise<{
         <div className="schedule-summary">
           <div><strong>{plan.name}</strong><span>plan{household.planStatus ? ` · ${household.planStatus.replace(/_/g, " ")}` : ""}{household.plansStored ? "" : " · plans table not set up"}</span></div>
           <div><strong>{household.people}</strong><span>{household.people === 1 ? "person" : "people"} on the account</span></div>
-          <div><strong>{current.length}</strong><span>current documents (plan allows {plan.unlimitedDocuments ? "unlimited" : plan.documents})</span></div>
+          <div><strong>{current.length}</strong><span>current {current.length === 1 ? "document" : "documents"} (plan allows {plan.unlimitedDocuments ? "unlimited" : plan.documents})</span></div>
           <div><strong>{questions.ok ? questions.data.questions : "—"}</strong><span>questions this month (plan allows {plan.questionsPerMonth}){questions.ok && questions.data.source === "messages_on_file" ? " · on file" : ""}</span></div>
           <div><strong>{usage.ok ? usd(usage.data.costUsd) : "—"}</strong><span>model spend this month{usage.ok ? ` · ${plural(usage.data.calls, "call")}` : ""}</span></div>
         </div>
@@ -85,7 +89,7 @@ export default async function AdminHouseholdPage({ params }: { params: Promise<{
                   <td>
                     <span className={`status ${d.status}`}>{statusLabel(d.status)}</span>
                     {d.replaced && <span className="schedule-flag">Replaced</span>}
-                    {d.quarantine && d.quarantine !== "scan_clean" && <span className="schedule-flag">{d.quarantine.replace(/_/g, " ")}</span>}
+                    {d.quarantine && QUARANTINE_FLAG[d.quarantine] && <span className="schedule-flag">{QUARANTINE_FLAG[d.quarantine]}</span>}
                     {d.needsReview && <span className="schedule-flag">Needs review</span>}
                   </td>
                   <td>{d.pages ?? "—"}</td><td>{when(d.uploadedAt)}</td><td>{when(d.readAt)}</td>

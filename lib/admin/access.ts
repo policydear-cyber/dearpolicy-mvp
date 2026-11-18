@@ -6,8 +6,9 @@
  * browser sends: no cookie flag, header or query string can make someone an admin.
  *
  * Fails closed: with ADMIN_EMAILS unset or empty, nobody is an admin. An address counts only once Supabase has
- * confirmed it, so signing up with an allow-listed address that isn't yours gives nothing. Everyone else, signed in or
- * not, gets the ordinary "page not found", so the console's existence isn't advertised.
+ * confirmed it, so signing up with an allow-listed address that isn't yours gives nothing. Anyone signed in who isn't
+ * on the list gets the ordinary "page not found". A signed-out visitor is sent to sign in first, as for every app page
+ * and /operator (middleware.ts, lib/public-site/app-sections.ts); that shows the address exists, nothing more.
  */
 import { notFound } from "next/navigation";
 import { getCurrentUser, type SessionUser } from "@/lib/auth/session";

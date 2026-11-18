@@ -71,6 +71,7 @@ export default async function AdminOverviewPage() {
             </tbody>
           </table></div>
         )}
+        {recent.ok && !recent.data && <p className="muted">Newest accounts aren&rsquo;t available: Supabase Auth&rsquo;s user list can&rsquo;t be read from this database.</p>}
         {recent.ok && recent.data && (
           <>
             <h3>Newest accounts</h3>
