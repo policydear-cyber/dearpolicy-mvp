@@ -670,7 +670,7 @@ const PLAIN_SUM = (r: SummaryRow) => (r.figure.kind === "worked_out" || (r.figur
  * insured where it has one, or, when its rows print no amount at all, its sum insured with its stated currency; else no
  * amount. The total is given only when every part has an amount in one currency and nothing may be one policy counted
  * twice; otherwise null, and the parts still say what each policy gives. Equal amounts never join two covers (R246). */
-export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: string })[], held: HeldCover[] = [], category?: string): { parts: TilePart[]; total: number | null; known: KnownSum | null } {
+export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: string; benefit?: string | null })[], held: HeldCover[] = [], category?: string): { parts: TilePart[]; total: number | null; known: KnownSum | null } {
   const allCovers = [...coversOf(rows)].filter(([, list]) => !list.every((r) => r.pays === "not_covered")).map(([key, list]) => {
     const own = held.filter((h) => policyOf(h) === key);
     const sums = new Map<string, { amount: number; currency: string }>();
@@ -786,11 +786,14 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
   // another category ("Accidental Death" stored as Death, "AD&D") is named with no amount here (Critic R247 Q1b). So is a
   // line outside the accident tile whose name has an accident or injury word but places it nowhere ("Accident Benefit"
   // stored as Death): it may pay on an accident only. A name with no such word ("Group Term Life") keeps its category.
-  const elsewhere = (l: { name: string }) => {
+  // The benefit's own printed name decides, where the line keeps one ("Death Benefit" on Singlife Comprehensive Critical
+  // Illness II): the product's name says what the policy is, not where this line pays (live check, PR 542).
+  const elsewhere = (l: { name: string; benefit?: string | null }) => {
     if (!category) return false;
-    if (ACCIDENT_ONLY_NAME(l.name)) return category !== "Personal Accident";
-    const c = categoryOfBenefit(l.name);
-    return c ? c !== category : category !== "Personal Accident" && ACCIDENT_WORD.test(l.name);
+    const name = l.benefit || l.name;
+    if (ACCIDENT_ONLY_NAME(name)) return category !== "Personal Accident";
+    const c = categoryOfBenefit(name);
+    return c ? c !== category : category !== "Personal Accident" && ACCIDENT_WORD.test(name);
   };
   // A rider here with no amount of its own, whose plan is on this tile with no amount either, and whose own words say it
   // pays that plan's death benefit ("Terminal Illness: we will pay the death benefit", paysPlanDeathBenefit), is that

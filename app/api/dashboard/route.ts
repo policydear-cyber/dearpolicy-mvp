@@ -24,6 +24,7 @@ import { coverVerdict } from "@/lib/coverage/cover-verdict";
 import { heldLines } from "@/lib/coverage/held-line";
 import { documentName, isMachineFilename, prettifyFilename } from "@/lib/policies/document-name";
 import { onFileDocumentName } from "@/lib/coverage/on-file-note";
+import { lineBenefit } from "@/lib/coverage/line-benefit";
 import { homeCardShowsAmount, pickCoverByName, readablePolicyName } from "@/lib/coverage/home-card";
 /** The document's own naming fields, read beside an on-file line or wording (documentName). */
 type OnFileDoc={doc_product:string|null;original_filename:string;doc_insurer:string|null;document_role:string|null;policy_number:string|null;doc_type:string|null};
@@ -62,8 +63,8 @@ export async function GET(request:NextRequest){
     reminders:[{kind:"family",title:"Add your family and upload a policy",detail:"Nothing is on file yet. Add who is in your family, then upload a policy schedule or certificate so DearPolicy can show what it covers and costs.",href:"/"}],
     unclaimed:[],quality:{needsReview:0,referenceDocs:0,personalDocs:0},empty:true});
 
-  const coverageRows=await query<{id:string;policy_id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string;evidence_text:string|null}>(`SELECT pc.id,p.id::text AS policy_id,pc.category,pc.amount::text,pc.currency,pc.evidence_text,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
-  type Chosen={policyId:string;category:string;amount:number|null;currency:string|null;policyKey:string;productName:string|null;insurer:string|null;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
+  const coverageRows=await query<{id:string;policy_id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string;evidence_text:string|null;notes:string|null}>(`SELECT pc.id,p.id::text AS policy_id,pc.category,pc.amount::text,pc.currency,pc.evidence_text,pc.notes,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
+  type Chosen={policyId:string;category:string;amount:number|null;currency:string|null;policyKey:string;productName:string|null;benefit:string|null;insurer:string|null;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
   const byPolicyCategory=new Map<string,Chosen[]>();
   // A line whose own label names a premium, waiver, fund or surrender value or the person's own share of a bill is no
   // tile and no part of a total (a "TPD Premium Waiver" line is stored under TPD); a cover whose figure may be a waived
@@ -75,7 +76,7 @@ export async function GET(request:NextRequest){
     // A figure paid per day, week or month carries its printed period; a periodic cover's figure with none is not shown
     // (lib/coverage/line-period.ts).
     const figure=lineFigure(category,row.amount==null?null:Number(row.amount),row.evidence_text);
-    const chosen:Chosen={policyId:row.policy_id,category,amount:figure.amount,currency:statedCurrencyCode(row.currency),policyKey:row.policy_key,productName:row.coverage_product_name??row.document_product_name,insurer:row.insurer,groupPolicyNumber:row.group_policy_number,authority:Number(row.document_authority),effectiveDate:row.effective_date,createdAt:row.created_at}; linePeriods.set(chosen,figure.period); list.push(chosen);
+    const chosen:Chosen={policyId:row.policy_id,category,amount:figure.amount,currency:statedCurrencyCode(row.currency),policyKey:row.policy_key,productName:row.coverage_product_name??row.document_product_name,benefit:lineBenefit(row.notes,row.coverage_product_name),insurer:row.insurer,groupPolicyNumber:row.group_policy_number,authority:Number(row.document_authority),effectiveDate:row.effective_date,createdAt:row.created_at}; linePeriods.set(chosen,figure.period); list.push(chosen);
     byPolicyCategory.set(key,list);
   }
   const selected:Chosen[]=[]; const conflictCategories=new Set<string>();
@@ -139,7 +140,7 @@ export async function GET(request:NextRequest){
       const kinds=personKinds(person?.covers??[],person?.rows??[]);
       for(const category of COVERAGE_CATEGORIES){
         const rows=tileRows(categoryRows(category,person?.rows??[]));
-        const lines=selected.filter(x=>x.category===category).map(x=>({name:x.productName??"Policy",amount:x.amount,currency:x.currency,documentIds:coverageRows.rows.filter(r=>r.policy_key===x.policyKey&&normalizeCoverageCategory(r.category)===category).map(r=>r.policy_id)}));
+        const lines=selected.filter(x=>x.category===category).map(x=>({name:x.productName??"Policy",benefit:x.benefit,amount:x.amount,currency:x.currency,documentIds:coverageRows.rows.filter(r=>r.policy_key===x.policyKey&&normalizeCoverageCategory(r.category)===category).map(r=>r.policy_id)}));
         // A lump-sum category gives each policy's sum and adds them up: a schedule line, and any cover only the table knows
         // (a scheme's sum only its summary prints). A policy whose sum is not read is named with no amount, and there is
         // then no total, never a part sum (DC 27 Oct).
