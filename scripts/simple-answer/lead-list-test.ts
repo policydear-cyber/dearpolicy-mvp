@@ -36,9 +36,9 @@ t("the screenshot's shape: a subject, five policies with descriptions, then an '
 });
 
 t("a name with 'and' in it is never cut (Critic #546 MED-2)", () => {
-  const a = answer("Jun has Alpha Life, Beta Hospital and Surgical Plan, and Gamma Accident.");
+  const a = answer("Jun has Alpha Life (life), Beta Hospital and Surgical Plan (hospital), and Gamma Accident (accidents).");
   listFromBottomLine(a, OPTS);
-  assert.deepEqual(items(a), ["Alpha Life", "Beta Hospital and Surgical Plan", "Gamma Accident"]);
+  assert.deepEqual(items(a), ["Alpha Life (life)", "Beta Hospital and Surgical Plan (hospital)", "Gamma Accident (accidents)"]);
   const b = answer("Jun has Singlife Shield, AIA Term Life, Hospital and Surgical Plan.");
   listFromBottomLine(b, OPTS);
   assert.ok(!items(b).includes("Hospital") && !items(b).includes("Surgical Plan"), JSON.stringify(items(b)));
@@ -116,9 +116,11 @@ t("an 'also linked' sentence goes from a plain point too; an amount card keeps e
   const removed = listFromBottomLine(a, OPTS);
   assert.deepEqual(a.statements.map((s) => [s.id, s.text]), [
     ["p1", "Alpha Life covers death and disability."],
+    // A part that names a scheme may be cover: kept (TE #546 F1).
+    ["p2", "Jun is also linked to the Beta scheme booklet."],
     ["s1", "Death benefit. Jun is also linked to a booklet."],
   ]);
-  assert.equal(removed.length, 2);
+  assert.equal(removed.length, 1);
   assert.equal(a.bottomLine, "Jun has two policies.");
 });
 
@@ -136,6 +138,76 @@ t("the items are the bottom line's own words: nothing added, nothing reworded", 
   listFromBottomLine(a, OPTS);
   assert.equal(a.bottomLine, "Ana has:");
   for (const item of items(a)) assert.ok(bottom.includes(item), item);
+});
+
+t("an 'also linked' sentence that names any cover stays; a sourced point always stays (TE #546 F1)", () => {
+  const opts = { ...OPTS, products: ["Plover Shield", "Kestrel Shield"] };
+  for (const kept of [
+    "Mei is also linked to the Information Booklet and Plover Shield.",
+    "Mei is also linked to the Information Booklet, CareShield Life and a product summary.",
+    "Mei is also linked to the Critical Illness Endorsement.",
+    "Mei is also linked to the Kestrel Shield policy document.",
+    "Mei is also linked to the Kestrel Shield Terms and Conditions.",
+  ]) {
+    const a = answer(`Mei has two policies. ${kept}`);
+    assert.deepEqual(listFromBottomLine(a, opts), [], kept);
+  }
+  const gone = answer("Mei has two policies. She is also linked to an Information Booklet, a product summary and a letter.");
+  assert.equal(listFromBottomLine(gone, opts).length, 1);
+  const sourced = answer("Mei has two policies.", [{ ...point("p1", "Mei is also linked to the Information Booklet."), source: { policyName: "Booklet", page: 1, citationIds: ["c1"] } } as AnswerStatement]);
+  listFromBottomLine(sourced, opts);
+  assert.deepEqual(sourced.statements.map((x) => x.id), ["p1"]);
+});
+
+t("a trailing remark, a name cut at a comma, or a colon never makes a list (TE #546 F2, F3)", () => {
+  for (const bottom of [
+    "Mei has Alpha Life (life), Plover Shield (hospital) and Wren Accident Plan (accidents), all in force.",
+    "Mei has Alpha Life (life), Plover Shield (hospital), Wren Accident Plan (accidents), each paid yearly.",
+    "Mei has Alpha Life (life), the Life, Health and Accident Plan (all-in-one) and Beta Care (care).",
+    "Mei has three Osprey Life policies: Term Plan (life), Shield (hospital) and Care (long-term care).",
+  ]) {
+    const a = answer(bottom);
+    listFromBottomLine(a, OPTS);
+    assert.equal(a.bottomLine, bottom, bottom);
+    assert.deepEqual(items(a), [], bottom);
+  }
+});
+
+t("a preferred name in brackets is the person too (TE #546 F4); no statements array still keeps the list (F5)", () => {
+  const a = answer("Charmaine has Alpha Life (life), Beta Shield (hospital) and Gamma Care (long-term care).");
+  listFromBottomLine(a, { names: ["Tan Hui Min (Charmaine)"] });
+  assert.equal(a.bottomLine, "Charmaine has:");
+  assert.equal(items(a).length, 3);
+  const b = { bottomLine: "Mei has Alpha Life (life), Beta Shield (hospital) and Gamma Care (long-term care). It is all in force." } as { bottomLine: string; statements?: AnswerStatement[] };
+  listFromBottomLine(b, OPTS);
+  assert.equal(b.bottomLine, "Mei has:");
+  assert.deepEqual(b.statements!.map((x) => x.id), ["lead-item-1", "lead-item-2", "lead-item-3", "lead-after"]);
+});
+
+t("a sentence that is not a list of described policies is never cut into fragments (Live site tester, post-#546)", () => {
+  for (const bottom of [
+    "Desmond has death cover under his Singlife group term life, group personal accident and Comprehensive Critical Illness II policies, plus accidental death under his travel policy; the amounts are below.",
+    "Charmaine has death cover through the MINDEF & MHA group scheme, her AIA, PruLink and PruFlexiCash plans and her Manulife ReadyBuilder; the amounts are below.",
+    "Mei has life cover, hospital cover, accident cover.",
+  ]) {
+    const a = answer(bottom);
+    listFromBottomLine(a, { names: ["Desmond Tan", "Tan Hui Min (Charmaine)", "Mei Tan"] });
+    assert.equal(a.bottomLine, bottom, bottom);
+    assert.deepEqual(items(a), [], bottom);
+  }
+});
+
+t("an 'and' inside nested brackets never splits an item; a booklet's own product name never keeps its 'also linked' line (TE #550 N1, N2)", () => {
+  const a = answer("Jun has Osprey Term Plan (life (death) and TPD), Plover Shield (hospital) and Wren Accident Plan (accidents).");
+  listFromBottomLine(a, OPTS);
+  assert.deepEqual(items(a), ["Osprey Term Plan (life (death) and TPD)", "Plover Shield (hospital)", "Wren Accident Plan (accidents)"]);
+  const b = answer("Jun has Osprey Term Plan (life), Plover Shield (hospital) and Wren Accident Plan (accidents). He is also linked to the Information Booklet.");
+  const removed = listFromBottomLine(b, { ...OPTS, products: ["Osprey Term Plan", "Information Booklet", "Plover Shield"] });
+  assert.deepEqual(removed, ["He is also linked to the Information Booklet."]);
+  assert.ok(!JSON.stringify(b).includes("Information Booklet"));
+  const c = answer("Jun has Osprey Term Plan (life), Plover Shield (hospital) and Wren Accident Plan (accidents). He is also linked to the Plover Shield brochure.");
+  listFromBottomLine(c, { ...OPTS, products: ["Plover Shield"] });
+  assert.ok(JSON.stringify(c).includes("Plover Shield brochure"));
 });
 
 console.log(`lead list: ${passed} passed, ${failures.length} failed`);

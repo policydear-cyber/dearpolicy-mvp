@@ -31,6 +31,7 @@ import { docLabel, matchMember, membersNamedIn } from "./verify";
 import { declutterAnswer } from "./declutter";
 import { dropQuoteFragments, tablesFromPrintedRows } from "./printed-table";
 import { listFromBottomLine } from "./lead-list";
+import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import { contactsHelp, insurerContactsFor } from "./insurer-contacts";
 import { amountsFromRows, withheldRows, asksForNobody, namesSomeone, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, dropQuotePointers, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
@@ -472,7 +473,8 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   if (fragments.length && !(answer.statements ?? []).length && INTRODUCES.test(answer.bottomLine ?? answer.summary ?? "")) answer.statements = [{ id: "nothing-shown", kind: "uncertainty", text: NOTHING_SHOWN, fullText: NOTHING_SHOWN, conditions: [] }];
   report.sentencesLeftOut.push(...declutterAnswer(answer));
   // An overview's bottom line that names three or more things becomes its subject and a list (DC, 18 Nov 2026).
-  report.sentencesLeftOut.push(...listFromBottomLine(answer, { names: household.members.map((m) => m.name), aboutDocuments: aboutLibrary(message) }));
+  report.sentencesLeftOut.push(...listFromBottomLine(answer, { names: household.members.map((m) => m.name), aboutDocuments: aboutLibrary(message),
+    products: household.documents.filter((d) => !d.supersededAt && !NO_COVER_READING_ROLES.includes(d.documentRole ?? "")).map((d) => d.productName ?? "") }));
   // How to reach the insurer, as the household's own documents print it, when the answer gives next steps or is about
   // claiming. Read by the server from the stored pages; never the model's words.
   if (reply.model !== "no-documents" && reply.model !== "unknown-person" && contactsHelp(answer, message)) {
