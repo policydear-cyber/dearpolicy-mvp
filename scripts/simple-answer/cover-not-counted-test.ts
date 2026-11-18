@@ -1,8 +1,10 @@
 /** An answer that shows amounts for a person while some of that person's documents gave it nothing never reads as the
  * person's whole cover (fresh-start run 10 Nov: a death answer showed one policy's figure while another policy's benefits
- * were unread). The bottom line says the amounts may not be all of it and names those documents: not read, read in part,
- * still being read, on hold, or whose benefits the benefit table could not read. Receipts and letters, superseded copies
- * and other people's documents are never named. The pure check (noteCoverNotCounted) and the app's own chat turn
+ * were unread). Since 18 Nov (DC: an overview that opened with file names, "read only in part", "not counted here" and
+ * "not a total" read as a refund request) that is one short plain line, the answer's last point, never in the bottom
+ * line: product names (two at most), else a count, never a file name and never "not a total". Not read, read in part,
+ * still being read, on hold, or whose benefits the benefit table could not read all count. Receipts and letters,
+ * superseded copies and other people's documents never do. The pure check (noteCoverNotCounted) and the app's own chat turn
  * (runSimpleChat, scripted model). Made-up household; no model, network or database.
  *   npm run simple:cover-not-counted-test */
 import assert from "node:assert/strict";
@@ -12,6 +14,7 @@ import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import type { SimpleModel } from "@/lib/simple-chat/model";
 import { noteCoverNotCounted } from "@/lib/simple-chat/verify";
 import { runSimpleChat } from "@/lib/simple-chat/hook";
+import { COVER_NOTE_ID } from "@/lib/chat/cover-note";
 
 let passed = 0;
 const failed: string[] = [];
@@ -49,50 +52,58 @@ const answer = (amounts: { person: string | null; text?: string; amount?: string
     amount: { text: a.amount ?? "S$5,000", currencyResolved: true, illustration: false }, basis: null, conditions: [], asOf: null, source: null, group: null })),
 } as unknown as StructuredAnswer);
 
+const BOTTOM = "Jane's Harbour Term Life shows a death benefit; the amount is below.";
+const noteOf = (a: StructuredAnswer) => (a.statements ?? []).filter((s) => s.id === COVER_NOTE_ID).map((s) => s.text);
+/** The one note, checked for what it must never say, and that it is the last point and the bottom line is untouched. */
+function oneNote(a: StructuredAnswer, bottom = BOTTOM): string {
+  const notes = noteOf(a);
+  assert.equal(notes.length, 1, JSON.stringify(a.statements));
+  assert.equal(a.statements!.at(-1)!.id, COVER_NOTE_ID, "the note is the last point");
+  assert.equal(a.bottomLine, bottom, "the bottom line is the answer only");
+  assert.doesNotMatch(notes[0], /not a total|not counted|\.pdf\b|\d/i, notes[0]);
+  return notes[0];
+}
+
 async function main() {
-  await check("the benefit table could not read a policy of hers: the bottom line says the amount is not her whole cover, and names it", () => {
+  await check("the benefit table could not read a policy of hers: one plain line at the end names it", () => {
     const a = answer([{ person: JANE }]);
     const said = noteCoverNotCounted(a, HOUSE([READ, UNREAD_TABLE]), new Map([[READ.policyId, "read"], [UNREAD_TABLE.policyId, "table_unread"]]));
-    assert.ok(said);
-    assert.match(a.bottomLine!, /^Jane's Harbour Term Life shows a death benefit; the amount is below\. This may not be all of Jane Doe’s cover: Kestrel Whole Life could not have its benefits read, so any cover in it is not counted here and the amounts shown are not a total\.$/);
-    assert.equal(a.summary, a.bottomLine);
-    assert.doesNotMatch(said!, /\d/, "no figure in the note");
+    assert.equal(said, "Kestrel Whole Life is not fully read, so some details may be missing.");
+    assert.equal(oneNote(a), said);
+    assert.equal(a.summary, BOTTOM);
   });
-  await check("not read, read in part, still being read and on hold are each named; a fully read document is not", () => {
+  await check("not read, read in part, still being read and on hold all count; more than two is a count, never a list of names", () => {
     const reading = doc(9, { productName: "Gannet Saver", processingStatus: "extracting", readingLive: true, pages: [] });
     const a = answer([{ person: JANE }]);
     noteCoverNotCounted(a, HOUSE([READ, FAILED, IN_PART, reading]));
-    assert.match(a.bottomLine!, /Osprey Critical Care could not be read, Plover Accident Plan was read only in part and Gannet Saver is still being read, so any cover in them is not counted here/);
-    assert.doesNotMatch(a.bottomLine!, /Harbour Term Life (could|was|is still)/);
+    assert.equal(oneNote(a), "Three documents are not fully read, so some details may be missing (the Documents page shows which).");
+    const two = answer([{ person: JANE }]);
+    noteCoverNotCounted(two, HOUSE([READ, FAILED, IN_PART]));
+    assert.equal(oneNote(two), "Osprey Critical Care and Plover Accident Plan are not fully read, so some details may be missing.");
   });
-  await check("a policy whose table reading read past a page names that page: never read as her whole cover (Critic and TE #404)", async () => {
+  await check("only documents still being read: says so, never that details may be missing", () => {
+    const reading = doc(9, { productName: "Gannet Saver", processingStatus: "extracting", readingLive: true, pages: [] });
+    const a = answer([{ person: JANE }]);
+    noteCoverNotCounted(a, HOUSE([READ, reading]));
+    assert.equal(oneNote(a), "Gannet Saver is still being read, so its details are not included yet.");
+  });
+  await check("a policy whose table reading read past a page counts, whether or not an amount shown comes from it (Critic and TE #404)", async () => {
     const { tableStateKey } = await import("@/lib/benefit-table/service");
     const states = (pages: number[]) => new Map([[READ.policyId, "read"], [UNREAD_TABLE.policyId, tableStateKey({ state: "read_in_part", unreadPages: pages })]]);
-    // An amount shown comes from the policy read in part: its cover shown may be incomplete, never "not counted" (TE #404).
-    const fromIt = (bottom?: string) => { const a = answer([{ person: JANE }], bottom); (a.statements![0] as { source: unknown }).source = { policyName: "Kestrel Whole Life", page: 3, citationIds: [] }; return a; };
+    const fromIt = () => { const a = answer([{ person: JANE }]); (a.statements![0] as { source: unknown }).source = { policyName: "Kestrel Whole Life", page: 3, citationIds: [] }; return a; };
     const a = fromIt();
     noteCoverNotCounted(a, HOUSE([READ, UNREAD_TABLE]), states([23]));
-    assert.match(a.bottomLine!, /The cover shown from Kestrel Whole Life may be incomplete \(page 23 could not be read\), so the amounts shown may not be a total\.$/);
-    assert.doesNotMatch(a.bottomLine!, /not counted/);
-    const b = fromIt();
-    noteCoverNotCounted(b, HOUSE([READ, UNREAD_TABLE]), states([4, 23]));
-    assert.match(b.bottomLine!, /The cover shown from Kestrel Whole Life may be incomplete \(pages 4 and 23 could not be read\)/);
-    // Said once on the next turn too, when the model repeats it.
-    const c = fromIt(b.bottomLine!);
-    noteCoverNotCounted(c, HOUSE([READ, UNREAD_TABLE]), states([4, 23]));
-    assert.equal(c.bottomLine!.match(/may be incomplete/g)?.length, 1);
-    // Critic #404 case M: the amount shown comes only from another policy; the one read in part gave nothing shown. Its cover
-    // is not counted, the pages are named, and the amount shown is never read as the whole cover.
+    assert.equal(oneNote(a), "Kestrel Whole Life is not fully read, so some details may be missing.");
     const m = answer([{ person: JANE }]);
     (m.statements![0] as { source: unknown }).source = { policyName: "Harbour Term Life", page: 1, citationIds: [] };
     noteCoverNotCounted(m, HOUSE([READ, UNREAD_TABLE]), states([23]));
-    assert.match(m.bottomLine!, /This may not be all of Jane Doe’s cover: Kestrel Whole Life was read only in part \(page 23 could not be read\), so any cover in it is not counted here and the amounts shown are not a total\.$/);
-    assert.doesNotMatch(m.bottomLine!, /may be incomplete/);
+    assert.equal(oneNote(m), "Kestrel Whole Life is not fully read, so some details may be missing.");
   });
   await check("receipts, superseded copies and another person's documents are never named", () => {
     const a = answer([{ person: JANE }]);
     assert.equal(noteCoverNotCounted(a, HOUSE([READ, RECEIPT, OLD, JOHNS]), null), null);
-    assert.equal(a.bottomLine, "Jane's Harbour Term Life shows a death benefit; the amount is below.");
+    assert.equal(a.bottomLine, BOTTOM);
+    assert.equal(noteOf(a).length, 0);
   });
   await check("a letter the table says is a misfiled pack (its cover still to read) is named; a plain letter is not (Critic #402 L)", () => {
     const pack = doc(11, { productName: "Bittern Life Plan", documentRole: "insurer_letter", pages: [{ page: 1, text: "Cover letter" }, { page: 2, text: "Policy Schedule" }] });
@@ -100,22 +111,23 @@ async function main() {
     for (const state of ["table_unread", "waiting"]) {
       const a = answer([{ person: JANE }]);
       noteCoverNotCounted(a, HOUSE([READ, pack, letter]), new Map([[READ.policyId, "read"], [pack.policyId, state], [letter.policyId, "no_table"]]));
-      assert.match(a.bottomLine!, new RegExp(`This may not be all of Jane Doe’s cover: Bittern Life Plan ${state === "waiting" ? "is still being read" : "could not have its benefits read"}, so any cover in it`));
-      assert.doesNotMatch(a.bottomLine!, /Bittern Renewal Letter/);
+      assert.equal(oneNote(a), state === "waiting" ? "Bittern Life Plan is still being read, so its details are not included yet." : "Bittern Life Plan is not fully read, so some details may be missing.");
     }
     const a = answer([{ person: JANE }]);
     assert.equal(noteCoverNotCounted(a, HOUSE([READ, pack]), new Map([[READ.policyId, "read"], [pack.policyId, "no_table"]])), null, "no_table letter: not named");
   });
-  await check("a document linked to nobody may be anyone's: it is named for whoever the amounts are for", () => {
+  await check("a document linked to nobody may be anyone's: it counts for whoever the amounts are for, said once", () => {
     const a = answer([{ person: JANE }, { person: JOHN, amount: "S$9,000" }]);
     noteCoverNotCounted(a, HOUSE([READ, NOBODYS, JOHNS]));
-    assert.match(a.bottomLine!, /This may not be all of Jane Doe’s cover: Finch Family Plan could not be read, so any cover in it/);
-    assert.match(a.bottomLine!, /This may not be all of John Roe’s cover: Finch Family Plan could not be read and Heron Life Plan could not be read, so any cover in them/);
+    assert.equal(oneNote(a), "Finch Family Plan and Heron Life Plan are not fully read, so some details may be missing.");
+    const jane = answer([{ person: JANE }]);
+    noteCoverNotCounted(jane, HOUSE([READ, NOBODYS, JOHNS]));
+    assert.equal(oneNote(jane), "Finch Family Plan is not fully read, so some details may be missing.");
   });
-  await check("an amount for no named person: every such document in the household is named", () => {
+  await check("an amount for no named person: every such document in the household counts", () => {
     const a = answer([{ person: null }]);
     noteCoverNotCounted(a, HOUSE([READ, JOHNS]));
-    assert.match(a.bottomLine!, /This may not be all of your household’s cover: Heron Life Plan could not be read/);
+    assert.equal(oneNote(a), "Heron Life Plan is not fully read, so some details may be missing.");
   });
   await check("no amount shown, or only premiums: no note", () => {
     const none = answer([]);
@@ -127,42 +139,40 @@ async function main() {
     const a = answer([{ person: JANE }]);
     assert.equal(noteCoverNotCounted(a, HOUSE([READ]), new Map([[READ.policyId, "read"]])), null);
   });
-  await check("a document's own file name in the note is kept as a library name", () => {
+  await check("a document with no product name is never named by its file name: the line is a count", () => {
     const own = doc(10, { name: "scan_20261101.pdf", productName: null, insurer: null, processingStatus: "failed", pages: [] });
     const a = answer([{ person: JANE }]);
     const said = noteCoverNotCounted(a, HOUSE([READ, own]));
-    assert.ok(said);
-    assert.match(said!, /scan_20261101\.pdf could not be read/);
-    assert.ok(a.libraryNames?.includes("scan_20261101.pdf"));
+    assert.equal(said, "One document is not fully read, so some details may be missing (the Documents page shows which).");
+    assert.equal(oneNote(a), said);
+    const booklet = doc(13, { name: "InformationBookletForTheNewlyInsured.pdf", productName: null, insurer: null, processingStatus: "ready" });
+    const b = answer([{ person: JANE }]);
+    noteCoverNotCounted(b, HOUSE([READ, booklet, UNREAD_TABLE]), new Map([[READ.policyId, "read"], [booklet.policyId, "no_table"], [UNREAD_TABLE.policyId, "table_unread"]]));
+    assert.equal(oneNote(b), "Two documents are not fully read, so some details may be missing (the Documents page shows which).");
   });
-
-  await check("the model repeats an earlier turn's note in its bottom line: the note is said once, as this turn has it (TE #402)", () => {
-    const first = answer([{ person: JANE }]);
-    const said = noteCoverNotCounted(first, HOUSE([READ, FAILED, IN_PART]));
-    assert.ok(said);
-    // Next turn: the model copies the whole earlier bottom line, note and all.
-    const again = answer([{ person: JANE }], first.bottomLine!);
-    noteCoverNotCounted(again, HOUSE([READ, FAILED, IN_PART]));
-    assert.equal(again.bottomLine!.split("This may not be all of").length - 1, 1, again.bottomLine!);
-    assert.equal(again.bottomLine, first.bottomLine);
-    // The earlier note named a document now read in full: only this turn's documents are named.
-    const later = answer([{ person: JANE }], first.bottomLine!);
-    noteCoverNotCounted(later, HOUSE([READ, FAILED]));
-    assert.doesNotMatch(later.bottomLine!, /Plover/);
-    assert.match(later.bottomLine!, /Osprey Critical Care could not be read, so any cover in it/);
-    // Everything now read: the repeated note goes, and nothing else of the bottom line.
-    const done = answer([{ person: JANE }], first.bottomLine!);
-    assert.equal(noteCoverNotCounted(done, HOUSE([READ])), null);
-    assert.equal(done.bottomLine, "Jane's Harbour Term Life shows a death benefit; the amount is below.");
-    // Its straight-apostrophe form too.
-    const straight = answer([{ person: JANE }], first.bottomLine!.replace(/’/g, "'"));
-    noteCoverNotCounted(straight, HOUSE([READ, FAILED, IN_PART]));
-    assert.equal(straight.bottomLine!.split("This may not be all of").length - 1, 1);
+  await check("the model repeats an earlier turn's note (old bottom-line wording or today's line): the note is said once, as this turn has it (TE #402)", () => {
+    const OLD_NOTE = "This may not be all of Jane Doe’s cover: Osprey Critical Care could not be read and Plover Accident Plan was read only in part, so any cover in them is not counted here and the amounts shown are not a total.";
+    const OLD_PART = "The cover shown from Plover Accident Plan may be incomplete (page 2 could not be read), so the amounts shown may not be a total.";
+    for (const echoed of [OLD_NOTE, OLD_NOTE.replace(/’/g, "'"), OLD_PART, "Osprey Critical Care and Plover Accident Plan are not fully read, so some details may be missing."]) {
+      const again = answer([{ person: JANE }], `${BOTTOM} ${echoed}`);
+      noteCoverNotCounted(again, HOUSE([READ, FAILED, IN_PART]));
+      assert.equal(oneNote(again), "Osprey Critical Care and Plover Accident Plan are not fully read, so some details may be missing.");
+      // Everything now read: the repeated note goes, and nothing else of the bottom line.
+      const done = answer([{ person: JANE }], `${BOTTOM} ${echoed}`);
+      assert.equal(noteCoverNotCounted(done, HOUSE([READ])), null);
+      assert.equal(done.bottomLine, BOTTOM);
+    }
+    // A point of the model's own that only repeats the note goes; one that says more stays.
+    const pts = answer([{ person: JANE }]);
+    pts.statements!.push({ id: "m1", kind: "uncertainty", text: "Plover Accident Plan is not fully read, so some details may be missing.", fullText: "", conditions: [] } as never,
+      { id: "m2", kind: "fact", text: "Plover Accident Plan pays for fractures.", fullText: "", conditions: [] } as never);
+    noteCoverNotCounted(pts, HOUSE([READ, IN_PART]));
+    assert.deepEqual(pts.statements!.map((s) => s.id), ["s1", "m2", COVER_NOTE_ID]);
   });
-  await check("chat turns: the saved answer's bottom line carries the note, once, on the next turn too", async () => {
+  await check("chat turns: the saved answer carries the note once, as its last point, on the next turn too", async () => {
     const house = HOUSE([READ, FAILED]);
     const model: SimpleModel = { choice: { provider: "anthropic", model: "test" }, async call() {
-      return { json: { bottomLine: "Jane's Harbour Term Life shows a death benefit; the amount is below.", statements: [
+      return { json: { bottomLine: BOTTOM, statements: [
         { kind: "amount", person: JANE, text: "Death Benefit (Harbour Term Life).", amount: "S$5,000", quote: "Death Benefit S$5,000", document: "D1" }],
       nextSteps: [], question: null }, stopReason: "end_turn", model: "test", usage: { input: 1, cacheWrite: 0, cacheRead: 0, output: 1 } }; } };
     const context = {
@@ -176,18 +186,19 @@ async function main() {
       today: () => new Date("2026-11-10T04:00:00Z") });
     const a = saved[0].answer;
     assert.ok(a.statements!.some((s) => s.amount?.text === "S$5,000"), "the amount card is shown");
-    assert.match(a.bottomLine!, /This may not be all of Jane Doe’s cover: Osprey Critical Care could not be read/);
-    assert.equal(a.summary, a.bottomLine);
-    // Turn two: the model repeats turn one's bottom line, which its history carries: the note is said once.
+    assert.equal(oneNote(a), "Osprey Critical Care is not fully read, so some details may be missing.");
+    assert.equal(a.summary, BOTTOM);
+    // Turn two: the model repeats turn one's note, which its history carries, as a point: the note is said once.
     const echo: SimpleModel = { choice: model.choice, async call() {
-      return { json: { bottomLine: a.bottomLine, statements: [
-        { kind: "amount", person: JANE, text: "Death Benefit (Harbour Term Life).", amount: "S$5,000", quote: "Death Benefit S$5,000", document: "D1" }],
+      return { json: { bottomLine: BOTTOM, statements: [
+        { kind: "amount", person: JANE, text: "Death Benefit (Harbour Term Life).", amount: "S$5,000", quote: "Death Benefit S$5,000", document: "D1" },
+        { kind: "uncertainty", person: null, text: "Osprey Critical Care is not fully read, so some details may be missing.", amount: null, quote: null, document: null }],
       nextSteps: [], question: null }, stopReason: "end_turn", model: "test", usage: { input: 1, cacheWrite: 0, cacheRead: 0, output: 1 } }; } };
     await runSimpleChat(context, {}, { model: echo, household: async () => house, history: async () => [{ role: "user", text: "How much death cover does Jane have?" }, { role: "assistant", text: a.bottomLine! }],
       save: (async (x: unknown) => { saved.push(x as never); }) as never, ledger: false, table: async () => null, today: () => new Date("2026-11-10T04:00:00Z") });
     const b = saved[1].answer;
-    assert.equal(b.bottomLine!.split("This may not be all of").length - 1, 1, b.bottomLine!);
-    assert.equal(b.bottomLine, a.bottomLine);
+    assert.equal(oneNote(b), "Osprey Critical Care is not fully read, so some details may be missing.");
+    assert.equal(b.statements!.filter((s) => /not fully read/.test(s.text)).length, 1);
   });
 
   console.log(`\n${passed} passed, ${failed.length} failed`);

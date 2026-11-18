@@ -200,4 +200,22 @@ t("same-event smaller benefits are given, and no sentence says a cover is one pe
   assert.match(SIMPLE_SYSTEM_PROMPT, /"from the 11th day" and "after the 10th day"/);
   assert.match(SIMPLE_SYSTEM_PROMPT, /only when their figures, days or conditions differ/);
 });
+t("overview answers lead with the policies; reading is never narrated; the one note is drawn last and quietly (DC, 18 Nov)", () => {
+  const style = answerStyle();
+  assert.match(style, /For an overview \("tell me about Alex's policies"\), lead with the policies/);
+  assert.match(style, /Never say how documents were read \(read in part, pages not checked, not counted\) unless the question is about that/);
+  assert.match(style, /Sound sure of what the documents print/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /Never open with how many documents are linked, never list file names, and never say which documents were or were not read/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /the app adds one short line about documents not fully read where it matters, so never add your own/);
+  const html = renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "Alex has two policies.", bottomLine: "Alex has two policies.", nextSteps: [], questions: [], citations: [],
+    statements: [
+      { id: "cover-note", kind: "uncertainty", text: "Two documents are not fully read, so some details may be missing (the Documents page shows which).", fullText: "", conditions: [] },
+      { id: "s1", kind: "benefit_terms", personName: "Alex Tan", text: "Death benefit.", fullText: "Death benefit.", conditions: [], amount: { text: "S$5,000", currencyResolved: true, illustration: false } }] } as unknown as StructuredAnswer,
+    render: (x: string) => x, prose: ["Alex has two policies."], after: createElement("div", { className: "next-steps" }, "Call the insurer.") }));
+  const at = html.indexOf("not fully read");
+  assert.equal(html.split("not fully read").length - 1, 1, "said once");
+  assert.ok(at > html.indexOf("S$5,000") && at > html.indexOf("Call the insurer."), "after the cards and next steps");
+  assert.match(html, /<p class="answer-cards-foot" data-testid="answer-cover-note">Two documents are not fully read/);
+  assert.doesNotMatch(html, /answer-point caution[^>]*><p>Two documents/);
+});
 console.log(`style: ${passed} passed, 0 failed`);
