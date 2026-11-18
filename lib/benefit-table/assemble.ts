@@ -474,7 +474,10 @@ function headlineSumProblem(b: CheckedBenefit, cover: PersonCover, personCovers:
   const said = `${b.source.excerpt}\n${b.rowText ?? ""}`;
   const basicPlanWords = /\b(?:basic|base|policy|policies|plans?|certificates?|contracts?)\b/i.test(`${b.source.excerpt}\n${b.shareSentence ?? ""}`.replace(/\bthis\s+(?:(?:basic|base)\s+)?benefit\b/gi, " "));
   const basicLine = /\b(?:basic|base)\b/i.test(said) && policy.some((x) => x.coverKey !== cover.coverKey && /\b(?:basic|base)\b/i.test(x.cover ?? ""));
-  const byName = rowWords.size && !basicPlanWords && !basicLine ? policy.filter((x) => { const w = benefitWords(x.cover ?? ""); return [...rowWords].every((r) => w.has(r)); }) : [];
+  // A line whose figure is paid per day, week, month or year ("Hospital Income S$200 per day") is not a sum to take a share
+  // of (TE on the share-sum fix).
+  const periodic = /\b(?:per|a|each|every)\s+(?:day|week|month|year|annum)\b|\b(?:daily|weekly|monthly|yearly|annually|p\.?a\.?)\b/i.test(`${cover.cover ?? ""}\n${cover.source.excerpt}`);
+  const byName = rowWords.size && !basicPlanWords && !basicLine && !periodic ? policy.filter((x) => { const w = benefitWords(x.cover ?? ""); return [...rowWords].every((r) => w.has(r)); }) : [];
   const settled = labelled.length ? one(labelled) : one(policy) || byName.some((x) => x.coverKey === cover.coverKey) && one(byName);
   if (!settled)
     return `${b.value}% of the policy's sum, but ${cover.cover ?? "this policy"} prints more than one sum for this person, so which one is not settled`;

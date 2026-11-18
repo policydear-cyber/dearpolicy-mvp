@@ -702,6 +702,16 @@ for (const [what, printed] of [
   assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
   assert.doesNotMatch(JSON.stringify(r.figure), /25,000|50,000/);
 });
+test("C control (TE): a line paid per day is not a sum the name match takes a share of", () => {
+  const covers = [{ cover: "Hospital Income", sum: 200, line: "Hospital Income\tS$200 per day" }, { cover: "Death Benefit", sum: 50000, line: "Death Benefit\tS$50,000" }];
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+    page1: [CCI_PAGE1.replace(/\nCritical Illness Plan\tS\$300,000$/, ""), ...covers.map((c) => c.line)].join("\n"),
+    page2: "3 BENEFITS\n3.2 Hospital Income Benefit\nWe will pay two hundred percent (200%) of the Sum Assured in one (1) lump sum.", link: "Hospital Income", covers,
+    benefits: [{ section: "3 BENEFITS", benefit: "3.2 Hospital Income Benefit", value: 200, quote: "We will pay two hundred percent (200%) of the Sum Assured in one (1) lump sum." }] });
+  const r = rowOf(h, "Lee Wei Ming", /Hospital Income Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+});
 test("C control: the sentence followed by a line that takes earlier payments off stays with no amount", () => {
   const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
     page1: CCI_PAGE1, page2: `3 BENEFITS\n${PROSE}\nAny amount paid earlier under the Early Stage benefit will be deducted.`, covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
