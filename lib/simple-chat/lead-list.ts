@@ -79,6 +79,7 @@ export function listFromBottomLine(answer: Listable, opts: { names: string[]; ab
   });
   let lead = kept.join(" ");
   const items: string[] = [];
+  let after = "";
   const first = (kept[0] ?? "").trim();
   const m = NOT_A_LIST.test(first) ? null : leadOf(first, opts.names);
   if (m) {
@@ -87,7 +88,9 @@ export function listFromBottomLine(answer: Listable, opts: { names: string[]; ab
     // Anything else stays as the model wrote it.
     if (parts.length >= 3 && parts.every((p) => p.length <= 160 && !CLAUSE_START.test(p) && !/[.!?]/.test(p.replace(/\([^)]*\)/g, "").replace(/\b(?:Pte|Ltd|Co|Inc|No|St)\./g, "")))) {
       items.push(...parts);
-      lead = [`${m.lead}:`, ...kept.slice(1)].join(" ");
+      // The lead introduces the list only: what else the bottom line says follows the list, as a point (Critic #546 LOW-1).
+      lead = `${m.lead}:`;
+      after = kept.slice(1).join(" ").trim();
     }
   }
   if (lead !== bottom) {
@@ -107,6 +110,7 @@ export function listFromBottomLine(answer: Listable, opts: { names: string[]; ab
     });
     if (items.length) answer.statements = [
       ...items.map((text, i) => ({ id: `${LEAD_ITEM_ID}-${i + 1}`, kind: "fact", text, fullText: text, conditions: [] } as AnswerStatement)),
+      ...(after ? [{ id: "lead-after", kind: "fact", text: after, fullText: after, conditions: [] } as AnswerStatement] : []),
       ...answer.statements,
     ];
   }

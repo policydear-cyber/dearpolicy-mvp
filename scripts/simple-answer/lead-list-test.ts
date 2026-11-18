@@ -122,6 +122,14 @@ t("an 'also linked' sentence goes from a plain point too; an amount card keeps e
   assert.equal(a.bottomLine, "Jun has two policies.");
 });
 
+t("a second sentence of the bottom line follows the list, never the lead (Critic #546 LOW-1)", () => {
+  const a = answer("Mei has Alpha Life (life), Beta Shield (hospital) and Gamma Care (long-term care). She is also linked to CareShield Life.");
+  listFromBottomLine(a, OPTS);
+  assert.equal(a.bottomLine, "Mei has:");
+  assert.deepEqual(a.statements.map((s) => s.id), ["lead-item-1", "lead-item-2", "lead-item-3", "lead-after"]);
+  assert.equal(a.statements[3].text, "She is also linked to CareShield Life.");
+});
+
 t("the items are the bottom line's own words: nothing added, nothing reworded", () => {
   const bottom = "Ana has Delta Term (life), Echo Shield (hospital) and Foxtrot Care (long-term care).";
   const a = answer(bottom);
