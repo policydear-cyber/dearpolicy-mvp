@@ -766,6 +766,14 @@ test("C control (Critic re-check 9 on #544, Y1): a list whose items have long de
   assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
 });
 
+test("C control (Critic re-check 10 on #544, Y2): one list item after a colon stays in the clause", () => {
+  const page2 = `3 BENEFITS\n${PROSE}\nThe illness covered is:\n4 Kidney Failure\nA definition line.\nAny amount paid under the Early Stage Benefit will be deducted.\n3.2 Death Benefit`;
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
+});
+
 if (failures.length) {
   for (const f of failures) console.error(`FAIL ${f}`);
   console.error(`benefit-table sum base: ${passed} passed, ${failures.length} failed`);

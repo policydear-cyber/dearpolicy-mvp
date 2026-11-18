@@ -1008,7 +1008,9 @@ export function provisionAround(text: string, start: number, end: number): strin
   let listOpen = lines.slice(Math.max(first, num === nearest ? nearestAt : first) + 1, own + 1).some(bare);
   for (let i = own + 1; i <= Math.min(lines.length - 1, own + 80); i++) {
     const m = CLAUSE_LINE.exec(lines[i]);
-    const listItem = listOpen && bare(lines[i]);
+    // A line introduced by a colon ("The illness covered is:") opens a list too (Critic on #544 re-check 10, Y2, X2).
+    const prev = lines.slice(0, i).reverse().find((l) => l.trim()) ?? "";
+    const listItem = (listOpen || /:\s*$/.test(prev)) && bare(lines[i]);
     if (bare(lines[i])) listOpen = true;
     if (m && num && !listItem && clauseHeading(lines, i, m[1], dotted, num) && m[1] !== num && !m[1].startsWith(`${num}.`) && clauseAfter(m[1], num)) { last = i - 1; break; }
   }
