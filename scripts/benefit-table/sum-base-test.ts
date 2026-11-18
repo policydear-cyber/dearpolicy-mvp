@@ -703,6 +703,10 @@ for (const [what, page2] of [
   ["a payment repeated monthly", `3 BENEFITS\n${PROSE.replace("in one (1) lump sum.", "each month.")}`],
   ["a payment repeated on the next line", `3 BENEFITS\n${PROSE}\nThis is paid monthly for 24 months.`],
   ["only what remains of the sum", `3 BENEFITS\n${PROSE}\nAfter an Early Stage claim, only what remains of the Sum Assured is paid.`],
+  ["a long numbered list with the deduction in item 5 (TE R1)", `3 BENEFITS\n${PROSE}\nThe following apply:\n1. The illness is diagnosed after the waiting period.\n2. The Life Assured survives 14 days.\n3. The diagnosis is by a Specialist.\n4. The claim is made within 6 months.\n5. Any Early Stage amount paid is deducted.`],
+  ["a repeated payment two lines down", `3 BENEFITS\n${PROSE}\nThe benefit starts on diagnosis.\nIt is paid monthly for 24 months.`],
+  ["equal instalments", `3 BENEFITS\n${PROSE}\nThis is paid in 10 equal instalments.`],
+  ["only what is left of the sum", `3 BENEFITS\n${PROSE}\nWe pay only what is left of the Sum Assured.`],
 ] as const) test(`C control (TE on #544): ${what} leaves the share with no amount`, () => {
   const quote = page2.includes("each month.") ? PROSE_QUOTE.replace("in one (1) lump sum.", "each month.") : PROSE_QUOTE;
   const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
@@ -720,6 +724,14 @@ test("C (Critic re-check 5 on #544): a deduction above an illness list in the cl
   assert.equal(rowOf(above, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
   assert.equal(proseHeadlineShare("Death\tWe will pay 100% of the Sum Assured.", 100, "Monthly Hospital Income\tS$100 a day"), true);
   assert.equal(proseHeadlineShare("We will pay 1% of the Sum Assured.", 1, "This is paid monthly for 24 months."), false);
+});
+
+test("C: a capital heading with one number ends the clause; monthly premiums in the clause do not block the share", () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1,
+    page2: `3 BENEFITS\n${PROSE}\nPremiums are payable monthly.\n4 EXCLUSIONS\nWe will not pay for any illness excluded under this clause.`,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(amountOf(h, "Lee Wei Ming", /Critical Illness Benefit/), 300000);
 });
 
 if (failures.length) {

@@ -918,8 +918,8 @@ const PROSE_TAIL = String.raw`(?:${CELL_TAIL}|(?:(?:payable|paid)\s+)?in\s+one\s
 const PROSE_SHARE = new RegExp(String.raw`\b(?:we|the\s+company|the\s+insurer|the\s+plan|the\s+policy|it)\s+(?:(?:will|shall)\s+pay|pays?)\s+(?:${SPELLED_NUMBER}[\s-]+){0,10}\(?\s*(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent)\s*\)?\s+of\s+${HEADLINE_SUM_NAME}${OF_THIS_PLAN}(?:\s*,?\s*${PROSE_TAIL})*\s*\.(?:\s|$)`, "iu");
 /** Words that make a benefit share its sum with another payment: "counted towards this benefit", "together pay at most",
  * "combined". Such a provision's share is left as read (Critic on #544, MEDIUM). */
-const SHARED_WITH = /\b(?:count(?:ed|s)?\s+(?:towards|against)|together\b[^.;]{0,60}\bat\s+most|in\s+total\b[^.;]{0,60}\bat\s+most|combined|aggregate|what\s+remains|remaining\s+(?:sum|amount|balance))\b/i;
-const REPEATED = /\b(?:monthly|weekly|quarterly|annually|yearly|every\s+(?:month|week|year|quarter)|each\s+(?:month|week|year|quarter)|per\s+(?:month|week|annum|year)|a\s+(?:month|year)|for\s+\w+\s*(?:\(\d+\)\s*)?(?:consecutive\s+)?(?:months|years|weeks))\b/i;
+const SHARED_WITH = /\b(?:count(?:ed|s)?\s+(?:towards|against)|together\b[^.;]{0,60}\bat\s+most|in\s+total\b[^.;]{0,60}\bat\s+most|combined|aggregate|what\s+remains|what\s+is\s+left|remaining\s+(?:sum|amount|balance))\b/i;
+const REPEATED = /\b(?:monthly|weekly|quarterly|annually|yearly|every\s+(?:month|week|year|quarter)|each\s+(?:month|week|year|quarter)|per\s+(?:month|week|annum|year)|a\s+(?:month|year)|instal+ments?|for\s+\w+\s*(?:\(\d+\)\s*)?(?:consecutive\s+)?(?:months|years|weeks))\b/i;
 export function proseHeadlineShare(cell: string, value: number, next = "", words = "", provision = ""): boolean {
   // Spaces and line breaks read as one space; a tab stays, so a row's label cell before the sentence is seen as one.
   const all = cell.normalize("NFKC").replace(/[^\S\t]+/g, " ").replace(/ *\t[\s]*/g, "\t");
@@ -932,7 +932,10 @@ export function proseHeadlineShare(cell: string, value: number, next = "", words
   // period, so it is left as read (TE on #544).
   // The next line only when it continues the sentence, never another table row ("Monthly Hospital Income<TAB>S$100 a
   // day", Critic on #544, U7).
-  if (REPEATED.test(all) || (!NEW_ROW.test(next) && REPEATED.test(next))) return false;
+  if (REPEATED.test(all) || (!NEW_ROW.test(next) && REPEATED.test(next) && !/\b(?:premiums?|contributions?)\b/i.test(next))) return false;
+  // Any sentence of the provision that says how this is paid, again and again ("It is paid monthly for 24 months", "in
+  // 10 equal instalments"); a premium's own schedule is not the benefit's (TE on #544).
+  if (provision.normalize("NFKC").replace(/\s+/g, " ").split(/(?<=[.;])\s+/).some((t) => /\b(?:paid|payable|pay|payment|payout)\b/i.test(t) && REPEATED.test(t) && !/\b(?:premiums?|contributions?)\b/i.test(t))) return false;
   const pcts = [...all.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:%|per\s?cent\b)/gi)];
   if (pcts.length !== 1 || Math.abs(Number(pcts[0][1].replace(",", ".")) - value) > 0.0001) return false;
   const m = PROSE_SHARE.exec(all);
@@ -969,7 +972,10 @@ export function provisionAround(text: string, start: number, end: number): strin
     const m = CLAUSE_LINE.exec(lines[i]);
     // Only a later clause ends it: "3.2" or "4" after "3.1". A sub-clause ("3.1.1") or a list inside the clause that counts
     // from 1 again ("1. The illness ...", "2. Any Early Stage amount paid is deducted.") is the clause's own (TE on #544).
-    if (m && num && m[1] !== num && !m[1].startsWith(`${num}.`) && clauseAfter(m[1], num)) { last = i - 1; break; }
+    // A list counting on inside the clause ("4. The claim is made within 6 months.") is the clause's too, so a number
+    // without a dot ends it only as a heading in capitals ("4 EXCLUSIONS") (TE on #544, R1).
+    const ends = m && (m[1].includes(".") || /^\s*\d+\.?[ \t]+[A-Z][A-Z0-9 &'()\/,-]{2,}$/.test(lines[i]));
+    if (m && ends && num && m[1] !== num && !m[1].startsWith(`${num}.`) && clauseAfter(m[1], num)) { last = i - 1; break; }
   }
   return lines.slice(first, last + 1).join("\n");
 }
