@@ -24,12 +24,15 @@ test("a critical illness plan's confirmed death benefit keeps its amount on Deat
   const { parts } = lumpSumParts([], [line("Acme Critical Illness Plan", "Death Benefit", 5000)], [], "Death");
   assert.equal(parts[0].amount, 5000); assert.equal(parts[0].otherTile, undefined);
 });
-test("a death-tile line whose benefit pays on another cover still shows no amount there", () => {
-  const { parts } = lumpSumParts([], [line("Acme Life Plan", "Accidental Death Benefit", 50000)], [], "Death");
-  assert.equal(parts[0].amount, null); assert.equal(parts[0].otherTile, true);
-  // A benefit naming another cover (no accident word) leaves the line as its product name placed it, as on main.
-  const ci = lumpSumParts([], [line("Acme Life Plan", "Critical Illness Benefit", 50000)], [], "Death");
-  assert.equal(ci.parts[0].amount, lumpSumParts([], [line("Acme Life Plan", null, 50000)], [], "Death").parts[0].amount);
+test("a kept benefit never takes away an amount the product's name kept (TE PR 548 F2)", () => {
+  for (const benefit of ["Accidental Death Benefit", "Death Benefit (Accidental)", "Critical Illness Benefit"]) {
+    const kept = lumpSumParts([], [line("Acme Life Plan", benefit, 50000)], [], "Death");
+    assert.equal(kept.parts[0].amount, lumpSumParts([], [line("Acme Life Plan", null, 50000)], [], "Death").parts[0].amount, benefit);
+  }
+});
+test("an accident word anywhere in the kept benefit keeps a line its product sent away (TE PR 548 F1)", () => {
+  const { parts } = lumpSumParts([], [line("Acme Critical Illness Plan", "Death Benefit · Accidental", 6000)], [], "Death");
+  assert.equal(parts[0].amount, null);
 });
 test("with no benefit kept, the product's name is judged as before", () => {
   const { parts } = lumpSumParts([], [line("Acme Critical Illness Plan", null, 5000)], [], "Death");

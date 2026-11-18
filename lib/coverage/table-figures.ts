@@ -786,22 +786,20 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
   // another category ("Accidental Death" stored as Death, "AD&D") is named with no amount here (Critic R247 Q1b). So is a
   // line outside the accident tile whose name has an accident or injury word but places it nowhere ("Accident Benefit"
   // stored as Death): it may pay on an accident only. A name with no such word ("Group Term Life") keeps its category.
-  // A line's product name places it as before. Its kept benefit name can clear a line that name sent away, and sends one
-  // away only for an accident word outside Personal Accident: "Death Benefit" on Singlife Comprehensive Critical Illness II pays on Death, but a PA plan's "Death Benefit"
-  // stays on Personal Accident (Critic PR 548 HIGH-2). The benefit clears it only when it names this very cover, and never
-  // when the product's or the benefit's name has an accident word ("Acme Accident Shield" · "Death Benefit", HIGH-1). A
-  // free note that names no cover ("Lump sum payable") clears nothing.
+  // A line's product name places it exactly as before. Its kept benefit name can only bring back a line that name sent
+  // away, never send one away (a figure main shows is never lost, TE PR 548 F2): "Death Benefit" on Singlife Comprehensive
+  // Critical Illness II pays on Death. It does so only when the benefit names this very cover and no accident word appears
+  // in the product's name or anywhere in the kept benefit ("Acme Accident Shield" · "Death Benefit", Critic PR 548 HIGH-1;
+  // "... · Death Benefit · Accidental", TE F1). A free note that names no cover ("Lump sum payable") changes nothing.
   const byName = (n: string) => {
     if (ACCIDENT_ONLY_NAME(n)) return category !== "Personal Accident";
     const c = categoryOfBenefit(n);
     return c ? c !== category : category !== "Personal Accident" && ACCIDENT_WORD.test(n);
   };
   const elsewhere = (l: { name: string; benefit?: string | null }) => {
-    if (!category) return false;
-    const benefit = (l.benefit ?? "").split(" · ")[0].trim();
-    // Only an accident word in the benefit can send away a line its product name kept: it pays on an accident only (R247 Q1b).
-    if (!byName(l.name)) return category !== "Personal Accident" && !!benefit && (ACCIDENT_ONLY_NAME(benefit) || ACCIDENT_WORD.test(benefit));
-    if (!benefit || ACCIDENT_ONLY_NAME(l.name) || ACCIDENT_WORD.test(l.name) || ACCIDENT_ONLY_NAME(benefit) || ACCIDENT_WORD.test(benefit)) return true;
+    if (!category || !byName(l.name)) return false;
+    const kept = (l.benefit ?? "").trim(), benefit = kept.split(" · ")[0].trim();
+    if (!benefit || [l.name, kept].some((n) => ACCIDENT_ONLY_NAME(n) || ACCIDENT_WORD.test(n))) return true;
     return categoryOfBenefit(benefit) !== category;
   };
   // A rider here with no amount of its own, whose plan is on this tile with no amount either, and whose own words say it
