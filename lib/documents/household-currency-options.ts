@@ -11,3 +11,9 @@ export const HOUSEHOLD_CURRENCY_LABELS: Record<HouseholdCurrencySetting, string>
   NONE: "Don't assume a currency",
 };
 
+
+/** A stored or submitted setting, read strictly: anything else is not a setting. */
+export function parseHouseholdCurrencySetting(value: unknown): HouseholdCurrencySetting | null {
+  const v = typeof value === "string" ? value.trim().toUpperCase() : "";
+  return v === NO_HOUSEHOLD_CURRENCY || (HOUSEHOLD_CURRENCIES as readonly string[]).includes(v) ? (v as HouseholdCurrencySetting) : null;
+}

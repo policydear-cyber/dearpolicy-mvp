@@ -5,6 +5,7 @@ import { invitedToSignUp } from "@/lib/auth/signup-invited";
 import { clientKey } from "@/lib/http/rate-limit";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 import { safeInviteNext } from "@/lib/auth/invite-return";
+import { parseHouseholdCurrencySetting } from "@/lib/documents/household-currency-options";
 import { CONFIRM_EMAIL_MESSAGE, signupMode, SIGNUP_CLOSED_MESSAGE, SignupClosedError } from "@/lib/auth/signup-gate";
 
 export const runtime = "nodejs";
@@ -36,6 +37,10 @@ export async function POST(request: Request) {
   if (!isValidEmail(email) || password.length < 8) {
     return NextResponse.json({ error: "Enter a valid email and a password of at least 8 characters." }, { status: 400 });
   }
+  // The household's policy currency is chosen at sign-up (DC 18 Nov: compulsory): the currency DearPolicy uses for a
+  // document's amounts only when the document prints none (lib/documents/household-currency.ts).
+  const currency = parseHouseholdCurrencySetting(body.currency);
+  if (!currency) return NextResponse.json({ error: "Choose the currency your policies are in." }, { status: 400 });
 
   // Invite-only sign-up (lib/auth/signup-gate.ts): checked before any account is made, so a person who is not invited
   // gets no account at all. Any error while checking is a no.
@@ -72,6 +77,7 @@ export async function POST(request: Request) {
       await ensureDefaultHousehold(data.user.id, householdName || `${email.split("@")[0]}'s household`, undefined, {
         // A password proves nothing about the address (lib/auth/signup-gate.ts): only the emailed link does.
         email: data.user.email ?? email,
+        currency,
       });
     } catch (e) {
       if (!(e instanceof SignupClosedError)) throw e;

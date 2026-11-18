@@ -244,7 +244,7 @@ test.describe.serial("synthetic claim journey", () => {
 
     // Upload the synthetic memo, and a synthetic flagged file, through the Claims page.
     const upload = async (name: string, bytes: Buffer) => {
-      await page.locator("select").first().selectOption("specialist_memo");
+      await page.locator("select:has(option[value=specialist_memo])").first().selectOption("specialist_memo");
       await page.locator("input[type=file]").setInputFiles({ name, mimeType: "application/pdf", buffer: bytes });
       await page.getByRole("button", { name: /^upload$/i }).click();
       await expect(page.getByText(name).first()).toBeVisible({ timeout: 60_000 });
