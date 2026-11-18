@@ -10,6 +10,7 @@ import { uncheckedText } from "@/lib/documents/layout-check";
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { failedDocumentChatAdvice, type FailedDocumentChatAdvice } from "@/lib/documents/failure-advice";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 export { UNCHECKED_PAGE, uncheckedText } from "@/lib/documents/layout-check";
 
 export type HouseholdPage = { page: number; text: string };
@@ -104,13 +105,13 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
   for (const row of [...members, ...docs, ...links, ...pages])
     if (String(row.account_id) !== accountId) throw new Error("A row from another household was returned; refusing to build a prompt");
   // The household's currency choice: a database without the column, or any failed read, is "not chosen" (nothing assumed).
-  const currency = await run(`SELECT a.id AS account_id, to_jsonb(a)->>'currency' AS currency FROM accounts a WHERE a.id=$1`, [accountId])
+  const currency = await run(`SELECT a.id AS account_id, to_jsonb(a)->>'currency' AS currency FROM accounts a WHERE a.id=$1 AND ${activePredicate("a")}`, [accountId])
     .then((rows) => rows.find((r) => String(r.account_id) === accountId && typeof r.currency === "string")?.currency as string | undefined)
     .catch(() => undefined);
   const chosen = effectiveHouseholdCurrency(currency ?? null);
   const settled = chosen && ids.length ? await run(
     `SELECT c.account_id, c.policy_id, c.source_page, c.amount, f.display_name FROM policy_coverages c
-       JOIN family_members f ON f.id=c.family_member_id AND f.account_id=c.account_id
+       JOIN family_members f ON f.id=c.family_member_id AND f.account_id=c.account_id AND f.lifecycle_state='active'
       WHERE c.account_id=$1 AND c.policy_id = ANY($2::uuid[]) AND c.currency=$3 AND position($4 in coalesce(c.notes,''))>0
         AND c.source_page IS NOT NULL AND c.amount IS NOT NULL`,
     [accountId, ids, chosen, HOUSEHOLD_CURRENCY_NOTE]).catch(() => [] as Row[]) : [];
