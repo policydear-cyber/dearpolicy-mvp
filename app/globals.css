@@ -71,7 +71,7 @@
   --scrim: rgba(14, 22, 18, .28);
 
   --shadow-float: 0 4px 12px rgba(22, 33, 28, .10), 0 1px 2px rgba(22, 33, 28, .06);
-  --focus: 0 0 0 3px rgba(37, 99, 235, .4);
+  --focus: 0 0 0 3px #2563eb; --focus-ring: #2563eb;
 
   --r-sm: 10px; --r-md: 14px; --r-lg: 20px;
   --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 22px; --fs-2xl: 28px; --fs-3xl: 36px;
@@ -112,7 +112,7 @@
     --unresolved: #93a7bb; --unresolved-text: #b7c7d7; --unresolved-tint: #1f262d; --unresolved-line: #6a7d90;
     --scrim: rgba(0, 0, 0, .5);
     --shadow-float: 0 4px 14px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .3);
-    --focus: 0 0 0 3px rgba(147, 180, 255, .5);
+    --focus: 0 0 0 3px rgba(147, 180, 255, .5); --focus-ring: rgba(147, 180, 255, .5);
     --brand: #eef0f3;
     --on-brand: #0f1216;
     --accent: #eef0f3;
@@ -168,7 +168,7 @@ table { font-variant-numeric: tabular-nums; }
 .nav-icon svg { width: 20px; height: 20px; }
 .sidebar-footer { margin-top: auto; padding: 16px 8px 0; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; display: grid; gap: 10px; }
 .sidebar-footer p { margin: 0; }
-.privacy-pill { display: inline-flex; justify-self: start; border: 1px solid var(--good-line); background: var(--good-tint); color: var(--good-text); padding: 4px 10px; border-radius: 999px; font-weight: 650; font-size: var(--fs-xs); }
+.privacy-pill { display: inline-flex; justify-self: start; border: 1px solid transparent; background: transparent; color: var(--muted); padding: 4px 10px; border-radius: 999px; font-weight: 500; font-size: var(--fs-xs); }
 .to-confirm { background: var(--unresolved-tint); color: var(--unresolved-text); border: 1px dashed var(--unresolved-line); border-radius: 4px; padding: 0 4px; }
 .main-content { min-width: 0; }
 .page { max-width: 1120px; margin: 0 auto; padding: 44px 40px 72px; }
@@ -1004,10 +1004,21 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 }
 
 /* Round 5: empty portfolio */
-.getting-started { margin: 12px 0 0; padding-left: 20px; display: grid; gap: 14px; }
-.getting-started li { display: grid; gap: 4px; justify-items: start; }
-.getting-started li span { color: var(--muted); }
+/* First steps as sheets: the step to do now is a white sheet holding the page's one button, a done step is ticked, a step
+   still to come is an empty dashed slot. Numbers come from the step mark, not the list. */
+.getting-started { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; max-width: 720px; }
+.getting-started li { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 14px; align-items: start; padding: 18px 20px; border-radius: 6px 0 14px 14px; }
+.getting-started li > div { display: grid; gap: 6px; justify-items: start; }
+.getting-started li > div > span { color: var(--muted); }
+.getting-started li > div > .button { margin-top: 6px; }
+.getting-started .step-mark { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: var(--fs-sm); background: var(--surface-2); color: var(--ink-2); }
+.getting-started .step-mark svg { width: 16px; height: 16px; }
+.getting-started li.current { background: var(--surface); box-shadow: var(--sheet-shadow); }
+.getting-started li.current .step-mark { background: var(--accent); color: var(--accent-ink); }
+.getting-started li.done { background: var(--surface); }
 .getting-started li.done strong { color: var(--good-text); }
+.getting-started li.done .step-mark { background: var(--good-tint); color: var(--good-text); }
+.getting-started li.later { border: 2px dashed var(--slot-line); }
 
 /* Round 8: chat answers on a phone.
    - The chat column is a grid; without a 0 minimum, one wide table (the
@@ -1127,7 +1138,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .upload-file-input { position: absolute; inset: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .upload-drop { display: grid; gap: 2px; min-height: 88px; align-content: center; padding: 14px 16px; border: 2px dashed var(--line-strong); border-radius: var(--r-md); background: var(--surface-2); cursor: pointer; }
 .upload-drop.chosen { border-style: solid; border-color: var(--brand); }
-.upload-file-input:focus-visible + .upload-drop { outline: 3px solid var(--focus, var(--brand)); outline-offset: 2px; }
+.upload-file-input:focus-visible + .upload-drop { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 .upload-drop .upload-drop-title { font-size: var(--fs-xs); font-weight: 650; color: var(--ink-2); }
 .upload-drop .upload-drop-cta { font-size: var(--fs-md); font-weight: 650; color: var(--brand-ink); }
 .upload-drop .upload-drop-file { font-size: var(--fs-md); font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
@@ -1286,9 +1297,12 @@ div.answer-point { display: grid; gap: 4px; }
 .home-attention-title { font-size: var(--fs-lg); margin: 4px 0 0; display: flex; align-items: center; gap: 8px; }
 .home-attention-title span { font-size: var(--fs-xs); font-weight: 700; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; display: inline-grid; place-items: center; background: var(--warn-tint); color: var(--warn-text); }
 .home-attention-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.home-attention-list a { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 12px 14px; border: 1px solid var(--edge); border-left-width: 4px; border-radius: var(--r-md); background: var(--surface); color: inherit; }
-.home-attention-list li.warn a { border-left-color: var(--critical); }
-.home-attention-list li.info a { border-left-color: var(--warn); }
+.home-attention-list a { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 12px 14px; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--surface); color: inherit; }
+/* Each row is marked by a small dot in its role's colour beside its words (a failed read is an error, something to look
+   at is a warning), not a thick coloured stripe down the edge. The words carry the meaning; the dot only groups. */
+.home-attention-list a::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.home-attention-list li.warn a::before { background: var(--critical); }
+.home-attention-list li.info a::before { background: var(--warn); }
 .home-attention-text { flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
 .home-attention-text small { color: var(--muted); font-size: var(--fs-xs); line-height: 1.4; }
 .home-attention-action { flex: none; font-size: var(--fs-sm); font-weight: 650; color: var(--brand-ink); }
@@ -1310,14 +1324,14 @@ div.answer-point { display: grid; gap: 4px; }
 /* Columns follow the width the cards actually get (a container query on .home-cards; Test engineer, PR 519, F2): 2 columns
    until there is room for 3 or 4 card-sized columns, so a name never breaks mid-word and an amount never spills. */
 .home-cards { container-type: inline-size; }
-.home-cards .coverage-grid[data-cols] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+.home-cards .coverage-grid[data-cols] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 12px; }
 .home-cards .coverage-grid[data-cols] > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 @container (min-width: 600px) {
-  .home-cards .coverage-grid[data-cols="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px 16px; }
+  .home-cards .coverage-grid[data-cols="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 30px 16px; }
   .home-cards .coverage-grid[data-cols="3"] > :last-child:nth-child(odd) { grid-column: auto; }
 }
 @container (min-width: 820px) {
-  .home-cards .coverage-grid[data-cols="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px 16px; }
+  .home-cards .coverage-grid[data-cols="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 30px 16px; }
   .home-cards .coverage-grid[data-cols="4"] > :last-child:nth-child(odd) { grid-column: auto; }
 }
 .home-cards .coverage-card.covered { min-height: 0; padding: 16px 18px 18px; gap: 6px; container-type: inline-size; }
@@ -1332,7 +1346,7 @@ div.answer-point { display: grid; gap: 4px; }
 .home-cards .coverage-card.covered .coverage-status { padding-top: 6px; }
 /* Gaps to consider (DC 17 Nov): the main kinds not found, as empty slots under the cards, so they read as places a
    sheet could go, not as warnings. Neutral ink, no status colour. */
-.home-gaps { display: grid; gap: 8px; margin-top: 10px; padding: 16px 18px; border: 2px dashed var(--slot-line); border-radius: 6px 22px 14px 14px; }
+.home-gaps { display: grid; gap: 8px; margin-top: 10px; padding: 16px 18px; border: 2px dashed var(--slot-line); border-radius: 6px 0 14px 14px; }
 .home-gaps h2 { margin: 0; font-size: var(--fs-md); }
 .home-gaps > p { margin: 0; color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.5; }
 .home-gaps small { color: var(--muted); font-size: var(--fs-xs); }
@@ -1342,24 +1356,30 @@ div.answer-point { display: grid; gap: 4px; }
 .home-gap .icon, .home-gap svg { width: 16px; height: 16px; color: var(--muted); flex: none; }
 .home-gaps .home-gaps-foot { font-size: var(--fs-xs); color: var(--muted); }
 .home-gaps .home-gaps-foot .text-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 500; color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
-.home-ask-panel { position: sticky; top: 24px; display: grid; gap: 12px; padding: 20px; border: 1px solid var(--brand-ink); border-radius: var(--r-lg); background: var(--surface); }
+/* The ask box is a calm white panel beside the sheets: the sheets carry the colour, the one black key inside carries the action. */
+.home-ask-panel { position: sticky; top: 24px; display: grid; gap: 12px; padding: 20px; border: 1px solid transparent; border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--lift); }
 .home-ask-panel h2 { margin: 0; font-size: var(--fs-xl); display: flex; align-items: center; gap: 10px; }
 .home-ask-panel > p { margin: 0; color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.5; }
 .home-ask { display: grid; gap: 8px; }
 .home-ask textarea { width: 100%; min-height: 88px; resize: vertical; padding: 12px 14px; border: 1px solid var(--input-line); border-radius: var(--r-md); background: var(--surface); color: var(--ink); font: inherit; }
 .home-ask .button { min-height: 48px; justify-content: center; }
-.home-ask-examples { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.home-ask-examples button { width: 100%; text-align: left; min-height: 44px; padding: 8px 12px; border: 1px solid var(--edge); border-radius: var(--r-md); background: var(--surface-2); color: var(--ink); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
-.home-ask-examples button:hover { border-color: var(--brand-ink); }
+.home-ask-examples { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+/* Example questions read as a short list of lines to tap, not a stack of grey boxes. */
+.home-ask-examples li + li { border-top: 1px solid var(--line); }
+.home-ask-examples button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; min-height: 44px; padding: 10px 2px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.home-ask-examples button::after { content: "\203A"; flex: none; color: var(--muted); font-size: 1.2em; line-height: 1; }
+.home-ask-examples button:hover { color: var(--ink); }
+.home-ask-examples button:hover::after { color: var(--ink); }
 .dashboard-page > .unclaimed-panel, .dashboard-page > .home-attention { margin-top: 20px; }
 .home-ask-fab { display: none; }
 @media (max-width: 1000px) { .home-top { grid-template-columns: minmax(0, 1fr); } .home-ask-panel { position: static; } }
 @media (max-width: 900px) {
-  .home-ask-fab { display: inline-flex; position: fixed; right: 16px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 16px); z-index: 30; min-height: 52px; padding-inline: 20px; border-radius: 999px; box-shadow: var(--shadow-float); }
+  .home-ask-fab { display: inline-flex; position: fixed; right: 16px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 16px); z-index: 30; min-height: 52px; padding-inline: 20px; border-radius: 999px; box-shadow: var(--shadow-float); transition: opacity .18s ease, transform .18s ease; }
+  .home-ask-fab[data-hidden] { opacity: 0; transform: translateY(12px); pointer-events: none; }
   .dashboard-page { padding-bottom: 120px; }
 }
 @media (max-width: 620px) {
-  .home-cards .coverage-grid, .home-cards .coverage-grid[data-cols] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 10px; }
+  .home-cards .coverage-grid, .home-cards .coverage-grid[data-cols] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 10px; }
   .home-cards .coverage-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
   .home-cards .coverage-card.covered { min-height: 0; padding: 14px; }
   .home-cards .coverage-card.covered .coverage-top { gap: 10px; }
@@ -1632,15 +1652,16 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 .coverage-card[data-card="savings"] { --cover: var(--cover-savings); }
 .coverage-card[data-card="other"] { --cover: var(--cover-other); }
 .coverage-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 26px 18px; padding-bottom: 8px; }
-.coverage-card.covered { position: relative; isolation: isolate; background: var(--cover); color: var(--on-cover); border: 0; border-radius: 6px 26px 14px 14px;
+.coverage-card.covered { position: relative; isolation: isolate; background: var(--cover); color: var(--on-cover); border: 0; border-radius: 6px 0 14px 14px;
   min-height: 200px; padding: 18px 20px; gap: 4px;
-  box-shadow: inset 0 1px 0 var(--cover-top), 0 7px 0 -3px color-mix(in srgb, var(--cover) 45%, var(--bg)), 0 14px 0 -7px color-mix(in srgb, var(--cover) 22%, var(--bg)), var(--sheet-shadow);
+  box-shadow: inset 0 1px 0 var(--cover-top), 0 9px 0 -3px color-mix(in srgb, var(--cover) 50%, var(--bg)), 0 18px 0 -7px color-mix(in srgb, var(--cover) 24%, var(--bg)), var(--sheet-shadow);
   transition: transform var(--t-state) var(--ease); }
 .coverage-card.covered::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; border-radius: inherit;
   background: radial-gradient(120% 80% at 100% 0, var(--cover-sheen), transparent 60%), repeating-linear-gradient(0deg, var(--cover-grain) 0 1px, transparent 1px 4px); }
-/* The folded corner, top right, like a document's dog-ear. */
-.coverage-card.covered::after { content: ""; position: absolute; top: 0; right: 0; width: 26px; height: 26px; border-radius: 0 26px 0 6px;
-  background: linear-gradient(225deg, var(--bg) 50%, color-mix(in srgb, var(--cover) 70%, var(--on-cover)) 50%); box-shadow: -2px 2px 3px var(--paper-fold); }
+/* The folded corner, top right, like a document's dog-ear: a square corner folded down along a straight diagonal (a
+   rounded corner cannot fold, so the sheet's top-right corner is square). */
+.coverage-card.covered::after { content: ""; position: absolute; top: 0; right: 0; width: 24px; height: 24px; border-radius: 0 0 0 5px;
+  background: linear-gradient(225deg, var(--bg) 50%, color-mix(in srgb, var(--cover) 62%, var(--on-cover)) 50%); box-shadow: -2px 2px 3px var(--paper-fold); }
 .coverage-card.covered:hover { transform: translateY(-2px); border: 0; }
 .coverage-card.covered .coverage-top { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 10px; }
 .coverage-card.covered .coverage-icon { width: 38px; height: 38px; border-radius: 12px; background: transparent; border: 1.5px solid var(--cover-ring); color: var(--on-cover); }
@@ -1654,7 +1675,7 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 /* Where it comes from: the footer line of the sheet, under a thin rule. */
 .coverage-card.covered small:last-of-type { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--cover-top); }
 /* Cover on file but not confirmed: an empty slot the sheet will fill. */
-.coverage-card.on_file, .coverage-card.needs_review { background: transparent; border: 2px dashed var(--unresolved-line); border-radius: 6px 26px 14px 14px; }
+.coverage-card.on_file, .coverage-card.needs_review { background: transparent; border: 2px dashed var(--unresolved-line); border-radius: 6px 0 14px 14px; }
 .coverage-card.on_file .coverage-icon, .coverage-card.needs_review .coverage-icon { background: var(--surface); }
 .home-not-found { background: transparent; border: 2px dashed var(--slot-line); }
 
@@ -1681,13 +1702,13 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 .answer-card.printed .answer-card-amount small { color: var(--muted); }
 
 /* A drawn policy sheet (components/policy-sheet.tsx): the landing page and a missing page. */
-.policy-sheet { --cover: var(--cover-other); position: relative; overflow: hidden; background: var(--paper); color: var(--ink); border-radius: 6px 22px 10px 10px;
+.policy-sheet { --cover: var(--cover-other); position: relative; overflow: hidden; background: var(--paper); color: var(--ink); border-radius: 6px 0 14px 14px;
   box-shadow: var(--sheet-shadow), 0 0 0 1px var(--paper-line); display: grid; align-content: start; aspect-ratio: .78; }
 .policy-sheet[data-card="hospital"] { --cover: var(--cover-hospital); }
 .policy-sheet[data-card="death"] { --cover: var(--cover-death); }
 .policy-sheet[data-card="ci"] { --cover: var(--cover-ci); }
 .policy-sheet[data-card="accident"] { --cover: var(--cover-accident); }
-.policy-sheet::after { content: ""; position: absolute; top: 0; right: 0; width: 24px; height: 24px; border-radius: 0 22px 0 6px;
+.policy-sheet::after { content: ""; position: absolute; top: 0; right: 0; width: 24px; height: 24px; border-radius: 0 0 0 5px;
   background: linear-gradient(225deg, var(--bg) 50%, var(--paper-line) 50%); }
 .policy-sheet-head { background: var(--cover); color: var(--on-cover); padding: 14px 16px; display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 15px; }
 .policy-sheet-head svg { width: 18px; height: 18px; flex: none; }
@@ -1775,3 +1796,61 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
   /* Everything under the name lines up with the name, so each row reads as one block. */
   .rows .document-main > :not(.document-head) { margin-left: 52px; }
 }
+
+
+/* "Where this comes from" opens and closes on every screen size: a flex summary loses the browser's own arrow, so it
+   draws one (phones already had it). */
+.answer-where > summary { cursor: pointer; list-style: none; }
+.answer-where > summary::-webkit-details-marker { display: none; }
+.answer-where > summary::before { content: "▸"; margin-right: 8px; font-size: .8em; color: var(--muted); }
+.answer-where[open] > summary::before { content: "▾"; }
+
+/* Dark: the menu bar and the people switch sit one step above the page so they can be seen, and the chosen key is told
+   by its own tone and edge, not by bold text alone. */
+@media (min-width: 901px) {
+  :root[data-theme="dark"] .nav { background: var(--surface); }
+  :root[data-theme="dark"] .nav-item.active { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
+}
+:root[data-theme="dark"] .member-pills { background: var(--surface); }
+:root[data-theme="dark"] .member-pill.active { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
+
+/* Keyboard focus stays visible on keys that draw their own shadow (the chosen person, the active menu item, the floating
+   Ask button): while focused, the ring takes the place of their own shadow. */
+:root .nav-item:focus-visible, :root .nav-item.active:focus-visible, :root .member-pill:focus-visible, :root .member-pill.active:focus-visible, :root .home-ask-fab:focus-visible { box-shadow: var(--focus); outline: none; }
+
+/* Documents: each document is drawn as a small policy sheet (paper, a grey head band carrying the insurer's initials, ruled
+   lines, a folded corner), so the list belongs to the same wallet as Home. A document that couldn't be read is an empty
+   dashed slot. Decoration only: the words beside it say what the document is and its state. */
+.document-card .policy-logo { position: relative; width: 42px; height: 52px; flex: none; border-radius: 4px 0 6px 6px; align-self: start;
+  --rule: linear-gradient(var(--line-strong), var(--line-strong));
+  background: linear-gradient(var(--cover-other), var(--cover-other)) 0 0 / 100% 16px no-repeat,
+    var(--rule) 6px 24px / 24px 2px no-repeat, var(--rule) 6px 30px / 28px 2px no-repeat, var(--rule) 6px 36px / 20px 2px no-repeat, var(--rule) 6px 42px / 26px 2px no-repeat, var(--paper);
+  box-shadow: inset 0 0 0 1px var(--paper-line), 0 2px 0 -1px var(--paper-line), var(--lift);
+  color: var(--on-cover); font-size: 9px; font-weight: 650; letter-spacing: .04em; display: block; padding: 2px 0 0 6px; line-height: 12px; text-align: left; }
+.document-card .policy-logo::after { content: ""; position: absolute; top: 0; right: 0; width: 10px; height: 10px; border-radius: 0 0 0 2px;
+  background: linear-gradient(225deg, var(--surface) 50%, color-mix(in srgb, var(--cover-other) 62%, var(--on-cover)) 50%); }
+.document-card .policy-logo:empty { background: transparent; box-shadow: none; border: 1.5px dashed var(--slot-line); }
+.document-card .policy-logo:empty::after { display: none; }
+
+/* A document's actions are quiet text keys; the page's one strong button is Upload. Delete keeps its own muted-then-red
+   behaviour. */
+.document-card .document-meta .mini-button:not(.armed) { background: transparent; }
+.document-card .document-meta .mini-button:not(.danger):not(.armed) { color: var(--ink-2); }
+.document-card .document-meta .mini-button:not(.danger):not(.armed):hover { background: var(--surface-2); color: var(--ink); }
+
+/* Document rows are panels like every other one: told apart by tone and a soft lift, not a drawn border. */
+.rows .document-card:not(.needs-review) { border-color: transparent; box-shadow: var(--lift); }
+
+/* Ask: an answer's benefit cards are policy sheets too (square top-right corner with its folded dog-ear), and the page a
+   figure comes from is a small paper tab rather than a pale pill. Prose in an answer stops at a readable line length. */
+.answer-card { position: relative; border-radius: 6px 0 14px 14px; }
+.answer-card::after { content: ""; position: absolute; top: 0; right: 0; width: 16px; height: 16px; border-radius: 0 0 0 3px; pointer-events: none;
+  background: linear-gradient(225deg, var(--surface) 50%, var(--paper-line) 50%); box-shadow: -1px 1px 2px var(--paper-fold); }
+.answer-card-amount { border-radius: 6px 0 0 0; }
+.answer-chip { background: var(--paper); border: 1px solid var(--paper-line); border-bottom-width: 2px; border-radius: 4px 4px 2px 2px; padding: 2px 8px; }
+.message.assistant .message-body > p, .message.assistant .message-body .answer-bottom-line, .message.assistant .message-body .next-steps li, .message.assistant .message-body .answer-cards > p { max-width: 72ch; }
+
+/* Keys and sheets that draw their own shadow show the focus ring as an outline instead, so the shadow (a secondary key's
+   edge, a cover sheet's stacked pages) never hides it. */
+:root .button.secondary:focus-visible, :root .coverage-card:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+

@@ -4,7 +4,8 @@
 .public-skip { position: absolute; left: -9999px; top: 8px; z-index: 100; background: var(--surface); color: var(--ink); padding: 8px 12px; border-radius: var(--r-sm); }
 .public-skip:focus { left: 16px; box-shadow: var(--focus); }
 .public-header { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 12px clamp(16px, 4vw, 56px); background: var(--bg); }
+  /* Lines up with the page column below it (.landing: 1120px wide, centred), so the logo sits over the headline. */
+  padding: 12px max(clamp(16px, 4vw, 40px), calc((100% - 1120px) / 2 + clamp(16px, 4vw, 40px))); background: var(--bg); }
 .public-brand { display: inline-flex; align-items: center; min-height: 44px; }
 .public-brand .brand-logo { height: 30px; width: auto; display: block; }
 .public-nav { display: flex; align-items: center; gap: 4px; }
@@ -81,16 +82,20 @@
 
 /* Wallet of cover: the hero holds a fan of policy sheets above the example answer. */
 .landing-wallet { display: grid; gap: 8px; min-width: 0; }
-.landing-fan { position: relative; height: 250px; }
-.landing-fan .policy-sheet { position: absolute; width: min(180px, 40%); top: 20px; }
-.landing-fan .policy-sheet:nth-child(1) { left: 6%; transform: rotate(-8deg); }
-.landing-fan .policy-sheet:nth-child(2) { left: 30%; top: 4px; transform: rotate(-1deg); }
-.landing-fan .policy-sheet:nth-child(3) { left: 54%; top: 24px; transform: rotate(6deg); }
+/* The sheets cascade like papers fanned out of a folder: each later sheet sits lower and to the right, so every sheet's
+   coloured head and title stays readable above the next one, and the front sheet is the whole page. */
+.landing-fan { position: relative; height: 290px; }
+/* The example answer is laid over the bottom of the front sheet, like a note clipped onto it. */
+.landing-wallet .landing-example { position: relative; z-index: 4; box-shadow: var(--sheet-shadow); }
+.landing-fan .policy-sheet { position: absolute; width: min(230px, 56%); transform-origin: 0 0; }
+.landing-fan .policy-sheet:nth-child(1) { left: 4%; top: 6px; transform: rotate(-3deg); z-index: 1; }
+.landing-fan .policy-sheet:nth-child(2) { left: 20%; top: 56px; transform: rotate(-.5deg); z-index: 2; }
+.landing-fan .policy-sheet:nth-child(3) { left: 36%; top: 106px; transform: rotate(2deg); z-index: 3; }
 @media (max-width: 640px) {
-  .landing-fan { height: 220px; overflow: hidden; margin: 0 -16px; }
-  .landing-fan .policy-sheet { width: 150px; }
+  .landing-fan { height: 260px; overflow: hidden; margin: 0 -16px; }
+  .landing-fan .policy-sheet { width: 200px; }
   .landing-fan .policy-sheet-head { font-size: 13px; padding: 12px; }
-  .landing-fan .policy-sheet:nth-child(1) { left: 8%; }
-  .landing-fan .policy-sheet:nth-child(2) { left: 31%; }
-  .landing-fan .policy-sheet:nth-child(3) { left: 54%; }
+  .landing-fan .policy-sheet:nth-child(1) { left: 6%; top: 8px; }
+  .landing-fan .policy-sheet:nth-child(2) { left: 22%; top: 54px; }
+  .landing-fan .policy-sheet:nth-child(3) { left: 38%; top: 100px; }
 }

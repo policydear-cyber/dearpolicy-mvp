@@ -27,6 +27,8 @@ export default function DashboardPage(){
  // Only the newest request may change the page, so a late quiet re-fetch never shows a person the household has since
  // switched away from; quiet re-fetches follow whoever is chosen now (want), and say so (poll=1) so they start no reading.
  const seq=useRef(0),want=useRef<string|undefined>(undefined);
+ // Whether Home's ask box is on screen, so the phone's floating Ask button can step aside instead of covering it.
+ const [askInView,setAskInView]=useState(false);
  async function load(memberId?:string,quiet=false){const n=++seq.current;if(!quiet)setLoading(true);const params=new URLSearchParams();if(memberId)params.set("familyMemberId",memberId);if(quiet)params.set("poll","1");
   const q=params.toString()?`?${params}`:"";let payload:Dashboard;
   try{
@@ -68,6 +70,9 @@ export default function DashboardPage(){
  // the household's page, and says so for that person, with any premium already found for them.
  const view=homeView({personDocs:documentCount-(data?.unclaimed?.length??0),family:data?.family??[],unclaimed:data?.unclaimed?.length??0,covered:confirmed.length,premiums:data?.premiums?.items??[]});
  const emptyPortfolio=!loading&&!data?.error&&!!data&&view.empty;
+ // Re-run when the empty view gives way to Home, whose ask box is a new element.
+ useEffect(()=>{if(typeof IntersectionObserver==="undefined")return;let io:IntersectionObserver|null=null;const watch=()=>{const box=document.getElementById("ask");if(!box)return false;io=new IntersectionObserver(([e])=>setAskInView(!!e?.isIntersecting),{threshold:.15});io.observe(box);return true;};
+  if(watch())return()=>io?.disconnect();let tries=0;const t=window.setInterval(()=>{if(watch()||++tries>=20)window.clearInterval(t);},500);return()=>{window.clearInterval(t);io?.disconnect();};},[emptyPortfolio]);
  const returning=!!data&&!data.error&&!view.empty;
  const personEmpty=returning&&view.personEmpty;
  const name=active?.display_name??null;
@@ -76,7 +81,9 @@ export default function DashboardPage(){
  return <div className="page dashboard-page">
   {data?.error&&<div className="alert error" role="alert"><strong>DearPolicy couldn&rsquo;t load your family&rsquo;s cover just now.</strong><small>Your documents are safe. Please refresh the page in a moment.</small></div>}
   {emptyPortfolio?<>
-   <header className="page-header portfolio-hero"><div><h1>Know what your family has. Know what to do next.</h1><p className="lead">Upload your family&rsquo;s insurance documents. DearPolicy shows who is covered for what, and answers your questions with the page each answer comes from.</p></div><div className="hero-actions"><Link href="/policies" className="button secondary"><Icon name="upload"/>Upload documents</Link><Link href="/chat" className="button primary"><Icon name="ask"/>Ask DearPolicy</Link></div></header>
+   {/* A new household gets one thing to do at a time: the steps below carry the only button, so nothing on the page sends
+       them to Ask before there is a document to ask about. */}
+   <header className="page-header portfolio-hero"><div><h1>Let&rsquo;s read your first policy.</h1><p className="lead">Upload your family&rsquo;s insurance documents. DearPolicy shows who is covered for what, and answers your questions with the page each answer comes from.</p></div></header>
    {!!data?.family?.length&&people}
    <EmptyPortfolio hasFamily={!!data?.family?.length}/>
   </>:<>
@@ -107,7 +114,9 @@ export default function DashboardPage(){
    </div>)}</div></section>}
   {returning&&<HomeAttention/>}
   </>}
-  <Link href={`/chat${active?.id?`?member=${encodeURIComponent(active.id)}`:""}`} className="home-ask-fab button primary" aria-label="Ask DearPolicy"><Icon name="ask"/>Ask DearPolicy</Link>
+  {/* Phone: Ask stays one tap away, but steps aside while Home's own ask box is on screen, and an empty household has
+      nothing to ask about yet (its first step is to add people or upload), so the button never covers that box or a step. */}
+  {!emptyPortfolio&&<Link href={`/chat${active?.id?`?member=${encodeURIComponent(active.id)}`:""}`} className="home-ask-fab button primary" aria-label="Ask DearPolicy" data-hidden={askInView?"true":undefined} aria-hidden={askInView?true:undefined} tabIndex={askInView?-1:undefined}><Icon name="ask"/>Ask DearPolicy</Link>}
  </div>;
 }
 
@@ -121,13 +130,16 @@ function PersonNothingYet({name,paidFor}:{name:string;paidFor:string[]}){
 
 /** The portfolio before anything is uploaded: what to do first, in order. */
 function EmptyPortfolio({hasFamily}:{hasFamily:boolean}){
+ // The step to do now is a white sheet with the page's one button; a step done is ticked; a step still to come is an
+ // empty dashed slot, like a sheet not yet in the wallet.
+ const state=(n:number)=>n<(hasFamily?2:1)?"done":n===(hasFamily?2:1)?"current":"later";
  return <section className="section empty-portfolio" data-testid="empty-portfolio">
-  <div className="section-heading"><Titled icon="sparkle"><h2>Nothing here yet</h2></Titled></div>
+  <h2 className="sr-only">Getting started</h2>
   <p className="lead">Three steps to get started. Once DearPolicy has read your documents, this page shows what each person is covered for, what you pay, and anything that needs you.</p>
   <ol className="getting-started">
-   <li className={hasFamily?"done":""}><strong><Icon name={hasFamily?"checkCircle":"family"}/>{hasFamily?"Family added":"Add the people in your family"}</strong><span>So DearPolicy knows whose cover is whose.</span>{!hasFamily&&<Link href="/family" className="button primary">Add family members</Link>}</li>
-   <li><strong><Icon name="upload"/>Upload a policy document</strong><span>A policy schedule, certificate, renewal notice or benefits booklet. A PDF, a scan or a photo is fine.</span>{hasFamily&&<Link href="/policies" className="button primary">Upload a document</Link>}</li>
-   <li><strong><Icon name="ask"/>Ask a question</strong><span>In your own words. For example, &ldquo;Is my son covered if he breaks his arm?&rdquo; or &ldquo;What should I do after a car accident?&rdquo;</span></li>
+   <li className={state(1)}><span className="step-mark" aria-hidden="true">{hasFamily?<Icon name="check"/>:"1"}</span><div><strong><Icon name={hasFamily?"checkCircle":"family"}/>{hasFamily?"Family added":"Add the people in your family"}</strong><span>So DearPolicy knows whose cover is whose.</span>{!hasFamily&&<Link href="/family" className="button primary">Add family members</Link>}</div></li>
+   <li className={state(2)}><span className="step-mark" aria-hidden="true">2</span><div><strong><Icon name="upload"/>Upload a policy document</strong><span>A policy schedule, certificate, renewal notice or benefits booklet. A PDF, a scan or a photo is fine.</span>{hasFamily&&<Link href="/policies" className="button primary">Upload a document</Link>}</div></li>
+   <li className={state(3)}><span className="step-mark" aria-hidden="true">3</span><div><strong><Icon name="ask"/>Ask a question</strong><span>In your own words. For example, &ldquo;Is my son covered if he breaks his arm?&rdquo; or &ldquo;What should I do after a car accident?&rdquo;</span></div></li>
   </ol>
  </section>;
 }
