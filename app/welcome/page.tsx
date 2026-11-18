@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 const STEPS: Array<{ title: string; text: string }> = [
   { title: "Upload your documents", text: "Any insurer, in English. PDFs, scans or photos." },
   { title: "Link each one to a person", text: "Mei\u2019s policy stays Mei\u2019s." },
-  { title: "Ask in plain words", text: "Each answer shows the page it came from." },
+  { title: "Ask in plain words", text: "Answers show the page they came from." },
 ];
 
 const LIMITS: Array<{ icon: IconName; text: string }> = [
@@ -59,9 +59,9 @@ export default function WelcomePage() {
           <div className="landing-bubble landing-bubble-dp">
             <p>
               Mei&rsquo;s <strong>Harbourline Family PA</strong> schedule lists a <strong>Fractures</strong> benefit of up
-              to <strong>S$2,000</strong> per accident.
+              to <strong>S$2,000</strong> per accident, for an injury caused by an accident.
             </p>
-            <p className="landing-cite"><Icon name="documents" /> Harbourline Family PA Schedule 2026 · page 2</p>
+            <p className="landing-cite"><Icon name="documents" /> Harbourline Family PA Schedule 2026 · Table of benefits · page 2</p>
           </div>
         </figure>
         </div>
