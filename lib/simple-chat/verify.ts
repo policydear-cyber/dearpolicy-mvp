@@ -1650,6 +1650,46 @@ const STATUS_CELL = /^(?:in\s*force|active|lapsed|manual\s+lapse|paid[\s-]*up|pr
 /** A cell that is a term or a plan number, not a cover's name: "Term", "Premium Term", "Policy Term (Years)", "Plan",
  * "Plan No.", "Plan Type". */
 const TERM_OR_PLAN_CELL = /^(?:(?:premium|policy|benefit|cover(?:age)?|payment|contract|payout)\s+)?(?:term|plans?)(?:\s*\((?:years?|yrs?|months?)\)|\s+in\s+(?:years|months)|\s+(?:no\.?|number|code|type|#))?\.?$/i;
+/** Whether every printing of `value` in `text` is part of a rule for paying a large claim in parts, never an amount of cover
+ * (live 18 Nov, a group policy's TPD terms: "If the sum payable in respect of a valid claim is above S$200,000, the Company
+ * will first pay a lump sum of S$200,000 and pay the balance in three (3) equal annual instalments."). Such a figure is
+ * - the threshold of a condition ("if / where / when ... is above", "claims of more than", "exceeds", "in excess of"), with
+ *   no negation between the condition and the figure: a cap ("shall not at any time exceed S$3,000", "cannot be more
+ *   than") is never one (Critic on #545, NEW-HIGH); or
+ * - the first part paid before the rest ("first pay a lump sum of", "the first S$200,000", "S$200,000 upfront /
+ *   immediately / first / at once / in a lump sum");
+ * and the figure's own sentence, or a next sentence that opens by referring back to the rest ("The balance ...", "Any
+ * amount above that ..."), pays that rest in instalments or yearly / monthly payments or payouts, never the premium's. The figure says how a benefit is paid, not how
+ * much it is, so it is never an amount. */
+const SCHEDULE_CONDITION = /\b(?:if|where|when(?:ever)?|in\s+the\s+event|claims?\s+(?:of|that|which)|any\s+claim\s+(?:of|that|which))\b(?![^.;,:]*\b(?:not|never|no|cannot)\b|[^.;,:]*n't\b)[^.;,:]{0,100}\b(?:above|over|exceeds?|exceeding|more\s+than|greater\s+than|in\s+excess\s+of)\s*$/i;
+const SCHEDULE_FIRST = /\b(?:(?:first|initial(?:ly)?)\b[^.;]{0,40}\blump[\s-]+sum(?:\s+payment)?\s+(?:of\s+)?|the\s+first\s+)$/i;
+const SCHEDULE_FIRST_AFTER = /^\s*(?:(?:will\s+be|shall\s+be|is|are)\s+)?(?:(?:paid|payable)\s+)?(?:first|initially|up\s*front|immediately|at\s+once|(?:as\s+|in\s+)(?:a|one)\s+lump[\s-]+sum)\b/i;
+const SCHEDULE_REST = /\b(?:instal+ments?|(?:annual|monthly|yearly|quarterly|half[\s-]?yearly|equal|regular)\s+(?:payments|payouts|amounts))\b/i;
+const SCHEDULE_BALANCE = /\b(?:balance|remaining\s+(?:amount|sum|benefit)|remainder|rest\s+of\s+the|any\s+(?:amount|sum)\s+(?:above|over|in\s+excess\s+of)\s+(?:that|this|it))\b/i;
+/** A sentence that opens by referring back to what is left: "The balance ...", "Any amount above that ...", "The remainder". */
+const SCHEDULE_BALANCE_START = /^\s*(?:the\s+(?:balance|remainder|remaining\s+(?:amount|sum|benefit))|any\s+(?:amount|sum|balance)\s+(?:above|over|in\s+excess\s+of)\s+(?:that|this|it)|any\s+balance)\b/i;
+export function scheduleFigure(text: string, value: number): boolean {
+  const flat = text.normalize("NFKC").replace(/\s+/g, " ");
+  const at = [...flat.matchAll(/(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\d,])|(?<![\d.,])\d+(?:\.\d+)?(?![\d.,]*\d)/g)].filter((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
+  if (!at.length) return false;
+  const END = /[.;](?:\s|$)/g;
+  const endFrom = (i: number) => { END.lastIndex = i; const e = END.exec(flat); return e ? e.index + 1 : flat.length; };
+  return at.every((m) => {
+    const start = Math.max(flat.slice(0, m.index).search(/[^.;]*$/), 0);
+    const after = m.index! + m[0].length;
+    const own = flat.slice(start, endFrom(after));
+    const nextStart = start + own.length;
+    const next = flat.slice(nextStart, endFrom(nextStart + 1));
+    // The rest of the payment is named where the figure's own sentence pays it, or in the next sentence only when that
+    // sentence opens by referring back ("The balance will be paid in ... instalments", "Any amount above that is paid in
+    // instalments"). A neighbouring benefit's or the premium's instalments never count (Critic on #545 re-check: a lump
+    // sum death benefit beside an income rider or monthly premiums kept its figure).
+    const rest = (t: string) => SCHEDULE_REST.test(t) && SCHEDULE_BALANCE.test(t) && !/\b(?:premiums?|contributions?)\b/i.test(t);
+    if (!(rest(own) || (SCHEDULE_BALANCE_START.test(next) && rest(next)))) return false;
+    const lead = flat.slice(start, m.index).replace(/(?:[A-Z]{1,3}\$|RM|SGD|USD|MYR|HKD|GBP|EUR|AUD|£|€|\$)\s*$/i, "");
+    return SCHEDULE_CONDITION.test(lead) || SCHEDULE_FIRST.test(lead) || SCHEDULE_FIRST_AFTER.test(flat.slice(after));
+  });
+}
 function plainAmount(st: ModelStatement, found: Found, household: Household): AmountCheck {
   const doc = household.documents[found.docIndex];
   const raw = (st.amount ?? "").trim();
@@ -1659,6 +1699,18 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
   if (figures.length > 1 || plain.length > 1) return { ok: false, why: "an amount must be one figure" };
   const value = figures[0]?.value ?? plain[0];
   if (value == null) return { ok: false, why: "no amount given" };
+  // A figure that only says when or how a large claim is paid in parts (scheduleFigure) is not an amount: read with its whole
+  // sentence on the page, so a quote cut before "the balance in instalments" is caught too.
+  {
+    const pageText = doc.pages.find((p) => p.page === found.page)?.text ?? "";
+    const from = Math.max(0, Math.min(found.offset, pageText.length)), quoteEnd = Math.min(pageText.length, found.end ?? found.offset + found.excerpt.length);
+    const back = pageText.slice(Math.max(0, from - 400), from), after = pageText.slice(quoteEnd, quoteEnd + 800);
+    // The quote's own sentence, back to its start and on through the two sentences after it (scheduleFigure reads that far).
+    const ends = [...after.matchAll(/[.;](?:\s|$)/g)].map((e) => e.index! + 1);
+    const sentences = back.slice(Math.max(0, back.search(/[^.;]*$/))) + pageText.slice(from, quoteEnd) + after.slice(0, ends[2] ?? after.length);
+    if (scheduleFigure(found.excerpt, value) || (moneyFiguresIn(found.excerpt).some((f) => sameValue(f.value, value)) && scheduleFigure(sentences, value)))
+      return { ok: false, why: "the figure is when or how a large claim is paid in parts, not an amount of cover" };
+  }
   // Only a figure printed with its currency sign counts: a percentage, a count, a plan number or a code never does. A page
   // that declares one currency for all its figures (a policy schedule) gives that currency to a figure written as an amount.
   if (!moneyFiguresIn(found.excerpt).some((f) => sameValue(f.value, value))) {
