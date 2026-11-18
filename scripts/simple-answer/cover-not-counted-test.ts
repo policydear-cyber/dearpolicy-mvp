@@ -157,9 +157,10 @@ async function main() {
       const again = answer([{ person: JANE }], `${BOTTOM} ${echoed}`);
       noteCoverNotCounted(again, HOUSE([READ, FAILED, IN_PART]));
       assert.equal(oneNote(again), "Osprey Critical Care and Plover Accident Plan are not fully read, so some details may be missing.");
-      // Everything now read: the repeated note goes, and nothing else of the bottom line.
+      // Everything now read (the same documents, read in full since): the repeated note goes, and nothing else of the bottom line.
       const done = answer([{ person: JANE }], `${BOTTOM} ${echoed}`);
-      assert.equal(noteCoverNotCounted(done, HOUSE([READ])), null);
+      const readNow = [READ, { ...FAILED, processingStatus: "ready", pages: [{ page: 1, text: "Osprey" }] }, { ...IN_PART, partCheckedPages: [] }];
+      assert.equal(noteCoverNotCounted(done, HOUSE(readNow)), null);
       assert.equal(done.bottomLine, BOTTOM);
     }
     // A point of the model's own that only repeats the note goes; one that says more stays.
@@ -199,6 +200,26 @@ async function main() {
     const b = saved[1].answer;
     assert.equal(oneNote(b), "Osprey Critical Care is not fully read, so some details may be missing.");
     assert.equal(b.statements!.filter((s) => /not fully read/.test(s.text)).length, 1);
+  });
+  await check("only the note's own sentences are taken out: the model's own words that end the same way stay (Critic #539 MED1, LOW1)", () => {
+    const own = [
+      "Alex has a plan and Plover Accident Plan is not fully read, so some details may be missing.",
+      "Jane's Plover Accident Plan pays on a fracture, but it is not fully read, so some details may be missing.",
+    ];
+    for (const bottom of own) {
+      const a = answer([{ person: JANE }], bottom);
+      noteCoverNotCounted(a, HOUSE([READ, IN_PART]));
+      assert.equal(a.bottomLine, bottom, "the bottom line is kept whole");
+      const p = answer([{ person: JANE }]);
+      p.statements!.push({ id: "m1", kind: "fact", text: bottom, fullText: "", conditions: [] } as never);
+      noteCoverNotCounted(p, HOUSE([READ, IN_PART]));
+      assert.ok(p.statements!.some((s) => s.id === "m1"), "the point is kept");
+    }
+    // A product name with full stops in it is still matched when the model repeats the note.
+    const dotted = doc(14, { productName: "Prudential Pte. Ltd. Shield", partCheckedPages: [2], pages: [{ page: 1, text: "x" }, { page: 2, text: "y" }] });
+    const echo = answer([{ person: JANE }], `${BOTTOM} Prudential Pte. Ltd. Shield is not fully read, so some details may be missing.`);
+    noteCoverNotCounted(echo, HOUSE([READ, dotted]));
+    assert.equal(oneNote(echo), "Prudential Pte. Ltd. Shield is not fully read, so some details may be missing.");
   });
 
   console.log(`\n${passed} passed, ${failed.length} failed`);

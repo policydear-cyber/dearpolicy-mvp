@@ -203,10 +203,13 @@ t("same-event smaller benefits are given, and no sentence says a cover is one pe
 t("overview answers lead with the policies; reading is never narrated; the one note is drawn last and quietly (DC, 18 Nov)", () => {
   const style = answerStyle();
   assert.match(style, /For an overview \("tell me about Alex's policies"\), lead with the policies/);
-  assert.match(style, /Never say how documents were read \(read in part, pages not checked, not counted\) unless the question is about that/);
+  assert.match(style, /Never say which pages of a document were read or checked unless the question is about that, or the answer turns on those pages/);
+  // Critic #539 MED2: the app's line comes only with amounts, so a document not readable, still being read or on hold is still said.
+  assert.match(style, /A document that could not be read, is still being read or is on hold is still said plainly, once, when it matters to the answer/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /This is only about pages read in part: the rules below for a document not readable, still being read or on hold still apply/);
   assert.match(style, /Sound sure of what the documents print/);
   assert.match(SIMPLE_SYSTEM_PROMPT, /Never open with how many documents are linked, never list file names, and never say which documents were or were not read/);
-  assert.match(SIMPLE_SYSTEM_PROMPT, /the app adds one short line about documents not fully read where it matters, so never add your own/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /when amounts are shown, the app adds one short line about documents not fully read, so never add your own/);
   const html = renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "Alex has two policies.", bottomLine: "Alex has two policies.", nextSteps: [], questions: [], citations: [],
     statements: [
       { id: "cover-note", kind: "uncertainty", text: "Two documents are not fully read, so some details may be missing (the Documents page shows which).", fullText: "", conditions: [] },
