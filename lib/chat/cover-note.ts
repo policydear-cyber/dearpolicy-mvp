@@ -23,6 +23,9 @@ export function coverNotePattern(names: readonly string[] = []): RegExp {
   const subject = one ? `(?:${COUNT}|${one}(?: and ${one})?)` : COUNT;
   return new RegExp(String.raw`\s*(?:${OLD}|(?<=^|[.!?]\s*)${subject}${TAIL})`, "g");
 }
-export const COVER_NOTE = coverNotePattern();
+/** The old wording only, which only the server ever wrote (today's wording can be the model's own answer about reading). */
+export const COVER_NOTE = new RegExp(String.raw`\s*(?:${OLD})`, "g");
 /** Whether a point says nothing but the note (in any wording): one the model repeated from an earlier turn. */
-export const isCoverNote = (text: string, names: readonly string[] = []) => !!text.trim() && !text.replace(coverNotePattern(names), "").trim();
+export const isCoverNote = (text: string, names: readonly string[]) => !!text.trim() && !text.replace(coverNotePattern(names), "").trim();
+/** Whether a point says nothing but the note in its old wording. */
+export const isOldCoverNote = (text: string) => !!text.trim() && !text.replace(COVER_NOTE, "").trim();

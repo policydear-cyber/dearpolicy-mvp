@@ -221,6 +221,18 @@ async function main() {
     noteCoverNotCounted(echo, HOUSE([READ, dotted]));
     assert.equal(oneNote(echo), "Prudential Pte. Ltd. Shield is not fully read, so some details may be missing.");
   });
+  await check("an answer with no amounts keeps the model's own words about reading, even in the note's wording (TE #539 M1)", () => {
+    const said = "Osprey Critical Care and Plover Accident Plan are not fully read, so some details may be missing.";
+    const a = answer([], said);
+    a.statements = [{ id: "m1", kind: "fact", text: "Plover Accident Plan is not fully read, so some details may be missing.", fullText: "", conditions: [] } as never];
+    assert.equal(noteCoverNotCounted(a, HOUSE([READ, FAILED, IN_PART])), null);
+    assert.equal(a.bottomLine, said);
+    assert.deepEqual(a.statements!.map((s) => s.id), ["m1"]);
+    // The old wording, only ever the server's, still goes.
+    const old = answer([], `${BOTTOM} This may not be all of Jane Doe’s cover: Osprey Critical Care could not be read, so any cover in it is not counted here and the amounts shown are not a total.`);
+    noteCoverNotCounted(old, HOUSE([READ, FAILED]));
+    assert.equal(old.bottomLine, BOTTOM);
+  });
 
   console.log(`\n${passed} passed, ${failed.length} failed`);
   if (failed.length) process.exit(1);

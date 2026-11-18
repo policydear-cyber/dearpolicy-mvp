@@ -33,7 +33,7 @@ import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
-import { COVER_NOTE_ID, coverNotePattern, isCoverNote } from "@/lib/chat/cover-note";
+import { COVER_NOTE, COVER_NOTE_ID, coverNotePattern, isCoverNote, isOldCoverNote } from "@/lib/chat/cover-note";
 
 export const LEFT_OUT_AMOUNT = "I left out an amount I couldn’t find printed in your documents.";
 export const LEFT_OUT_FACT = "I left out a point I couldn’t find in your documents.";
@@ -3669,13 +3669,17 @@ const andList = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -
  * rows' labels (RowReport.premiumLabels). Returns the sentence added, or null. A note an earlier turn gave, which the model
  * may repeat from the history it is sent, is taken out first (TE #402): this turn's note (or none) is the one that holds. */
 export function noteCoverNotCounted(answer: StructuredAnswer, household: Household, tableStates: ReadonlyMap<string, string> | null = null, charged: ReadonlySet<string> = new Set()): string | null {
-  const products = household.documents.map((d) => d.productName ?? "");
-  const repeated = (answer.bottomLine ?? answer.summary ?? "");
-  const cleaned = repeated.replace(coverNotePattern(products), "").trim();
-  if (cleaned !== repeated.trim()) { answer.bottomLine = cleaned; answer.summary = cleaned; }
-  if (answer.statements) answer.statements = answer.statements.filter((s) => s.id !== COVER_NOTE_ID && (!!s.amount || !isCoverNote(s.text, products)));
   // A premium is charged, never claimed: an answer whose every amount is a premium row's own card is not about cover.
   const amounts = (answer.statements ?? []).filter((s) => s.amount && !charged.has(s.text));
+  // Today's wording is taken out only from an answer this turn's note speaks for (one with amounts): with no amounts it is
+  // the model's own answer, such as to "which of my documents haven't been fully read?", and stays (TE #539 M1). The
+  // old wording, which only the server ever wrote, is taken out of any answer, as before.
+  const products = amounts.length ? household.documents.map((d) => d.productName ?? "") : null;
+  const pattern = products ? coverNotePattern(products) : COVER_NOTE;
+  const repeated = (answer.bottomLine ?? answer.summary ?? "");
+  const cleaned = repeated.replace(pattern, "").trim();
+  if (cleaned !== repeated.trim()) { answer.bottomLine = cleaned; answer.summary = cleaned; }
+  if (answer.statements) answer.statements = answer.statements.filter((s) => s.id !== COVER_NOTE_ID && (!!s.amount || !(products ? isCoverNote(s.text, products) : isOldCoverNote(s.text))));
   if (!amounts.length) return null;
   const people = [...new Set(amounts.map((s) => s.personName ?? null))];
   // A receipt or letter holds no cover, unless the table says it is a misfiled pack waiting for Read again or being read

@@ -208,7 +208,10 @@ t("overview answers lead with the policies; reading is never narrated; the one n
   assert.match(style, /A document that could not be read, is still being read or is on hold is still said plainly, once, when it matters to the answer/);
   assert.match(SIMPLE_SYSTEM_PROMPT, /This is only about pages read in part: the rules below for a document not readable, still being read or on hold still apply/);
   assert.match(style, /Sound sure of what the documents print/);
-  assert.match(SIMPLE_SYSTEM_PROMPT, /Never open with how many documents are linked, never list file names, and never say which documents were or were not read/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /Never open with how many documents are linked, never list file names, and never name pages read in part/);
+  // TE #539 M2: an overview never silently leaves out a policy whose document is not read.
+  assert.match(SIMPLE_SYSTEM_PROMPT, /A policy whose document could not be read, is still being read or is on hold is still named, after the others, in one short sentence saying so/);
+  assert.match(style, /A figure the documents themselves leave open \(a "to confirm" amount, a condition not yet known\) is still said as open/);
   assert.match(SIMPLE_SYSTEM_PROMPT, /when amounts are shown, the app adds one short line about documents not fully read, so never add your own/);
   const html = renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "Alex has two policies.", bottomLine: "Alex has two policies.", nextSteps: [], questions: [], citations: [],
     statements: [
