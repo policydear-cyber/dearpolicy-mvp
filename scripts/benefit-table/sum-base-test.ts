@@ -31,7 +31,7 @@ function test(name: string, fn: () => void) {
 const ACC = "55555555-5555-4555-8555-555555555555";
 const DOC = "eeeeeeee-1111-4111-8111-000000000001";
 type Cover = { cover: string; sum: number | null; line: string; riderOf?: string | null };
-type Spec = { person: string; others?: string[]; linked?: string[]; product: string; insurer: string; policyNumber: string; page1: string; page2?: string;
+type Spec = { person: string; others?: string[]; linked?: string[]; product: string; insurer: string; policyNumber: string; page1: string; page2?: string; page3?: string;
   covers: Cover[]; benefits: Record<string, unknown>[]; link?: string };
 const ben = (o: Record<string, unknown>) => ({ section: null, column: null, pays: "percent", value: null, period: null, basis: null, asOf: null, percentOf: "other", baseAmount: null,
   baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 2, ...o });
@@ -41,7 +41,7 @@ const ben = (o: Record<string, unknown>) => ({ section: null, column: null, pays
 function build(s: Spec) {
   const members = [s.person, ...(s.others ?? [])];
   const family: FamilyMember[] = members.map((n, i) => ({ id: `m${i}`, display_name: n }));
-  const pages = [s.page1, ...(s.page2 != null ? [s.page2] : [])].map((text, i) => ({ page: i + 1, text }));
+  const pages = [s.page1, ...(s.page2 != null ? [s.page2] : []), ...(s.page3 != null ? [s.page3] : [])].map((text, i) => ({ page: i + 1, text }));
   const d: Household["documents"][number] = { policyId: DOC, name: `${s.product}.pdf`, insurer: s.insurer, productName: s.product, policyNumber: s.policyNumber, documentType: null,
     documentRole: "personal_schedule", effectiveDate: null, expiryDate: null, uploadedAt: "2026-10-01", uploadedFor: null, linkedPeople: s.linked ?? [s.person], supersededAt: null,
     processingStatus: "ready", pages };
@@ -662,6 +662,31 @@ test("C: a deduction in the next clause (3.2) is another provision's, so the sha
     page2: `3 BENEFITS\n${PROSE}\n3.1.1 This benefit is subject to the waiting period in Clause 8.\n3.2 Death Benefit\nWe will pay the Sum Assured less any amount owing to Us.`,
     covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
     benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(amountOf(h, "Lee Wei Ming", /Critical Illness Benefit/), 300000);
+});
+
+const PLAIN_PROSE = "We will pay 100% of the Sum Assured in one (1) lump sum.";
+for (const [what, page2, page3] of [
+  ["a digit share (table rule) with a deduction in a later paragraph", `3 BENEFITS\n3.1 Critical Illness Benefit\n${PLAIN_PROSE}\n\nAny amount paid under the Early Stage Benefit will be deducted.`, null],
+  ["a digit share (table rule) with a deduction on the line above", `3 BENEFITS\n3.1 Critical Illness Benefit\nSubject to the deduction of any amount previously paid,\n${PLAIN_PROSE}`, null],
+  ["a digit share (table rule) with another life above", `3 BENEFITS\n3.1 Critical Illness Benefit\nIf Life Assured 2 is diagnosed with a covered illness,\n${PLAIN_PROSE}`, null],
+  ["a deduction on the next page", `3 BENEFITS\n${PROSE}`, "Any amount paid under the Early Stage Benefit will be deducted from this benefit.\n3.2 Death Benefit"],
+  ["a wrapped line opening with a number before the deduction", `3 BENEFITS\n${PROSE}\nThis benefit is paid if the diagnosis is made within\n12 months of the start. Any amount paid under the Early Stage Benefit will be deducted.`, null],
+  ["a wrapped line opening with a number after the deduction above", `3 BENEFITS\n3.1 Critical Illness Benefit\nAny amount previously paid will be deducted if claimed within\n30 days of the claim.\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.`, null],
+  ["an Early Stage payment counted towards this benefit", `3 BENEFITS\n${PROSE}\nAny Early Stage payment made will be counted towards this benefit.`, null],
+  ["benefits that together pay at most the sum", `3 BENEFITS\n${PROSE}\nThis benefit and the Early Stage Benefit together pay at most the Sum Assured.`, null],
+] as const) test(`C control (Critic re-check on #544): ${what} leaves the share with no amount`, () => {
+  const quote = page2.includes(PLAIN_PROSE) ? PLAIN_PROSE : PROSE_QUOTE;
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1,
+    page2: page3 ? `${page2}\n` : page2, covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote }], ...(page3 ? { page3 } : {}) } as never);
+  assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
+});
+test("C: a digit share in a clean provision is still settled", () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1,
+    page2: `3 BENEFITS\n3.1 Critical Illness Benefit\n${PLAIN_PROSE}\n3.2 Death Benefit\nWe will pay the Sum Assured less any amount owing to Us.`,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PLAIN_PROSE }] });
   assert.equal(amountOf(h, "Lee Wei Ming", /Critical Illness Benefit/), 300000);
 });
 
