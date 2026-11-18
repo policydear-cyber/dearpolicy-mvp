@@ -37,5 +37,19 @@ test("with no benefit kept, the product's name is judged as before", () => {
   assert.equal(gtl.parts[0].amount, 1000000);
 });
 
+test("an accident-only product never lands on Death through its kept benefit (Critic PR 548 HIGH-1)", () => {
+  for (const [product, benefit] of [["Acme Accident Shield", "Death Benefit"], ["Acme Accident Shield", "Lump sum payable"], ["Acme AD&D Plan", "Death"], ["Acme Personal Accident Plan", "Death Benefit"]]) {
+    const { parts, total } = lumpSumParts([], [line(product, benefit, 100000), line("Group Term Life", null, 200000)], [], "Death");
+    assert.equal(parts[0].amount, null, `${product} · ${benefit}`);
+    assert.notEqual(total, 300000, `${product} · ${benefit}`);
+  }
+});
+test("a free note that names no cover never clears a line, and a trailing note is ignored", () => {
+  const { parts } = lumpSumParts([], [line("Acme Critical Illness Plan", "Lump sum payable", 5000)], [], "Death");
+  assert.equal(parts[0].amount, null);
+  const t = lumpSumParts([], [line("Acme Critical Illness Plan", "Death Benefit · Currency from your account settings.", 5000)], [], "Death");
+  assert.equal(t.parts[0].amount, 5000);
+});
+
 console.log(`line-benefit: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error(`  FAIL ${f}`); process.exit(1); }

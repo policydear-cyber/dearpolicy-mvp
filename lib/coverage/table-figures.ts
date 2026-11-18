@@ -786,14 +786,19 @@ export function lumpSumParts(rows: TileRow[], lines: (ConfirmedLine & { name: st
   // another category ("Accidental Death" stored as Death, "AD&D") is named with no amount here (Critic R247 Q1b). So is a
   // line outside the accident tile whose name has an accident or injury word but places it nowhere ("Accident Benefit"
   // stored as Death): it may pay on an accident only. A name with no such word ("Group Term Life") keeps its category.
-  // The benefit's own printed name decides, where the line keeps one ("Death Benefit" on Singlife Comprehensive Critical
-  // Illness II): the product's name says what the policy is, not where this line pays (live check, PR 542).
+  // A line kept with its benefit's name ("Death Benefit" on Singlife Comprehensive Critical Illness II) is placed by that
+  // name instead of its product's, but only when the benefit names a cover: a free note ("Lump sum payable") never clears
+  // a line. An accident word in the product's name, or in the benefit's, still keeps the line off any tile but Personal
+  // Accident whatever the benefit says ("Acme Accident Shield" · "Death Benefit"): Critic PR 548 HIGH-1.
   const elsewhere = (l: { name: string; benefit?: string | null }) => {
     if (!category) return false;
-    const name = l.benefit || l.name;
-    if (ACCIDENT_ONLY_NAME(name)) return category !== "Personal Accident";
-    const c = categoryOfBenefit(name);
-    return c ? c !== category : category !== "Personal Accident" && ACCIDENT_WORD.test(name);
+    const accidentOnly = (n: string) => ACCIDENT_ONLY_NAME(n) || (category !== "Personal Accident" && ACCIDENT_WORD.test(n));
+    if (ACCIDENT_ONLY_NAME(l.name)) return category !== "Personal Accident";
+    const benefit = (l.benefit ?? "").split(" · ")[0].trim();
+    const placed = benefit ? categoryOfBenefit(benefit) : null;
+    if (placed) return placed !== category || (category !== "Personal Accident" && (accidentOnly(benefit) || ACCIDENT_WORD.test(l.name)));
+    const c = categoryOfBenefit(l.name);
+    return c ? c !== category : category !== "Personal Accident" && ACCIDENT_WORD.test(l.name);
   };
   // A rider here with no amount of its own, whose plan is on this tile with no amount either, and whose own words say it
   // pays that plan's death benefit ("Terminal Illness: we will pay the death benefit", paysPlanDeathBenefit), is that
