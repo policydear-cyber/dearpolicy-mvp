@@ -260,6 +260,26 @@ async function main() {
       assert.deepEqual(await roles(householdId), { [owner]: "owner" });
     });
 
+    await testAsync("leave, rejoin, leave again: the second leave really removes them, never the first leave's old answer (TE #538 G1)", async () => {
+      const householdId = await seedHousehold("Household Rejoin");
+      const owner = "f1000000-0000-4000-8000-000000000011", member = "f1000000-0000-4000-8000-000000000012";
+      await addMember(householdId, owner, "owner");
+      await addMember(householdId, member, "member");
+      asUser(member);
+      const leave = () => deleteMember(requestFor(`http://localhost/api/household/members/${member}`, { household: householdId, method: "DELETE" }), { params: Promise.resolve({ userId: member }) } as any);
+      const first = await leave();
+      assert.equal(first.status, 200);
+      const firstId = (await first.json()).deletionRequestId;
+      // Invited back and accepted: a new membership, joined later.
+      await pool.query(`INSERT INTO household_members(household_id, user_id, role, created_at) VALUES ($1, $2, 'member', now() + interval '1 minute')`, [householdId, member]);
+      const second = await leave();
+      assert.equal(second.status, 200);
+      const body = await second.json();
+      assert.notEqual(body.deletionRequestId, firstId, "a new membership's removal is a new request");
+      const row = await pool.query(`SELECT 1 FROM household_members WHERE household_id=$1 AND user_id=$2`, [householdId, member]);
+      assert.equal(row.rows.length, 0, "they are really out of the household the second time");
+    });
+
     await testAsync("a removed member is excluded from GET /api/household/members (the real downstream roster-read path) immediately", async () => {
       const householdId = await seedHousehold("Household Roster");
       const owner = "c0000000-0000-4000-8000-00000000000d";

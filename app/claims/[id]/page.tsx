@@ -82,14 +82,14 @@ function sentFor(requested: string, documents: EvidenceDoc[]): EvidenceDoc | nul
 
 /** What happens next for this claim, in plain steps. Follows only the server's display tone; it never says what the
  * insurer will decide or how long anything takes. */
-function nextSteps(tone: ClaimDisplay["tone"]): string[] {
+function nextSteps(tone: ClaimDisplay["tone"], canManage = true): string[] {
   if (tone === "info") return [
     "Answer the remaining questions in the chat, so DearPolicy knows what happened.",
     "DearPolicy then lists the documents this claim needs.",
-    "You upload them here, and DearPolicy reads each one.",
+    canManage ? "You upload them here, and DearPolicy reads each one." : "The household owner uploads them here, and DearPolicy reads each one.",
   ];
   if (tone === "waiting") return [
-    "Upload each document still needed. A photo or a PDF is fine.",
+    canManage ? "Upload each document still needed. A photo or a PDF is fine." : "The household owner uploads each document still needed.",
     "DearPolicy reads each one and checks the name matches. Anything that must meet the policy’s own definition is checked by a DearPolicy reviewer.",
     "An indicative estimate appears below once your documents support it. The insurer makes the final decision.",
   ];
@@ -197,7 +197,7 @@ export default function ClaimEvidencePage() {
 
   return (
     <div className="page">
-      <header className="page-header"><div><div className="eyebrow">Claim documents</div><h1>{claim.event_summary ?? "Your claim"}</h1><p className="lead">Upload the documents for this claim here, and check what DearPolicy read from them. Nothing is used for an estimate until it has been reviewed. The insurer decides what is paid.</p></div>{claim.conversation_id ? <a className="button secondary" href={`/chat?conversation=${claim.conversation_id}`} data-testid="claim-conversation-link">← Back to the conversation</a> : null}</header>
+      <header className="page-header"><div><div className="eyebrow">Claim documents</div><h1>{claim.event_summary ?? "Your claim"}</h1><p className="lead">{canManage ? "Upload the documents for this claim here, and check what DearPolicy read from them." : "See the documents for this claim and what DearPolicy read from them. The household owner uploads them."} Nothing is used for an estimate until it has been reviewed. The insurer decides what is paid.</p></div>{claim.conversation_id ? <a className="button secondary" href={`/chat?conversation=${claim.conversation_id}`} data-testid="claim-conversation-link">← Back to the conversation</a> : null}</header>
 
       <section className="section claim-status-panel" data-testid="claim-display" data-tone={claim.display?.tone ?? "info"}>
         <div className="eyebrow">Status</div>
@@ -218,7 +218,7 @@ export default function ClaimEvidencePage() {
         })() : null}
         <div className="claim-next" data-testid="claim-next-steps">
           <strong>What happens next</strong>
-          <ol>{nextSteps(claim.display?.tone ?? "info").map((step) => <li key={step}>{step}</li>)}</ol>
+          <ol>{nextSteps(claim.display?.tone ?? "info", canManage).map((step) => <li key={step}>{step}</li>)}</ol>
           {claim.display?.tone === "ready" && claim.decision_packet ? <p><a className="text-link" href={`/api/claims/${claim.id}/pack`}>Download the claim pack (PDF) →</a></p> : null}
         </div>
       </section>

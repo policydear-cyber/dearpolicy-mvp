@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { requireRecentAuthentication } from "@/lib/auth/session";
-import { removeMember, setMemberRole, type Role } from "@/lib/household/repo";
+import { listHouseholdMembers, removeMember, setMemberRole, type Role } from "@/lib/household/repo";
 import { requestHouseholdLeave, requestHouseholdMemberRemoval } from "@/lib/lifecycle/coordinator";
 import { isUuid } from "@/lib/db/client";
 
@@ -55,7 +55,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const self = await requireHouseholdContext(request);
     // Leaving is open to every member; removing anyone else is the owner's.
     const ctx = self.userId === targetUserId ? self : await requireHouseholdOwnerContext(request);
-    const idempotencyKey = request.headers.get("idempotency-key") || `delete:${targetUserId}`;
+    // The default key names this membership, not just the person: someone who leaves, is invited back and leaves again
+    // is a new removal, never answered with the old one's "completed" (Test engineer #538 G1).
+    const joinedAt = (await listHouseholdMembers(ctx.userId, ctx.householdId)).find((m) => m.userId === targetUserId)?.createdAt;
+    const idempotencyKey = request.headers.get("idempotency-key") || `delete:${targetUserId}:${joinedAt ? new Date(joinedAt).toISOString() : "none"}`;
     const outcome =
       ctx.userId === targetUserId
         ? await requestHouseholdLeave({ accountId: ctx.householdId, callerUserId: ctx.userId, targetUserId, idempotencyKey })
