@@ -166,8 +166,10 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
     return () => window.removeEventListener("keydown", onKey);
   }, [moreOpen]);
   // A public page names itself through its own metadata (title and description for search results), so no <title> here.
-  if (publicView) return <PublicShell onLearn={pathname.startsWith("/learn")}>{children}</PublicShell>;
-  if (authFrame) return <PublicShell onLearn={false} authPage><title>{pageTitle}</title><div className="auth-frame">{children}</div></PublicShell>;
+  // Signed out, the same light/dark switch as inside the app, so a visitor who chose dark can switch back.
+  const publicThemeToggle = <ThemeToggle theme={theme} onToggle={toggleTheme} />;
+  if (publicView) return <PublicShell onLearn={pathname.startsWith("/learn")} themeToggle={publicThemeToggle}>{children}</PublicShell>;
+  if (authFrame) return <PublicShell onLearn={false} authPage themeToggle={publicThemeToggle}><title>{pageTitle}</title><div className="auth-frame">{children}</div></PublicShell>;
   return (
     <div className={`app-shell${noNav ? " no-nav" : ""}`}>
       <title>{pageTitle}</title>

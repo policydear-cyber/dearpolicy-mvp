@@ -26,6 +26,13 @@
 .lsh-head .lp .lp-fill, .lh-picture .lp .lp-fill { fill: var(--cover-sheen); }
 .lsh-head .lp .lp-accent, .lsh-head .lp .lp-good, .lh-picture .lp .lp-accent, .lh-picture .lp .lp-good { fill: var(--cover-top); }
 
+/* The library sits in one centred column (DC, 18 Nov: "centralise the contents"): the article and its "On this page"
+   list together, with the same empty space on both sides. Text stays left-aligned inside it. */
+.page.learn-page { max-width: 1200px; margin-inline: auto; }
+/* A guide is as wide as its reading column (plus "On this page" on wide screens), so the back link lines up with it. */
+.page.learn-guide { max-width: calc(820px + 2 * clamp(24px, 3vw, 56px)); }
+@media (min-width: 1180px) { .page.learn-guide { max-width: calc(1080px + 2 * clamp(24px, 3vw, 56px)); } }
+
 .learn-notice { margin: 0 0 20px; padding: 0; color: var(--muted); font-size: var(--fs-sm); line-height: 1.55; max-width: 68ch; }
 
 /* --------------------------------------------------------------------------

@@ -13,7 +13,7 @@ export const PUBLIC_FOOTER_LINE =
  * reset-password page: there the header keeps only the logo and Learn, so the form's own links (which carry an
  * invitation's ?next=) are the only way between them and the page has one primary button.
  */
-export default function PublicShell({ children, onLearn, authPage = false }: { children: React.ReactNode; onLearn: boolean; authPage?: boolean }) {
+export default function PublicShell({ children, onLearn, authPage = false, themeToggle }: { children: React.ReactNode; onLearn: boolean; authPage?: boolean; themeToggle?: React.ReactNode }) {
   return (
     <div className="public-shell" data-testid="public-shell">
       <a className="public-skip" href="#public-main">Skip to content</a>
@@ -27,6 +27,7 @@ export default function PublicShell({ children, onLearn, authPage = false }: { c
             <Link className="public-nav-link" href="/login" data-testid="public-sign-in">Sign in</Link>
             <Link className="button primary compact" href="/signup" data-testid="public-sign-up">Create an account</Link>
           </>}
+          {themeToggle}
         </nav>
       </header>
       <main id="public-main" className="public-main" tabIndex={-1}>{children}</main>
