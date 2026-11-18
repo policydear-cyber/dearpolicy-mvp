@@ -34,10 +34,14 @@ export const SLOT_HINTS: Record<FolderSlot, string> = {
   other: "Anything else for this policy",
 };
 
+/** One word that is a system's code, not a name: joined by underscores ("SGGRP_COI_APP"), letters and digits together
+ * ("PW9", "COI2026", "POL.SCHED.V2", an id), or capitals joined by hyphens or dots ("SGGRP-COI-APP"). One-word names a
+ * person reads ("Eldershield", "MINDEF", "Kestrel-Care") are kept. */
+const codeWord = (t: string) => !/\s/.test(t) && (isCodeName(t) || (/\d/.test(t) && /[a-z]/i.test(t)) || /^[A-Z0-9]+(?:[-.][A-Z0-9]+)+$/.test(t));
 /** A product name a person reads: not a system's code or a file name ("SGGRP_COI_APP", "cert_v2.pdf"). */
 const plainName = (name: string | null | undefined) => {
   const t = name?.trim();
-  return t && !isCodeName(t) && !/\.(pdf|jpe?g|png|webp|tiff?|heic|docx?)$/i.test(t) ? t : null;
+  return t && !codeWord(t) && !/\.(pdf|jpe?g|png|webp|tiff?|heic|docx?)$/i.test(t) ? t : null;
 };
 
 /** A folder's name: the household's own; else the insurer's plain product name from any document in it, the schedule's

@@ -35,6 +35,12 @@ test("T6 only codes or file names as products: never shown; who it is for instea
   const docs = [d("s", { product_name: "POL_SCHED_V2" }), d("w", { product_name: "wording_final.pdf" }), d("x", { product_name: "Terms.pdf" }), d("y", { product_name: "scan.TIFF" })];
   assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }, { policyId: "w", slot: "wording" }, { policyId: "x", slot: null }, { policyId: "y", slot: null }] }), map(docs)), "Policy for Jane Doe");
 });
+test("T8 one-word codes without underscores are never a name; one-word plain names are", () => {
+  for (const code of ["SGGRP-COI-APP", "PW9", "ABC123", "COI2026", "POL.SCHED.V2", "817d6e8b-874f-4527-9a3c-1f2e3d4c5b6a"])
+    assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: code, insurer: "Example Life" })])), "Policy for Jane Doe", code);
+  for (const name of ["Eldershield", "MINDEF", "Kestrel-Care", "CareShield"])
+    assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: name })])), name, name);
+});
 test("T7 the insurer's legal suffix is dropped, and not repeated when the product names it", () => {
   assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: "Shield Plan", insurer: "Example Life Pte. Ltd." })])), "Example Life Shield Plan");
   assert.equal(folderTitle(f({ documents: [{ policyId: "s", slot: "schedule" }] }), map([d("s", { product_name: "Example Life Shield", insurer: "Example Life Ltd" })])), "Example Life Shield");
