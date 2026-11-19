@@ -15,12 +15,14 @@ type Props = {
   /** Shown instead of the chart when the series isn't available. */
   unavailable?: string;
   testId?: string;
+  /** One line under the chart saying what is counted. */
+  note?: string;
 };
 
 // Bars only inside the SVG (it stretches to the panel's width); every word is HTML, so text never scales or squashes.
 const W = 600, H = 140, PAD_L = 0, PAD_R = 0, PAD_T = 2, PAD_B = 0;
 
-export function TrendChart({ title, summary, days, values, format = (v) => v.toLocaleString(), unavailable, testId }: Props) {
+export function TrendChart({ title, summary, days, values, format = (v) => v.toLocaleString(), unavailable, testId, note }: Props) {
   if (!values) {
     return (
       <section className="admin-panel admin-chart" data-testid={testId}>
@@ -58,6 +60,7 @@ export function TrendChart({ title, summary, days, values, format = (v) => v.toL
         })}
       </svg>
       <div className="admin-axis-row" aria-hidden="true"><span>{day(days[0])}</span><span>{day(days[days.length - 1])}</span></div>
+      {note ? <p className="admin-chart-note">{note}</p> : null}
       <details className="admin-chart-table">
         <summary>Show the numbers</summary>
         <table className="admin-table">

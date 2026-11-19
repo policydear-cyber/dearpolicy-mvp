@@ -56,7 +56,7 @@ function sortValue(h: HouseholdRow, key: SortKey): string | number {
     case "read": return h.documentsRead;
     case "unreadable": return h.documentsUnreadable;
     case "questions": return h.questionsThisMonth ?? -1;
-    case "spend": return h.spendUsd;
+    case "spend": return h.spendUsd ?? -1;
     case "lastSignIn": return time(h.lastSignInAt);
   }
 }
@@ -65,15 +65,18 @@ function sortValue(h: HouseholdRow, key: SortKey): string | number {
 export function csvCell(v: string | number | null): string {
   if (v == null) return "";
   let s = String(v);
-  if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  // Spreadsheets also run a formula after leading spaces or a line break, so those are checked too.
+  if (typeof v === "string" && /^[\s]*[=+\-@]|^[\t\r\n]/.test(s)) s = "'" + s;
   return /[",\n\r]/.test(s) || s.startsWith("'") ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export function householdsCsv(rows: HouseholdRow[]): string {
+/** Rows as a spreadsheet. Dates are the Singapore-time labels the page shows, not the database's UTC text. */
+export function householdsCsv(rows: HouseholdRow[], whenLabels: Record<string, { created: string; lastSignIn: string }> = {}): string {
   const head = ["Household", "Household id", "Owner email", "Plan", "Plan status", "Documents", "Read", "Unreadable", "Still being read",
-    "Questions this month", "Model spend this month (USD)", "Model calls", "Members", "People", "Joined", "Last sign-in"];
+    "Questions this month", "Model spend this month (USD)", "Model calls", "Members", "People", "Joined (Singapore time)", "Last sign-in (Singapore time)"];
   const lines = rows.map((h) => [h.name, h.id, h.ownerEmail, PLAN_NAME[h.plan], h.planStatus, h.documents, h.documentsRead, h.documentsUnreadable,
-    h.documentsInProgress, h.questionsThisMonth, h.spendUsd.toFixed(4), h.modelCalls, h.members, h.people, h.createdAt, h.lastSignInAt].map(csvCell).join(","));
+    h.documentsInProgress, h.questionsThisMonth, h.spendUsd == null ? null : h.spendUsd.toFixed(4), h.modelCalls, h.members, h.people,
+    whenLabels[h.id]?.created ?? h.createdAt, whenLabels[h.id]?.lastSignIn ?? h.lastSignInAt].map(csvCell).join(","));
   return [head.join(","), ...lines].join("\r\n");
 }
 
@@ -108,7 +111,7 @@ export function HouseholdsTable({ rows, now, whenLabels }: {
     setSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: numeric || key === "created" || key === "lastSignIn" ? -1 : 1 }));
 
   const download = () => {
-    const blob = new Blob(["﻿" + householdsCsv(shown)], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["﻿" + householdsCsv(shown, whenLabels)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -160,7 +163,7 @@ export function HouseholdsTable({ rows, now, whenLabels }: {
                 <td className="num">{h.documentsRead}</td>
                 <td className="num">{h.documentsUnreadable ? <span className="admin-flag critical">{h.documentsUnreadable} unreadable</span> : 0}</td>
                 <td className="num">{h.questionsThisMonth ?? "—"}</td>
-                <td className="num">{"US$" + h.spendUsd.toFixed(h.spendUsd > 0 && h.spendUsd < 0.1 ? 4 : 2)}</td>
+                <td className="num">{h.spendUsd == null ? "—" : "US$" + h.spendUsd.toFixed(h.spendUsd > 0 && h.spendUsd < 0.1 ? 4 : 2)}</td>
                 <td className="num">{h.members}</td>
                 <td className="num">{h.people}</td>
                 <td>{whenLabels[h.id]?.created ?? "—"}</td>

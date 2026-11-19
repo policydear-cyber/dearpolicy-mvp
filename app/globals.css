@@ -1950,6 +1950,7 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 .admin-axis-top { margin-bottom: 2px; }
 .admin-axis-row { display: flex; justify-content: space-between; margin-top: 4px; }
 .admin-chart-empty { margin: 8px 0 0; }
+.admin-chart-note { color: var(--muted); font-size: var(--fs-xs); margin: 8px 0 0; }
 .admin-chart-table { margin-top: 10px; font-size: var(--fs-sm); }
 .admin-chart-table summary { cursor: pointer; color: var(--ink-2); font-weight: 550; min-height: 32px; display: flex; align-items: center; }
 .admin-chart-table summary:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 6px; }
@@ -1999,7 +2000,7 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 .admin-table th button:hover { color: var(--ink); }
 .admin-table th button:focus-visible { box-shadow: var(--focus); border-radius: 4px; }
 .admin-table th[aria-sort="ascending"], .admin-table th[aria-sort="descending"] { color: var(--ink); }
-.admin-sort { font-size: 10px; opacity: .7; }
+.admin-sort { font-size: var(--fs-xs); opacity: .7; }
 .admin-row-link { color: var(--ink); font-weight: 600; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 .admin-row-link:hover { text-decoration-color: currentColor; }
 .admin-id { display: block; color: var(--muted); font-size: var(--fs-xs); font-weight: 400; }

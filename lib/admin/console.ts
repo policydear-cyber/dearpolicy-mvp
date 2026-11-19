@@ -171,8 +171,9 @@ export type HouseholdRow = {
   questionsThisMonth: number | null;
   plan: PlanId;
   planStatus: string | null;
-  spendUsd: number;
-  modelCalls: number;
+  /** Null when the model-usage table isn't there: shown as "—", never 0. */
+  spendUsd: number | null;
+  modelCalls: number | null;
 };
 
 export type HouseholdList = {
@@ -184,6 +185,8 @@ export type HouseholdList = {
   questionsSource: "kept_count" | "messages_on_file";
   /** False when that source table isn't there: the column shows "—", never 0. */
   questionsAvailable: boolean;
+  /** False when the model-usage table isn't there: spend shows "—", never US$0.00. */
+  spendAvailable: boolean;
   spendUnattributedUsd: number;
   spendTotalUsd: number;
 };
@@ -261,26 +264,26 @@ export async function readHouseholds(): Promise<Section<HouseholdList>> {
         documentsInProgress: Math.max(0, num(r.documents) - num(r.ready) - num(r.failed)), lastSignInAt: r.last_sign_in_at,
         questionsThisMonth: !questionsAvailable ? null : questionsSource === "kept_count" ? (kept.get(r.id) ?? 0) : (onFile.get(r.id) ?? 0),
         plan: effectivePlanId(p?.plan, p?.status), planStatus: p?.status ?? null,
-        spendUsd: s?.usd ?? 0, modelCalls: s?.calls ?? 0,
+        spendUsd: spend.available ? (s?.usd ?? 0) : null, modelCalls: spend.available ? (s?.calls ?? 0) : null,
       };
     });
     // Households beyond the list limit also fall into "unattributed" here, which the page says when it's truncated.
-    return { rows: out, truncated, plansStored, questionsSource, questionsAvailable,
+    return { rows: out, truncated, plansStored, questionsSource, questionsAvailable, spendAvailable: spend.available,
       spendTotalUsd: round6(spend.totalUsd), spendUnattributedUsd: round6(Math.max(0, spend.totalUsd - attributed)) };
   });
 }
 
 const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
 
-async function spendByHouseholdRef(since: Date): Promise<{ rows: { ref: string | null; usd: number; calls: number }[]; totalUsd: number }> {
+async function spendByHouseholdRef(since: Date): Promise<{ rows: { ref: string | null; usd: number; calls: number }[]; totalUsd: number; available: boolean }> {
   try {
     const { rows } = await query<{ ref: string | null; usd: string; calls: number }>(
       `SELECT household_ref AS ref, coalesce(sum(cost_usd), 0)::text AS usd, count(*)::int AS calls
          FROM model_executions WHERE created_at >= $1 GROUP BY household_ref`, [since.toISOString()]);
     const out = rows.map((r) => ({ ref: r.ref, usd: Number(r.usd) || 0, calls: num(r.calls) }));
-    return { rows: out, totalUsd: out.reduce((n, r) => n + r.usd, 0) };
+    return { rows: out, totalUsd: out.reduce((n, r) => n + r.usd, 0), available: true };
   } catch (e) {
-    if (isMissingRelation(e)) return { rows: [], totalUsd: 0 };
+    if (isMissingRelation(e)) return { rows: [], totalUsd: 0, available: false };
     throw e;
   }
 }

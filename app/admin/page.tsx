@@ -44,7 +44,8 @@ export default async function AdminOverviewPage() {
     readTotals(), readTrends(), readRecentSignups(), readHouseholds(), readRecentProcessingFailures(), readFailedModelCalls(), readStuckJobs(),
   ]);
   const now = Date.now();
-  const month = new Date(now).toLocaleDateString("en-GB", { month: "long", timeZone: "Asia/Singapore" });
+  // The monthly questions and spend counts start at the UTC month (as plan limits do), so the label follows UTC too.
+  const month = new Date(now).toLocaleDateString("en-GB", { month: "long", timeZone: "UTC" });
   const t = totals.ok ? totals.data : null;
   const h = households.ok ? households.data : null;
 
@@ -54,7 +55,8 @@ export default async function AdminOverviewPage() {
   const errorCount = (failures.ok ? failures.data.length : 0)
     + (modelFailures.ok ? modelFailures.data.reduce((n, m) => n + m.calls, 0) : 0)
     + (jobs.ok ? jobs.data.reduce((n, j) => n + j.jobs, 0) : 0);
-  const errorsKnown = failures.ok || modelFailures.ok || jobs.ok;
+  // Only a full count is shown: if any of the three lists can't be read, the tile says "—" rather than a low number.
+  const errorsKnown = failures.ok && modelFailures.ok && jobs.ok;
   const failuresCapped = failures.ok && failures.data.length >= 50;
 
   const tr = trends.ok ? trends.data : null;
@@ -92,9 +94,10 @@ export default async function AdminOverviewPage() {
             note={t?.documentsUnreadable ? "Documents that need a look" : "None"} />
           <Kpi testId="kpi-questions" label={`Questions asked in ${month}`} value={count(questionsThisMonth)}
             note={askingHouseholds != null ? `from ${plural(askingHouseholds, "household")}` : "The table they come from isn’t set up yet"} />
-          <Kpi testId="kpi-spend" label={`Model spend in ${month}`} value={h ? usd(h.spendTotalUsd) : "—"} note={h && t?.households ? `about ${usd(h.spendTotalUsd / Math.max(1, t.households))} per household` : undefined} />
-          <Kpi testId="kpi-errors" label={`Errors, ${ERROR_WINDOW_LABEL}`} value={errorsKnown ? `${errorCount.toLocaleString()}${failuresCapped ? "+" : ""}` : "—"} tone={errorCount ? "warn" : undefined}
-            note={errorCount ? <a className="text-link" href="#errors">See what failed</a> : "Nothing failed"} />
+          <Kpi testId="kpi-spend" label={`Model spend in ${month}`} value={h?.spendAvailable ? usd(h.spendTotalUsd) : "—"}
+            note={!h ? undefined : !h.spendAvailable ? "The model-usage table isn’t set up yet" : t?.households ? `about ${usd(h.spendTotalUsd / Math.max(1, t.households))} per household, all calls` : undefined} />
+          <Kpi testId="kpi-errors" label={`Errors, ${ERROR_WINDOW_LABEL}`} value={errorsKnown ? `${errorCount.toLocaleString()}${failuresCapped ? "+" : ""}` : "—"} tone={errorsKnown && errorCount ? "warn" : undefined}
+            note={!errorsKnown ? <a className="text-link" href="#errors">Some error lists aren’t available</a> : errorCount ? <a className="text-link" href="#errors">See what failed</a> : "Nothing failed"} />
         </div>
       </section>
 
@@ -106,8 +109,10 @@ export default async function AdminOverviewPage() {
             <TrendChart testId="chart-accounts" title="New accounts per day" summary={accounts30 == null ? "—" : `${accounts30.toLocaleString()} in ${TREND_DAYS} days`} days={tr.days} values={tr.accounts}
               unavailable="Sign-ups come from Supabase Auth, which can’t be read from this database." />
             <TrendChart testId="chart-questions" title="Questions per day" summary={questions30 == null ? "—" : `${questions30.toLocaleString()} in ${TREND_DAYS} days`} days={tr.days} values={tr.questions}
+              note="Questions still on file, by the day they were asked."
               unavailable="Questions come from the chat tables, which aren’t set up yet." />
             <TrendChart testId="chart-spend" title="Model spend per day" summary={spend30 == null ? "—" : `${usd(spend30)} in ${TREND_DAYS} days`} days={tr.days} values={tr.spendUsd} format={usd}
+              note="Every model call, including sign-in, background and test calls."
               unavailable="Spend comes from the model-usage table, which isn’t set up yet." />
           </div>
         )}
@@ -159,7 +164,7 @@ export default async function AdminOverviewPage() {
               Questions and spend are for {month}.{" "}
               {!h.questionsAvailable ? "Questions aren’t available: the table they come from isn’t set up yet." : h.questionsSource === "kept_count" ? "Questions are the counted questions plan limits use." : "Questions are the ones still on file (plan limits are off, so nothing is counted yet)."}
               {h.truncated ? " Only the newest 500 households are listed." : ""}
-              {h.spendUnattributedUsd > 0 ? ` ${usd(h.spendUnattributedUsd)} of this month’s spend isn’t tied to a listed household (sign-in, background or test calls${h.truncated ? ", or households beyond the list" : ""}).` : ""}
+              {h.spendAvailable && h.spendUnattributedUsd > 0 ? ` ${usd(h.spendUnattributedUsd)} of this month’s spend isn’t tied to a listed household (sign-in, background or test calls${h.truncated ? ", or households beyond the list" : ""}).` : ""}
             </p>
           </>
         )}
