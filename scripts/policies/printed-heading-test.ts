@@ -9,6 +9,10 @@ const cases: [string, string | null][] = [
   ["Orchid Life Insurance Berhad (Singapore Branch)\nPolicy Services (fictional)\nCONFIRMATION OF REINSTATEMENT\nDate: 8 January 2026", "Confirmation of Reinstatement"],
   ["MS LEE SIEW LING\nPRIVATE AND CONFIDENTIAL\nDear Ms Lee, thank you.", null],
   ["POLICY SCHEDULE\nPolicy number 123", "Policy Schedule"],
+  ["Orchid Life\nConfirmation of Reinstatement\nDear Ms Lee", "Confirmation of Reinstatement"],
+  ["Orchid Life\nRE: POLICY LAPSE\nDear Sir", "Policy Lapse"],
+  ["PATIENT TAN AH KOW BILL\nTAX INVOICE", "Tax Invoice"],
+  ["UNTITLED DOCUMENT\nSTRICTLY CONFIDENTIAL\nTI-IE GREAT EASTEIRN LIFE\nJURONG WEST STREET", null],
   ["CLAIMS DEPARTMENT\nPAYMENT SERVICES UNIT\nCLAIM DECISION\nDear Sir", "Claim Decision"],
 ];
 let failed = 0;

@@ -59,7 +59,7 @@ export function documentName(doc:{product_name:string|null;original_filename:str
   // joined by underscores. Nor is a PDF tool's stand-in title ("(anonymous)", "Untitled"). The document is then named as
   // if it had none (re-upload check, 10 Nov; #564, 19 Nov).
   // A title an office tool wrote keeps only the name a person gave ("Microsoft Word - Shield Plan.docx" -> "Shield Plan"; TE #564 L-F2).
-  if(product&&!isCodeName(product)&&!isPlaceholderName(product))return product.replace(/^microsoft\s+(?:word|excel|powerpoint)\s*-\s*/i,"").replace(/\.(?:pdf|docx?|xlsx?|pptx?|jpe?g|png)$/i,"").trim()||product;
+  if(product&&!isCodeName(product)&&!isPlaceholderName(product))return cleanTitle(product);
   // An ID number in the file name is masked before the name is made readable: spacing splits it ("S7712345D" ->
   // "S7712345 D") into a shape no mask knows (TE pr181 F2).
   if(!isMachineFilename(doc.original_filename))return prettifyFilename(maskIdentityText(doc.original_filename));
@@ -74,6 +74,10 @@ export function documentName(doc:{product_name:string|null;original_filename:str
 /** A code a system gives a file or template ("SGGRP_COI_APP", "POL_SCHED_V2"), not a name a person reads: no space, and its
  * words joined by underscores. */
 export function isCodeName(name:string):boolean {const t=name.trim();return !/\s/.test(t)&&/_/.test(t);}
+
+/** A title as a person gave it, without an office tool's prefix or a file extension ("Microsoft Word - Shield Plan.docx" ->
+ * "Shield Plan"; TE #564 L-F2, L-F3). */
+export function cleanTitle(title:string):string{return title.replace(/^microsoft\s+(?:word|excel|powerpoint)\s*-\s*/i,"").replace(/\.(?:pdf|docx?|xlsx?|pptx?|jpe?g|png)$/i,"").trim()||title.trim();}
 
 /** A title a PDF tool writes when the author gave none ("(anonymous)", "Untitled", "(no title)"), never a document's name. */
 export function isPlaceholderName(name:string):boolean {

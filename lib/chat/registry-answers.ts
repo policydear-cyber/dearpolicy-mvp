@@ -21,7 +21,7 @@
  * notice and a reinstatement letter, a premium receipt) count as one policy.
  */
 import { query } from "@/lib/db/client";
-import { documentLabels, isPlaceholderName } from "@/lib/policies/document-name";
+import { cleanTitle, documentLabels, isPlaceholderName } from "@/lib/policies/document-name";
 import { isPolicyRole, printedHeadings } from "@/lib/policies/printed-heading";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ClaimPerson } from "@/lib/claims/person";
@@ -97,7 +97,7 @@ async function loadDocs(accountId: string): Promise<Doc[]> {
   // ready ones are answered from.
   const labels = documentLabels(all.map((r) => ({ id: r.id, original_filename: r.file_raw, product_name: r.product, insurer: r.insurer, document_role: r.role, policy_number: r.number, created_at: r.created })), { describeUnnamed: true });
   const rows = all.filter((r) => r.ready);
-  return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", label: labels.get(r.id) ?? "the document", role: r.role, product: r.product && !isPlaceholderName(r.product) ? r.product : null, insurer: cleanInsurer(r.insurer), number: r.number, groupNumber: r.group_number, kind: r.kind,
+  return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", label: labels.get(r.id) ?? "the document", role: r.role, product: r.product && !isPlaceholderName(r.product) ? cleanTitle(r.product) : null, insurer: cleanInsurer(r.insurer), number: r.number, groupNumber: r.group_number, kind: r.kind,
     pages: r.pages, start: r.start, end: r.end_date, dated: r.dated, paid: r.paid, owners: r.owners?.length ? r.owners : [r.uploaded_to], uploadedTo: r.uploaded_to, created: r.created, superseded: !!r.superseded, currencies: r.currencies ?? [] }));
 }
 

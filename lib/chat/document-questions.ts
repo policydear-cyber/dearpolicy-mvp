@@ -33,7 +33,7 @@ import { replacedFigures } from "@/lib/policies/amendments";
 import { askedCoverage, bestLines, columnsFor, narrowToColumn, piecesOf, quoted, wordsOf } from "./printed-lines";
 import { citeAnswerLines } from "./answer-verification";
 import { planKind, type PlanKind } from "./plan-kinds";
-import { documentLabels, isPlaceholderName } from "@/lib/policies/document-name";
+import { cleanTitle, documentLabels, isPlaceholderName } from "@/lib/policies/document-name";
 import { isPolicyRole, printedHeadings } from "@/lib/policies/printed-heading";
 
 export type DocumentAnswer = { summary: string; details: string[]; nextSteps: string[]; citations: ChatCitation[]; personId: string | null; patch: Partial<ConversationState> };
@@ -63,7 +63,7 @@ async function loadDocuments(accountId: string): Promise<Doc[]> {
   // query (r10 perf budget).
   const labels = documentLabels(rows.map((r) => ({ id: r.id, original_filename: r.file, product_name: r.product, insurer: r.insurer, document_role: r.role, policy_number: r.policy_number, created_at: r.created })), { describeUnnamed: true });
   return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", label: labels.get(r.id) ?? "Document", role: r.role, status: r.status, message: r.message,
-    failure: r.status === "failed" ? failedDocumentChatAdvice(r.error, { hasPages: !!r.pages }) : null, product: r.product && !isPlaceholderName(r.product) ? r.product : null, insurer: r.insurer, type: r.type, superseded: !!r.superseded,
+    failure: r.status === "failed" ? failedDocumentChatAdvice(r.error, { hasPages: !!r.pages }) : null, product: r.product && !isPlaceholderName(r.product) ? cleanTitle(r.product) : null, insurer: r.insurer, type: r.type, superseded: !!r.superseded,
     notes: Array.isArray(r.notes) ? (r.notes as unknown[]).map(String) : [], uploadedTo: r.uploaded_to, owners: r.owners?.length ? r.owners : [r.uploaded_to], created: r.created }));
 }
 async function pagesOf(accountId: string, ids: string[]): Promise<Map<string, { page: number; text: string }[]>> {
