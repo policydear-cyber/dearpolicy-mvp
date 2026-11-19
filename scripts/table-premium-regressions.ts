@@ -144,6 +144,24 @@ test("no household, insurer or product is written into the premium code", async 
   assert.doesNotMatch(code, /Singlife|Desmond|Charmaine|Comprehensive Critical|470\.85|376\.68/i);
 });
 
+test("a plan row that shares the page's first-year line but prints no start is part of that premium, never named as left out (live check #560)", () => {
+  // One critical-illness schedule page: the basic plan prints its start; the rider row carries the same first-year line and no start.
+  const note = "the page prints a different premium for the first policy year";
+  const plan = cover({ product: "Example Total CI Plan", cover: "Critical Illness Benefit", premium: 269.05, firstYearPremium: 376.68, premiumNote: note, startDate: "19/10/2026", premiumCurrency: undefined });
+  const rider = cover({ product: "Example Total CI Plan", cover: "Health Extra", premium: 201.8, firstYearPremium: 376.68, premiumNote: note, startDate: null, documentPeriodFrom: null, premiumCurrency: undefined });
+  const r = run([plan, rider]);
+  assert.deepEqual(r.items.map((i) => [i.amount, i.currency]), [[376.68, "SGD"]], "the first-year premium counted once");
+  assert.deepEqual(r.leftOut, [], "never also said to be left out");
+  assert.equal(r.items[0].detail, "first policy year", "no later figure that would leave the rider's own later premium out");
+  // Negative controls: a different first-year figure, or another page, is not that premium; alone it is still named.
+  assert.deepEqual(run([plan, cover({ ...rider, firstYearPremium: 90 })]).leftOut, [{ name: "Example Total CI Plan", why: "not_current" }]);
+  assert.deepEqual(run([plan, cover({ ...rider, source: { ...src("doc-a"), page: 2 } as never })]).leftOut, [{ name: "Example Total CI Plan", why: "not_current" }]);
+  assert.deepEqual(run([rider]).items, []);
+  assert.deepEqual(run([rider]).leftOut, [{ name: "Example Total CI Plan", why: "not_current" }]);
+  // Control: the plan alone keeps its later figure from the anniversary.
+  assert.equal(run([plan]).items[0].detail, "first policy year; S$269.05 monthly from 19 October 2027");
+});
+
 test("the first policy year starts at the policy start the premium's page labels, never an issue date", () => {
   const read = (text: string) => checkReading({ id: "d1", name: "s.pdf", readable: true, people: ["Lim Ah Kow"], pages: [{ page: 3, text }] },
     { document: { kind: "personal_proof", product: "Harbour CI", namedPeople: ["Lim Ah Kow"] }, covers: [{ page: 3, person: "Lim Ah Kow", product: "Harbour CI", cover: "Critical Illness Benefit", plan: null,

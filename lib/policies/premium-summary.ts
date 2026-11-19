@@ -280,6 +280,7 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
   // schedule's basic plan and rider each carried the page's first-year premium, and Home counted it twice). Grouped by
   // document, page, figure and currency; settled after the loop (sharedFirstYear).
   const firstYear = new Map<string, { item: PremiumItem; name: string; later: number; frequency: string; perYear: number; anniversary: number; number: string | null }[]>();
+  const noStart: { key: string; name: string }[] = [];
   for (const c of covers) {
     if (c.premium == null || !(c.premium > 0) || c.ended) continue;
     const documentId = c.source?.documentId;
@@ -306,6 +307,10 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
     let amount = c.premium, detail: string | null = null;
     if (c.premiumNote || c.firstYearPremium != null) {
       const start = printedDay(c.startDate ?? c.firstYearFrom ?? null);
+      // A plan row that carries the page's first-year line but prints no start of its own is part of that one first-year
+      // premium when another row of the same page counts it: settled after the loop, never named as left out while the
+      // same premium is in the total (live check #560: a rider row on a critical-illness schedule).
+      if (c.firstYearPremium != null && start == null) { noStart.push({ key: [documentId, page, c.firstYearPremium, currency].join("|"), name }); continue; }
       if (c.firstYearPremium == null || start == null) { leftOut.push({ name, why: "not_current" }); continue; }
       const next = new Date(start * 86_400_000); next.setUTCFullYear(next.getUTCFullYear() + 1);
       const anniversary = next.getTime() / 86_400_000;
@@ -340,6 +345,13 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
     for (const g of rest) dropped.add(g.item);
     head.item.detail = "first policy year; " + formatMoney(Math.round(group.reduce((x, g) => x + g.later, 0) * 100) / 100, head.item.currency!) + " "
       + head.frequency.toLowerCase() + " from " + longDate(isoOfDay(head.anniversary));
+  }
+  // A first-year line a row with no start shares: counted once by the row that has one. Its own premium from the second year
+  // is printed per plan with no start, so no later figure is said for the policy (it would leave that plan out).
+  for (const n of noStart) {
+    const counted = (firstYear.get(n.key) ?? []).find((g) => !dropped.has(g.item));
+    if (counted) counted.item.detail = "first policy year";
+    else leftOut.push({ name: n.name, why: "not_current" });
   }
   if (dropped.size) found.splice(0, found.length, ...found.filter((f) => !dropped.has(f.item)));
   // A policy two documents give a premium (by a number, or a name, that may be one): the one whose printed period starts
