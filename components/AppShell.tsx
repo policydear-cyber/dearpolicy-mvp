@@ -7,6 +7,7 @@ import { HouseholdCurrencyPrompt } from "@/components/household-currency-prompt"
 import { clearHouseholdDeviceMemory } from "@/components/device-memory";
 import { Icon, type IconName } from "@/components/icons";
 import PublicShell from "@/components/public/PublicShell";
+import { PlanBadge, PlanProvider } from "@/components/plan-status";
 import { isAppSection } from "@/lib/public-site/app-sections";
 
 
@@ -172,7 +173,10 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
   const publicThemeToggle = <ThemeToggle theme={theme} onToggle={toggleTheme} />;
   if (publicView) return <PublicShell onLearn={pathname.startsWith("/learn")} themeToggle={publicThemeToggle}>{children}</PublicShell>;
   if (authFrame) return <PublicShell onLearn={false} authPage themeToggle={publicThemeToggle}><title>{pageTitle}</title><div className="auth-frame">{children}</div></PublicShell>;
+  // The household's plan beside the light/dark switch (components/plan-status.tsx): household pages only.
+  const householdPage = !noNav && !reviewerArea && !operatorArea;
   return (
+    <PlanProvider enabled={householdPage}>
     <div className={`app-shell${noNav ? " no-nav" : ""}`}>
       <title>{pageTitle}</title>
       <aside className="sidebar">
@@ -209,7 +213,7 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
           </div>
         </>}
         <div className="sidebar-footer">
-          <div className="sidebar-controls"><ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <div className="sidebar-controls">{householdPage && <PlanBadge />}<ThemeToggle theme={theme} onToggle={toggleTheme} />
           {!signedOutPage && <SignOutButton />}</div>
           {unreachable && (
             <div className="service-fix" role="status">
@@ -225,15 +229,17 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
         <div className="mobile-bar">
           <Link href="/" aria-label="DearPolicy home"><img className="brand-logo" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} /></Link>
           <div className="mobile-bar-actions">
+            {householdPage && <PlanBadge />}
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
             {!signedOutPage && <SignOutButton />}
           </div>
         </div>
         {/* Household pages only; Account settings has its own currency section. */}
-        {!noNav && !reviewerArea && !operatorArea && pathname !== "/household" && <HouseholdCurrencyPrompt key={pathname} />}
+        {householdPage && pathname !== "/household" && <HouseholdCurrencyPrompt key={pathname} />}
         {children}
         {!noNav && <p className="trust-line mobile-privacy" data-testid="mobile-privacy"><Icon name="lock" />{hosted ? "Private to your household." : "Stays on this computer."}</p>}
       </main>
     </div>
+    </PlanProvider>
   );
 }

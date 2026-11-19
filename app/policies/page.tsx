@@ -7,7 +7,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { customerError } from "@/components/customer-text";
 import { coverReadingPending, failedDocumentAdvice, notReadPagesAdvice, readInPartAdvice, unreadablePagesAdvice } from "@/lib/documents/failure-advice";
-import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
+import { MAX_UPLOAD_LABEL, UploadError, uploadPolicyDocument } from "@/components/upload-document";
+import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
 import { CONFIRM_READ_AGAIN, documentReadLabel, pressReadAgain, readingFinishedSummary, readingWaitCopy } from "@/lib/documents/upload-problems";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
@@ -111,6 +112,9 @@ export default function PoliciesPage() {
   // An upload that failed or was refused is shown as an error, never in the
   // same box (and colour) as a successful one.
   const [statusIsError, setStatusIsError] = useState(false);
+  // The upload was refused at the plan's document limit: the owner is offered the way to upgrade under the message.
+  const [atDocumentLimit, setAtDocumentLimit] = useState(false);
+  const plan = usePlanStatus();
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -269,8 +273,11 @@ export default function PoliciesPage() {
       const finished = policies.filter((p) => wasActive.current.has(p.id));
       const summary = readingFinishedSummary(finished.length ? finished : policies, documentName);
       setStatusIsError(summary.problem);
+      setAtDocumentLimit(false);
       setStatus(summary.text);
       wasActive.current = new Set();
+      // A document that couldn't be read stops counting towards the plan.
+      if (plan.status?.upgrade) plan.refresh();
     }
     for (const p of policies) if (isProcessing(p)) wasActive.current.add(p.id);
     previousActiveCount.current = activeCount;
@@ -287,6 +294,7 @@ export default function PoliciesPage() {
     if (!file) return;
     setBusy(true);
     setStatusIsError(false);
+    setAtDocumentLimit(false);
     setStatus("Uploading document…");
     try {
       // Straight to secure storage (components/upload-document.ts): large
@@ -301,8 +309,10 @@ export default function PoliciesPage() {
       setPdfPassword("");
       if (fileInput.current) fileInput.current.value = "";
       await refresh();
+      if (plan.status?.upgrade) plan.refresh();
     } catch (err) {
       setStatusIsError(true);
+      setAtDocumentLimit(err instanceof UploadError && err.reasonCode === "PLAN_DOCUMENT_LIMIT");
       setStatus(customerError(err, "The upload did not go through. Please try again.").replace(/\s--\s/g, " — "));
     } finally {
       setBusy(false);
@@ -412,6 +422,7 @@ export default function PoliciesPage() {
       if (!response.ok) throw new Error(payload.error || "Could not delete document");
       setLibraryNotice(`Deleted ${label}. It is no longer used in answers, and Home has been updated.`);
       await refresh();
+      if (plan.status?.upgrade) plan.refresh();
     } catch (error) {
       setLibraryNotice(customerError(error, "Could not delete that document. Please try again in a moment."));
     } finally {
@@ -432,6 +443,8 @@ export default function PoliciesPage() {
 
   return <div className="page">
     <header className="page-header compact"><div><h1><span className="title-icon"><Icon name="documents"/></span>Your documents</h1><p className="lead">Any policy, certificate, schedule, renewal notice or receipt your insurer sent you.</p></div></header>
+    {/* An owner on Free sees how many of the plan's documents are kept, with one link to upgrade (components/plan-status.tsx). */}
+    <UpgradePrompt place="documents"/>
 
 
     {pollingPaused && <div className="processing-banner"><div><strong>Still reading in the background.</strong><small> This page stopped checking on its own after ten minutes. <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
@@ -461,7 +474,7 @@ export default function PoliciesPage() {
         <div className="field"><label htmlFor="up-profile">Who is this for? <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure: DearPolicy checks names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
         {file && isPdf(file) ? <div className="field"><label htmlFor="up-password">PDF password <span>(only if it asks for one)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required" aria-describedby="up-password-note"/><small id="up-password-note" className="field-note">Used only to read this file, and not stored.</small></div> : null}
         <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : <><Icon name="upload"/>Upload and read</>}</button>
-        {status && <div ref={statusBox} className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}</div>}
+        {status && <div ref={statusBox} className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}{statusIsError && atDocumentLimit && <> <UpgradeLink/></>}</div>}
       </form>}
     </section>
 

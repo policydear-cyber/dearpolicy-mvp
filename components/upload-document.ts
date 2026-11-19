@@ -23,7 +23,8 @@ export const MAX_UPLOAD_LABEL = "50 MB";
 const STORAGE_CONTENT_TYPE = "application/pdf";
 
 export class UploadError extends Error {
-  constructor(message: string, public status = 0) { super(message); }
+  /** The server's reason, when it gave one (for example PLAN_DOCUMENT_LIMIT), so the page can offer the way forward. */
+  constructor(message: string, public status = 0, public reasonCode: string | null = null) { super(message); }
 }
 
 type StartResponse =
@@ -37,7 +38,7 @@ async function json(response: Response): Promise<Record<string, unknown>> {
  * side's fixed copy for a server error or an answer that isn't ours (a gateway page), never a raw code
  * (lib/documents/upload-problems.ts). */
 function failure(step: UploadStep, status: number, body: Record<string, unknown> = {}) {
-  return new UploadError(uploadFailureMessage(step, { status, serverMessage: typeof body.error === "string" ? body.error : null }), status);
+  return new UploadError(uploadFailureMessage(step, { status, serverMessage: typeof body.error === "string" ? body.error : null }), status, typeof body.reasonCode === "string" ? body.reasonCode : null);
 }
 /** fetch, with a dropped connection (the browser's own "Failed to fetch", "Load failed", "NetworkError…") said plainly. */
 async function send(step: UploadStep, url: string, init: RequestInit): Promise<Response> {

@@ -24,6 +24,7 @@ import { LearnLinks } from "@/components/learn-links";
 import { sendFailure } from "@/components/chat-send-failure";
 import { applyReplaced,type ReplacedAnswer } from "@/lib/chat/replaced-live";
 import { COVER_NOTE } from "@/lib/chat/cover-note";
+import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
  * uncertainty, and one next question or action. Internal working -- what the
@@ -120,6 +121,8 @@ function ChatWelcome({library}:{library:Library|null}){
 
 function ChatContent(){
   const params=useSearchParams();
+  // The month's question count for Ask's upgrade line (owner on Free only), read again after each question.
+  const planStatus=usePlanStatus();
   const [family,setFamily]=useState<Member[]>([]);
   const [memberId,setMemberId]=useState(params.get("member")??"");
   // The home page's ask box opens a new chat with its question in the box, ready to send (not sent for them).
@@ -311,7 +314,7 @@ function ChatContent(){
         setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message,conflict,noFamily,planLimit,stopped,restored}:m));
       }
     }
-    finally{if(version===requestVersion.current){jobId.current=null;setBusy(false);controller.current=null;}}
+    finally{if(version===requestVersion.current){jobId.current=null;setBusy(false);controller.current=null;}if(planStatus.status?.upgrade)planStatus.refresh();}
   }
   async function removeChat(id:string){
     // Inline arm-then-confirm avoids window.confirm()'s tab-freezing blocking
@@ -382,6 +385,9 @@ function ChatContent(){
       {/* Who the chat is about shows once someone is chosen; until then the welcome says to name who. */}
       <div className="chat-head-actions">{active?<div className="auto-context"><strong><Icon name="person"/> Asking about {active.display_name}</strong><span>Mention someone else to switch.</span></div>:null}<button className="button secondary compact" onClick={reset}><Icon name="plus"/>New chat</button></div>
     </header>
+    {/* From 8 of the month's questions, an owner on Free sees one upgrade line here, above the chat, where the sticky
+        box never covers it (components/plan-status.tsx). */}
+    <UpgradePrompt place="ask"/>
     {/* A first-time user has no previous chats: the empty panel is left out rather than shown as "Previous chats · 0". */}
     {history.length||historyCursor?<details className="chat-history"><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
       <div className="history-actions"><button className={`mini-button${confirmClearHistory?" danger armed":""}`} disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm delete all":"Delete all chats"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>
@@ -493,7 +499,7 @@ function ChatContent(){
           {message.role==="assistant"&&message.answer&&!isStopped(message.answer,message.content)?<LearnLinks texts={[message.content.replace(COVER_NOTE," "),...(message.answer.details??[]),...(message.answer.claimItems??[]).flatMap(item=>[item.reason,...(item.conditions??[])])]}/>:null}
         </div>
         {message.error?(message.planLimit
-          ?<div className="alert message-inline-error" role="alert" data-testid="chat-plan-limit"><strong>Not sent.</strong><span> {message.error}</span><Link className="mini-button" href="/usage">See plans</Link></div>
+          ?<div className="alert message-inline-error" role="alert" data-testid="chat-plan-limit"><strong>Not sent.</strong><span> {message.error}</span><UpgradeLink/></div>
           :message.noFamily
           ?<div className="alert error message-inline-error" role="alert" data-testid="chat-no-family"><strong>Not sent.</strong><span> {message.error}</span><Link className="mini-button" href="/family">Add family members</Link></div>
           :message.conflict
