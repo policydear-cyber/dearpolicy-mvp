@@ -2028,3 +2028,11 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 @media (max-width: 360px) { .admin-kpis { grid-template-columns: minmax(0, 1fr); } }
 .admin-subhead { font-size: var(--fs-md); margin: 20px 0 10px; }
 @media (min-width: 1000px) { .admin-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* Premiums: each person's total, the first thing under their name. */
+.premium-person-total { display: grid; gap: 6px; margin: 0 0 12px; padding: 14px 16px; border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--accent-tint); }
+.premium-person-figures { display: flex; flex-wrap: wrap; gap: 8px 32px; }
+.premium-person-figures > div { display: grid; gap: 2px; min-width: 0; }
+.premium-person-figures small { font-size: var(--fs-xs); color: var(--ink-2); font-weight: 650; }
+.premium-person-figures strong { font-size: var(--fs-2xl); font-weight: 650; letter-spacing: -.02em; color: var(--money); font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
+.premium-person-total p { margin: 0; font-size: var(--fs-xs); color: var(--ink-2); line-height: 1.45; }
