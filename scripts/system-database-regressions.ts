@@ -1489,7 +1489,7 @@ async function main(){
         body:JSON.stringify({policyId:uuid(709000+i)})}))).status);
       assert.deepEqual(statuses.slice(0,120),Array(120).fill(404),"Within the allowance the request is handled (an unknown document is not found), and refused presses never use up the 20 paid reads");
       assert.equal(statuses[120],429,"The 121st press in an hour is refused");
-      const paid=await db.query("SELECT count(*)::int AS n FROM rate_limit_buckets WHERE limiter_name='policy-reprocess'");
+      const paid=await db.query<{n:number}>("SELECT count(*)::int AS n FROM rate_limit_buckets WHERE limiter_name='policy-reprocess'");
       assert.equal(paid.rows[0].n,0,"No paid read was counted for a document that was not found");
       await db.query("DELETE FROM rate_limit_buckets WHERE limiter_name IN ('policy-reprocess','policy-reprocess-press')");
     });
