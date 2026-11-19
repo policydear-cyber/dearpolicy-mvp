@@ -9,7 +9,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { documentsByPerson, isGroupGuide, type PersonDocument } from "@/lib/chat/household-status";
 import { documentName } from "@/lib/policies/document-name";
-import { householdDocumentLabels } from "@/lib/policies/household-labels";
+import { householdDocumentNames } from "@/lib/policies/household-labels";
 import { evidenceAt, type EvidenceRef } from "./evidence";
 import { loadDocs, loadMembers, loadPages } from "./store";
 
@@ -45,7 +45,7 @@ export async function householdDocuments(accountId: string): Promise<Inventory> 
   const all = [...[...byPerson.values()].flat().filter((d) => d.status === "ready").map((d) => d.id), ...unlinkedRows.filter((r) => r.processing_status === "ready").map((r) => r.id)];
   const pages = all.length ? await loadPages(accountId, [...new Set(all)], [1]) : [];
   const hashes = new Map((await loadDocs(accountId)).map((d) => [d.id, d.fileHash]));
-  const labels = await householdDocumentLabels(accountId);
+  const { labels, titles } = await householdDocumentNames(accountId);
   const titleOf = (policyId: string): EvidenceRef | null => {
     const page = pages.find((p) => p.policyId === policyId && p.page === 1);
     if (!page) return null;
@@ -53,11 +53,11 @@ export async function householdDocuments(accountId: string): Promise<Inventory> 
     return m ? evidenceAt({ policyId, documentHash: hashes.get(policyId) ?? null, page: 1, pageText: page.text, start: m.index, end: m.index + m[0].length }) : null;
   };
   const kindOf = (d: PersonDocument): InventoryDoc["kind"] => (d.confirmed ? "personal" : isGroupGuide(d) ? "reference" : "linked_unconfirmed");
-  const toDoc = (d: PersonDocument): InventoryDoc => ({ policyId: d.id, name: d.name, insurer: d.insurer ?? null, label: labels.get(d.id) ?? d.label ?? d.name, role: d.role, kind: kindOf(d), readable: d.status,
+  const toDoc = (d: PersonDocument): InventoryDoc => ({ policyId: d.id, name: titles.get(d.id) ?? d.label ?? d.name, insurer: d.insurer ?? null, label: labels.get(d.id) ?? d.label ?? d.name, role: d.role, kind: kindOf(d), readable: d.status,
     reason: d.status === "password" ? UNREADABLE_WHY.password : d.status === "unreadable" ? UNREADABLE_WHY[d.reason ?? "unknown"] ?? UNREADABLE_WHY.unknown : d.status === "processing" ? "it is still being read" : null, evidence: d.status === "ready" ? titleOf(d.id) : null });
   return {
     people: members.map((m) => ({ id: m.id, name: m.displayName, short: m.preferredName?.trim() || m.displayName.split(/\s+/)[0], documents: (byPerson.get(m.id) ?? []).map(toDoc) })),
-    unlinked: unlinkedRows.map((r) => ({ policyId: r.id, name: documentName(r), insurer: r.insurer?.trim() || null, label: labels.get(r.id) ?? documentName(r), role: r.document_role, kind: "unlinked" as const,
+    unlinked: unlinkedRows.map((r) => ({ policyId: r.id, name: titles.get(r.id) ?? documentName(r), insurer: r.insurer?.trim() || null, label: labels.get(r.id) ?? documentName(r), role: r.document_role, kind: "unlinked" as const,
       readable: r.processing_status === "ready" ? "ready" as const : r.processing_status === "failed" ? "unreadable" as const : "processing" as const, reason: null, evidence: r.processing_status === "ready" ? titleOf(r.id) : null })),
   };
 }

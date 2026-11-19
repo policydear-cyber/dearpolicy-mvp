@@ -43,3 +43,12 @@ the fixture was seeded.
 
 Earlier saved grade files for past live runs are left as they were recorded. A past run's answer that showed a file name
 would now fail these checks, as intended.
+
+## Tightened after review (TE #564 F2, F3)
+
+- A text that shows a document's file name never counts as naming that document. For a nameless upload, its file
+  name's stem counts too, in any case ("IMG_0042", "img_0042.JPG"). So "Photo of letter.jpg could not be read" and
+  "Photo uploaded 3 Nov 2026 (IMG_0042.jpg)" now fail C1 and C3, where before this change they passed.
+- A nameless upload must be said with its own format word ("Photo" for a .jpg, never "PDF") and with the exact casing.
+  Only the day is open, because it depends on when the fixture was seeded.
+- livelib-check S52C now needs the "could not be read" status on the same line as the photo, as pr50-check C3 already did.

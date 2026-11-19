@@ -14,7 +14,7 @@ import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
 import * as P from "./fixtures/rag2-pr50/household";
 import type { ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
-import { namesDocument } from "./rag2-live/spoken-name";
+import { namesDocument, showsFileName } from "./rag2-live/spoken-name";
 
 const HOUSEHOLD = P as unknown as Parameters<typeof startHarness>[0];
 setEnv(HOUSEHOLD);
@@ -234,7 +234,8 @@ async function main() {
   const peopleOf = (v: ScriptView) => (([...v.turn].reverse().find((x) => x.name === "household_documents")?.result?.data ?? {}) as any);
   // the live model named every readable document itself (the travel insurer's two by their file names) and wrote its own
   // unreadable-file sentence citing a readable document's evidence
-  const modelLines = (v: ScriptView) => { const d = peopleOf(v); const ppl = (d.people ?? []) as any[]; const unl = (d.unlinked ?? []) as any[];
+  let inventoryJson = "";
+  const modelLines = (v: ScriptView) => { const d = peopleOf(v); inventoryJson = JSON.stringify(d); const ppl = (d.people ?? []) as any[]; const unl = (d.unlinked ?? []) as any[];
     const ev = ppl.flatMap((p) => (p.documents as any[]).map((x) => x.evidence?.evidence_id)).filter(Boolean);
     return [
       ...ppl.filter((p) => p.documents.length).map((p: any) => ({ text: `${p.short}: ${(p.documents as any[]).map((x) => `${x.name} (${x.insurer}${x.kind === "personal" ? ", personal certificate" : ", reference wording"})`).join("; ")}.`, evidence_ids: (p.documents as any[]).map((x) => x.evidence?.evidence_id).filter(Boolean) })),
@@ -257,6 +258,12 @@ async function main() {
     for (const k of ["TRAVEL_WORDING", "TRAVEL_SUMMARY"]) { const d = P.doc(k); const line = x.v.split("\n").find((l) => shownIn(d, l)) ?? ""; assert.ok(!/personal (?:policy document|certificate)/.test(line.split(";").find((s) => shownIn(d, s)) ?? ""), line); }
     for (const d of P.DOCS) if (d.filename) assert.ok(!x.v.includes(d.filename), `file name shown: ${d.filename}\n${x.v}`);
     assert.ok((x.answer.citations ?? []).length > 0);
+  });
+  // TE #564 F1: what the model is given (household_documents) carries no file name and no stem of a nameless upload's file
+  // name, so neither the model nor the output guard's library-name exemption can bring one back.
+  await check(`C0 [${NAMES}] the household_documents result the model reads holds no file name (nor a nameless upload's stem)`, () => {
+    assert.ok(inventoryJson.length > 2, "the inventory was read");
+    for (const d of P.DOCS) assert.ok(!showsFileName(d, inventoryJson), `${d.key} file name in the inventory: ${inventoryJson}`);
   });
   // Negative control for the output-guard repair: only the household's own library names are protected.
   await check(`G [${NAMES}] the output guard still drops an internal identifier or id that is not one of the answer's library names`, async () => {
