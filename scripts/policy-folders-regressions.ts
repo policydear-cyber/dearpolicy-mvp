@@ -432,6 +432,20 @@ async function main() {
     const [f] = (await folders.listFolders(A)).filter((x) => x.replacements.some((r) => r.by === copy));
     assert.ok(f, "the old folder offers the copy");
   });
+  await test("AU11 a third copy of a filed schedule whose second copy was never added: no second folder; the folder offers the newest", async () => {
+    asUser(ownerA);
+    const v1 = id("f9800000", 30), v2 = id("f9800000", 31), v3 = id("f9800000", 32);
+    const ins = (pid: string, prev: string | null) => pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,processing_status,original_filename,storage_key,file_hash,quarantine_status,supersedes_id)
+      VALUES($1,$2,$3,'Example Life','Chain Shield','personal_schedule','ready','v.pdf','k',$4,'scan_clean',$5)`, [pid, A, jane, "sha256:" + pid, prev]);
+    await ins(v1, null);
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: v1, people: [jane], documents: [{ policyId: v1, slot: "schedule" }] }] }))).json()).made, 1);
+    await ins(v2, v1); await pool.query("UPDATE policies SET superseded_at=now() WHERE id=$1", [v1]);
+    await ins(v3, v2); await pool.query("UPDATE policies SET superseded_at=now() WHERE id=$1", [v2]);
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: v3, people: [jane], documents: [{ policyId: v3, slot: "schedule" }] }] }))).json()).made, 0);
+    assert.deepEqual(await folderWith(v3), []);
+    const offers = (await folders.listFolders(A)).flatMap((f) => f.replacements.filter((r) => r.policyId === v1));
+    assert.deepEqual(offers.map((r) => r.by), [v3], "v1's folder offers v3, once");
+  });
   await test("AU8 the database itself refuses a record naming another household's document; browsers can only read their own", async () => {
     await assert.rejects(pool.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2)", [bDoc, A]), /another household/);
     const asBrowser = async <T>(userId: string, fn: () => Promise<T>) => serial(async () => {

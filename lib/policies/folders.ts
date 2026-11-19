@@ -60,14 +60,24 @@ export async function listFolders(accountId: string): Promise<PolicyFolder[]> {
          JOIN policies p ON p.id=fd.policy_id AND p.account_id=fd.account_id AND p.lifecycle_state='active' AND p.superseded_at IS NULL
         WHERE fd.account_id=$1 AND fd.folder_id = ANY($2::uuid[]) ORDER BY fd.created_at, fd.policy_id`, [accountId, ids]),
   ]);
-  // Documents in a folder that a newer copy has replaced since, with that copy when it is in the library.
+  // Documents in a folder that a newer copy has replaced since, with the newest copy in the library: followed through every
+  // copy (v1 -> v2 -> v3), so a folder whose v2 was never added still offers v3. A document whose later copy is already in
+  // the folder offers nothing itself; that copy's own row does.
   const replaced = await query<{ folder_id: string; account_id: string; policy_id: string; slot: FolderSlot | null; by: string }>(
-    `SELECT fd.folder_id, fd.account_id, fd.policy_id, fd.slot, n.id AS by FROM policy_folder_documents fd
-       JOIN policies p ON p.id=fd.policy_id AND p.account_id=fd.account_id AND p.lifecycle_state='active' AND p.superseded_at IS NOT NULL
-       JOIN policies n ON n.supersedes_id=p.id AND n.account_id=fd.account_id AND n.lifecycle_state='active' AND n.superseded_at IS NULL
-      WHERE fd.account_id=$1 AND fd.folder_id = ANY($2::uuid[])
-        AND NOT EXISTS (SELECT 1 FROM policy_folder_documents x WHERE x.folder_id=fd.folder_id AND x.policy_id=n.id)
-      ORDER BY fd.created_at, fd.policy_id`, [accountId, ids]);
+    `WITH RECURSIVE chain(folder_id, account_id, start_id, slot, created_at, id, depth) AS (
+       SELECT fd.folder_id, fd.account_id, fd.policy_id, fd.slot, fd.created_at, fd.policy_id, 0 FROM policy_folder_documents fd
+         JOIN policies p ON p.id=fd.policy_id AND p.account_id=fd.account_id AND p.lifecycle_state='active' AND p.superseded_at IS NOT NULL
+        WHERE fd.account_id=$1 AND fd.folder_id = ANY($2::uuid[])
+       UNION ALL
+       SELECT c.folder_id, c.account_id, c.start_id, c.slot, c.created_at, n.id, c.depth + 1 FROM chain c
+         JOIN policies n ON n.supersedes_id=c.id AND n.account_id=c.account_id AND n.lifecycle_state='active'
+        WHERE c.depth < 20)
+     SELECT c.folder_id, c.account_id, c.start_id AS policy_id, c.slot, c.id AS by FROM chain c
+       JOIN policies n ON n.id=c.id AND n.account_id=c.account_id AND n.lifecycle_state='active' AND n.superseded_at IS NULL
+      WHERE c.depth > 0
+        AND NOT EXISTS (SELECT 1 FROM chain y JOIN policy_folder_documents x ON x.folder_id=y.folder_id AND x.policy_id=y.id
+                         WHERE y.folder_id=c.folder_id AND y.start_id=c.start_id AND y.depth > 0)
+      ORDER BY c.created_at, c.start_id`, [accountId, ids]);
   for (const row of [...folders.rows, ...people.rows, ...documents.rows, ...replaced.rows])
     if (String(row.account_id) !== accountId) throw new Error("A folder row from another household was returned");
   return folders.rows.map((f) => ({
@@ -233,10 +243,15 @@ export async function handledDocuments(accountId: string): Promise<string[]> {
   return r.rows.map((x) => String(x.policy_id));
 }
 
-/** Whether a document is in a folder, or is a newer copy of one that is. */
+/** Whether a document is in a folder, or is a newer copy of one that is, however many copies back (v3 of a filed v1 whose
+ * v2 was never added counts as filed). */
 async function filedOrCopyOfFiled(tx: Tx, accountId: string, policyId: string): Promise<boolean> {
-  const r = await tx.query(`SELECT 1 FROM policy_folder_documents fd WHERE fd.account_id=$1 AND (fd.policy_id=$2 OR fd.policy_id =
-      (SELECT n.supersedes_id FROM policies n WHERE n.id=$2 AND n.account_id=$1 AND ${activePredicate("n")})) LIMIT 1`, [accountId, policyId]);
+  const r = await tx.query(`WITH RECURSIVE back(id, depth) AS (
+      SELECT $2::uuid, 0
+      UNION ALL
+      SELECT n.supersedes_id, b.depth + 1 FROM back b JOIN policies n ON n.id=b.id AND n.account_id=$1 AND ${activePredicate("n")}
+       WHERE n.supersedes_id IS NOT NULL AND b.depth < 20)
+    SELECT 1 FROM policy_folder_documents fd WHERE fd.account_id=$1 AND fd.policy_id IN (SELECT id FROM back) LIMIT 1`, [accountId, policyId]);
   return r.rows.length > 0;
 }
 
