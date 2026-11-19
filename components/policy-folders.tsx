@@ -215,12 +215,21 @@ function SlotPicker({ slot, files, onChange }: { slot: FolderSlot; files: File[]
 function OnFile({ documents, skip, chosen, onChange, name, folders, title }: { documents: FolderPageDoc[]; skip: Set<string>; chosen: string[]; onChange: (ids: string[]) => void; name: (d: FolderPageDoc) => string; folders?: FolderView[]; title?: (f: FolderView) => string }) {
   const list = documents.filter((d) => !skip.has(d.id));
   if (!list.length) return null;
+  // Two documents of one product read apart by what each is ("Harbour Term · Policy wording"), then by the policy number's
+  // last four, never by a file name (TE #559 L1).
+  const withKind = (d: FolderPageDoc) => { const n = name(d), k = kindLabel(null, d); return k !== "Document" && !n.toLowerCase().includes(k.toLowerCase()) ? `${n} · ${k}` : n; };
+  const counts = new Map<string, number>();
+  for (const d of list) counts.set(withKind(d), (counts.get(withKind(d)) ?? 0) + 1);
+  const label = (d: FolderPageDoc) => {
+    const l = withKind(d), digits = (d.policy_number ?? "").replace(/[^a-z0-9]/gi, "");
+    return (counts.get(l) ?? 0) > 1 && /\d/.test(digits) && !l.includes(`ending ${digits.slice(-4)}`) ? `${l} (ending ${digits.slice(-4)})` : l;
+  };
   return <fieldset className="field folder-onfile" data-testid="folder-onfile">
     <legend>Already on file</legend>
     {list.map((d) => {
       const inFolders = (folders ?? []).filter((f) => f.documents.some((x) => x.policyId === d.id));
       return <label key={d.id} className="folder-check"><input type="checkbox" checked={chosen.includes(d.id)} onChange={(e) => onChange(e.target.checked ? [...chosen, d.id] : chosen.filter((x) => x !== d.id))}/>
-        <span>{name(d)}{inFolders.length && title ? <small className="muted"> · in {inFolders.map(title).join(", ")}</small> : null}</span></label>;
+        <span>{label(d)}{inFolders.length && title ? <small className="muted"> · in {inFolders.map(title).join(", ")}</small> : null}</span></label>;
     })}
   </fieldset>;
 }
