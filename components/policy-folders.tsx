@@ -163,7 +163,7 @@ function Folder({ folder, title, allFolders, titleOf, docs, documents, family, n
   };
   const forWhom = folder.people.map((p) => p.name).join(", ");
   const docName = (id: string) => { const d = docs.get(id); return d ? withFile(d, name) : "this document"; };
-  return <div className={`document-card policy-folder${folder.complete ? "" : " unfinished"}`} data-testid="policy-folder" data-folder-id={folder.id}>
+  return <div className={`folder-card policy-folder${folder.complete ? "" : " unfinished"}`} data-testid="policy-folder" data-folder-id={folder.id}>
     <div className="document-head">
       <div className="policy-logo"><Icon name="folder"/></div>
       <div className="document-title"><strong>{title}</strong><span>{forWhom ? `For ${forWhom}` : "Not linked to anyone yet"}</span></div>
