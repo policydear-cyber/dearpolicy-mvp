@@ -1482,12 +1482,16 @@ async function main(){
     await test("Reading documents again is limited per household",async()=>{
       // Critic R67-2 (PR #87): each re-read is a full paid reading.
       await db.exec(await readFile(path.resolve("sql/rate-limit.sql"),"utf8"));
+      // #565: every press is bounded (120 an hour: each fetches and checks the stored file); the 20 paid reads an hour are
+      // counted only once a read can start, so a refused press (here: an unknown document) never uses one up.
       const statuses:number[]=[];
-      for(let i=0;i<21;i++)statuses.push((await reprocessPolicy(new NextRequest("http://localhost/api/policies/reprocess",{method:"POST",headers:{"content-type":"application/json"},
+      for(let i=0;i<121;i++)statuses.push((await reprocessPolicy(new NextRequest("http://localhost/api/policies/reprocess",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({policyId:uuid(709000+i)})}))).status);
-      assert.deepEqual(statuses.slice(0,20),Array(20).fill(404),"Within the allowance the request is handled (an unknown document is not found)");
-      assert.equal(statuses[20],429,"The 21st in an hour is refused");
-      await db.query("DELETE FROM rate_limit_buckets WHERE limiter_name='policy-reprocess'");
+      assert.deepEqual(statuses.slice(0,120),Array(120).fill(404),"Within the allowance the request is handled (an unknown document is not found), and refused presses never use up the 20 paid reads");
+      assert.equal(statuses[120],429,"The 121st press in an hour is refused");
+      const paid=await db.query("SELECT count(*)::int AS n FROM rate_limit_buckets WHERE limiter_name='policy-reprocess'");
+      assert.equal(paid.rows[0].n,0,"No paid read was counted for a document that was not found");
+      await db.query("DELETE FROM rate_limit_buckets WHERE limiter_name IN ('policy-reprocess','policy-reprocess-press')");
     });
     await test("A removal survives the document being read again, and ticking the person again restores their cover",async()=>{
       const [daniel,grace]=[people[0].id,people[1].id];
