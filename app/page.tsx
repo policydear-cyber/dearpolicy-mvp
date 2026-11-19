@@ -7,6 +7,7 @@ import { HomeNotFound, homeGaps } from "@/components/home-not-found";
 import { homeView } from "@/lib/format/home-view";
 import { Icon, coverCard, coverIcon, type IconName } from "@/components/icons";
 import { homeCardSource, homeGridColumns } from "@/lib/coverage/home-card";
+import { UpgradePrompt } from "@/components/plan-status";
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 type Coverage={category:string;status:"covered"|"on_file"|"not_covered";reviewRequired:boolean;amount:number|null;displayAmount:string|null;currency:string|null;count:number;policyNames:string[];sources?:string[];derived:boolean;parts?:TilePart[]|null;known?:KnownSum|null;planNote?:string|null;onFileDocuments?:string[]};
@@ -111,6 +112,8 @@ export default function DashboardPage(){
     <div className="declare-owner">{data.family.map(m=><button key={m.id} type="button" className="button secondary" disabled={claiming===doc.id} onClick={()=>void claim(doc.id,m.id)}>{m.display_name}</button>)}</div>
    </div>)}</div></section>}
   {returning&&<HomeAttention/>}
+  {/* One short upgrade line for an owner on Free, after what the household came for (components/plan-status.tsx). */}
+  {returning&&<UpgradePrompt place="home"/>}
   </>}
   {/* Phone: Ask stays one tap away, but steps aside while Home's own ask box is on screen, and an empty household has
       nothing to ask about yet (its first step is to add people or upload), so the button never covers that box or a step. */}
