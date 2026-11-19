@@ -1376,7 +1376,13 @@ div.answer-point { display: grid; gap: 4px; }
 .home-date-chip.unresolved { background: var(--unresolved-tint); color: var(--unresolved-text); border: 1px dashed var(--unresolved-line); }
 .home-date.renewal_due { padding: 12px; border: 1px solid var(--warn-line); border-radius: var(--r-sm); background: var(--warn-tint); }
 .home-date.renewal_due p { color: var(--warn-text); }
-.home-date-upload { justify-self: start; margin-top: 4px; }
+.home-date-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 4px; }
+.home-date-link { background: none; border: 0; padding: 6px 0; min-height: 44px; font: inherit; font-size: var(--fs-sm); color: var(--brand-ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.home-date-link:disabled { color: var(--muted); cursor: default; }
+.home-date-link:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 4px; }
+.home-date-chip.info { background: var(--info-tint); color: var(--info-text); border: 1px solid var(--info-line); }
+.home-date.not_renewed p { color: var(--muted); }
+.home-dates-error { margin: 0; font-size: var(--fs-sm); color: var(--critical); }
 .home-gap-list { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .home-gap { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--edge); border-radius: 999px; background: var(--surface); color: var(--ink); font-size: var(--fs-sm); font-weight: 600; }
 .home-gap:hover { border-color: var(--brand-ink); }

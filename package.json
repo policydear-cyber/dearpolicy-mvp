@@ -202,6 +202,7 @@
     "format:printed-number-test": "node --import tsx scripts/format/printed-number-test.ts",
     "coverage:home-card-test": "node --import tsx scripts/coverage/home-card-test.ts",
     "policies:dates-test": "node --import tsx scripts/policies/policy-dates-test.ts",
+    "policies:not-renewed-test": "node --import tsx scripts/policy-not-renewed-regressions.ts",
     "coverage:cover-summary-test": "node --import tsx scripts/coverage/cover-summary-test.ts",
     "coverage:line-benefit-test": "node --import tsx scripts/coverage/line-benefit-test.ts",
     "format:home-not-found-test": "node --import tsx scripts/format/home-not-found-test.ts",

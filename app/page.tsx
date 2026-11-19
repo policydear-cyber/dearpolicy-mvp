@@ -101,7 +101,7 @@ export default function DashboardPage(){
         so a gap is never shown for a document DearPolicy has not finished. Never "not covered". */}
     {!loading&&!personEmpty&&covered.length>0&&!data?.reading&&<HomeNotFound {...homeGaps(data?.coverages??[],active?.relationship)} memberId={active?.id??""} name={name} note={data?.notFullyRead} pending={data?.gapsPending===true}/>}
     {/* When each policy ends, as printed; a passed date asks for proof of renewal (DC 19 Nov). */}
-    {!loading&&!personEmpty&&returning&&<HomePolicyDates memberId={active?.id}/>}
+    {!loading&&!personEmpty&&returning&&<HomePolicyDates memberId={active?.id} onChanged={()=>void load(want.current,true)}/>}
    </section>
    <HomeAsk memberId={active?.id} name={name}/>
   </div>

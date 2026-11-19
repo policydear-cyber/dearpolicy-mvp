@@ -30,6 +30,9 @@ export type HouseholdDocument = {
   /** Linked people whose only link is DearPolicy's match by plan (scheme_reference_match), not the household's or the reading's. */
   matchedOnly?: string[];
   supersededAt: string | null;
+  /** Set when the household said it did not renew this policy after its printed end date (Home's Policy dates,
+   * lib/policies/not-renewed.ts): "not renewed after 4 Oct 2026". The household's own statement, never an insurer's. */
+  householdSaid?: string | null;
   /** The app's reading status, e.g. "ready" or "failed". */
   processingStatus?: string | null;
   /** The upload's safety-scan status (sql/schema.sql quarantine_status), when read: a rejected upload is never read. */
@@ -204,7 +207,20 @@ export async function loadHousehold(accountId: string): Promise<Household> {
   const notExcluded = await notExcludedClause("pm.account_id", "pm.policy_id", "pm.family_member_id");
   const { malwareScanningIntentionallyDisabled } = await import("@/lib/scanning/adapter");
   const { foldersReady } = await import("@/lib/policies/folders");
-  return readHousehold(accountId, async (sql, params) => (await query(sql, params)).rows, notExcluded, malwareScanningIntentionallyDisabled(), await foldersReady());
+  const household = await readHousehold(accountId, async (sql, params) => (await query(sql, params)).rows, notExcluded, malwareScanningIntentionallyDisabled(), await foldersReady());
+  // A policy the household said it did not renew after its printed end date: its documents say so (prompt rule).
+  try {
+    const { notRenewedRows } = await import("@/lib/policies/not-renewed");
+    const members = [...new Set((await notRenewedRows(accountId)).map((r) => r.family_member_id))];
+    if (members.length) {
+      const { loadPolicyDates } = await import("@/lib/policies/policy-dates-load");
+      const said = new Map<string, string>();
+      for (const member of members) for (const p of (await loadPolicyDates(accountId, member)).policies)
+        if (p.state === "not_renewed" && p.endsText) for (const id of p.documentIds) said.set(id, `not renewed after ${p.endsText}`);
+      for (const d of household.documents) d.householdSaid = said.get(d.policyId) ?? null;
+    }
+  } catch (error) { console.warn("Not-renewed answers unavailable for the chat:", error instanceof Error ? error.message : error); }
+  return household;
 }
 
 /** Uploaded text is data: < and > are escaped so a page cannot close or open a document tag (R36-4). */
@@ -297,6 +313,7 @@ export function renderDocument(doc: HouseholdDocument, index: number, pagesSent?
     attr("type", doc.documentType) + attr("role", doc.documentRole) + attr("effective", doc.effectiveDate) +
     attr("expiry_or_renewal", doc.expiryDate) + attr("uploaded", doc.uploadedAt) + attr("uploaded_for", doc.uploadedFor) +
     attr("linked_people", doc.linkedPeople.length ? doc.linkedPeople.join(", ") : LINKED_TO_NOBODY) + attr("superseded", doc.supersededAt) +
+    attr("household_said", doc.householdSaid ? `${doc.householdSaid}, as the household told DearPolicy` : null) +
     (stillReading(doc) ? attr("reading_status", `${STILL_READING} (${doc.processingStatus})`)
       : onHold(doc) ? attr("reading_status", `${onHoldWords(doc)}, so it is not being read yet${doc.holdLabel ? ` (${doc.holdLabel})` : ""}`)
       : unreadable(doc) ? attr("reading_status", `${NOT_READABLE} (${doc.processingStatus})`) : attr("reading_status", readInPart(doc))) +

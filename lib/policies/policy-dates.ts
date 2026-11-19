@@ -43,9 +43,13 @@ export type DatedCover = { documentId: string; name: string; startDate: string |
 export type PaymentRecord = { policy_id: string | null; source_document_id: string | null; family_member_id: string | null; insurer: string | null; policy_number: string | null;
   payment_date: string | null; period_start: string | null; period_end: string | null; created_at: string | null };
 
-export type PolicyDateState = "until" | "ends_soon" | "renewal_due" | "renewed" | "no_date";
+/** not_renewed: the household said it did not renew the policy after its printed end date (lib/policies/not-renewed.ts):
+ * their own statement, shown as theirs, and taken back with Undo. */
+export type PolicyDateState = "until" | "ends_soon" | "renewal_due" | "renewed" | "no_date" | "not_renewed";
 export type PolicyDate = {
   key: string; name: string; insurer: string | null; state: PolicyDateState;
+  /** The policy's own documents (its schedule, certificate or newer copies). */
+  documentIds: string[];
   /** The last printed end date of the policy's covers (ISO), and its document and page. */
   endsOn: string | null; endsText: string | null; source: { documentId: string; page: number | null } | null;
   /** Days from today to endsOn (negative once it has passed). */
@@ -93,7 +97,9 @@ export function renewalAfter(rows: PaymentRecord[], endDay: number): PaymentReco
 }
 
 /** The dates of one policy. `today` is a day count in Singapore (lib/benefit-table/dates.ts singaporeDay). */
-export function policyDates(contract: DatedContract, covers: DatedCover[], payments: PaymentRecord[], today: number): PolicyDate {
+/** `notRenewed` holds the household's "I didn't renew it" answers (lib/policies/not-renewed.ts notRenewedKey): one counts only
+ * for the same policy and the same printed end date, and only while no renewal evidence after that date is on file. */
+export function policyDates(contract: DatedContract, covers: DatedCover[], payments: PaymentRecord[], today: number, notRenewed?: ReadonlySet<string>): PolicyDate {
   const ids = new Set(contract.documents.map((d) => d.id));
   const own = covers.filter((c) => ids.has(c.documentId));
   type End = { day: number; name: string; documentId: string; page: number | null };
@@ -102,7 +108,7 @@ export function policyDates(contract: DatedContract, covers: DatedCover[], payme
   if (!ends.length) for (const d of contract.documents) { const day = dayOf(d.renewal_or_expiry_date); if (day != null) ends.push({ day, name: contract.name, documentId: d.id, page: null }); }
   const starts = [...own.map((c) => dayOf(c.startDate)), ...contract.documents.map((d) => dayOf(d.effective_date))].filter((d): d is number => d != null);
   const startedOn = starts.length ? isoOf(Math.min(...starts)) : null;
-  const base = { key: contract.id, name: contract.name, insurer: contract.insurer, startedOn };
+  const base = { key: contract.id, name: contract.name, insurer: contract.insurer, documentIds: contract.documents.map((d) => d.id), startedOn };
   if (!ends.length) return { ...base, state: "no_date", endsOn: null, endsText: null, source: null, daysLeft: null, sooner: [], renewal: null };
   const last = ends.reduce((a, b) => (b.day > a.day ? b : a));
   const soonerByName = new Map<string, number>();
@@ -115,15 +121,16 @@ export function policyDates(contract: DatedContract, covers: DatedCover[], payme
   const dated = { endsOn: isoOf(last.day), endsText: dayText(last.day), source: { documentId: last.documentId, page: last.page }, daysLeft, sooner };
   if (daysLeft >= 0) return { ...base, ...dated, state: daysLeft <= ENDS_SOON_DAYS ? "ends_soon" : "until", renewal: null };
   const proof = renewalAfter(payments.filter((row) => sameContract(contract, row)), last.day);
-  if (!proof) return { ...base, ...dated, state: "renewal_due", renewal: null };
+  if (!proof) return { ...base, ...dated, state: notRenewed?.has(`${contract.id}|${isoOf(last.day)}`) ? "not_renewed" : "renewal_due", renewal: null };
   const paid = dayOf(proof.payment_date), until = dayOf(proof.period_end);
   return { ...base, ...dated, state: "renewed", renewal: { paidOn: paid != null ? isoOf(paid) : null, paidText: paid != null ? dayText(paid) : null,
     until: until != null && until > last.day ? isoOf(until) : null, untilText: until != null && until > last.day ? dayText(until) : null, documentId: proof.source_document_id ?? proof.policy_id } };
 }
 
-/** The household's list: policies needing proof of renewal first, then the soonest end, then those printing no date. */
-export function householdPolicyDates(contracts: DatedContract[], covers: DatedCover[], payments: PaymentRecord[], today: number): PolicyDate[] {
-  const rank: Record<PolicyDateState, number> = { renewal_due: 0, ends_soon: 1, until: 2, renewed: 2, no_date: 3 };
-  return contracts.map((c) => policyDates(c, covers, payments, today))
+/** The household's list: policies needing proof of renewal first, then the soonest end, then those printing no date, then
+ * those the household said it did not renew. */
+export function householdPolicyDates(contracts: DatedContract[], covers: DatedCover[], payments: PaymentRecord[], today: number, notRenewed?: ReadonlySet<string>): PolicyDate[] {
+  const rank: Record<PolicyDateState, number> = { renewal_due: 0, ends_soon: 1, until: 2, renewed: 2, no_date: 3, not_renewed: 4 };
+  return contracts.map((c) => policyDates(c, covers, payments, today, notRenewed))
     .sort((a, b) => rank[a.state] - rank[b.state] || (a.endsOn ?? "9999").localeCompare(b.endsOn ?? "9999") || a.name.localeCompare(b.name));
 }

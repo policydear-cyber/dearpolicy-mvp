@@ -95,6 +95,16 @@ test("another person's, another number's or another insurer's receipt never rene
   assert.equal(policyDates(c, covers, [pay({ ...after })], TODAY).state, "renewal_due", "a receipt naming no policy");
 });
 
+test("'I didn't renew it' counts only for the same policy and the same printed date, and a later receipt wins", () => {
+  const c = contract("k1", [doc("d1", { policy_number: "HL-1" })]); const covers = [cover("d1", "Family PA", "31/10/2026")];
+  assert.equal(policyDates(c, covers, [], TODAY, new Set(["k1|2026-10-31"])).state, "not_renewed");
+  assert.equal(policyDates(c, covers, [], TODAY, new Set(["k1|2026-10-30"])).state, "renewal_due", "another date");
+  assert.equal(policyDates(c, covers, [], TODAY, new Set(["k2|2026-10-31"])).state, "renewal_due", "another policy");
+  assert.equal(policyDates(c, covers, [pay({ policy_id: "d1", payment_date: "2026-11-02" })], TODAY, new Set(["k1|2026-10-31"])).state, "renewed", "receipt after the date");
+  assert.equal(policyDates(c, [cover("d1", "Family PA", "31/10/2027")], [], TODAY, new Set(["k1|2026-10-31"])).state, "until", "a newer schedule's date");
+  assert.deepEqual(policyDates(c, covers, [], TODAY).documentIds, ["d1"]);
+});
+
 test("renewalAfter picks the record that runs furthest", () => {
   const end = day("2026-10-31");
   const r = renewalAfter([pay({ payment_date: "2026-11-02" }), pay({ source_document_id: "r2", period_end: "2027-10-31" })], end);
@@ -107,6 +117,8 @@ test("the list: proof of renewal first, then the soonest end, then no date", () 
     contract("due", [doc("d")], { name: "Beta PA" }), contract("soon", [doc("s")], { name: "Gamma Shield" })],
     [cover("f", "x", "01/01/2060"), cover("d", "x", "01/10/2026"), cover("s", "x", "01/12/2026")], [], TODAY);
   assert.deepEqual(list.map((p) => p.key), ["due", "soon", "far", "none"]);
+  const withAnswer = householdPolicyDates([contract("due", [doc("d")], { name: "Beta PA" }), contract("none", [doc("n")], { name: "Zeta Plan" })], [cover("d", "x", "01/10/2026")], [], TODAY, new Set(["due|2026-10-01"]));
+  assert.deepEqual(withAnswer.map((p) => [p.key, p.state]), [["none", "no_date"], ["due", "not_renewed"]]);
 });
 
 test("Home shows the list and never the words 'Ended' or 'expired' for a passed date", () => {

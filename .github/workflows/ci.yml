@@ -161,6 +161,8 @@ jobs:
         run: npm run policies:folder-view-test
       - name: Policy dates (end dates, proof of renewal)
         run: npm run policies:dates-test
+      - name: "I didn't renew it" (owner only, own household, refused before the date passes, Home cards and chat follow, Undo; PGlite)
+        run: npm run policies:not-renewed-test
       - name: Policy folders join a wording's "100% of the Sum Assured" to the same person's schedule in the same folder (negative controls)
         run: npm run simple:folder-whole-sum-test
       - name: Scanned pages mark an amount whose first digit may be a misread currency letter ($520,000 for S$20,000; negative controls)

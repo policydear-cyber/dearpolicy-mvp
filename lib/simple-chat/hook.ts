@@ -105,6 +105,7 @@ function chatFor(context: ChatContext): string {
 export function periodsNote(household: Household, _now: Date): string {
   const said: string[] = [];
   for (const d of household.documents) {
+    if (d.householdSaid) continue;
     const seen = new Set<string>();
     for (const p of d.pages) for (const m of p.text.matchAll(/\b(\d{1,2}\/\d{1,2}\/\d{4})\s*(?:to|until|-|–|—)\s*(\d{1,2}\/\d{1,2}\/\d{4})\b/gi)) {
       const from = printedDay(m[1]), to = printedDay(m[2]);
