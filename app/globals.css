@@ -1358,6 +1358,25 @@ div.answer-point { display: grid; gap: 4px; }
 .home-gaps h2 { margin: 0; font-size: var(--fs-md); }
 .home-gaps > p { margin: 0; color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.5; }
 .home-gaps small { color: var(--muted); font-size: var(--fs-xs); }
+/* Home's policy dates (components/home-policy-dates.tsx): one row per policy. A passed date asks for proof of renewal in
+   the warning role (the household can act); a date not printed is unresolved, with a dashed edge and its words. */
+.home-dates { display: grid; gap: 8px; margin-top: 10px; padding: 16px 18px; border-radius: var(--r-md); background: var(--surface); }
+.home-dates h2 { margin: 0; font-size: var(--fs-md); }
+.home-dates ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.home-date { display: grid; gap: 4px; padding-top: 10px; border-top: 1px solid var(--line); }
+.home-date:first-child { padding-top: 0; border-top: 0; }
+.home-date-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.home-date-head strong { font-size: var(--fs-sm); min-width: 0; overflow-wrap: anywhere; }
+.home-date p { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.5; font-variant-numeric: tabular-nums; }
+.home-date p b { color: var(--ink); font-weight: 600; }
+.home-date small { color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; }
+.home-date-chip { font-size: var(--fs-xs); font-weight: 650; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.home-date-chip.warn { background: var(--warn-tint); color: var(--warn-text); border: 1px solid var(--warn-line); }
+.home-date-chip.good { background: var(--good-tint); color: var(--good-text); }
+.home-date-chip.unresolved { background: var(--unresolved-tint); color: var(--unresolved-text); border: 1px dashed var(--unresolved-line); }
+.home-date.renewal_due { padding: 12px; border: 1px solid var(--warn-line); border-radius: var(--r-sm); background: var(--warn-tint); }
+.home-date.renewal_due p { color: var(--warn-text); }
+.home-date-upload { justify-self: start; margin-top: 4px; }
 .home-gap-list { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .home-gap { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--edge); border-radius: 999px; background: var(--surface); color: var(--ink); font-size: var(--fs-sm); font-weight: 600; }
 .home-gap:hover { border-color: var(--brand-ink); }
