@@ -132,9 +132,16 @@ export function formNames(text: string): string[] {
 /** Is this person's name printed as one of the form's names (formNames): the same words, in any order ("Tan Mei Ling"
  * for "Family Name: Tan  Given Name: Mei Ling"), never words gathered from other fields or other people (TE #561). */
 export function formNamePrinted(text: string, name: string): boolean {
-  const words = (n: string) => n.normalize("NFKC").toLowerCase().split(/[^\p{L}\p{M}\p{N}/]+/u).filter(Boolean).sort().join(" ");
-  const wanted = words(name);
-  return !!wanted && formNames(text).some((n) => words(n) === wanted);
+  const wanted = formWords(name).join(" ");
+  return !!wanted && formNames(text).some((n) => formWords(n).join(" ") === wanted);
+}
+const formWords = (n: string) => n.normalize("NFKC").toLowerCase().split(/[^\p{L}\p{M}\p{N}/]+/u).filter(Boolean).sort();
+
+/** A form's own field prints a LONGER name holding every word of this one ("Full name: Wei Tan Ah Kow" for "Wei Tan"):
+ * the name read is part of someone else's, so finding it inside the page's text proves nothing (TE #561 W2, W3). */
+export function formNameLonger(text: string, name: string): boolean {
+  const wanted = formWords(name);
+  return wanted.length > 0 && formNames(text).some((n) => { const w = formWords(n); return w.length > wanted.length && wanted.every((x) => w.includes(x)); });
 }
 
 const WHOLE_NAME_LABEL = /^(?:full name|(?:insured|traveller|traveler|applicant|proposer|policy ?holder)(?:'s)? (?:full )?name|name of (?:the )?(?:insured|policy ?holder|policy owner|proposer|applicant|traveller|traveler|life assured))$/;
