@@ -446,6 +446,32 @@ async function main() {
     const offers = (await folders.listFolders(A)).flatMap((f) => f.replacements.filter((r) => r.policyId === v1));
     assert.deepEqual(offers.map((r) => r.by), [v3], "v1's folder offers v3, once");
   });
+  await test("AU12 a deleted folder does not come back when its schedule gets a newer copy", async () => {
+    asUser(ownerA);
+    const v1 = id("f9800000", 33), v2 = id("f9800000", 34);
+    const ins = (pid: string, prev: string | null) => pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,processing_status,original_filename,storage_key,file_hash,quarantine_status,supersedes_id)
+      VALUES($1,$2,$3,'Example Life','Gone Shield','personal_schedule','ready','v.pdf','k',$4,'scan_clean',$5)`, [pid, A, jane, "sha256:" + pid, prev]);
+    await ins(v1, null);
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: v1, people: [jane], documents: [{ policyId: v1, slot: "schedule" }] }] }))).json()).made, 1);
+    const [f] = await folderWith(v1);
+    assert.equal((await item.DELETE(req(`/api/policies/folders/${f.id}`, "DELETE", A), params(f.id))).status, 200);
+    await ins(v2, v1); await pool.query("UPDATE policies SET superseded_at=now() WHERE id=$1", [v1]);
+    assert.ok((await folders.handledDocuments(A)).includes(v2), "the page is told the newer copy is handled");
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: v2, people: [jane], documents: [{ policyId: v2, slot: "schedule" }] }] }))).json()).made, 0);
+    assert.deepEqual(await folderWith(v2), []);
+  });
+  await test("AU13 a copy chain longer than the steps followed makes no second folder", async () => {
+    asUser(ownerA);
+    const ids = Array.from({ length: 24 }, (_, i) => id("f9810000", i + 1));
+    for (const [i, pid] of ids.entries()) {
+      await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,processing_status,original_filename,storage_key,file_hash,quarantine_status,supersedes_id)
+        VALUES($1,$2,$3,'Example Life','Long Shield','personal_schedule','ready','v.pdf','k',$4,'scan_clean',$5)`, [pid, A, jane, "sha256:" + pid, i ? ids[i - 1] : null]);
+      if (i === 0) assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: pid, people: [jane], documents: [{ policyId: pid, slot: "schedule" }] }] }))).json()).made, 1);
+      else await pool.query("UPDATE policies SET superseded_at=now() WHERE id=$1", [ids[i - 1]]);
+    }
+    const last = ids.at(-1)!;
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: last, people: [jane], documents: [{ policyId: last, slot: "schedule" }] }] }))).json()).made, 0);
+  });
   await test("AU8 the database itself refuses a record naming another household's document; browsers can only read their own", async () => {
     await assert.rejects(pool.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2)", [bDoc, A]), /another household/);
     const asBrowser = async <T>(userId: string, fn: () => Promise<T>) => serial(async () => {

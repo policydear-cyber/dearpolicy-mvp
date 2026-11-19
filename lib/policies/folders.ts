@@ -236,22 +236,36 @@ export function autoFoldersReady(): Promise<boolean> {
 }
 export function resetAutoFoldersReady() { autoReady = null; }
 
-/** The documents that have had a folder made, or left one: never made into a folder again on their own. */
+/** How many copies back (or forward) a document's versions are followed. Past this, a document counts as settled. */
+const COPY_STEPS = 20;
+
+/** The documents that have had a folder made, or left one, and every newer copy of them: never made into a folder again on
+ * their own, so a folder the household deleted does not come back when its policy gets a new version (TE #554 R4-1). */
 export async function handledDocuments(accountId: string): Promise<string[]> {
   if (!await foldersReady() || !await autoFoldersReady()) return [];
-  const r = await query<{ policy_id: string }>("SELECT policy_id FROM policy_folder_auto WHERE account_id=$1", [accountId]);
+  const r = await query<{ policy_id: string }>(`WITH RECURSIVE fwd(id, depth) AS (
+      SELECT policy_id, 0 FROM policy_folder_auto WHERE account_id=$1
+      UNION
+      SELECT n.id, f.depth + 1 FROM fwd f JOIN policies n ON n.supersedes_id=f.id AND n.account_id=$1 AND ${activePredicate("n")}
+       WHERE f.depth < ${COPY_STEPS})
+    SELECT DISTINCT id AS policy_id FROM fwd`, [accountId]);
   return r.rows.map((x) => String(x.policy_id));
 }
 
-/** Whether a document is in a folder, or is a newer copy of one that is, however many copies back (v3 of a filed v1 whose
- * v2 was never added counts as filed). */
-async function filedOrCopyOfFiled(tx: Tx, accountId: string, policyId: string): Promise<boolean> {
-  const r = await tx.query(`WITH RECURSIVE back(id, depth) AS (
-      SELECT $2::uuid, 0
+/** Whether a document is settled: it is in a folder, or it is a newer copy (however many copies back) of a document that is
+ * in a folder, had one made, or left one. v3 of a filed v1 whose v2 was never added is settled (the folder offers it as
+ * "Add it"), and so is v2 of a schedule whose folder the household deleted. A chain longer than COPY_STEPS counts as
+ * settled rather than risk a second folder. */
+async function settled(tx: Tx, accountId: string, policyId: string): Promise<boolean> {
+  const r = await tx.query(`WITH RECURSIVE back(id, depth, prev) AS (
+      SELECT n.id, 0, n.supersedes_id FROM policies n WHERE n.id=$2 AND n.account_id=$1 AND ${activePredicate("n")}
       UNION ALL
-      SELECT n.supersedes_id, b.depth + 1 FROM back b JOIN policies n ON n.id=b.id AND n.account_id=$1 AND ${activePredicate("n")}
-       WHERE n.supersedes_id IS NOT NULL AND b.depth < 20)
-    SELECT 1 FROM policy_folder_documents fd WHERE fd.account_id=$1 AND fd.policy_id IN (SELECT id FROM back) LIMIT 1`, [accountId, policyId]);
+      SELECT n.id, b.depth + 1, n.supersedes_id FROM back b JOIN policies n ON n.id=b.prev AND n.account_id=$1 AND ${activePredicate("n")}
+       WHERE b.depth < ${COPY_STEPS})
+    SELECT 1 FROM back b WHERE EXISTS (SELECT 1 FROM policy_folder_documents fd WHERE fd.account_id=$1 AND fd.policy_id=b.id)
+       OR (b.depth > 0 AND EXISTS (SELECT 1 FROM policy_folder_auto a WHERE a.account_id=$1 AND a.policy_id=b.id))
+       OR (b.depth = ${COPY_STEPS} AND b.prev IS NOT NULL)
+    LIMIT 1`, [accountId, policyId]);
   return r.rows.length > 0;
 }
 
@@ -271,14 +285,14 @@ export async function makeAutoFolders(accountId: string, starters: AutoFolderInp
       const first = await tx.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING policy_id", [s.scheduleId, accountId]);
       if (!first.rows.length) return 0;
       // The schedule is in no folder now (a folder made by hand since the page loaded keeps it), and is not a newer copy of a
-      // document in a folder: that folder offers it as "Add it" instead (TE #554 MED).
-      if (await filedOrCopyOfFiled(tx, accountId, s.scheduleId)) return 0;
+      // document in a folder (that folder offers it as "Add it", TE #554 MED) or of one whose folder was made or deleted.
+      if (await settled(tx, accountId, s.scheduleId)) return 0;
       // Every other document joins only if it is in no folder and was never made into one or taken out of one, whatever the
       // page sent (Critic #554 MED-2).
       const joining: FolderDocumentInput[] = [docs.find((d) => d.policyId === s.scheduleId)!];
       for (const d of docs) {
         if (d.policyId === s.scheduleId) continue;
-        if (await filedOrCopyOfFiled(tx, accountId, d.policyId)) continue;
+        if (await settled(tx, accountId, d.policyId)) continue;
         const fresh = await tx.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING policy_id", [d.policyId, accountId]);
         if (fresh.rows.length) joining.push(d);
       }
