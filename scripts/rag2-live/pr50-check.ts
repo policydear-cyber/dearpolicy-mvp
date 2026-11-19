@@ -64,7 +64,7 @@ export function gradeP50C(t: any): Check[] {
   add("C2", "each displayed upload is in the saved record (a citation of its document id, or its library name)", !notSaved.length, notSaved.map((d) => d.key).join(", "));
   const scan = byKey("SCAN");
   add("C3", "the failed upload is stated as unreadable (on the line naming it); nothing is quoted from it", lines.some((l) => names(scan, l) && /could not be read|couldn['’]t be read|unreadable|not readable|failed/i.test(l)), v);
-  const gone = ["DELETED", "OTHER"].map(byKey).filter((d) => names(d, v) || saved.has(d.id));
+  const gone = ["DELETED", "OTHER"].map(byKey).filter((d) => names(d, v) || (!!d.filename && v.includes(d.filename)) || saved.has(d.id)); // by title, file name or id (Critic #564 LOW-1: no looser than before)
   add("C4", "the deleted upload and the other household's upload are absent (by name and by id)", !gone.length, gone.map((d) => d.key).join(", "));
   const travel = ["TRAVEL_WORDING", "TRAVEL_SUMMARY"].map(byKey);
   const asPersonal = lines.filter((l) => travel.some((d) => names(d, l))).flatMap((l) => l.split(/;\s+/)).filter((p) => travel.some((d) => names(d, p)) && /\bpersonal (?:policy document|certificate|cover|policy)\b/i.test(p) && !/\bnot (?:a |your )?personal\b/i.test(p));

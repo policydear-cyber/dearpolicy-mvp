@@ -28,7 +28,8 @@ the fixture was seeded.
 
 | File | Check | Before | Now |
 |---|---|---|---|
-| scripts/rag2-live/pr50-check.ts | C1, C2, C4, C5 | product or exact file name | product or title, or "Photo uploaded <day>" |
+| scripts/rag2-live/pr50-check.ts | C1, C2, C5 | product or exact file name | product or title, or "Photo uploaded <day>" |
+| scripts/rag2-live/pr50-check.ts | C4 | absent by product, file name or id | absent by product or title, file name, or id (unchanged strictness) |
 | scripts/rag2-live/pr50-check.ts | C3 | the line names `scan.filename` | the line names the scan as above |
 | scripts/rag2-live/livelib-check.ts | S52C turn 1 | `/IMG_0042\.jpg/` | "Photo uploaded <day>", and not IMG_0042.jpg |
 | scripts/rag2-live/check-regressions.ts | C52 | fixture text with IMG_0042.jpg | fixture with "Photo uploaded 19 Nov 2026"; a new control shows the file name now fails |
