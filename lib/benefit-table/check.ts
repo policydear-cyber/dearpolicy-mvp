@@ -529,8 +529,21 @@ export function termDates(c: { premiumEndDate?: unknown; premiumTerm?: unknown; 
  * benefit in the same column for two or more different ages or years (a table by year, whatever the reader called its
  * rows: Critic #562 MED-8 and its follow-up). An age limit on an ordinary benefit ("Death or TPD before age 70") is one row
  * on its own, so it reads as a current figure, as on main. */
-/** Words that make an age a band of when a benefit pays (TE F5). */
-const AGE_BAND = /\b(?:before|under|below|up\s+to|until|till|from|over|above|after|to|between|aged)\s+(?:the\s+)?(?:age|ages|anb|alb)\b|\bage\s+\d{1,3}\s*(?:-|–|to)\s*\d{1,3}(?![\d,.])|\b(?:age|ages)\s+\d{1,3}\s*(?:and|or)\s+(?:above|over|below|under|older|younger)\b/i;
+/** Whether the row's own age or policy year is printed as a band of when the benefit pays ("before age 40", "from age 60",
+ * "age 40 to 60", "during policy year 1", "from policy year 2", "year 2 onwards"): a limit, never a point the row is printed
+ * for (TE F5, F6). Only the row's own number counts, so "payable up to age 100" beside an age-55 row of an illustration is
+ * not a band (Critic MED-11), and a range never reads into an amount ("Age 55 - 120,500"). */
+function printedAsBand(text: string, age: number | null | undefined, year: number | null | undefined): boolean {
+  const n = (x: number) => `0*${x}(?![\\d,.])`;
+  const range = (lead: string, x: number) => new RegExp(`\\b${lead}\\s+(?:\\d{1,3}\\s*(?:-|–|to)\\s*${n(x)}|${n(x)}\\s*(?:-|–|to)\\s*\\d{1,3}(?![\\d,.]))`, "i");
+  if (age != null && (new RegExp(`\\b(?:before|under|below|up\\s+to|until|till|from|over|above|after|to|between|aged)\\s+(?:the\\s+)?(?:age|ages|anb|alb)\\s+${n(age)}`, "i").test(text)
+    || range("(?:age|ages)", age).test(text)
+    || new RegExp(`\\b(?:age|ages)\\s+${n(age)}\\s*(?:and|or)\\s+(?:above|over|below|under|older|younger)\\b`, "i").test(text))) return true;
+  if (year != null && (new RegExp(`\\b(?:during|in|from|after|before|until|till|up\\s+to|within)\\s+(?:the\\s+)?(?:first\\s+)?(?:policy\\s+)?years?\\s+${n(year)}`, "i").test(text)
+    || range("(?:policy\\s+)?years?", year).test(text)
+    || new RegExp(`\\b(?:policy\\s+)?year\\s+${n(year)}\\s*(?:onwards?|and\\s+(?:after|above|thereafter|beyond)|\\+)`, "i").test(text))) return true;
+  return false;
+}
 export function byYearOnly<T extends { benefit: string; section?: string | null; column?: string | null; pays?: unknown; atAge?: number | null; atPolicyYear?: number | null; rate?: string | null; quote?: string | null }>(rows: T[]): T[] {
   // The same benefit in the same section and column: a step-down schedule ("before age 65", "from 65 to 70") prints two ages,
   // an illustration prints policy years, or at least three ages (first row, every fifth year, last: Critic MED-9).
@@ -543,12 +556,12 @@ export function byYearOnly<T extends { benefit: string; section?: string | null;
   }
   return rows.map((r) => {
     if (r.atAge == null && r.atPolicyYear == null && r.rate == null) return r;
-    // A value row, or a table printing two or more policy years, keeps its ages and years: a table by year wins over any
-    // words beside it ("payable up to age 100" on a whole-life illustration: Critic MED-11).
-    if (r.pays === "value" || (years.get(key(r))?.size ?? 0) >= 2) return r;
-    // Otherwise three or more ages make a table, unless the row reads as an age band ("before age 40", "from age 60", "up to
-    // age 18"): a limit on when it pays, never an age it is printed for (TE F5).
-    if ((ages.get(key(r))?.size ?? 0) >= 3 && !AGE_BAND.test(`${r.benefit} ${r.quote ?? ""}`)) return r;
+    // A value row keeps its ages and years.
+    if (r.pays === "value") return r;
+    // Otherwise a row whose own age or year is printed as a band is a limit on when it pays, read as a current figure as
+    // on main; and the rest keep theirs only as a table: two or more policy years, or three or more ages.
+    if (!printedAsBand(`${r.benefit} ${r.quote ?? ""}`, r.atAge, r.atPolicyYear)
+      && ((years.get(key(r))?.size ?? 0) >= 2 || (ages.get(key(r))?.size ?? 0) >= 3)) return r;
     const { atAge: _a, atPolicyYear: _y, rate: _r, ...rest } = r;
     return rest as T;
   });

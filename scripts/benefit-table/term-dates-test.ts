@@ -133,5 +133,13 @@ test("a table by year keeps its years whatever words sit beside them; the band t
   assert.deepEqual(amounts.map((x) => (x as { atAge?: number }).atAge ?? null), [55, 60, 65], "'Age 55 - 120,500' is an age and an amount, not a band");
 });
 
+test("policy-year bands are limits, not a table by year: both stay current figures (TE F6)", () => {
+  const r = (atPolicyYear: number, quote: string) => ({ benefit: "Death benefit", section: null, column: "Sum Assured", pays: "amount", atPolicyYear, quote });
+  const kept = (rows: ReturnType<typeof r>[]) => byYearOnly(rows).map((x) => (x as { atPolicyYear?: number }).atPolicyYear ?? null);
+  assert.deepEqual(kept([r(1, "Death benefit during policy year 1: S$20,000"), r(2, "Death benefit from policy year 2: S$40,000")]), [null, null]);
+  assert.deepEqual(kept([r(1, "Policy year 1 to 5 S$20,000"), r(6, "Year 6 onwards S$40,000")]), [null, null]);
+  assert.deepEqual(kept([r(10, "10 45 150,000"), r(20, "20 55 250,000")]), [10, 20], "a bare table by year keeps its years");
+});
+
 if (failures.length) { console.error(failures.join("\n")); console.error(`${failures.length} failed, ${passed} passed`); process.exit(1); }
 console.log(`term-dates: ${passed} passed`);
