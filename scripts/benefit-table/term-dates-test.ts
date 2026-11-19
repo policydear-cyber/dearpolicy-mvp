@@ -5,7 +5,7 @@
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 import assert from "node:assert/strict";
-import { checkReading, termDates, valueAt, type SourceDoc } from "@/lib/benefit-table/check";
+import { byYearOnly, checkReading, termDates, valueAt, type SourceDoc } from "@/lib/benefit-table/check";
 import { assembleTable } from "@/lib/benefit-table/assemble";
 import { READING_PROMPT, READING_SCHEMA } from "@/lib/benefit-table/reading";
 import { atYearFigure, type Figure } from "@/lib/benefit-table/assemble";
@@ -85,6 +85,25 @@ test("an age limit on an ordinary benefit is not a year it is printed for: the r
   const category = categoryOfRow(death as never)!;
   assert.ok(category, "the row has a Home category");
   assert.deepEqual(categoryRows(category, rows as never[]).map((r: { figure: Figure }) => r.figure.kind), ["printed"], "it still reaches Home's card as it does on main");
+});
+
+test("a table by year keeps its ages and years whatever the reader called its rows; a lone age limit does not (Critic follow-up)", () => {
+  const r = (benefit: string, pays: string, atPolicyYear?: number, column = "Guaranteed") => ({ benefit, column, pays, ...(atPolicyYear != null ? { atPolicyYear } : {}) });
+  const out = byYearOnly([r("Death benefit", "amount", 10), r("Death Benefit", "amount", 20), r("Hospital cash up to age 18", "per_day", 18, "Daily"), r("Surrender value", "value", 5)]);
+  assert.deepEqual(out.map((x) => (x as { atPolicyYear?: number }).atPolicyYear), [10, 20, undefined, 5]);
+  const PERSON = "Lim Wei Jie";
+  const lines = ["Policy Year\tAge\tGuaranteed Death Benefit", "10\t45\tS$150,000", "20\t55\tS$250,000"];
+  const src: SourceDoc = { id: "doc-2", name: "Illustration", readable: true, pages: [{ page: 1, text: `Life Assured: ${PERSON}\nPolicy Number: 55001234\n${lines.join("\n")}\nCurrency: Singapore Dollar` }] };
+  const row = (year: number, age: number, amount: number, line: string) => ({ section: null, column: "Guaranteed Death Benefit", benefit: "Death benefit", pays: "amount", value: amount, period: null, basis: null, asOf: null, percentOf: null,
+    baseAmount: null, baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: line, atPolicyYear: year, atAge: age });
+  const reading = checkReading(src, { document: { kind: "personal_proof", product: "Harbour Term", insurer: "Example Assurance", namedPeople: [PERSON], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: PERSON, product: "Harbour Term", cover: "Harbour Term", plan: null, riderOf: null, policyNumber: "55001234", premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 1, sumInsured: null, quote: lines[1] }],
+    benefits: [row(10, 45, 150000, lines[1]), row(20, 55, 250000, lines[2])] });
+  const rows = assembleTable([reading], [{ id: "m1", display_name: PERSON }], []).people[0]?.rows ?? [];
+  const deaths = rows.filter((x) => /death/i.test(x.benefit));
+  assert.ok(deaths.length >= 1);
+  assert.ok(deaths.every((x) => x.figure.kind === "value" && !!x.valueAt), "a year-N death benefit is a value as of that year, never a current amount");
+  assert.deepEqual(categoryRows("Death", rows as never[]), []);
 });
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`${failures.length} failed, ${passed} passed`); process.exit(1); }

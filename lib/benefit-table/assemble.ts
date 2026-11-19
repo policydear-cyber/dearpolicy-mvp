@@ -1791,7 +1791,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
       const printedFigure: Figure = tier ? { kind: "none", why: tier } : headline ? withShare(b, { kind: "none", why: headline })
         : r.documentId !== c.source.documentId && b.pays !== "not_covered" && printedNotCovered(b, notCoveredOn(c, readings))
           ? { kind: "none", why: "the person's own schedule prints this cover as not covered" } : named ? figureFor(named.b, named.cover, r.kind === "illustration", singaporeDay(now)) : figureFor(b, c, r.kind === "illustration", singaporeDay(now));
-      const at = b.pays !== "value" ? {} : { ...(b.atAge != null ? { age: b.atAge } : {}), ...(b.atPolicyYear != null ? { policyYear: b.atPolicyYear } : {}), ...(b.rate ? { rate: b.rate } : {}) };
+      const at = { ...(b.atAge != null ? { age: b.atAge } : {}), ...(b.atPolicyYear != null ? { policyYear: b.atPolicyYear } : {}), ...(b.rate ? { rate: b.rate } : {}) };
       // A figure printed for an age or a policy year (a table of values by year) is never a current amount (Critic MED-5):
       // it is a value as of that year whatever the reader called it, so no card, headline or answer takes it as cover now.
       const figure: Figure = atYearFigure(printedFigure, at);

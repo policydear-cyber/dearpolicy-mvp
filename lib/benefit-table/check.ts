@@ -525,6 +525,22 @@ export function termDates(c: { premiumEndDate?: unknown; premiumTerm?: unknown; 
 }
 /** A value's age, policy year and illustrated rate, each kept only where printed: the age and year in the row's own quote,
  * the rate on the row's page. */
+/** A row keeps the age or policy year it is printed for only when it is a value row, or when its document prints the same
+ * benefit in the same column for two or more different ages or years (a table by year, whatever the reader called its
+ * rows: Critic #562 MED-8 and its follow-up). An age limit on an ordinary benefit ("Death or TPD before age 70") is one row
+ * on its own, so it reads as a current figure, as on main. */
+export function byYearOnly<T extends { benefit: string; column?: string | null; pays?: unknown; atAge?: number | null; atPolicyYear?: number | null; rate?: string | null }>(rows: T[]): T[] {
+  const key = (r: T) => `${r.benefit.toLowerCase().replace(/\s+/g, " ").trim()}|${(r.column ?? "").toLowerCase().trim()}`;
+  const points = new Map<string, Set<string>>();
+  for (const r of rows) if (r.atAge != null || r.atPolicyYear != null) points.set(key(r), new Set([...(points.get(key(r)) ?? []), `${r.atAge ?? ""}/${r.atPolicyYear ?? ""}`]));
+  return rows.map((r) => {
+    if (r.atAge == null && r.atPolicyYear == null && r.rate == null) return r;
+    if (r.pays === "value" || (points.get(key(r))?.size ?? 0) >= 2) return r;
+    const { atAge: _a, atPolicyYear: _y, rate: _r, ...rest } = r;
+    return rest as T;
+  });
+}
+
 export function valueAt(b: { atAge?: unknown; atPolicyYear?: unknown; rate?: unknown }, quote: string, page: string): { atAge?: number; atPolicyYear?: number; rate?: string } {
   const whole = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 130 ? v : null);
   const inQuote = (n: number | null) => n != null && numbersIn(quote.replace(/[,]/g, " ")).includes(n) ? n : null;
@@ -2575,9 +2591,10 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}),
       // Only a value row (a table of values by year) keeps its age or year: an age limit on an ordinary benefit ("Death or
       // TPD before age 70") is never a year the row is printed for (Critic MED-8).
-      ...(pays === "value" ? valueAt(b, source.excerpt, pageText(source.page)) : {}),
+      ...valueAt(b, source.excerpt, pageText(source.page)),
       ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
   }
+  out.benefits = byYearOnly(out.benefits);
   out.benefits = foldChildColumns(out.benefits, out.dropped);
   Object.assign(out, lifeNotesOf(doc.pages, { ...out, kind: o.notesKind ?? out.kind, insurer: str(d.insurer) }));
   return out;
