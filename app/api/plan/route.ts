@@ -21,8 +21,10 @@ export async function GET(request: NextRequest) {
     ]);
     const input = { planId: plan.planId, isOwner, billingEnabled: billingEnabled() };
     if (!mayPromptUpgrade(input)) return NextResponse.json(planStatus(input), { headers: { "cache-control": "no-store" } });
-    const [documentsKept, questions] = await Promise.all([keptDocumentCount(ctx.householdId), questionsThisMonth(ctx.householdId)]);
-    return NextResponse.json(planStatus({ ...input, documentsKept, questionsThisMonth: questions }), { headers: { "cache-control": "no-store" } });
+    // A count that can't be read hides the prompts, never the badge (TE F3).
+    const counts = await Promise.all([keptDocumentCount(ctx.householdId), questionsThisMonth(ctx.householdId)]).catch(() => null);
+    if (!counts) return NextResponse.json(planStatus({ ...input, billingEnabled: false }), { headers: { "cache-control": "no-store" } });
+    return NextResponse.json(planStatus({ ...input, documentsKept: counts[0], questionsThisMonth: counts[1] }), { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const authResponse = routeErrorResponse(error);
     if (authResponse.status === 500) return NextResponse.json({ error: "Could not load your plan" }, { status: 500 });

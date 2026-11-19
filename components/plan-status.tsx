@@ -18,7 +18,7 @@ export function usePlanStatus(): PlanContextValue {
 
 function isPlanStatus(value: unknown): value is PlanStatus {
   const v = value as Partial<PlanStatus> | null;
-  return !!v && (v.plan === "free" || v.plan === "plus" || v.plan === "family") && typeof v.name === "string" && typeof v.upgrade === "boolean";
+  return !!v && (v.plan === "free" || v.plan === "plus" || v.plan === "family") && typeof v.name === "string" && typeof v.upgrade === "boolean" && typeof v.owner === "boolean";
 }
 
 /** `enabled` is false on pages with no household (signed out, operator, reviewer): nothing is asked or shown. */
@@ -52,10 +52,11 @@ export function UpgradePrompt({ place }: { place: UpgradePlace }) {
   </aside>;
 }
 
-/** For a refusal at the limit (a document not kept, a question not sent): the owner gets the way to upgrade; anyone
- * else gets nothing extra. */
+/** For a refusal at the limit (a document not kept, a question not sent): the way to the plans, on any plan, for the
+ * owner, whose message says to upgrade (TE F1). A member's message says who can, so no link. While the plan is
+ * unknown the link stays, as it always did. */
 export function UpgradeLink({ className = "mini-button" }: { className?: string }) {
   const { status } = usePlanStatus();
-  if (!status?.upgrade) return null;
+  if (status && !status.owner) return null;
   return <Link className={className} href="/usage" data-testid="upgrade-link">See plans</Link>;
 }

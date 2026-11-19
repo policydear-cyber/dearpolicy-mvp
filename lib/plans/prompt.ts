@@ -16,6 +16,8 @@ export type PlanStatus = {
   name: string;
   /** True only for the household's owner, on Free, while payments are on. */
   upgrade: boolean;
+  /** Whether the signed-in person is the household's owner (only the owner can upgrade). */
+  owner: boolean;
   /** Counts against the plan, sent only when `upgrade` is true (prompts are the only thing that use them). */
   documentsKept?: number;
   questionsThisMonth?: number;
@@ -27,7 +29,7 @@ export function mayPromptUpgrade(input: { planId: PlanId; isOwner: boolean; bill
 
 export function planStatus(input: { planId: PlanId; isOwner: boolean; billingEnabled: boolean; documentsKept?: number; questionsThisMonth?: number }): PlanStatus {
   const upgrade = mayPromptUpgrade(input);
-  const status: PlanStatus = { plan: input.planId, name: PLANS[input.planId].name, upgrade };
+  const status: PlanStatus = { plan: input.planId, name: PLANS[input.planId].name, upgrade, owner: input.isOwner };
   if (upgrade) {
     if (typeof input.documentsKept === "number") status.documentsKept = input.documentsKept;
     if (typeof input.questionsThisMonth === "number") status.questionsThisMonth = input.questionsThisMonth;
@@ -51,7 +53,8 @@ export function upgradeLine(place: UpgradePlace, status: PlanStatus | null): { l
   const free = PLANS.free, plus = PLANS.plus, family = PLANS.family;
   if (place === "home") return { lead: `Upgrade to ${family.name}.`, detail: `${documentsLabel(family)} and ${family.questionsPerMonth} questions a month.`, plan: "family" };
   if (place === "documents") {
-    if (typeof status.documentsKept !== "number") return null;
+    // Not on an empty page: a new household's first step is its first upload, not a plan (TE F2).
+    if (typeof status.documentsKept !== "number" || status.documentsKept < 1) return null;
     return { lead: `${Math.min(status.documentsKept, free.documents)} of ${free.documents} documents on ${free.name}.`, detail: `${plus.name} keeps ${plus.documents}.`, plan: "plus" };
   }
   if (!questionsNearLimit(status)) return null;
