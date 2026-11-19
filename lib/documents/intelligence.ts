@@ -129,20 +129,18 @@ export function formNames(text: string): string[] {
   return out;
 }
 
-/** Is this person's name printed as one of the form's names (formNames): the same words, in any order ("Tan Mei Ling"
- * for "Family Name: Tan  Given Name: Mei Ling"), never words gathered from other fields or other people (TE #561). */
+/** Is this person's name printed in ONE of the form's names (formNames): every word of it in that one name, in any order.
+ * A household often keeps a shorter name than the form prints ("Daniel Lim" for "Family Name: Lim  Given Name: Wei Jie,
+ * Daniel"), so a part of one printed name counts, as it does on main; words gathered from other fields or other people on
+ * the line never do ("Family Name: Tan  Given Name: Mei Ling  Emergency contact: Wei" does not print "Wei Tan"; TE #561).
+ * Who the person is stays the household matcher's decision (lib/policies/linking). */
 export function formNamePrinted(text: string, name: string): boolean {
-  const wanted = formWords(name).join(" ");
-  return !!wanted && formNames(text).some((n) => formWords(n).join(" ") === wanted);
-}
-const formWords = (n: string) => n.normalize("NFKC").toLowerCase().split(/[^\p{L}\p{M}\p{N}/]+/u).filter(Boolean).sort();
-
-/** A form's own field prints a LONGER name holding every word of this one ("Full name: Wei Tan Ah Kow" for "Wei Tan"):
- * the name read is part of someone else's, so finding it inside the page's text proves nothing (TE #561 W2, W3). */
-export function formNameLonger(text: string, name: string): boolean {
   const wanted = formWords(name);
-  return wanted.length > 0 && formNames(text).some((n) => { const w = formWords(n); return w.length > wanted.length && wanted.every((x) => w.includes(x)); });
+  return wanted.length > 0 && formNames(text).some((n) => { const w = formWords(n); return wanted.every((x) => w.includes(x)); });
 }
+/** A name's words, without the words that only join a name ("bin", "binte", "s/o"). */
+const formWords = (n: string) => n.normalize("NFKC").toLowerCase().replace(/(?<![\p{L}])(?:[sd]\s*\/\s*o|a\s*\/\s*[lp])(?![\p{L}])/gu, " ")
+  .split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w && !["bin", "binte", "binti", "bte", "bt"].includes(w));
 
 const WHOLE_NAME_LABEL = /^(?:full name|(?:insured|traveller|traveler|applicant|proposer|policy ?holder)(?:'s)? (?:full )?name|name of (?:the )?(?:insured|policy ?holder|policy owner|proposer|applicant|traveller|traveler|life assured))$/;
 const FAMILY_LABEL = /^(?:family name|surname|last name)$/;

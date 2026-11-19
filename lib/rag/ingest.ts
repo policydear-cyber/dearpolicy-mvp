@@ -18,7 +18,7 @@ import { crossCheckPages, suspectPages, uncheckedPagesNote } from "@/lib/documen
 import { chunkPages } from "@/lib/documents/chunk";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { buildCodeOnlyExtraction, extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
-import { REFERENCE_ROLES, deterministicDocumentRole, formNameLonger, formNamePrinted, documentAuthority, looksLikeActualPersonName, printedDocumentRole, roleOnReread, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
+import { REFERENCE_ROLES, deterministicDocumentRole, formNamePrinted, documentAuthority, looksLikeActualPersonName, printedDocumentRole, roleOnReread, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
 import { factCheckExtraction, personPrinted } from "@/lib/documents/fact-check";
 import { PolicyExtractionSchema } from "@/lib/ai/extract-policy";
 import { normalizeCoverageCategory } from "@/lib/insurance";
@@ -225,7 +225,7 @@ export function verifyExtractionEvidence(extraction: PolicyExtraction, pages: { 
         const evidenceVerified = Boolean(hay && needle.length >= 3 && evidenceMatches(hay, coverage.evidenceText ?? "")
           // The whole name, or the name a form prints in its own fields ("Family Name: Tan <tab> Given Name: Mei Ling"):
           // exactly those fields' words, never words gathered from other fields or people on the line (TE #561).
-          && ((hay.includes(nameNeedle) && !formNameLonger(rawPages.get(coverage.sourcePage!) ?? "", person.name)) || formNamePrinted(rawPages.get(coverage.sourcePage!) ?? "", person.name)));
+          && (hay.includes(nameNeedle) || formNamePrinted(rawPages.get(coverage.sourcePage!) ?? "", person.name)));
         return { ...coverage, evidenceVerified };
       }),
     })),

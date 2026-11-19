@@ -176,13 +176,19 @@ async function main() {
     assert.equal(ok("Full name: Mei Ling Tan    Full name: Wei Lim", "Wei Tan"), false);
     assert.equal(ok("Insured persons: Mei Ling Tan, Wei Lim", "Wei Tan"), false);
     assert.equal(ok("Family Name: Tan    Given Name: Mei Ling    Emergency contact: Wei", "Mei Ling Tan"), true, "the form's own name still verifies");
-    // A name that is only part of a longer name the form prints is not that person (TE #561 W2).
-    assert.equal(ok("Full name:\tWei Tan Ah Kow", "Wei Tan"), false);
+    // A shorter name the household keeps is part of the one name the form prints: the same person, as on main (Critic #561).
     assert.equal(ok("Full name:\tWei Tan Ah Kow", "Wei Tan Ah Kow"), true);
+    assert.equal(ok("Family Name:\tLim\tGiven Name:\tWei Jie, Daniel", "Daniel Lim"), true);
     const { personPrinted } = await import("@/lib/documents/fact-check");
-    assert.equal(personPrinted("Full name:\tWei Tan Ah Kow", "Wei Tan"), false, "the fact check reads it the same way");
-    assert.equal(personPrinted("Family Name: Tan    Given Name: Mei Ling    Emergency contact: Wei", "Wei Tan"), false, "TE #561 V3");
+    assert.equal(personPrinted("Family Name: Tan    Given Name: Mei Ling    Emergency contact: Wei", "Wei Tan"), false, "TE #561 V3: words from two fields");
+    assert.equal(personPrinted("Full name: Mei Ling Tan    Full name: Wei Lim", "Wei Tan"), false, "TE #561 V4: words from two people");
     assert.equal(personPrinted("Family Name: Tan    Given Name: Mei Ling", "Mei Ling Tan"), true);
+    // Short forms of the printed name stay printed, as on main (Critic #561 HIGH-1).
+    assert.equal(personPrinted("Name of Insured: Jessica Tan Mei Ling\tNRIC: S1234567A", "Jessica Tan"), true);
+    assert.equal(personPrinted("Family Name: Lim\tGiven Name: Wei Jie, Daniel", "Daniel Lim"), true);
+    assert.equal(personPrinted("Full name: Ahmad bin Ismail", "Ahmad Ismail"), true);
+    assert.equal(personPrinted("Policyholder: Daniel Lim\nFamily Name: Lim\tGiven Name: Wei Jie, Daniel", "Daniel Lim"), true);
+    assert.equal(personPrinted("Full name: Tan Ah Kow\nLife Assured: Tan Ah Kow", "Tan Ah Kow"), true);
     assert.equal(personPrinted("Insured: Lim Wei Jie  Sum assured 100,000", "Lim Wei Jie"), true, "a page with no form name field reads as before");
     assert.equal(personPrinted("Lim, Wei Jie   Plan A", "Wei Jie Lim"), true, "a line with no form name field reads as before");
   });
