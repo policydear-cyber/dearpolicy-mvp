@@ -22,6 +22,7 @@
  */
 import { query } from "@/lib/db/client";
 import { householdDocumentLabels } from "@/lib/policies/household-labels";
+import { isPlaceholderName } from "@/lib/policies/document-name";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation, ComputationOperand, FigureBinding } from "@/types";
@@ -93,7 +94,7 @@ async function loadDocs(accountId: string): Promise<Doc[]> {
             ARRAY(SELECT DISTINCT upper(c) FROM (SELECT pc.currency c FROM policy_coverages pc WHERE pc.policy_id=p.id UNION ALL SELECT pr.currency FROM premium_records pr WHERE pr.source_document_id=p.id OR pr.policy_id=p.id) x WHERE c IS NOT NULL) AS currencies
        FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready' ORDER BY p.created_at, p.id`, [accountId]).catch(() => ({ rows: [] }))).rows;
   const labels = await householdDocumentLabels(accountId).catch(() => new Map<string, string>());
-  return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", label: labels.get(r.id) ?? "the document", role: r.role, product: r.product, insurer: cleanInsurer(r.insurer), number: r.number, groupNumber: r.group_number, kind: r.kind,
+  return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", label: labels.get(r.id) ?? "the document", role: r.role, product: r.product && !isPlaceholderName(r.product) ? r.product : null, insurer: cleanInsurer(r.insurer), number: r.number, groupNumber: r.group_number, kind: r.kind,
     pages: r.pages, start: r.start, end: r.end_date, dated: r.dated, paid: r.paid, owners: r.owners?.length ? r.owners : [r.uploaded_to], uploadedTo: r.uploaded_to, created: r.created, superseded: !!r.superseded, currencies: r.currencies ?? [] }));
 }
 

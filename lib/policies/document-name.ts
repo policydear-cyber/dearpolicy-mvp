@@ -56,8 +56,9 @@ function documentKind(role:string|null|undefined):string {
 export function documentName(doc:{product_name:string|null;original_filename:string;insurer?:string|null;document_role?:string|null;policy_number?:string|null}):string {
   const product=doc.product_name?.trim();
   // A system's code stored as the product ("SGGRP_COI_APP", from a PDF's own title) is not a name a person reads: one word
-  // joined by underscores. The document is then named as if it had none (re-upload check, 10 Nov).
-  if(product&&!isCodeName(product))return product;
+  // joined by underscores. Nor is a PDF tool's stand-in title ("(anonymous)", "Untitled"). The document is then named as
+  // if it had none (re-upload check, 10 Nov; #564, 19 Nov).
+  if(product&&!isCodeName(product)&&!isPlaceholderName(product))return product;
   // An ID number in the file name is masked before the name is made readable: spacing splits it ("S7712345D" ->
   // "S7712345 D") into a shape no mask knows (TE pr181 F2).
   if(!isMachineFilename(doc.original_filename))return prettifyFilename(maskIdentityText(doc.original_filename));
@@ -73,6 +74,9 @@ export function documentName(doc:{product_name:string|null;original_filename:str
  * words joined by underscores. */
 export function isCodeName(name:string):boolean {const t=name.trim();return !/\s/.test(t)&&/_/.test(t);}
 
+/** A title a PDF tool writes when the author gave none ("(anonymous)", "Untitled", "(no title)"), never a document's name. */
+export function isPlaceholderName(name:string):boolean {return /^[([]?\s*(?:anonymous|untitled(?:\s+document)?|no\s+title|none|null|undefined)\s*[)\]]?$/i.test(name.trim());}
+
 /** A policy or group number with only its letters and digits, upper-cased, for comparing. */
 export function normalizedIdentifier(value:string|null|undefined){return (value??"").toUpperCase().replace(/[^A-Z0-9]/g,"");}
 
@@ -85,6 +89,9 @@ export function documentCardTitle(doc:{product_name:string|null;original_filenam
 
 type LabelDoc={id:string;original_filename:string|null;product_name:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null;created_at?:string|Date|null};
 const FORMAT_WORDS:[RegExp,string][]=[[/\.(?:jpe?g|png|heic|heif|webp|gif|tiff?)(?:\s|$)/i,"photo"],[/\.pdf(?:\s|$)/i,"PDF"],[/\.docx?(?:\s|$)/i,"Word file"]];
+/** What a document that is not the policy itself is, as a tell ("letter", "claim decision"); "" for the policy's own pages. */
+const roleTell=(d:LabelDoc)=>{const r=d.document_role??"";
+  return ["","unknown","personal_schedule","schedule","policy","policy_document","policy_schedule","certificate"].includes(r)?"":documentKind(r);};
 const MONTH_WORDS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 /** The day a document was uploaded, in Singapore time ("3 Nov 2026"), from a Date, an ISO string or Postgres's text form. */
 export function uploadDay(value:string|Date|null|undefined):string{
@@ -113,6 +120,8 @@ export function documentLabels(docs:LabelDoc[],opts:{describeUnnamed?:boolean}={
   // until every label is unique, so no label can point at two documents (Critic MED-1: a title "Shield (PDF)" beside a
   // "Shield" PDF). All tells share one bracket ("Shield (part 1 of 2, uploaded 3 Nov 2026)", Critic L3).
   const steps:((d:LabelDoc,group:LabelDoc[])=>string)[]=[
+    // A letter, bill or claim decision that carries a policy's name reads as what it is, never as a "copy" of the policy (#564).
+    (d,g)=>new Set(g.map(roleTell)).size>1?roleTell(d):"",
     (d,g)=>new Set(g.map(fmt)).size>1?fmt(d):"",
     // Different policies are told apart by their numbers, as documentName does, never as "copies" (TE L1).
     (d,g)=>{const end=(x:LabelDoc)=>{const n=normalizedIdentifier(x.policy_number);return /\d/.test(n)?n.slice(-4):"";};
@@ -145,7 +154,7 @@ export function documentLabels(docs:LabelDoc[],opts:{describeUnnamed?:boolean}={
  * "Document". */
 export function hasOwnName(doc:{product_name:string|null;original_filename:string|null;insurer?:string|null;document_role?:string|null}):boolean{
   const product=doc.product_name?.trim();
-  if(product&&!isCodeName(product))return true;
+  if(product&&!isCodeName(product)&&!isPlaceholderName(product))return true;
   if(!isMachineFilename(doc.original_filename??""))return true;
   return !!doc.insurer?.trim()||!["","unknown"].includes(doc.document_role??"");
 }

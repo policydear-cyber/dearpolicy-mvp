@@ -34,6 +34,7 @@ import { askedCoverage, bestLines, columnsFor, narrowToColumn, piecesOf, quoted,
 import { citeAnswerLines } from "./answer-verification";
 import { planKind, type PlanKind } from "./plan-kinds";
 import { householdDocumentLabels } from "@/lib/policies/household-labels";
+import { isPlaceholderName } from "@/lib/policies/document-name";
 
 export type DocumentAnswer = { summary: string; details: string[]; nextSteps: string[]; citations: ChatCitation[]; personId: string | null; patch: Partial<ConversationState> };
 type Doc = { id: string; file: string;
@@ -60,7 +61,7 @@ async function loadDocuments(accountId: string): Promise<Doc[]> {
        FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} ORDER BY p.created_at,p.id`, [accountId]).catch(() => ({ rows: [] }))).rows;
   const labels = await householdDocumentLabels(accountId).catch(() => new Map<string, string>());
   return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", label: labels.get(r.id) ?? "Document", role: r.role, status: r.status, message: r.message,
-    failure: r.status === "failed" ? failedDocumentChatAdvice(r.error, { hasPages: !!r.pages }) : null, product: r.product, insurer: r.insurer, type: r.type, superseded: !!r.superseded,
+    failure: r.status === "failed" ? failedDocumentChatAdvice(r.error, { hasPages: !!r.pages }) : null, product: r.product && !isPlaceholderName(r.product) ? r.product : null, insurer: r.insurer, type: r.type, superseded: !!r.superseded,
     notes: Array.isArray(r.notes) ? (r.notes as unknown[]).map(String) : [], uploadedTo: r.uploaded_to, owners: r.owners?.length ? r.owners : [r.uploaded_to], created: r.created }));
 }
 async function pagesOf(accountId: string, ids: string[]): Promise<Map<string, { page: number; text: string }[]>> {
@@ -130,6 +131,11 @@ const ROLE_ASK: [CorrespondenceRole, RegExp][] = [
 const DOCUMENT_KIND_WORDS = new Set(["policy", "schedule", "certificate", "summary", "statement", "renewal", "notice", "letter", "document", "of", "the", "your", "and", "for", "insurance", "assurance", "plan", "cover", "page", "details", "member", "members", "membership", "health", "life", "medical", "travel", "general"]);
 /** Words that only a document's title carries ("Policy schedule", "Membership certificate"), never a benefit line. */
 const TITLE_ONLY_WORDS = new Set(["policy", "schedule", "certificate", "summary", "statement", "renewal", "notice", "letter", "document", "details", "membership", "page"]);
+/** A printed line that is only the document's own name ("TermGuard 65" on a screenshot titled "TermGuard 65"). */
+const namesOnly = (line: string, d: { label: string; product: string | null }) => {
+  const k = (t: string | null) => (t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return !!k(line) && (k(line) === k(d.label) || k(line) === k(d.product));
+};
 /** A line with no figure that is only the product's name plus document words. A benefit line that happens to use
  * some of the name's words ("Hospital cash" on a Hospital Cash Plan, "Monthly benefit" on a Monthly Benefit Income
  * Plan) is not a title: a title prints the whole name or names the document. */
@@ -304,7 +310,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
     for (const d of whoTarget) byProduct.set(d.product!, [...(byProduct.get(d.product!) ?? []), d]);
     const lines = [...byProduct].map(([product, ds]) => {
       const owners = [...new Set(ds.flatMap((d) => d.owners))].map((id) => args.family.find((p) => p.id === id)).filter((p): p is ClaimPerson => !!p);
-      return product + " covers " + listOf(owners.map((p) => isSelf(p) ? "you" : personName(p) + " (" + p.display_name + ")")) + ", going by " + (ds.length === 1 ? q(ds[0].label) : "its documents") + ".";
+      return product + " covers " + listOf(owners.map((p) => isSelf(p) ? "you" : personName(p) + " (" + p.display_name + ")")) + ", going by " + (ds.length === 1 && !ds[0].label.startsWith(product) ? q(ds[0].label) : ds.length === 1 ? "its document" : "its documents") + ".";
     });
     const owners = [...new Set(whoTarget.flatMap((d) => d.owners))];
     // "Is Papa covered by SeniorGuard?": yes or no for the person asked about, then who it covers.
@@ -332,8 +338,10 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
     const details: string[] = [], citations: ChatCitation[] = [];
     for (const d of onlyHits.filter((x) => x.role !== "app_screenshot")) details.push(unusableLine(d, unusableKind(d)!));
     for (const d of shots) {
-      const lines = bestLines(pages.get(d.id) ?? [], text, { limit: 3, always: [/\bsum assured|next premium|in force\b/i] });
-      const shown = lines.length ? lines : bestLines(pages.get(d.id) ?? [], "", { limit: 3, always: [/\bsum assured|next premium|in force\b/i], min: 2 });
+      // 19 Nov: the screenshot's title line ("TermGuard 65") is what its label already says, so it is not quoted again.
+      const notTitle = (l: { line: string }) => !titleLine(l.line, d.product) && !namesOnly(l.line, d);
+      const lines = bestLines(pages.get(d.id) ?? [], text, { limit: 3, always: [/\bsum assured|next premium|in force\b/i] }).filter(notTitle);
+      const shown = lines.length ? lines : bestLines(pages.get(d.id) ?? [], "", { limit: 3, always: [/\bsum assured|next premium|in force\b/i], min: 2 }).filter(notTitle);
       details.push(q(d.label) + " is a screenshot of " + (cleanInsurer(d.insurer) ? cleanInsurer(d.insurer) + "’s" : "the insurer’s") + " app — a summary from the app, not a policy document — and shows: " + shown.map((l) => "“" + flagUnclearFigures(l.line) + "” (page " + l.page + ")").join("; ") + ".");
       citations.push(...cite(d, "the app screenshot, " + d.label, shown.map((l) => l.page)));
     }
@@ -408,7 +416,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
       personal_notes: [],
     };
     const zero = (l: { line: string }) => /S\$\s?0(?:\.00)?\b(?![\d,])/.test(l.line);
-    const picked = bestLines(docPages, text, { limit: roleAsked === "medical_bill" || roleAsked === "app_screenshot" ? 3 : 4, always: always[roleAsked] }).filter((l) => !zero(l));
+    const picked = bestLines(docPages, text, { limit: roleAsked === "medical_bill" || roleAsked === "app_screenshot" ? 3 : 4, always: always[roleAsked] }).filter((l) => !zero(l) && !(roleAsked === "app_screenshot" && (titleLine(l.line, d.product) || namesOnly(l.line, d))));
     // Round 11: "how much was the bill?" is the bill's total, whatever single charge the question's other words match.
     if (roleAsked === "medical_bill" && /\bhow much\b|\btotal\b|\bamount\b|\bcost\b/i.test(text) && !picked.some((l) => /total charges|amount payable/i.test(l.line))) {
       const total = bestLines(docPages, "total charges amount payable by patient", { limit: 4 }).filter((l) => /(?:^|— )(?:total charges|amount payable by (?:the )?patient):/i.test(l.line) && !zero(l)).slice(0, 1);
@@ -665,7 +673,10 @@ async function printedLinesAnswerInner(args: { accountId: string; question: stri
   const whose = owner ? (isSelf(owner) ? "your" : personName(owner) + "’s") : "the";
   const what = best.d.role === "annual_statement" ? " statement" : best.d.role === "renewal_statement" ? " renewal notice" : "";
   const summary = best.d.superseded
-    ? q(best.d.label) + " is an earlier schedule of " + whose + " " + (best.d.product ?? "policy") + ", kept for reference (answers about the current year use the newer one). For that earlier year it prints:"
+    ? (best.d.product && best.d.label.startsWith(best.d.product)
+      // 19 Nov: the title already names the product, so it is said once ("same policy listed twice" otherwise).
+      ? q(best.d.label) + " is an earlier schedule of " + whose + " policy, kept for reference (answers about the current year use the newer one). For that earlier year it prints:"
+      : q(best.d.label) + " is an earlier schedule of " + whose + " " + (best.d.product ?? "policy") + ", kept for reference (answers about the current year use the newer one). For that earlier year it prints:")
     : "Here is what " + whose + " " + (best.d.product ?? q(best.d.label)) + what + " prints about that:";
   // Round 7 (port): a per-column table row says only the column asked (or this person's, on the household's own group plan), or is not quoted.
   const self = args.family.find((p) => /^self$/i.test(p.relationship ?? ""));
@@ -707,7 +718,7 @@ export async function provenanceAnswer(args: { accountId: string; conversationId
   const docs = await loadDocuments(args.accountId);
   const byId = new Map(docs.map((d) => [d.id, d]));
   const isPolicy = (d: Doc) => !NON_COVER_ROLES.has(d.role ?? "") && d.role !== "app_screenshot";
-  const what = (d: Doc) => d.role && d.role in ROLE_WORDS ? ROLE_WORDS[d.role as CorrespondenceRole].replace("'", "’") + ", not a policy document" : d.product ? "the " + d.product + " policy document" : "a policy document";
+  const what = (d: Doc) => d.role && d.role in ROLE_WORDS ? ROLE_WORDS[d.role as CorrespondenceRole].replace("'", "’") + ", not a policy document" : d.product && !d.label.startsWith(d.product) ? "the " + d.product + " policy document" : "a policy document";
   const pageWords = (ps: number[]) => ps.length === 1 ? "page " + ps[0] : "pages " + listOf(ps.map(String));
   // The pages the answer cited, by document.
   const cited = new Map<string, number[]>();

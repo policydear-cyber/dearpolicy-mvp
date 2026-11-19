@@ -52,3 +52,26 @@ would now fail these checks, as intended.
 - A nameless upload must be said with its own format word ("Photo" for a .jpg, never "PDF") and with the exact casing.
   Only the day is open, because it depends on when the fixture was seeded.
 - livelib-check S52C now needs the "could not be read" status on the same line as the photo, as pr50-check C3 already did.
+
+## Test battery and browser specs updated with the CI fixes
+
+These are not registered graders. They are listed here so every file-name expectation that changed is in one place.
+
+| File | Case | Before | Now |
+|---|---|---|---|
+| scripts/r10/battery.ts | current SilverShield schedule | `SilverShield_Schedule_2026.pdf` or 2026; must not call `SilverShield_2025_photo.png` current | "SilverShield Integrated Plan (PDF)" or 2026; must not call "(photo, ending 0417)" current |
+| scripts/r10/battery.ts | schedule uploaded twice | `SilverShield_Schedule_2026.pdf` or PDF | "SilverShield Integrated Plan (PDF)" or PDF |
+| scripts/r10/battery.ts | premium last year | /2025/ | /2025/ or "earlier schedule" |
+| scripts/r10/battery.ts | documents that couldn't be read (3 cases) | the three file names | the three titles in quotes, and no file name shown |
+| scripts/r10/battery.ts | letters rather than policies | the letter's and decision's file names, or premium / claim | "(letter)" or premium; "(claim decision)" or claim |
+| scripts/r10/battery.ts | every document for Papa | `SilverShield_Schedule_2026.pdf`, `Merlion_Claim_Decision` | "SilverShield Integrated Plan (PDF)", "SilverShield Integrated Plan (claim decision)", and no file name shown |
+| scripts/r10/battery.ts | was the 2025 premium S$1,962 | S$1,962, unclear or 2025 | the same, or "(photo, ending 0417)" |
+| scripts/r10/battery.ts | is that from the policy (2 cases) | the schedule's or screenshot's file name | its title in quotes; the screenshot's file name must not show |
+| e2e/tests/rag2-stress-report.spec.ts | R1 | scan-0042.jpg could not be read | "Photo uploaded <day> could not be read", and not scan-0042 |
+| e2e/tests/rag2-livelib.spec.ts | L1 | the line holding the file name | the line holding the title "Claim S$5,000 receipt", and not the file name |
+
+Two of these passed on main only because a citation showed the file name `SilverShield_2025_photo.png`, which holds
+"2025". The answers themselves are unchanged from main: "What was Papa's SilverShield premium last year?" says it is the
+earlier schedule and leaves out the unclear amount, and "Was Papa's 2025 premium S$1,962?" leaves out the amount. The
+battery now accepts the 2025 photo's title in place of the file name. Whether that second answer should say more is a
+follow-up, not part of this change.

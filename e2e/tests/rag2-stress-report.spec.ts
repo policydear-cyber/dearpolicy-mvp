@@ -44,8 +44,9 @@ test("R1 household document inventory: per person, insurer and role; pet documen
   const [m] = await scenario(request, "R1");
   await newChat(page);
   const v = await send(page, m);
-  for (const x of [/Marcus:/, /Serena:/, /Public Officers Group Scheme - Certificate/, /Kestrel Assurance/, /personal policy document/, /Summary of Benefits/, /reference wording/, /Not linked to anyone[^\n]*PawSafe Pet Insurance/, /scan-0042\.jpg could not be read/]) expect(v).toMatch(x);
+  for (const x of [/Marcus:/, /Serena:/, /Public Officers Group Scheme - Certificate/, /Kestrel Assurance/, /personal policy document/, /Summary of Benefits/, /reference wording/, /Not linked to anyone[^\n]*PawSafe Pet Insurance/, /Photo uploaded \d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4} could not be read/]) expect(v).toMatch(x);
   expect(v).not.toMatch(/S\$\d/);
+  expect(v).not.toMatch(/scan-0042/i); // 19 Nov (DC approved): the scan by its upload day, never its file name
   expect(v).not.toMatch(/Lee, Marcus|S\$700,000/);
 });
 

@@ -103,5 +103,18 @@ test("documentLabels: multi-policy parts, nameless uploads and twins never show 
   for (const l of labels) assert.doesNotMatch(l, /\.(?:pdf|jpe?g)\b|output_|817d6e8b|IMG_|pages \d/i, l);
 });
 
+// #564 (19 Nov): a letter or claim decision that carries the policy's name reads as what it is, not as "copy 2"; a PDF
+// tool's stand-in title ("(anonymous)") is never a name.
+test("documentLabels: letters and decisions read by kind; placeholder titles are not names", () => {
+  const d = (id: string, f: string, p: string | null, r: string | null) => ({ id, original_filename: f, product_name: p, document_role: r, created_at: "2026-11-03T02:00:00Z" });
+  const m = documentLabels([
+    d("s", "a.pdf", "Shield Plan", "personal_schedule"), d("l", "b.pdf", "Shield Plan", "insurer_letter"),
+    d("c", "c.pdf", "Shield Plan", "claim_decision"), d("x", "Novena_Final_Bill.pdf", "(anonymous)", "medical_bill"),
+    d("u", "IMG_0042.pdf", "Untitled", null),
+  ], { describeUnnamed: true });
+  assert.deepEqual([...m.values()], ["Shield Plan", "Shield Plan (letter)", "Shield Plan (claim decision)", "Novena Final Bill", "PDF uploaded 3 Nov 2026"]);
+  assert.equal(documentCardTitle({ product_name: "(anonymous)", original_filename: "IMG_1.pdf", insurer: "Merlion", document_role: "medical_bill" }), "Merlion medical bill");
+});
+
 console.log(`doc-card-title: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }

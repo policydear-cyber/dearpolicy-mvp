@@ -31,7 +31,9 @@ test("L1 inventory: the unreadable upload's status line is composed, saved verba
   const shown = await send(page, m);
   const s = await last(request);
   const turn = s.state?.ragLoop?.turns?.at(-1);
-  const line = (turn?.composed as string[]).find((c) => c.includes("Claim S$5,000 receipt 05-03-2024.pdf"));
+  // 19 Nov (DC approved): the upload is said by its title ("Claim S$5,000 receipt …"), never its file name.
+  const line = (turn?.composed as string[]).find((c) => c.includes("Claim S$5,000 receipt"));
+  expect(shown).not.toContain("05-03-2024.pdf");
   expect(line, JSON.stringify(turn?.composed)).toBeTruthy();
   const saved = [s.message!.answer_json.summary, ...s.message!.answer_json.details];
   expect(saved).toContain(line);
