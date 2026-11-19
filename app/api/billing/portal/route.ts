@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { requireHouseholdOwner } from "@/lib/household/repo";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { billingConfig, createPortalSession, stripeCustomerOf } from "@/lib/billing/stripe";
 
 export const runtime = "nodejs";
@@ -12,8 +11,7 @@ export async function POST(request: NextRequest) {
   try {
     const config = billingConfig();
     if (!config) return NextResponse.json({ error: "Billing isn’t open yet." }, { status: 404 });
-    const ctx = await requireHouseholdContext(request);
-    await requireHouseholdOwner(ctx.userId, ctx.householdId);
+    const ctx = await requireHouseholdOwnerContext(request);
     const customerId = await stripeCustomerOf(ctx.householdId);
     if (!customerId) return NextResponse.json({ error: "Your household doesn’t have a paid plan yet." }, { status: 404 });
     return NextResponse.json({ url: await createPortalSession(config, { customerId, origin: request.nextUrl.origin }) });

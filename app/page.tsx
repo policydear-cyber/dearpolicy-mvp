@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect,useMemo,useRef,useState } from "react";
 import { customerError } from "@/components/customer-text";
+import { useCanManageHousehold } from "@/components/household-role";
 import { HomeAsk, HomeAttention } from "@/components/home-attention";
 import { HomeNotFound, homeGaps } from "@/components/home-not-found";
 import { homeView } from "@/lib/format/home-view";
@@ -48,6 +49,8 @@ export default function DashboardPage(){
  // answered the document is used for nothing at all, which is why it is on the
  // portfolio rather than buried in the document list.
  const [claiming,setClaiming]=useState("");
+ // Only the household owner says whose a document is (components/household-role); a member is told who can.
+ const canManage=useCanManageHousehold();
  const [claimError,setClaimError]=useState("");
  async function claim(policyId:string,familyMemberId:string){
   setClaiming(policyId);setClaimError("");
@@ -75,7 +78,7 @@ export default function DashboardPage(){
  const personEmpty=returning&&view.personEmpty;
  const name=active?.display_name??null;
  const covered=(data?.coverages??[]).filter(c=>c.status==="covered");
- const people=<section className="member-strip"><div className="member-pills" role="group" aria-label="Whose cover">{data?.family?.map((m,i)=><button key={m.id} data-person={i%4} aria-pressed={m.id===(active?.id??activeId)} className={`member-pill ${m.id===(active?.id??activeId)?"active":""}`} onClick={()=>choose(m.id)}><span className="member-dot">{m.display_name.slice(0,1).toUpperCase()}</span><span><b>{m.display_name}</b><small>{m.relationship}</small></span></button>)}<Link className="member-pill add" href="/family"><Icon name="plus"/> Add person</Link></div></section>;
+ const people=<section className="member-strip"><div className="member-pills" role="group" aria-label="Whose cover">{data?.family?.map((m,i)=><button key={m.id} data-person={i%4} aria-pressed={m.id===(active?.id??activeId)} className={`member-pill ${m.id===(active?.id??activeId)?"active":""}`} onClick={()=>choose(m.id)}><span className="member-dot">{m.display_name.slice(0,1).toUpperCase()}</span><span><b>{m.display_name}</b><small>{m.relationship}</small></span></button>)}{canManage&&<Link className="member-pill add" href="/family"><Icon name="plus"/> Add person</Link>}</div></section>;
  return <div className="page dashboard-page">
   {data?.error&&<div className="alert error" role="alert"><strong>DearPolicy couldn&rsquo;t load your family&rsquo;s cover just now.</strong><small>Your documents are safe. Please refresh the page in a moment.</small></div>}
   {emptyPortfolio?<>
@@ -91,7 +94,7 @@ export default function DashboardPage(){
       are one tap away on Coverage. A cover no document gives this person has no card. */}
   <div className="home-top">
    <section className="home-cards" aria-labelledby="home-cards-title">
-    <div className="home-cards-head"><h1 id="home-cards-title">{name?`${name}\u2019s protection`:"Your family\u2019s protection"}</h1><Link href="/policies" className="text-link"><Icon name="upload"/>Upload</Link></div>
+    <div className="home-cards-head"><h1 id="home-cards-title">{name?`${name}\u2019s protection`:"Your family\u2019s protection"}</h1>{canManage&&<Link href="/policies" className="text-link"><Icon name="upload"/>Upload</Link>}</div>
     {people}
     {!loading&&!!data?.reading&&<p className="summary-sub">{data.reading===1?"A document is":`${data.reading} documents are`} still being read. This page updates on its own when reading is done.</p>}
     {loading&&!data?<div className="empty-card">Loading…</div>:personEmpty?<PersonNothingYet name={name??"This person"} paidFor={view.paidFor}/>:covered.length?<div className="coverage-grid" data-testid="home-cards" data-cols={homeGridColumns(covered.length)}>{covered.map(c=>{const source=homeCardSource(c);return <Link href={`/coverage?member=${encodeURIComponent(active?.id??"")}&category=${encodeURIComponent(c.category)}`} className="coverage-card covered" data-card={coverCard(c.category)} key={c.category}><div className="coverage-top"><span className="coverage-icon"><Icon name={coverIcon(c.category)}/></span><div className="coverage-name">{c.category}</div></div>{source&&<span className="coverage-source" title={source}>{source}</span>}<strong className="coverage-status"><Icon name="checkCircle"/>Covered</strong></Link>;})}</div>
@@ -103,12 +106,12 @@ export default function DashboardPage(){
    <HomeAsk memberId={active?.id} name={name}/>
   </div>
   {!!data?.unclaimed?.length&&<section className="section unclaimed-panel"><div className="section-heading"><div><Titled icon="person"><h2>Whose {data.unclaimed.length===1?"document is this":"documents are these"}?</h2></Titled></div></div>
-   <p className="unclaimed-lead">Choose who {data.unclaimed.length===1?"this document belongs":"these documents belong"} to. Until you do, DearPolicy doesn&rsquo;t use {data.unclaimed.length===1?"it":"them"}.</p>
-   <p className="muted">Covers more than one person, like a group booklet? <Link href="/policies" className="text-link">Choose everyone it covers on the Documents page →</Link></p>
+   <p className="unclaimed-lead">{canManage?<>Choose who {data.unclaimed.length===1?"this document belongs":"these documents belong"} to. Until you do</>:<>The household owner can choose who {data.unclaimed.length===1?"this document belongs":"these documents belong"} to. Until they do</>}, DearPolicy doesn&rsquo;t use {data.unclaimed.length===1?"it":"them"}.</p>
+   {canManage&&<p className="muted">Covers more than one person, like a group booklet? <Link href="/policies" className="text-link">Choose everyone it covers on the Documents page →</Link></p>}
    {claimError&&<div className="alert error" role="alert">{claimError}</div>}
    <div className="unclaimed-list">{data.unclaimed.map(doc=><div className="unclaimed-row" key={doc.id}>
     <div><strong>{doc.product_name??doc.original_filename}</strong><span>{[doc.insurer,(doc.document_role??"").replaceAll("_"," ")].filter(Boolean).join(" · ")||doc.original_filename}</span></div>
-    <div className="declare-owner">{data.family.map(m=><button key={m.id} type="button" className="button secondary" disabled={claiming===doc.id} onClick={()=>void claim(doc.id,m.id)}>{m.display_name}</button>)}</div>
+    {canManage&&<div className="declare-owner">{data.family.map(m=><button key={m.id} type="button" className="button secondary" disabled={claiming===doc.id} onClick={()=>void claim(doc.id,m.id)}>{m.display_name}</button>)}</div>}
    </div>)}</div></section>}
   {returning&&<HomeAttention/>}
   </>}

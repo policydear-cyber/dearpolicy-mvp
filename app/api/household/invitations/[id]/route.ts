@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { isUuid } from "@/lib/db/client";
 import { DeletionValidationError, requestInvitationRevocation } from "@/lib/lifecycle/coordinator";
 
@@ -11,7 +11,7 @@ export const ROUTE_AUTH = "household-owner" as const;
  * instead of calling revokeInvitation() directly. */
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const { id } = await params;
     if (!isUuid(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const idempotencyKey = request.headers.get("idempotency-key") || `delete:${id}`;

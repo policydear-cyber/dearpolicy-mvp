@@ -198,35 +198,68 @@ export async function removeMember(callerUserId: string, householdId: string, ta
     // remove someone else, or anyone to remove themselves (leave) -- a
     // caller who is neither gets rowCount 0, surfaced the same way as
     // "not found" below.
-    const { rowCount } = await client.query(`delete from household_members where household_id = $1 and user_id = $2`, [
-      householdId,
-      targetUserId,
-    ]);
-    if (rowCount === 0) throw new ForbiddenError("Not permitted to remove this member");
+    // Only a member row is deleted here: if a transfer made this person the owner after the read above, the delete
+    // re-checks the committed row (it waits on the transfer's row lock) and removes nothing, so a household is never
+    // left with no owner (Test engineer #538 F1). The rare legacy co-owner case was already checked above.
+    const { rowCount } = await client.query(
+      `delete from household_members where household_id = $1 and user_id = $2 and (role <> 'owner' or $3::boolean)`,
+      [householdId, targetUserId, target.rows[0].role === "owner"],
+    );
+    if (rowCount === 0) {
+      const now = await client.query<{ role: Role }>(`select role from household_members where household_id = $1 and user_id = $2`, [householdId, targetUserId]);
+      if (now.rows[0]?.role === "owner") throw new ConflictError("Cannot remove the owner of a household. Transfer ownership first.");
+      throw new ForbiddenError("Not permitted to remove this member");
+    }
   }, poolOverride);
 }
 
-/** Owner-only: promote/demote a member's role, with the same
- * never-leave-zero-owners protection as removeMember(). */
+/** A household has exactly one owner (DC, 18 Nov 2026). The owner alone
+ * manages documents, people and settings; members can view and use Ask.
+ * Ownership moves only by transfer: the target becomes the owner and the
+ * caller becomes a member, in one transaction, so the household is never
+ * left without an owner and never has two.
+ *
+ * Promote first, then demote: both statements run under the caller's own
+ * RLS (household_members_update needs is_household_owner()), and after a
+ * demotion the caller could no longer promote anyone. The one-owner
+ * constraint in sql/household-single-owner.sql is DEFERRABLE INITIALLY
+ * DEFERRED, so the brief two-owner state inside this transaction is checked
+ * only at commit. */
+export async function transferOwnership(callerUserId: string, householdId: string, targetUserId: string, poolOverride?: Pick<Pool, "connect">): Promise<void> {
+  if (callerUserId === targetUserId) throw new ConflictError("You are already the owner of this household.");
+  await createUserSupabaseClient(callerUserId, async (client) => {
+    const { rows } = await client.query<{ user_id: string; role: Role }>(
+      `select user_id, role from household_members where household_id = $1 and user_id = any($2::uuid[]) for update`,
+      [householdId, [callerUserId, targetUserId]],
+    );
+    const caller = rows.find((r) => r.user_id === callerUserId);
+    const target = rows.find((r) => r.user_id === targetUserId);
+    if (!caller || caller.role !== "owner") throw new NotHouseholdOwnerError("Only the household owner can perform this action.");
+    if (!target) throw new NotFoundError("Membership not found");
+    const promoted = await client.query(`update household_members set role = 'owner' where household_id = $1 and user_id = $2`, [householdId, targetUserId]);
+    if (promoted.rowCount !== 1) throw new ForbiddenError("Not permitted to change this member's role");
+    const demoted = await client.query(`update household_members set role = 'member' where household_id = $1 and user_id = $2`, [householdId, callerUserId]);
+    if (demoted.rowCount !== 1) throw new ForbiddenError("Not permitted to change this member's role");
+    // Any invitation still pending was sent by the old owner on their own
+    // authority; it stays valid (it can only ever add a member).
+  }, poolOverride);
+}
+
+/** Kept for the members route's PATCH body ({ role }). "owner" means
+ * transfer ownership to the target; "member" can only describe someone who
+ * already is one, because the single owner can't step down without naming
+ * a successor. */
 export async function setMemberRole(callerUserId: string, householdId: string, targetUserId: string, role: Role, poolOverride?: Pick<Pool, "connect">): Promise<void> {
+  if (role === "owner") return transferOwnership(callerUserId, householdId, targetUserId, poolOverride);
   await createUserSupabaseClient(callerUserId, async (client) => {
     const target = await client.query<{ role: Role }>(
       `select role from household_members where household_id = $1 and user_id = $2`,
       [householdId, targetUserId],
     );
     if (target.rows.length === 0) throw new NotFoundError("Membership not found");
-    if (target.rows[0].role === "owner" && role === "member") {
-      const owners = await countOwners(client, householdId);
-      if (owners <= 1) {
-        throw new ConflictError("Cannot demote the last owner of a household.");
-      }
+    if (target.rows[0].role === "owner") {
+      throw new ConflictError("Cannot demote the last owner of a household. Transfer ownership instead.");
     }
-    const { rowCount } = await client.query(`update household_members set role = $1 where household_id = $2 and user_id = $3`, [
-      role,
-      householdId,
-      targetUserId,
-    ]);
-    if (rowCount === 0) throw new ForbiddenError("Not permitted to change this member's role");
   }, poolOverride);
 }
 
@@ -250,6 +283,8 @@ export async function createInvitation(
   role: Role = "member",
   poolOverride?: Pick<Pool, "connect">,
 ): Promise<{ token: string; expiresAt: string }> {
+  // One owner per household: an invitation can only ever add a member.
+  if (role !== "member") throw new ConflictError("An invitation can only add a member. Transfer ownership instead.");
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !normalizedEmail.includes("@")) throw new ConflictError("A valid email address is required");
   const token = randomBytes(32).toString("base64url");
@@ -398,7 +433,9 @@ export async function acceptInvitation(
       throw new ForbiddenError("This invitation was issued to a different email address");
     }
 
-    await insertMember(client, invitation.household_id, acceptingUserId, invitation.role, null);
+    // Always a member: a household has exactly one owner, and an older
+    // invitation stored as "owner" must never create a second one.
+    await insertMember(client, invitation.household_id, acceptingUserId, "member", null);
     await client.query(`update household_invitations set accepted_at = now(), accepted_by = $1 where id = $2`, [
       acceptingUserId,
       invitation.id,

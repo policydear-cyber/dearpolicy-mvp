@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createPolicyUploadUrl, policyUploadDriver, policyUploadKey } from "@/lib/storage";
 import { ACCEPTED_FORMATS_MESSAGE, FORMAT_EXTENSIONS, SUPPORTED_UPLOAD_FORMATS } from "@/lib/documents/formats";
 import { MAX_DOCUMENT_BYTES, TOO_LARGE_MESSAGE, resolveUploadFamilyMember, uploadErrorResponse } from "../accept";
@@ -36,7 +36,7 @@ const Schema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = Schema.parse(await request.json().catch(() => ({})));
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     if (body.byteSize <= 0) return NextResponse.json({ error: "The uploaded file is empty.", reasonCode: "EMPTY_FILE" }, { status: 400 });
     if (body.byteSize > MAX_DOCUMENT_BYTES) return NextResponse.json({ error: TOO_LARGE_MESSAGE, reasonCode: "FILE_TOO_LARGE" }, { status: 400 });
     const extension = (body.filename.match(/\.([a-z0-9]+)$/i)?.[1] ?? "").toLowerCase();

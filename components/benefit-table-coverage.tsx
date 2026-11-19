@@ -3,6 +3,7 @@
 import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { useState } from "react";
+import { useCanManageHousehold } from "@/components/household-role";
 import { benefitNames, bySection, keyBenefits, money, noSumText, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
 import { rowsForCover } from "@/lib/benefit-table/cover-rows";
 import { sharedCoverText } from "@/lib/benefit-table/shared-cover";
@@ -135,12 +136,14 @@ function FigureToConfirm({check,done}:{check:FigureCheck;done:()=>void}){
  * answers. Figures still being checked are counted, with nothing to do. */
 function FigureChecks({checks,reload}:{checks:FigureCheck[];reload?:()=>Promise<void>}){
   const [hidden,setHidden]=useState<string[]>([]);
+  // Saying what the page prints is the household owner's answer (components/household-role); a member sees what waits.
+  const canManage=useCanManageHousehold();
   const ask=checks.filter(c=>c.status==="confirm"&&!hidden.includes(c.documentId+c.claimKey)),checking=checks.filter(c=>c.status==="checking");
   if(!ask.length&&!checking.length)return null;
   return <section className="cov-person" data-testid="figure-checks">
     {ask.length?<><div className="cov-person-head"><h2>{ask.length===1?"One figure needs your check":`${ask.length} figures need your check`}</h2></div>
-      <p className="muted">Five separate readings didn&rsquo;t agree on {ask.length===1?"this figure":"these figures"}, often because the print is unclear. {ask.length===1?"It isn’t":"They aren’t"} used anywhere until you say what the page prints. What you choose is kept.</p>
-      <ul className="cov-also">{ask.map(c=><FigureToConfirm key={c.documentId+c.claimKey} check={c} done={()=>{setHidden(h=>[...h,c.documentId+c.claimKey]);void reload?.();}}/>)}</ul></>:null}
+      <p className="muted">Five separate readings didn&rsquo;t agree on {ask.length===1?"this figure":"these figures"}, often because the print is unclear. {ask.length===1?"It isn’t":"They aren’t"} used anywhere until {canManage?"you say":"the household owner says"} what the page prints. What {canManage?"you choose":"they choose"} is kept.</p>
+      {canManage&&<ul className="cov-also">{ask.map(c=><FigureToConfirm key={c.documentId+c.claimKey} check={c} done={()=>{setHidden(h=>[...h,c.documentId+c.claimKey]);void reload?.();}}/>)}</ul>}</>:null}
     {checking.length?<p className="muted" role="status" data-testid="figure-checking">{checking.length===1?"One figure is":`${checking.length} figures are`} still being checked, so {checking.length===1?"it isn’t":"they aren’t"} used yet.</p>:null}
   </section>;
 }

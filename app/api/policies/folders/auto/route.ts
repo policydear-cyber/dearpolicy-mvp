@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireHouseholdContext } from "@/lib/auth/request-context";
-import { requireHouseholdOwner } from "@/lib/household/repo";
+import { requireHouseholdOwnerContext } from "@/lib/auth/request-context";
 import { makeAutoFolders } from "@/lib/policies/folders";
 import { AutoFolders, folderError } from "../http";
 
@@ -12,8 +11,7 @@ export const ROUTE_AUTH = "household-owner" as const;
  * that had its folder made, or left one, is skipped. */
 export async function POST(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext(request);
-    await requireHouseholdOwner(ctx.userId, ctx.householdId);
+    const ctx = await requireHouseholdOwnerContext(request);
     const body = AutoFolders.parse(await request.json().catch(() => ({})));
     const made = await makeAutoFolders(ctx.householdId, body.starters);
     return NextResponse.json({ ok: true, made });

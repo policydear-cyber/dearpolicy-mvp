@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const raw = await request.json().catch(() => ({}));
     if (raw && typeof raw === "object" && Array.isArray((raw as { assignments?: unknown }).assignments)) {
       const assignment = AssignmentsSchema.parse(raw);
-      const assignCtx = await requireHouseholdContext(request);
+      const assignCtx = await requireHouseholdOwnerContext(request);
       await ensurePolicyMemberTierSchema();
       // Authorise the document and every person against this household
       // through the RLS-scoped client; the save itself is one transaction.
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, assigned: saved.assigned, removed: saved.removed, linked: saved.linked });
     }
     const body = Schema.parse(raw);
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const remembersRemovals = await exclusionsReady();
     const remembersDismissals = await dismissalsReady();
     const unmatchedClause = await notDismissedClause();

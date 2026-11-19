@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Icon, coverIcon } from "@/components/icons";
+import { useCanManageHousehold } from "@/components/household-role";
 
 /** The main kinds of cover a household usually considers. Home lists those not found for the person as gaps (DC 17 Nov:
  * "show the user what insurance gaps they do not have, so they can consider getting them"). Add-ons of these (Hospital
@@ -27,6 +28,8 @@ export function homeGaps(coverages: { category: string; status: string }[], rela
  * when gaps show instead (design review 2, Critic finding 2). Each gap links to its own Coverage answer, which names
  * anything on file for it. No product or insurer is suggested; the Learn guide explains what each kind is for. */
 export function HomeNotFound({missing,onFile=[],memberId,name,note,pending=false}:{missing:string[];onFile?:string[];memberId:string;name?:string|null;note?:string|null;pending?:boolean}){
+  // Uploading is the household owner's (components/household-role): a member is told who can add it.
+  const canManage=useCanManageHousehold();
   if(!missing.length&&!onFile.length)return null;
   const whose=name?`${name}\u2019s documents`:"your documents";
   const own=name?`${name}\u2019s own policy`:"your own policy";
@@ -39,6 +42,6 @@ export function HomeNotFound({missing,onFile=[],memberId,name,note,pending=false
       {!!missing.length&&<small>A policy that is not uploaded may still cover these.</small>}
     </>}
     {note&&<small>{note}</small>}
-    <p className="home-gaps-foot"><Link className="text-link" href="/learn/types-of-cover">What each type of cover is for</Link>{!pending&&<><span aria-hidden="true"> · </span><Link className="text-link" href="/policies">Have one of these? Upload it</Link></>}</p>
+    <p className="home-gaps-foot"><Link className="text-link" href="/learn/types-of-cover">What each type of cover is for</Link>{!pending&&<><span aria-hidden="true"> · </span>{canManage?<Link className="text-link" href="/policies">Have one of these? Upload it</Link>:<span>Have one of these? The household owner can upload it.</span>}</>}</p>
   </section>;
 }

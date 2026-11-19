@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { readPolicyFile } from "@/lib/storage";
 import { acceptPolicyUpload, MAX_DOCUMENT_BYTES, TOO_LARGE_MESSAGE, uploadErrorResponse } from "../accept";
@@ -25,7 +25,7 @@ const Schema = z.object({ token: z.string().min(1).max(8192), pdfPassword: z.str
 export async function POST(request: NextRequest) {
   try {
     const body = Schema.parse(await request.json().catch(() => ({})));
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     scheduleRequestDrain();
     const intent = verifyUploadIntent(body.token);
     if (!intent || intent.householdId !== ctx.householdId || intent.userId !== ctx.userId) {

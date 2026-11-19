@@ -5,7 +5,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { scheduleOnlyLines } from "@/components/cover-kinds";
 import { scheduleLinesFor } from "@/lib/ledger/schedule-lines";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { statedCurrencyCode } from "@/lib/format/currency";
 import { addLedgerRow,ledgerAlternatives,ledgerFor,loadLedger,loadLedgerRow,refreshLedgerOnOpen,seedLedger,sentPlanName,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
@@ -82,7 +82,7 @@ const Patch=z.object({
 export async function PATCH(request:NextRequest){
   try{
     const body=Patch.parse(await request.json().catch(()=>({})));
-    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
+    const ctx=await requireHouseholdOwnerContext(request),accountId=ctx.householdId;
     if(body.eventType&&!(body.eventType in EVENTS))return NextResponse.json({error:"Unknown event"},{status:400});
     const existing=await loadLedgerRow(accountId,body.id);
     if(!existing)return NextResponse.json({error:"Row not found"},{status:404});
@@ -117,7 +117,10 @@ const Add=z.object({
 export async function POST(request:NextRequest){
   try{
     const body=await request.json().catch(()=>({}));
-    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
+    // Finishing the reading of documents already on file ("read") happens when anyone opens Coverage, so any member may
+    // ask for it: it reads what the owner uploaded and changes nothing they chose. Adding a cover or rebuilding is the
+    // owner's (one owner per household).
+    const ctx=body?.action==="read"?await requireHouseholdContext(request):await requireHouseholdOwnerContext(request),accountId=ctx.householdId;
     if(body?.action==="rebuild"){
       const added=await seedLedger(accountId);
       return NextResponse.json({added:added.added});

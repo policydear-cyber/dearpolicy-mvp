@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { appendPolicyUploadPart } from "@/lib/storage";
 import { MAX_DOCUMENT_BYTES } from "../accept";
 import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
@@ -19,7 +19,7 @@ const MAX_PART_BYTES = 4 * 1024 * 1024 + 64 * 1024;
  */
 export async function PUT(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const intent = verifyUploadIntent(request.headers.get("x-upload-token"));
     if (!intent || intent.driver !== "local" || intent.householdId !== ctx.householdId || intent.userId !== ctx.userId) {
       return NextResponse.json({ error: "This upload has expired. Choose the file again." }, { status: 403 });

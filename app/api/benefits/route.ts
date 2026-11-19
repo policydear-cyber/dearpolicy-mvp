@@ -4,7 +4,7 @@ import { z } from "zod";
 import { isUuid,query } from "@/lib/db/client";
 import { nameWithoutPlanCell } from "@/lib/insurance/scale-limit";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { isWarmPing } from "@/lib/http/warm-ping";
 import { limitOpenEndpoint } from "@/lib/http/open-endpoint-limit";
 import { coverageForBenefit,describeBenefitFormula,describeScheduleTerm,isScheduleTerm,ensureBenefitSchema,isRulelessCoverLine,looksLikeCoverageLine,namesNoBenefit,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
@@ -379,7 +379,7 @@ const Patch=z.object({
 export async function PATCH(request:NextRequest){
   try{
     const body=Patch.parse(await request.json().catch(()=>({})));
-    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
+    const ctx=await requireHouseholdOwnerContext(request),accountId=ctx.householdId;
     await ensureBenefitSchema();
     const existing=await query<{id:string;benefit_name:string;quote:string|null}>("SELECT id,benefit_name,quote FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,accountId]);
     if(!existing.rows[0])return NextResponse.json({error:"That benefit is not in your schedule."},{status:404});
@@ -428,7 +428,7 @@ const Remove=z.object({id:z.string().uuid()});
 export async function DELETE(request:NextRequest){
   try{
     const body=Remove.parse(await request.json().catch(()=>({})));
-    const ctx=await requireHouseholdContext(request);
+    const ctx=await requireHouseholdOwnerContext(request);
     await ensureBenefitSchema();
     const result=await query("DELETE FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,ctx.householdId]);
     if(!result.rowCount)return NextResponse.json({error:"That benefit is not in your schedule."},{status:404});

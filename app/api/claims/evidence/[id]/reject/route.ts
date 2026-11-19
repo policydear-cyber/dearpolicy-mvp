@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { getClaimSession } from "@/lib/claims/session";
 import { getScopedEvidenceDocument, transitionEvidenceStatus } from "@/lib/claims/evidence/store";
 import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const { id } = await params;
     if (!isUuid(id)) return NextResponse.json({ error: "Invalid claim-evidence document id." }, { status: 400 });
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const body = (await request.json().catch(() => ({}))) as { familyMemberId?: string; claimSessionId?: string; reason?: string };
     if (!body.familyMemberId || !body.claimSessionId) return NextResponse.json({ error: "familyMemberId and claimSessionId are required." }, { status: 400 });
 
