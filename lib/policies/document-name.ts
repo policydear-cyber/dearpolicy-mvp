@@ -123,7 +123,15 @@ export function documentLabels(docs:LabelDoc[],opts:{describeUnnamed?:boolean}={
       group.forEach((d,i)=>{if(add[i])head.get(d.id)!.tells.push(add[i]);});
     }
   }
-  return new Map(docs.map(d=>[d.id,text(d.id)]));
+  // A title that itself reads like a tell ("Shield (copy 1)") could still meet a twin's label: bump the copy number until
+  // the label is free (Critic L6).
+  const out=new Map<string,string>(),used=new Set<string>();
+  for(const d of docs){
+    let label=text(d.id);
+    for(let k=2;used.has(label);k++)label=`${text(d.id)} (copy ${k})`;
+    used.add(label);out.set(d.id,label);
+  }
+  return out;
 }
 
 /** Whether a document has a name of its own to be called by: a product, a file name a person chose, an insurer, or a
@@ -135,9 +143,11 @@ export function hasOwnName(doc:{product_name:string|null;original_filename:strin
   if(!isMachineFilename(doc.original_filename??""))return true;
   return !!doc.insurer?.trim()||!["","unknown"].includes(doc.document_role??"");
 }
-/** A document with no name of its own, described by what the upload is and the day it came ("the photo uploaded 3 Nov
+/** A document with no name of its own, described by what the upload is and the day it came ("Photo uploaded 3 Nov
  * 2026"), never by its file name (DC 18 Nov; DC 19 Nov approved this wording for the household inventory). */
 export function unnamedDescription(doc:{original_filename:string|null;created_at?:string|Date|null}):string{
   const fmt=FORMAT_WORDS.find(([re])=>re.test(doc.original_filename??""))?.[1]??"file",day=uploadDay(doc.created_at);
-  return `the ${fmt}${day?` uploaded ${day}`:""}`;
+  // Written as a title ("Photo uploaded 3 Nov 2026"), so it reads right in quotes and at the start of a sentence (Critic L7).
+  const word=fmt==="PDF"?"PDF":fmt.charAt(0).toUpperCase()+fmt.slice(1);
+  return `${word}${day?` uploaded ${day}`:""}`;
 }
