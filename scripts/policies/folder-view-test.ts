@@ -112,10 +112,14 @@ test("P4 a schedule already in a folder, linked to nobody, linked only by plan m
   const docs = [sch("filed"), sch("nobody", { linked_people: [] }), sch("plan", { linked_people: [{ id: "jane", source: "scheme_reference_match" }] }), d("reading", { document_role: null })];
   assert.deepEqual(policyStarters(docs, [f({ documents: [{ policyId: "filed", slot: null }] })]), []);
 });
-test("P5 a companion that would leave no person common to all is left out; the folder keeps one person's documents", () => {
+test("P5 a joint schedule keeps both people; a same-number document of only one of them stays out", () => {
   const docs = [sch("a", { policy_number: "AB123456", linked_people: [{ id: "jane" }, { id: "john" }] }),
-    d("j", { policy_number: "AB123456", linked_people: [{ id: "jane" }] }), d("k", { policy_number: "AB123456", linked_people: [{ id: "john" }] })];
-  assert.deepEqual(policyStarters(docs, []), [{ scheduleId: "a", personIds: ["jane"], documents: [{ policyId: "a", slot: "schedule" }, { policyId: "j", slot: "other" }] }]);
+    d("j", { policy_number: "AB123456", linked_people: [{ id: "jane" }] }), d("both", { policy_number: "AB123456", linked_people: [{ id: "john" }, { id: "jane" }] })];
+  assert.deepEqual(policyStarters(docs, []), [{ scheduleId: "a", personIds: ["jane", "john"], documents: [{ policyId: "a", slot: "schedule" }, { policyId: "both", slot: "other" }] }]);
+});
+test("P5b a document already made into a folder, or taken out of one, neither starts nor joins one", () => {
+  const docs = [sch("a", { policy_number: "AB123456" }), d("r", { policy_number: "AB123456" }), sch("gone")];
+  assert.deepEqual(policyStarters(docs, [], new Set(["r", "gone"])), [{ scheduleId: "a", personIds: ["jane"], documents: [{ policyId: "a", slot: "schedule" }] }]);
 });
 test("P6 two schedules with one number (a renewal) make one policy, not two", () => {
   const s = policyStarters([sch("a", { policy_number: "AB123456" }), sch("b", { policy_number: "AB123456" })], []);

@@ -404,6 +404,20 @@ async function main() {
     assert.equal((await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: autoSched, people: [jane], documents: [{ policyId: wording }] }] }))).status, 400);
     assert.equal((await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: autoSched, people: [], documents: [{ policyId: autoSched }] }] }))).status, 400);
   });
+  await test("AU9 a same-number document taken out of a folder, or filed by hand, is not put into a newly made one", async () => {
+    asUser(ownerA);
+    const s2 = id("f9800000", 25), took = id("f9800000", 26), hand = id("f9800000", 27);
+    for (const [pid, role] of [[s2, "personal_schedule"], [took, "premium_receipt"], [hand, "policy_wording"]])
+      await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,policy_number,processing_status,original_filename,storage_key,file_hash,quarantine_status)
+        VALUES($1,$2,$3,'Example Life','Example Shield',$4,'AU-999999','ready','x.pdf','k',$5,'scan_clean')`, [pid, A, jane, role, "sha256:" + pid]);
+    await pool.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2)", [took, A]);
+    assert.equal((await POST(req("/api/policies/folders", "POST", A, { people: [jane], documents: [{ policyId: hand }], complete: false }))).status, 200);
+    const res = await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: s2, people: [jane], documents: [{ policyId: s2, slot: "schedule" }, { policyId: took }, { policyId: hand }] }] }));
+    assert.equal((await res.json()).made, 1);
+    const [f] = await folderWith(s2);
+    assert.deepEqual(f.documents.map((d) => d.policyId), [s2]);
+    assert.equal((await folderWith(hand)).length, 1, "the hand-filed wording stays in its one folder");
+  });
   await test("AU8 the database itself refuses a record naming another household's document; browsers can only read their own", async () => {
     await assert.rejects(pool.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2)", [bDoc, A]), /another household/);
     const asBrowser = async <T>(userId: string, fn: () => Promise<T>) => serial(async () => {

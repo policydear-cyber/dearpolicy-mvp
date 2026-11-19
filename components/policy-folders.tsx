@@ -95,7 +95,7 @@ export function PolicyFolders({ documents, family, name, onLibraryChanged, onFol
   // Each schedule or certificate in no folder, not made into one before: its folder is made once, for the owner's page.
   useEffect(() => {
     if (!ready || !canManage || !auto.on) return;
-    const starters = policyStarters(documents, folders).filter((s) => !auto.handled.has(s.scheduleId) && !tried.current.has(s.scheduleId));
+    const starters = policyStarters(documents, folders, auto.handled).filter((s) => !tried.current.has(s.scheduleId));
     if (!starters.length) return;
     starters.forEach((s) => tried.current.add(s.scheduleId));
     void send("/api/policies/folders/auto", "POST", { starters: starters.map((s) => ({ scheduleId: s.scheduleId, people: s.personIds, documents: s.documents })) })

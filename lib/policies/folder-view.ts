@@ -119,23 +119,21 @@ export type PolicyStarter = { scheduleId: string; documents: { policyId: string;
  * every schedule or certificate in no folder yet starts one, for the people it is linked to (by the household or the reading,
  * not by a plan match), with any other document in no folder that prints the same policy number, from the same insurer, for
  * those same people. Nothing is made until the household taps; a document linked to nobody starts nothing. */
-export function policyStarters(docs: FolderDoc[], folders: FolderView[]): PolicyStarter[] {
+export function policyStarters(docs: FolderDoc[], folders: FolderView[], handled: ReadonlySet<string> = new Set()): PolicyStarter[] {
   const filed = new Set(folders.flatMap((f) => f.documents.map((d) => d.policyId)));
-  const free = docs.filter((d) => !filed.has(d.id));
+  // A document already made into a folder, or one the household took out of one, never starts or joins one again.
+  const free = docs.filter((d) => !filed.has(d.id) && !handled.has(d.id));
   const out: PolicyStarter[] = [], taken = new Set<string>();
   for (const schedule of free) {
     if (!schedule.document_role || !SCHEDULE_ROLES.has(schedule.document_role) || taken.has(schedule.id)) continue;
-    let people = [...ownPeople(schedule)];
+    const people = [...ownPeople(schedule)];
     if (!people.length) continue;
     const key = numberKey(schedule.policy_number), insurer = insurerKey(schedule.insurer);
     const companions = key.length < 5 ? [] : free.filter((d) => d.id !== schedule.id && !taken.has(d.id) && numberKey(d.policy_number) === key
-      && (!insurer || !insurerKey(d.insurer) || insurerKey(d.insurer) === insurer) && people.some((id) => ownPeople(d).has(id)));
-    // A companion joins only while some person is every document's own, so a folder never puts two people's documents together.
-    const joined: FolderDoc[] = [];
-    for (const c of companions) {
-      const kept = people.filter((id) => ownPeople(c).has(id));
-      if (kept.length) { people = kept; joined.push(c); }
-    }
+      && (!insurer || !insurerKey(d.insurer) || insurerKey(d.insurer) === insurer));
+    // A companion joins only when it is the own document of everyone the schedule is for: the folder keeps all of the
+    // schedule's people (a joint policy keeps both), and never takes in a document of someone else's.
+    const joined = companions.filter((c) => people.every((id) => ownPeople(c).has(id)));
     const group = [schedule, ...joined];
     group.forEach((d) => taken.add(d.id));
     out.push({ scheduleId: schedule.id, personIds: people, documents: group.map((d) => ({ policyId: d.id, slot: d.id === schedule.id ? "schedule" : slotForRole(d.document_role) })) });

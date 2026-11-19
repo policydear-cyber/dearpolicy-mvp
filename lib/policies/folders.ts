@@ -250,11 +250,20 @@ export async function makeAutoFolders(accountId: string, starters: AutoFolderInp
       // The schedule is in no folder now (a folder made by hand since the page loaded keeps it).
       const filed = await tx.query("SELECT 1 FROM policy_folder_documents WHERE account_id=$1 AND policy_id=$2 LIMIT 1", [accountId, s.scheduleId]);
       if (filed.rows.length) return 0;
-      for (const d of docs) await tx.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [d.policyId, accountId]);
+      // Every other document joins only if it is in no folder and was never made into one or taken out of one, whatever the
+      // page sent (Critic #554 MED-2).
+      const joining: FolderDocumentInput[] = [docs.find((d) => d.policyId === s.scheduleId)!];
+      for (const d of docs) {
+        if (d.policyId === s.scheduleId) continue;
+        const inFolder = await tx.query("SELECT 1 FROM policy_folder_documents WHERE account_id=$1 AND policy_id=$2 LIMIT 1", [accountId, d.policyId]);
+        if (inFolder.rows.length) continue;
+        const fresh = await tx.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING policy_id", [d.policyId, accountId]);
+        if (fresh.rows.length) joining.push(d);
+      }
       const created = await tx.query("INSERT INTO policy_folders(account_id) VALUES($1) RETURNING id", [accountId]);
       const id = String(created.rows[0].id);
       for (const p of people) await tx.query("INSERT INTO policy_folder_people(folder_id, account_id, family_member_id) VALUES($1,$2,$3)", [id, accountId, p]);
-      await addDocuments(tx, accountId, id, docs);
+      await addDocuments(tx, accountId, id, joining);
       return 1;
     });
   }
