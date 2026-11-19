@@ -222,9 +222,11 @@ async function main() {
     const reply = { citations: [{ chunkId: "c1", policyId: fam }], statements: [
       { id: "s1", kind: "benefit_terms", text: "Death benefit S$100,000", personName: "Jane Doe", amount: { text: "S$100,000" }, source: { citationIds: ["c1"] } },
       { id: "s2", kind: "benefit_terms", text: "Death benefit S$100,000", personName: "John Doe", amount: { text: "S$100,000" }, source: { citationIds: ["c1"] } },
-      { id: "s3", kind: "benefit_terms", text: "Medical S$150,000", personName: "Jane Doe", amount: { text: "S$150,000" }, source: { citationIds: ["c1"] } }] };
+      { id: "s3", kind: "benefit_terms", text: "Medical S$150,000", personName: "Jane Doe", amount: { text: "S$150,000" }, source: { citationIds: ["c1"] } },
+      { id: "s4", kind: "benefit_terms", text: "Baggage S$3,000", personName: "Jane Doe (Jane)", amount: { text: "S$3,000" }, source: { citationIds: ["c1"] } },
+      { id: "s5", kind: "benefit_terms", text: "Delay S$500", personName: "Someone Else", amount: { text: "S$500" }, source: { citationIds: ["c1"] } }] };
     const left = dropNotRenewedAmounts(reply, h);
-    assert.deepEqual(left, ["Death benefit S$100,000", "Medical S$150,000"]);
+    assert.deepEqual(left, ["Death benefit S$100,000", "Medical S$150,000", "Baggage S$3,000", "Delay S$500"], "the 'Display (Preferred)' form and a name that resolves to no one both go (Critic MED-7)");
     assert.deepEqual(reply.statements.map((x) => [x.personName, x.amount ? "amount" : x.kind]), [["Jane Doe", "fact"], ["John Doe", "amount"]]);
     assert.match(reply.statements[0].text, /not renewed after 7 Nov 2026 for Jane Doe, as the household told DearPolicy/);
     assert.equal((await answer(A, { member: jane, key: t.key, endsOn: t.endsOn, notRenewed: false })).status, 200);

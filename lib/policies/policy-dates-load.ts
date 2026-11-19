@@ -3,7 +3,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { loadPolicyInventory } from "@/lib/policies/inventory";
 import { singaporeDay } from "@/lib/benefit-table/dates";
-import { householdPolicyDates, type DatedCover, type PaymentRecord, type PolicyDate } from "@/lib/policies/policy-dates";
+import { householdPolicyDates, sharingDocuments, type DatedCover, type PaymentRecord, type PolicyDate } from "@/lib/policies/policy-dates";
 import { normalizedIdentifier } from "@/lib/policies/document-name";
 import type { PersonCover, TableRow } from "@/lib/benefit-table/assemble";
 import { notRenewedKey, notRenewedReady, notRenewedRows } from "@/lib/policies/not-renewed";
@@ -47,8 +47,10 @@ export async function loadPolicyDates(accountId: string, memberId: string | null
     const n = normalizedIdentifier(c.policyNumber);
     if (n) numbersOn.set(c.source.documentId, new Set([...(numbersOn.get(c.source.documentId) ?? []), n]));
   }
+  // Or, with no benefit table or no policy numbers read on it, two of the person's contracts share a document (MED-6).
+  const shared = sharingDocuments(contracts);
   const policies = householdPolicyDates(contracts, covers, payments, singaporeDay(new Date()), answers).map((p) => ({ ...p, key: pageKey(p.key),
-    ...(p.documentIds.some((id) => (numbersOn.get(id)?.size ?? 0) > 1) ? { severalPolicies: true } : {}) }));
+    ...(shared.has(p.key) || p.documentIds.some((id) => (numbersOn.get(id)?.size ?? 0) > 1) ? { severalPolicies: true } : {}) }));
   return { memberId: member.id, policies, answersReady: await notRenewedReady(), contractKeys, table,
     name: member.preferred_name?.trim() || member.display_name, displayName: member.display_name, dateOfBirth: member.date_of_birth ?? null };
 }

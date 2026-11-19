@@ -6,7 +6,7 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.te
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { dayOf, dayText, householdPolicyDates, policyDates, renewalAfter, type DatedContract, type DatedCover, type PaymentRecord } from "@/lib/policies/policy-dates";
+import { dayOf, dayText, householdPolicyDates, sharingDocuments, policyDates, renewalAfter, type DatedContract, type DatedCover, type PaymentRecord } from "@/lib/policies/policy-dates";
 
 let passed = 0; const failures: string[] = [];
 function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
@@ -89,7 +89,13 @@ test("a payment made before the date proves nothing, even uploaded after it (Cri
   assert.equal(state({ period_start: "2025-11-01", period_end: "2026-11-01", payment_date: "2026-11-10" }), "renewal_due", "an old term printed one day past the schedule's end (Critic L1), paid late");
   assert.equal(state({ period_start: "2026-10-01", period_end: "2026-10-31", payment_date: "2026-09-28", created_at: "2026-11-19T02:00:00Z" }), "renewal_due", "a trip's own purchase receipt (TE F1)");
   assert.equal(state({ period_start: "2026-11-01", period_end: "2027-10-31", payment_date: "2026-10-20" }), "renewed", "next term paid early");
-  assert.equal(state({ period_start: "2026-10-28" }), "renewed", "a next term starting just before the date");
+  assert.equal(state({ period_start: "2026-10-28" }), "renewal_due", "a start alone before the date (a monthly instalment) is not the next term");
+  assert.equal(state({ period_start: "2026-10-31" }), "renewed", "a start alone on the date");
+});
+
+test("contracts sharing a document are flagged, so one answer never hides another policy on it (Critic MED-6)", () => {
+  const shared = sharingDocuments([contract("k1", [doc("stmt"), doc("d1")]), contract("k2", [doc("stmt")]), contract("k3", [doc("d3")])]);
+  assert.deepEqual([...shared].sort(), ["k1", "k2"]);
 });
 
 test("a group number counts only for a record naming the person; a short number alone needs both insurers (Critic L2, L3)", () => {

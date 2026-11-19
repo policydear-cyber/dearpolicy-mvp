@@ -100,17 +100,23 @@ export function dropNotRenewedAmounts(answer: { statements?: { id: string; kind:
   if (!docs.size || !answer.statements?.length) return [];
   const policyOf = new Map((answer.citations ?? []).map((c) => [c.chunkId, c.policyId]));
   const left: string[] = [], said = new Set<string>(), out: typeof answer.statements = [];
+  // The statement's person as keepAnswerToSubjects resolves it ("Nora Tan (Nora)" is Nora Tan: Critic MED-7). A name that
+  // resolves to no one fails closed: on a document the household answered for, the amount goes.
+  const members = new Set(household.members.map((m) => m.name.replace(/\s*\([^)]*\)\s*$/, "").trim()));
+  const personOf = (name: string | null | undefined) => !name ? null : members.has(name) ? name : matchMember(household, name);
   for (const st of answer.statements) {
-    const hit = st.amount ? (st.source?.citationIds ?? []).map((id) => docs.get(policyOf.get(id) ?? "")).find((d) => d && d.notRenewedFor!.some((x) =>
-      st.personName ? x.person === st.personName : d.linkedPeople.length > 0 && d.linkedPeople.every((p) => d.notRenewedFor!.some((y) => y.person === p)))) : undefined;
+    const named = st.personName?.trim() ? personOf(st.personName) : null;
+    const unresolved = !!st.personName?.trim() && !named;
+    const hit = st.amount ? (st.source?.citationIds ?? []).map((id) => docs.get(policyOf.get(id) ?? "")).find((d) => d && (unresolved || d.notRenewedFor!.some((x) =>
+      named ? x.person === named : d.linkedPeople.length > 0 && d.linkedPeople.every((p) => d.notRenewedFor!.some((y) => y.person === p))))) : undefined;
     if (!hit) { out.push(st); continue; }
     left.push(st.text);
-    const who = hit.notRenewedFor!.find((x) => !st.personName || x.person === st.personName)!;
+    const who = hit.notRenewedFor!.find((x) => !named || x.person === named)!;
     const key = `${hit.policyId}|${who.person}`;
     if (said.has(key)) continue;
     said.add(key);
     const text = `${hit.productName ?? hit.name} was not renewed after ${who.after} for ${who.person}, as the household told DearPolicy, so it is not current cover.`;
-    out.push({ id: `${st.id}-not-renewed`, kind: "fact", text, fullText: text, personName: st.personName ?? who.person, amount: null, source: null, conditions: [] });
+    out.push({ id: `${st.id}-not-renewed`, kind: "fact", text, fullText: text, personName: named ?? who.person, amount: null, source: null, conditions: [] });
   }
   answer.statements = out;
   return left;

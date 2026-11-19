@@ -84,6 +84,14 @@ function sameContract(contract: DatedContract, row: PaymentRecord): boolean {
   return number.length >= 6;
 }
 
+/** The person's contracts that share a document with another of their contracts: a document that holds more than one
+ * of their policies, which "I didn't renew it" must not take off Home as a whole (Critic MED-3, MED-6). */
+export function sharingDocuments(contracts: Pick<DatedContract, "id" | "documents">[]): Set<string> {
+  const owners = new Map<string, Set<string>>();
+  for (const c of contracts) for (const d of c.documents) owners.set(d.id, new Set([...(owners.get(d.id) ?? []), c.id]));
+  return new Set([...owners.values()].filter((ids) => ids.size > 1).flatMap((ids) => [...ids]));
+}
+
 /** A premium record shows renewal past `endDay` only when it pays for the next term (Critic MED-1, TE F1):
  *  - a record that prints its period is decided by that period alone: it runs past endDay by more than a week (an old
  *    term printed "1 Dec 2025 to 1 Dec 2026" against a schedule's "30 Nov 2026" is not a renewal: Critic L1), or it starts
@@ -96,8 +104,10 @@ export function renewalAfter(rows: PaymentRecord[], endDay: number): PaymentReco
   let best: { row: PaymentRecord; day: number } | null = null;
   for (const row of rows) {
     const paid = dayOf(row.payment_date), start = dayOf(row.period_start), end = dayOf(row.period_end);
+    // A start printed with no end needs to start on or after endDay: a monthly instalment printed with its start alone is
+    // not the next term (Critic, b05d380 LOW). The week's slack applies only when an end is printed too.
     const renews = end != null || start != null
-      ? (end != null && end > endDay + PERIOD_SLACK_DAYS && (start == null || start >= endDay - PERIOD_SLACK_DAYS)) || (end == null && start != null && start >= endDay - PERIOD_SLACK_DAYS)
+      ? (end != null && end > endDay + PERIOD_SLACK_DAYS && (start == null || start >= endDay - PERIOD_SLACK_DAYS)) || (end == null && start != null && start >= endDay)
       : paid != null && paid >= endDay;
     if (!renews) continue;
     const day = end ?? start ?? paid ?? 0;
