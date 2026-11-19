@@ -415,6 +415,9 @@ async function main() {
       assert.equal(tripFigure(t)?.kind, "none", "the unchecked misread is never shown");
       assert.ok((t.figureChecks ?? []).length >= 1);
       assert.ok(t.figureChecks!.every((c) => c.status === "checking"), "still being checked, not asked yet");
+      const rows = t.table.people[0].rows.filter((x) => x.figure.kind === "none");
+      assert.ok(rows.length >= 2);
+      assert.ok(rows.every((x) => /still being checked/.test((x.figure as { why: string }).why)), "each withheld row says it is still being checked, never how the row pays (Live site tester, 19 Nov)");
     } finally { envOff(); }
   });
 
@@ -433,6 +436,7 @@ async function main() {
       const t = await tableFor(f.db, A);
       assert.equal(tripFigure(t)?.kind, "none");
       assert.deepEqual(t.figureChecks!.map((c) => [c.status, c.candidates]), [["confirm", [1000]]]);
+      assert.match((tripFigure(t) as { why: string }).why, /not confirmed against the document's page/);
       const hospital = t.table.people[0].rows.find((x) => x.benefit === "Daily hospital cash" && x.column === "Business")?.figure as { amount: number };
       assert.equal(hospital.amount, 200, "a confirmed figure is used");
       // Queued again (a second job, a later day): nothing is paid twice.
