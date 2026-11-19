@@ -35,7 +35,7 @@ export function HomePolicyDates({ memberId, onChanged }: { memberId?: string | n
   }
   if (!list?.length) return null;
   return <section className="home-dates" data-testid="home-policy-dates" aria-labelledby="home-dates-title">
-    <h2 id="home-dates-title">Policy dates</h2>
+    <div className="home-dates-head"><h2 id="home-dates-title">Policy dates</h2><Link href={`/life-stages?member=${encodeURIComponent(memberId ?? "")}`} className="text-link">Life stages →</Link></div>
     {error && <p className="home-dates-error" role="alert">{error}</p>}
     <ul>{list.map((p) => <li key={p.key} className={`home-date ${p.state}`} data-state={p.state}>
       <div className="home-date-head"><strong>{p.name}</strong><DateChip p={p} /></div>
