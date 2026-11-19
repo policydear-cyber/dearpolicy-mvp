@@ -26,6 +26,9 @@ export const maxDuration = 300;
 
 // Each re-read is a full paid reading of the document: a household gets 20 an hour.
 const rereads = createDbRateLimiter({ name: "policy-reprocess", windowMs: 60 * 60 * 1000, max: 20 });
+// Every press, refused or not, fetches and checks the stored file (a locked PDF's password): bounded separately and more
+// loosely, so refused presses never use up the paid-read allowance above (TE #565 F2) yet can't be sent without limit.
+const presses = createDbRateLimiter({ name: "policy-reprocess-press", windowMs: 60 * 60 * 1000, max: 120 });
 
 const Schema = z.object({ policyId: z.string().uuid(), pdfPassword: z.string().optional() });
 
@@ -37,10 +40,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = Schema.parse(await request.json().catch(() => ({})));
     const ctx = await requireHouseholdContext(request);
-    const allowance = await rereads.attempt(ctx.householdId);
-    if (!allowance.allowed) {
+    const pressed = await presses.attempt(ctx.householdId);
+    if (!pressed.allowed) {
       return NextResponse.json({ error: "Too many documents read again in the last hour. Please try again later." },
-        { status: 429, headers: { "Retry-After": String(Math.ceil(allowance.retryAfterMs / 1000)) } });
+        { status: 429, headers: { "Retry-After": String(Math.ceil(pressed.retryAfterMs / 1000)) } });
     }
     scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
 
@@ -77,6 +80,14 @@ export async function POST(request: NextRequest) {
     const locked = bytes ? await pdfPasswordProblem(bytes, body.pdfPassword || undefined) : null;
     if (locked === "needed") return NextResponse.json({ error: PDF_PASSWORD_NEEDED_MESSAGE, reasonCode: "PDF_PASSWORD_NEEDED" }, { status: 409 });
     if (locked === "incorrect") return NextResponse.json({ error: PDF_PASSWORD_DIDNT_OPEN_MESSAGE, reasonCode: "PDF_PASSWORD_INCORRECT" }, { status: 409 });
+
+    // Counted only once the request can start a read: a refused press (password needed or wrong) reads nothing, and must
+    // not use up the hour's allowance before the right password is typed (TE #565 F2).
+    const allowance = await rereads.attempt(ctx.householdId);
+    if (!allowance.allowed) {
+      return NextResponse.json({ error: "Too many documents read again in the last hour. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(allowance.retryAfterMs / 1000)) } });
+    }
 
     // The household's plan: an unreadable document doesn't count, so reading it again could take it past the limit.
     try {
