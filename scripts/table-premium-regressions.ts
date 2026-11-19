@@ -156,6 +156,11 @@ test("a plan row that shares the page's first-year line but prints no start is p
   // Negative controls: a different first-year figure, or another page, is not that premium; alone it is still named.
   assert.deepEqual(run([plan, cover({ ...rider, firstYearPremium: 90 })]).leftOut, [{ name: "Example Total CI Plan", why: "not_current" }]);
   assert.deepEqual(run([plan, cover({ ...rider, source: { ...src("doc-a"), page: 2 } as never })]).leftOut, [{ name: "Example Total CI Plan", why: "not_current" }]);
+  // A no-start row printing another policy number, or another frequency, is not known to be this premium (Critic #563 MED-1).
+  const numbered = cover({ ...plan, policyNumber: "EX-1001" });
+  assert.deepEqual(run([numbered, cover({ ...rider, policyNumber: "EX-2002" })]).leftOut, [{ name: "Example Total CI Plan", why: "unclear" }]);
+  assert.deepEqual(run([numbered, cover({ ...rider, policyNumber: "EX 1001" })]).leftOut, [], "control: the same number, spaced differently");
+  assert.deepEqual(run([plan, cover({ ...rider, premiumFrequency: "Annual" })]).leftOut, [{ name: "Example Total CI Plan", why: "unclear" }]);
   assert.deepEqual(run([rider]).items, []);
   assert.deepEqual(run([rider]).leftOut, [{ name: "Example Total CI Plan", why: "not_current" }]);
   // Control: the plan alone keeps its later figure from the anniversary.
