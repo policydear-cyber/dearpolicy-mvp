@@ -71,6 +71,10 @@ test("S3 a link only by plan match does not count as the person's", () => {
 test("S4 two insurers print the same number: nothing suggested", () => {
   assert.deepEqual(folderSuggestions([d("a", { policy_number: "AB123456", insurer: "One" }), d("b", { policy_number: "AB123456", insurer: "Two" })], []), []);
 });
+test("S4b one insurer printed two ways (Pte Ltd / Pte. Ltd.): still suggested", () => {
+  const s = folderSuggestions([d("a", { policy_number: "AB123456", insurer: "Example Singapore Pte Ltd" }), d("b", { policy_number: "AB123456", insurer: "Example Singapore Pte. Ltd." })], []);
+  assert.equal(s.length, 1);
+});
 test("S5 a short number (under 5 letters and digits): nothing suggested", () => {
   assert.deepEqual(folderSuggestions([d("a", { policy_number: "12-3" }), d("b", { policy_number: "123" })], []), []);
 });

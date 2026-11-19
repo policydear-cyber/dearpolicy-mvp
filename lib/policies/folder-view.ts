@@ -70,6 +70,7 @@ export function folderTitle(folder: FolderView, docs: Map<string, FolderDoc>): s
   return insurer ? `${insurer} policy${whose}` : `Policy${whose}`;
 }
 
+const insurerKey = (n: string | null) => (n?.trim() ? insurerShortName(n) : "").replace(/[^a-z0-9]/gi, "").toLowerCase();
 const numberKey = (n: string | null) => (n ?? "").replace(/[^a-z0-9]/gi, "").toLowerCase();
 
 export type FolderSuggestion = { policyNumber: string; policyIds: string[]; personIds: string[] };
@@ -87,7 +88,8 @@ export function folderSuggestions(docs: FolderDoc[], folders: FolderView[]): Fol
   const out: FolderSuggestion[] = [];
   for (const group of groups.values()) {
     if (group.length < 2) continue;
-    const insurers = new Set(group.map((d) => d.insurer?.trim().toLowerCase()).filter(Boolean));
+    // One insurer however its name was printed: "FWD Singapore Pte Ltd" and "FWD Singapore Pte. Ltd." are the same.
+    const insurers = new Set(group.map((d) => insurerKey(d.insurer)).filter(Boolean));
     if (insurers.size > 1) continue;
     const own = (d: FolderDoc) => new Set(d.linked_people.filter((p) => p.source !== "scheme_reference_match").map((p) => p.id));
     const shared = [...own(group[0])].filter((id) => group.every((d) => own(d).has(id)));
