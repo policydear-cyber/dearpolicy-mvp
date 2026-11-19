@@ -16,6 +16,9 @@ export const PDF_PASSWORD_REQUIRED_MESSAGE =
   "This PDF is password protected and was uploaded without its password.";
 export const PDF_PASSWORD_INCORRECT_MESSAGE =
   "The PDF password entered at upload was incorrect.";
+/** Read again pressed on a locked PDF without its password (app/api/policies/reprocess): refused before anything changes. */
+export const PDF_PASSWORD_NEEDED_MESSAGE =
+  "This PDF has a password. Enter it to read the document again. Until then, it stays as it is.";
 
 /** V1.1: a document that cannot be read tells the household, in one
  * sentence, WHAT is unavailable -- never the model, provider, retry or

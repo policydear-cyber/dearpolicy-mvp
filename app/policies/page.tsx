@@ -108,6 +108,8 @@ export default function PoliciesPage() {
   const [memberId, setMemberId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [pdfPassword, setPdfPassword] = useState("");
+  /** A ready, locked PDF whose Read again asked for its password (the reading stays until it is given). */
+  const [passwordFor, setPasswordFor] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   // An upload that failed or was refused is shown as an error, never in the
   // same box (and colour) as a successful one.
@@ -334,6 +336,8 @@ export default function PoliciesPage() {
         body: JSON.stringify({ policyId: policy.id }),
       });
       const payload = await response.json().catch(() => ({}));
+      // A locked PDF: nothing changed; its password is asked for where the document is (LockedPdf below).
+      if (payload.reasonCode === "PDF_PASSWORD_NEEDED") { setPasswordFor(policy.id); return; }
       if (!response.ok) throw new Error(payload.error || "Could not start reading it again.");
       setLibraryNotice(`Reading ${label} again…`);
       await refresh();
@@ -360,6 +364,7 @@ export default function PoliciesPage() {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "Could not read it with that password.");
     setLibraryNotice(`Reading ${label} with the password you entered…`);
+    setPasswordFor(null);
     await refresh();
   }
 
@@ -583,6 +588,7 @@ export default function PoliciesPage() {
             if (labels.length) return <p className="document-found" data-testid="document-found"><b>Found</b> {foundLine(labels)}. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
             return null;
           })()}
+          {!processing && !policy.processing_error && passwordFor === policy.id && <LockedPdf policy={policy} wrong={false} rereading onUnlock={(password) => unlock(policy, password)} />}
           {/* Why, and the one next step that can work for this kind of failure (lib/documents/failure-advice.ts). */}
           {!processing && policy.processing_error && (() => {
             const advice = failedDocumentAdvice(policy.processing_error, { hasPages: !!policy.page_count });
@@ -661,7 +667,7 @@ function MatchedNames({ policy, family, onMove }: { policy: Policy; family: Memb
   </div>;
 }
 
-function LockedPdf({ policy, wrong, onUnlock }: { policy: Policy; wrong: boolean; onUnlock: (password: string) => Promise<void> }) {
+function LockedPdf({ policy, wrong, rereading = false, onUnlock }: { policy: Policy; wrong: boolean; rereading?: boolean; onUnlock: (password: string) => Promise<void> }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -676,7 +682,9 @@ function LockedPdf({ policy, wrong, onUnlock }: { policy: Policy; wrong: boolean
   }
   return <div className="row-error processing-error locked-pdf" data-testid="document-locked">
     <strong>{wrong ? "The password didn’t work" : "This PDF is password-protected"}</strong>
-    <span>{wrong ? "DearPolicy tried the password you gave, but the PDF did not open. Check it (passwords are case-sensitive) and try again." : "Enter the password your insurer gave you for this PDF and DearPolicy will read it."}</span>
+    <span>{wrong ? "DearPolicy tried the password you gave, but the PDF did not open. Check it (passwords are case-sensitive) and try again."
+      : rereading ? "To read it again, enter the password your insurer gave you for this PDF. Until then, it stays as it is."
+      : "Enter the password your insurer gave you for this PDF and DearPolicy will read it."}</span>
     <form onSubmit={submit} className="unlock-form">
       <label htmlFor={id}>PDF password</label>
       <input id={id} type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />

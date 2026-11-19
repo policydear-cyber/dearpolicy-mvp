@@ -180,3 +180,22 @@ async function decryptedTitle(bytes: Uint8Array, password?: string): Promise<str
     await task.destroy();
   }
 }
+
+/** Whether a stored file is a PDF that cannot be opened without its open password (19 Nov: Read again on a locked PDF
+ * that had been read with its password, typed at upload and never stored, failed and took its working reading with it).
+ * An owner-password-only PDF opens without one, so it is not locked. Not a PDF, or not openable for another reason:
+ * false, and the read goes ahead as before. */
+export async function pdfNeedsOpenPassword(bytes: Uint8Array): Promise<boolean> {
+  if (!(bytes.length > 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46)) return false; // %PDF
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const task = pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false } as Parameters<typeof pdfjs.getDocument>[0]);
+  try {
+    await task.promise;
+    return false;
+  } catch (error) {
+    const e = error as { name?: string; code?: number };
+    return e?.name === "PasswordException" && e.code === 1;
+  } finally {
+    await task.destroy().catch(() => undefined);
+  }
+}

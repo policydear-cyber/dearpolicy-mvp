@@ -64,6 +64,28 @@ async function main() {
       await assert.rejects(extractPdfPages(fixture(name), "wrong"), (e: Error) => e.message === PDF_PASSWORD_INCORRECT_MESSAGE);
     });
   }
+  // Read again on a locked PDF without its password (19 Nov: a group certificate's working reading was lost): the route
+  // refuses before anything changes when the stored file needs an open password. An owner-password-only PDF opens.
+  await test("a PDF that needs its open password is known as one; a plain or owner-only PDF, or not a PDF, is not", async () => {
+    const { pdfNeedsOpenPassword } = await import("@/lib/documents/pdf");
+    for (const name of ["locked-rc4-128.pdf", "locked-aes-128.pdf", "locked-aes-256.pdf", "scan-locked-aes256.pdf", "scan-locked-objstm.pdf"]) {
+      assert.equal(await pdfNeedsOpenPassword(fixture(name)), true, name);
+    }
+    for (const name of ["scan-plain.pdf", "scan-owner-only.pdf", "scan-owner-only-objstm.pdf"]) {
+      assert.equal(await pdfNeedsOpenPassword(fixture(name)), false, name);
+    }
+    assert.equal(await pdfNeedsOpenPassword(new Uint8Array(Buffer.from("\xff\xd8\xff\xe0 a photo", "latin1"))), false);
+    assert.equal(await pdfNeedsOpenPassword(new Uint8Array(Buffer.from("%PDF-1.4 broken", "latin1"))), false);
+  });
+  await test("Read again refuses a locked PDF without its password before anything changes, and asks for it", async () => {
+    const route = readFileSync(join(__dirname, "../../app/api/policies/reprocess/route.ts"), "utf8");
+    const guard = route.indexOf("pdfNeedsOpenPassword(bytes)"), firstWrite = route.indexOf("pool.connect()"), plan = route.indexOf("mayAddDocument(ctx.householdId");
+    assert.ok(guard > 0 && guard < firstWrite && guard < plan, "the check runs before the plan check and the requeue");
+    assert.match(route, /if \(!body\.pdfPassword\)/);
+    assert.match(route, /reasonCode: "PDF_PASSWORD_NEEDED"/);
+    const page = readFileSync(join(__dirname, "../../app/policies/page.tsx"), "utf8");
+    assert.match(page, /reasonCode === "PDF_PASSWORD_NEEDED"\) \{ setPasswordFor\(policy\.id\)/);
+  });
   await test("an unlocked PDF's title is read as before", async () => {
     const { PDFDocument } = await import("pdf-lib");
     const doc = await PDFDocument.create(); doc.addPage(); doc.setTitle("Harbour Travel Policy Wording");

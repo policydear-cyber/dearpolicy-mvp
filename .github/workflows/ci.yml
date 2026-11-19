@@ -163,6 +163,8 @@ jobs:
         run: npm run policies:dates-test
       - name: Life stages
         run: npm run policies:life-stages-test
+      - name: Locked PDFs (read with their password; Read again without it is refused before anything changes)
+        run: npm run documents:locked-pdf-test
       - name: "I didn't renew it" (owner only, own household, refused before the date passes, Home cards and chat follow, Undo; PGlite)
         run: npm run policies:not-renewed-test
       - name: Premium end dates, maturity dates and illustrated values kept only where printed
