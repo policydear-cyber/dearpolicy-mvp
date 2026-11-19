@@ -21,8 +21,7 @@
  * notice and a reinstatement letter, a premium receipt) count as one policy.
  */
 import { query } from "@/lib/db/client";
-import { householdDocumentLabels } from "@/lib/policies/household-labels";
-import { isPlaceholderName } from "@/lib/policies/document-name";
+import { documentLabels, isPlaceholderName } from "@/lib/policies/document-name";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation, ComputationOperand, FigureBinding } from "@/types";
@@ -84,16 +83,19 @@ const KINDS: { asked: RegExp; doc: RegExp; label: string }[] = [
 const COMMON = /^(?:plan|policy|policies|insurance|integrated|personal|annual|whole|life|shield|care|cover|term|the|and|plus|pro|group|employee|benefits?|single|trip|multi|worldwide|accident|critical|illness|early|rider|health|outpatient|dental|universal|joint|protect\w*|secure\w*|assurance|insurer|ltd|pte|berhad|branch|singapore|general|mutual|international)$/i;
 
 async function loadDocs(accountId: string): Promise<Doc[]> {
-  const rows = (await query<{ id: string; file: string | null; role: string | null; product: string | null; insurer: string | null; number: string | null; group_number: string | null; kind: string | null;
-    pages: number | null; start: string | null; end_date: string | null; dated: string | null; paid: string | null; owners: string[] | null; uploaded_to: string; created: string; superseded: boolean; currencies: string[] | null }>(
-    `SELECT p.id::text, p.original_filename AS file, p.document_role AS role, p.product_name AS product, p.insurer, p.policy_number AS number, p.group_policy_number AS group_number,
+  const all = (await query<{ id: string; file: string | null; role: string | null; product: string | null; insurer: string | null; number: string | null; group_number: string | null; kind: string | null;
+    pages: number | null; start: string | null; end_date: string | null; dated: string | null; paid: string | null; owners: string[] | null; uploaded_to: string; created: string; superseded: boolean; currencies: string[] | null; file_raw: string | null; ready: boolean }>(
+    `SELECT p.id::text, p.original_filename AS file, p.original_filename AS file_raw, p.processing_status='ready' AS ready, p.document_role AS role, p.product_name AS product, p.insurer, p.policy_number AS number, p.group_policy_number AS group_number,
             p.policy_type AS kind, p.page_count AS pages, p.effective_date::text AS start, p.renewal_or_expiry_date::text AS end_date, p.document_date::text AS dated,
             (SELECT max(pr.payment_date)::text FROM premium_records pr WHERE pr.source_document_id=p.id AND pr.account_id=p.account_id) AS paid,
             ARRAY(SELECT pm.family_member_id::text FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id) AS owners,
             p.family_member_id::text AS uploaded_to, p.created_at::text AS created, p.superseded_at IS NOT NULL AS superseded,
             ARRAY(SELECT DISTINCT upper(c) FROM (SELECT pc.currency c FROM policy_coverages pc WHERE pc.policy_id=p.id UNION ALL SELECT pr.currency FROM premium_records pr WHERE pr.source_document_id=p.id OR pr.policy_id=p.id) x WHERE c IS NOT NULL) AS currencies
-       FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready' ORDER BY p.created_at, p.id`, [accountId]).catch(() => ({ rows: [] }))).rows;
-  const labels = await householdDocumentLabels(accountId).catch(() => new Map<string, string>());
+       FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} ORDER BY p.created_at, p.id`, [accountId]).catch(() => ({ rows: [] }))).rows;
+  // Labelled over every active document, as householdDocumentLabels does, from this one query (r10 perf budget); only the
+  // ready ones are answered from.
+  const labels = documentLabels(all.map((r) => ({ id: r.id, original_filename: r.file_raw, product_name: r.product, insurer: r.insurer, document_role: r.role, policy_number: r.number, created_at: r.created })), { describeUnnamed: true });
+  const rows = all.filter((r) => r.ready);
   return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", label: labels.get(r.id) ?? "the document", role: r.role, product: r.product && !isPlaceholderName(r.product) ? r.product : null, insurer: cleanInsurer(r.insurer), number: r.number, groupNumber: r.group_number, kind: r.kind,
     pages: r.pages, start: r.start, end: r.end_date, dated: r.dated, paid: r.paid, owners: r.owners?.length ? r.owners : [r.uploaded_to], uploadedTo: r.uploaded_to, created: r.created, superseded: !!r.superseded, currencies: r.currencies ?? [] }));
 }

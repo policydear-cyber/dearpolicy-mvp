@@ -8,7 +8,7 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { documentName, referenceRoles } from "@/lib/policies/inventory";
-import { householdDocumentLabels } from "@/lib/policies/household-labels";
+import { documentLabels } from "@/lib/policies/document-name";
 import { failedDocumentAdvice, READING_LIMIT_RESETS, type FailedDocumentAdvice } from "@/lib/documents/failure-advice";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation } from "@/types";
@@ -43,14 +43,20 @@ export async function documentsByPerson(accountId: string, people: ClaimPerson[]
   const out = new Map<string, PersonDocument[]>(people.map((p) => [p.id, []]));
   if (!people.length) return out;
   const r = await query<{ id: string; product_name: string | null; insurer: string | null; original_filename: string; policy_number: string | null; document_role: string | null; policy_type: string | null; personal_coverage_confirmed: boolean;
-    processing_status: string; processing_error: string | null; page_count: number | null; family_member_id: string; tier: string | null; effective_date: string | null; renewal_or_expiry_date: string | null; created: string | null }>(
+    processing_status: string; processing_error: string | null; page_count: number | null; family_member_id: string | null; tier: string | null; effective_date: string | null; renewal_or_expiry_date: string | null; created: string | null; superseded: boolean }>(
     `SELECT p.id::text AS id,p.product_name,p.insurer,p.original_filename,p.policy_number,p.document_role,p.policy_type,p.personal_coverage_confirmed,p.processing_status,p.processing_error,p.page_count,
-            pm.family_member_id::text AS family_member_id,to_jsonb(pm)->>'benefit_tier' AS tier,p.effective_date::text,p.renewal_or_expiry_date::text,p.created_at::text AS created
-       FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
-      WHERE p.account_id=$1 AND pm.family_member_id::text=ANY($2::text[]) AND ${activePredicate("p")} AND p.superseded_at IS NULL
-      ORDER BY p.created_at,p.id`, [accountId, people.map((p) => p.id)]);
-  const labels = await householdDocumentLabels(accountId).catch(() => new Map<string, string>());
+            pm.family_member_id::text AS family_member_id,to_jsonb(pm)->>'benefit_tier' AS tier,p.effective_date::text,p.renewal_or_expiry_date::text,p.created_at::text AS created,p.superseded_at IS NOT NULL AS superseded
+       FROM policies p LEFT JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
+      WHERE p.account_id=$1 AND ${activePredicate("p")}
+      ORDER BY p.created_at,p.id`, [accountId]);
+  // Every active document is read once (one row per member it is linked to), so labels are told apart over the whole
+  // household as householdDocumentLabels does, without a second query (r10 perf budget); only this person's current ones
+  // are listed.
+  const seen = new Set<string>();
+  const labels = documentLabels(r.rows.filter((x) => !seen.has(x.id) && !!seen.add(x.id)).map((x) => ({ ...x, created_at: x.created })), { describeUnnamed: true });
+  const asked = new Set(people.map((p) => p.id));
   for (const row of r.rows) {
+    if (!row.family_member_id || !asked.has(row.family_member_id) || row.superseded) continue;
     out.get(row.family_member_id)?.push({ id: row.id, name: documentName(row), label: labels.get(row.id) ?? documentName(row), filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
       policyType: row.policy_type, confirmed: row.personal_coverage_confirmed, tier: row.tier, effectiveDate: row.effective_date, renewalOrExpiryDate: row.renewal_or_expiry_date, ...personDocumentStatus(row) });
   }
