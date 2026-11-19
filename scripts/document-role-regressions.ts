@@ -156,8 +156,21 @@ async function main() {
       assert.equal(personalDocumentTitle(head + blank), null, blank);
     for (const words of ["Surname: please write as in passport\tGiven name: please write as in passport", "Full name: must match your passport", "Full name: please print in block letters", "Full name: John Doe", "Full name: Jane Doe", "Full name: Sample Name", "Surname:\tDoe\tGiven name:\tJohn (sample)"])
       assert.equal(personalDocumentTitle(head + words), null, words);
+    for (const words of ["Full name: Insured Person", "Full name: Not applicable", "Full name: Example Traveller"])
+      assert.equal(personalDocumentTitle(head + words), null, words);
+    assert.equal(personalDocumentTitle(head + "Full Name (as in passport):\tRaj Kumar s/o Muthu"), "personal_schedule", "a note on the label, s/o in the name");
     // The schedule labels that counted before #561 still count.
     assert.equal(personalDocumentTitle(head + "Policyholder: Lim Wei Jie"), "personal_schedule");
+  });
+  await t("3b: the traveller's cover is verified when the form prints family and given name on one line (TE #561)", async () => {
+    const { verifyExtractionEvidence } = await import("@/lib/rag/ingest");
+    const page = (name: string) => [{ pageNumber: 1, text: "Policy No.: 70012345\nAbout You\n" + name + "\nSummary of Cover\nMedical expenses overseas\tSGD 150,000" }];
+    const extraction = (who: string) => ({ insuredPeople: [{ name: who, relationshipHint: null, coverages: [{ category: "Travel", productName: "Travel Basic", policyNumber: "70012345", amount: 150000, currency: "SGD", notes: null, sourcePage: 1, evidenceText: "Medical expenses overseas SGD 150,000", evidenceVerified: false }] }] }) as never;
+    const ok = (text: string, who: string) => (verifyExtractionEvidence(extraction(who), page(text)) as { insuredPeople: { coverages: { evidenceVerified: boolean }[] }[] }).insuredPeople[0].coverages[0].evidenceVerified;
+    assert.equal(ok("Family Name:\tRivera\tGiven Name:\tAna Maria", "Ana Maria Rivera"), true);
+    assert.equal(ok("Full name: Ana Maria Rivera", "Ana Maria Rivera"), true, "unchanged: the whole name");
+    assert.equal(ok("Family Name: Rivera\nGiven Name: Ana Maria", "Ana Maria Rivera"), false, "a name split over two lines is not proof");
+    assert.equal(ok("Family Name:\tRivera\tGiven Name:\tAna", "Ana Maria Rivera"), false, "every part of the name must be printed");
   });
   await t("3 control: a generic summary with no printed policy number stays reference", () => {
     const generic = doc("Travel insurance summary of benefits\nThe policyholder is the person named in the schedule. Policy number means the number on your schedule.\nTerms and conditions apply. Please read the policy wording.");

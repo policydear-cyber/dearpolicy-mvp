@@ -211,8 +211,9 @@ function evidenceMatches(hay: string, needle: string) {
   return hits / unique.length >= 0.7;
 }
 
-function verifyExtractionEvidence(extraction: PolicyExtraction, pages: { pageNumber: number; text: string }[]) {
+export function verifyExtractionEvidence(extraction: PolicyExtraction, pages: { pageNumber: number; text: string }[]) {
   const pageMap = new Map(pages.map((p) => [p.pageNumber, normalizeEvidence(p.text)]));
+  const rawPages = new Map(pages.map((p) => [p.pageNumber, p.text]));
   return {
     ...extraction,
     insuredPeople: extraction.insuredPeople.map((person) => ({
@@ -221,7 +222,10 @@ function verifyExtractionEvidence(extraction: PolicyExtraction, pages: { pageNum
         const hay = coverage.sourcePage ? pageMap.get(coverage.sourcePage) ?? "" : "";
         const needle = coverage.evidenceText ? normalizeEvidence(coverage.evidenceText) : "";
         const nameNeedle = normalizeEvidence(person.name);
-        const evidenceVerified = Boolean(hay && needle.length >= 3 && evidenceMatches(hay, coverage.evidenceText ?? "") && hay.includes(nameNeedle));
+        const evidenceVerified = Boolean(hay && needle.length >= 3 && evidenceMatches(hay, coverage.evidenceText ?? "")
+          // The whole name, or every part of it on one line: a form prints it as "Family Name: Tan <tab> Given Name: Mei
+          // Ling" (personPrinted, the rule the rest of the fact check uses; TE #561).
+          && (hay.includes(nameNeedle) || personPrinted(rawPages.get(coverage.sourcePage!) ?? "", person.name)));
         return { ...coverage, evidenceVerified };
       }),
     })),

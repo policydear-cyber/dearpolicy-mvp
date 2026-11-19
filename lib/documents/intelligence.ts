@@ -110,7 +110,8 @@ function formNamed(t: string): boolean {
     for (let i = 0; i < cells.length; i++) {
       const m = /^(.*?)\s*:\s*(.*)$/.exec(cells[i]);
       if (!m) continue;
-      const label = m[1], value = m[2] || (cells[i + 1] && !cells[i + 1].includes(":") ? cells[i + 1] : "");
+      // A note on the label ("Full Name (as in passport)") is not part of it.
+      const label = m[1].replace(/\s*\([^)]*\)$/, ""), value = m[2] || (cells[i + 1] && !cells[i + 1].includes(":") ? cells[i + 1] : "");
       if (!FORM_NAME_VALUE.test(value) || STAND_IN.test(value)) continue;
       if (WHOLE_NAME_LABEL.test(label) && value.split(/[\s,]+/).filter(Boolean).length >= 2) return true;
       if (FAMILY_LABEL.test(label)) family = true;
@@ -123,8 +124,8 @@ function formNamed(t: string): boolean {
 const WHOLE_NAME_LABEL = /^(?:full name|(?:insured|traveller|traveler|applicant|proposer|policy ?holder)(?:'s)? (?:full )?name|name of (?:the )?(?:insured|policy ?holder|policy owner|proposer|applicant|traveller|traveler|life assured))$/;
 const FAMILY_LABEL = /^(?:family name|surname|last name)$/;
 const GIVEN_LABEL = /^(?:given names?|first names?)$/;
-const FORM_NAME_VALUE = /^(?!(?:any|the|a|an|all|each|every|eligible|means|refers|see|as|please|must|should|enter|write|print|block|same|refer|to|in|on|your|n\/?a|nil)\b)[a-z][a-z.'-]*(?:[ ,]+[a-z][a-z.'-]*)*$/;
-const STAND_IN = /\b(?:john doe|jane doe|joe bloggs|name here|sample|specimen|test|dummy|xxx+)\b/;
+const FORM_NAME_VALUE = /^(?!(?:any|the|a|an|all|each|every|eligible|means|refers|see|as|please|must|should|enter|write|print|block|same|refer|to|in|on|your|n\/?a|nil)\b)[a-z][a-z.'/-]*(?:[ ,]+[a-z][a-z.'/-]*)*$/;
+const STAND_IN = /\b(?:john doe|jane doe|joe bloggs|name here|sample|specimen|example|test|dummy|xxx+|not applicable|insured|traveller|traveler|applicant|policy ?holder|proposer)\b/;
 
 /** A printed person's name after a label ("Life Assured: Lim Wei Jie"), not a definition ("any eligible employee",
  * "the person named in Part 1"). Lower-case text. */
