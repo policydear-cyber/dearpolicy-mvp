@@ -33,9 +33,13 @@ import { replacedFigures } from "@/lib/policies/amendments";
 import { askedCoverage, bestLines, columnsFor, narrowToColumn, piecesOf, quoted, wordsOf } from "./printed-lines";
 import { citeAnswerLines } from "./answer-verification";
 import { planKind, type PlanKind } from "./plan-kinds";
+import { cleanTitle, documentLabels, isPlaceholderName } from "@/lib/policies/document-name";
+import { isPolicyRole, printedHeadings } from "@/lib/policies/printed-heading";
 
 export type DocumentAnswer = { summary: string; details: string[]; nextSteps: string[]; citations: ChatCitation[]; personId: string | null; patch: Partial<ConversationState> };
-type Doc = { id: string; file: string; role: string | null; status: string; message: string | null; product: string | null; insurer: string | null;
+type Doc = { id: string; file: string;
+  /** What the household calls it in a sentence: its title, never the file name (DC 18 Nov); `file` is only for matching. */
+  label: string; role: string | null; status: string; message: string | null; product: string | null; insurer: string | null;
   /** The plan's stored type ("Travel", "Life", "Health"), which names its kind when its product name doesn't ("Annual Multi-Trip Family"). */
   type?: string | null;
   /** For a failed document: why and what to do, from the Documents page's allow-list (never the stored text itself). */
@@ -49,14 +53,17 @@ const cleanInsurer = (name: string | null) => name ? name.replace(/\s*\((?:ficti
 const q = (file: string) => "“" + file + "”";
 
 async function loadDocuments(accountId: string): Promise<Doc[]> {
-  const rows = (await query<{ id: string; file: string | null; role: string | null; status: string; error: string | null; pages: number | null; message: string | null; product: string | null; insurer: string | null; type: string | null;
+  const rows = (await query<{ id: string; file: string | null; role: string | null; status: string; error: string | null; pages: number | null; message: string | null; product: string | null; insurer: string | null; type: string | null; policy_number: string | null;
     superseded: boolean; notes: unknown; uploaded_to: string; owners: string[] | null; created: string }>(
-    `SELECT p.id::text,p.original_filename AS file,p.document_role AS role,p.processing_status AS status,p.processing_error AS error,p.page_count AS pages,p.processing_message AS message,p.product_name AS product,p.insurer,p.policy_type AS type,
+    `SELECT p.id::text,p.original_filename AS file,p.document_role AS role,p.processing_status AS status,p.processing_error AS error,p.page_count AS pages,p.processing_message AS message,p.product_name AS product,p.insurer,p.policy_type AS type,p.policy_number,
             p.superseded_at IS NOT NULL AS superseded,p.extracted_json->'documentNotes' AS notes,p.family_member_id::text AS uploaded_to,
             ARRAY(SELECT pm.family_member_id::text FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id) AS owners,p.created_at::text AS created
        FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} ORDER BY p.created_at,p.id`, [accountId]).catch(() => ({ rows: [] }))).rows;
-  return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", role: r.role, status: r.status, message: r.message,
-    failure: r.status === "failed" ? failedDocumentChatAdvice(r.error, { hasPages: !!r.pages }) : null, product: r.product, insurer: r.insurer, type: r.type, superseded: !!r.superseded,
+  // The same rows householdDocumentLabels reads (every active document, in upload order): labelled here without a second
+  // query (r10 perf budget).
+  const labels = documentLabels(rows.map((r) => ({ id: r.id, original_filename: r.file, product_name: r.product, insurer: r.insurer, document_role: r.role, policy_number: r.policy_number, created_at: r.created })), { describeUnnamed: true });
+  return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", label: labels.get(r.id) ?? "Document", role: r.role, status: r.status, message: r.message,
+    failure: r.status === "failed" ? failedDocumentChatAdvice(r.error, { hasPages: !!r.pages }) : null, product: r.product && !isPlaceholderName(r.product) ? cleanTitle(r.product) : null, insurer: r.insurer, type: r.type, superseded: !!r.superseded,
     notes: Array.isArray(r.notes) ? (r.notes as unknown[]).map(String) : [], uploadedTo: r.uploaded_to, owners: r.owners?.length ? r.owners : [r.uploaded_to], created: r.created }));
 }
 async function pagesOf(accountId: string, ids: string[]): Promise<Map<string, { page: number; text: string }[]>> {
@@ -88,11 +95,11 @@ function unusableKind(d: Doc): Unusable | null {
 const PHOTO_TIPS = "lay the page flat in good light with no shadow across it, hold the phone steady and straight above the page, keep the whole page in the frame, and check the photo is sharp before you upload it";
 function unusableLine(d: Doc, kind: Unusable, readable?: string[]): string {
   switch (kind) {
-    case "processing": return q(d.file) + " is still being read. Ask again in a few minutes.";
-    case "handwriting": return q(d.file) + " is handwritten, and DearPolicy could read only parts of it, so it is kept as your own notes and nothing in it is used as a policy fact."
+    case "processing": return q(d.label) + " is still being read. Ask again in a few minutes.";
+    case "handwriting": return q(d.label) + " is handwritten, and DearPolicy could read only parts of it, so it is kept as your own notes and nothing in it is used as a policy fact."
       + (readable?.length ? " The parts it could read: " + readable.map((l) => "“" + l + "”").join(", ") + "." : "");
     // A failed document: why it could not be read and its next step, the Documents page's own advice for its reason.
-    default: { const f = failureOf(d); return q(d.file) + " couldn’t be read because " + f.why + ". " + f.step; }
+    default: { const f = failureOf(d); return q(d.label) + " couldn’t be read because " + f.why + ". " + f.step; }
   }
 }
 
@@ -126,6 +133,14 @@ const ROLE_ASK: [CorrespondenceRole, RegExp][] = [
 const DOCUMENT_KIND_WORDS = new Set(["policy", "schedule", "certificate", "summary", "statement", "renewal", "notice", "letter", "document", "of", "the", "your", "and", "for", "insurance", "assurance", "plan", "cover", "page", "details", "member", "members", "membership", "health", "life", "medical", "travel", "general"]);
 /** Words that only a document's title carries ("Policy schedule", "Membership certificate"), never a benefit line. */
 const TITLE_ONLY_WORDS = new Set(["policy", "schedule", "certificate", "summary", "statement", "renewal", "notice", "letter", "document", "details", "membership", "page"]);
+/** Whether a label opens with the product as whole words ("Shield (photo)" does for "Shield"; "Shield Plus" does not), so
+ * the product is said once (Critic #564 LOW-1). */
+const opensWith = (label: string, product: string) => label === product || label.startsWith(product + " ");
+/** A printed line that is only the document's own name ("TermGuard 65" on a screenshot titled "TermGuard 65"). */
+const namesOnly = (line: string, d: { label: string; product: string | null }) => {
+  const k = (t: string | null) => (t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return !!k(line) && (k(line) === k(d.label) || k(line) === k(d.product));
+};
 /** A line with no figure that is only the product's name plus document words. A benefit line that happens to use
  * some of the name's words ("Hospital cash" on a Hospital Cash Plan, "Monthly benefit" on a Monthly Benefit Income
  * Plan) is not a title: a title prints the whole name or names the document. */
@@ -215,7 +230,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
   // ---- how to take the photo again
   if (retake && !roleAsked) {
     const photos = docs.filter((d) => unusableKind(d) === "photo" && forPerson(d));
-    return done("To get a photo DearPolicy can read: " + PHOTO_TIPS + ". Take one photo per page, and if the insurer sent a PDF, uploading that is better still." + (photos.length ? " Then upload it in place of " + listOf(photos.map((d) => q(d.file))) + "." : ""),
+    return done("To get a photo DearPolicy can read: " + PHOTO_TIPS + ". Take one photo per page, and if the insurer sent a PDF, uploading that is better still." + (photos.length ? " Then upload it in place of " + listOf(photos.map((d) => q(d.label))) + "." : ""),
       [], [], person?.id ?? null, { documents: { kind: "unreadable", ids: photos.map((d) => d.id) } });
   }
   // ---- what could not be read, and why
@@ -238,7 +253,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
     if (listing) wanted = docs.filter((d) => unusableKind(d) && unusableKind(d) !== "processing" && forPerson(d) && !d.superseded);
     if (/\bstill (?:being )?(?:read|processed|processing|loading)\b/i.test(text)) {
       const reading = docs.filter((d) => unusableKind(d) === "processing");
-      return done(reading.length ? listOf(reading.map((d) => q(d.file))) + (reading.length === 1 ? " is" : " are") + " still being read. Ask again in a few minutes."
+      return done(reading.length ? listOf(reading.map((d) => q(d.label))) + (reading.length === 1 ? " is" : " are") + " still being read. Ask again in a few minutes."
         : "No — every upload has finished. Of the " + docs.length + " uploads on file, " + docs.filter((d) => d.status === "ready").length + " were read and " + docs.filter((d) => d.status === "failed").length + " couldn’t be (ask “which documents couldn’t be read?” to see why and what to do).",
         [], [], null, { documents: { kind: "unreadable", ids: reading.map((d) => d.id) } });
     }
@@ -269,9 +284,9 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
       const owner = ownerOf(d);
       const earlier = d.superseded ? " (an earlier or duplicate upload, kept for reference)" : "";
       const summary = centsOnly
-        ? q(d.file) + earlier + " prints S$" + whole + " with cents the scan shows unclearly (“" + body + "”), so the whole-dollar amount is S$" + whole + " and the cents can’t be read with certainty."
-        : "I can’t confirm that amount from the documents: the scan of " + q(d.file) + earlier + " prints it unclearly (it shows “" + body + "”), so DearPolicy doesn’t use it as a figure.";
-      return done(summary, quoted([{ line, page: p.page }]), cite(d, (d.product ?? d.file) + " (" + d.file + ")", [p.page]), owner?.id ?? person?.id ?? null,
+        ? q(d.label) + earlier + " prints S$" + whole + " with cents the scan shows unclearly (“" + body + "”), so the whole-dollar amount is S$" + whole + " and the cents can’t be read with certainty."
+        : "I can’t confirm that amount from the documents: the scan of " + q(d.label) + earlier + " prints it unclearly (it shows “" + body + "”), so DearPolicy doesn’t use it as a figure.";
+      return done(summary, quoted([{ line, page: p.page }]), cite(d, d.label, [p.page]), owner?.id ?? person?.id ?? null,
         { documents: { kind: "uploads", ids: [d.id] } }, ["Check it against the paper copy, or ask the insurer to confirm the figure."]);
     }
     if (!uploadsAsked && !unreadable && !scanAsked) return null;
@@ -287,7 +302,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
       const owner = ownerOf(named) ?? person;
       const cover = policyDocs.filter((d) => !owner || d.owners.includes(owner.id)).filter((d) => /shield|hospital|health|medical/i.test((d.product ?? "") + " " + (d.role ?? "")));
       const who = owner ? (isSelf(owner) ? "your" : personName(owner) + "’s") : "the";
-      return done(issuer(named) + " is the hospital, not an insurer: " + q(named.file) + " is its bill for " + who + " stay, not a policy, so it adds no cover."
+      return done(issuer(named) + " is the hospital, not an insurer: " + q(named.label) + " is its bill for " + who + " stay, not a policy, so it adds no cover."
         + (cover.length ? " " + (who === "your" ? "Your" : who.replace(/^./, (c) => c.toUpperCase())) + " hospital cover on file is " + listOf([...new Set(cover.map((d) => d.product!))]) + "." : ""),
         [], [], owner?.id ?? null, { documents: { kind: "correspondence", role: "medical_bill", ids: [named.id] } });
     }
@@ -300,7 +315,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
     for (const d of whoTarget) byProduct.set(d.product!, [...(byProduct.get(d.product!) ?? []), d]);
     const lines = [...byProduct].map(([product, ds]) => {
       const owners = [...new Set(ds.flatMap((d) => d.owners))].map((id) => args.family.find((p) => p.id === id)).filter((p): p is ClaimPerson => !!p);
-      return product + " covers " + listOf(owners.map((p) => isSelf(p) ? "you" : personName(p) + " (" + p.display_name + ")")) + ", going by " + (ds.length === 1 ? q(ds[0].file) : "its documents") + ".";
+      return product + " covers " + listOf(owners.map((p) => isSelf(p) ? "you" : personName(p) + " (" + p.display_name + ")")) + ", going by " + (ds.length === 1 && !opensWith(ds[0].label, product) ? q(ds[0].label) : ds.length === 1 ? "its document" : "its documents") + ".";
     });
     const owners = [...new Set(whoTarget.flatMap((d) => d.owners))];
     // "Is Papa covered by SeniorGuard?": yes or no for the person asked about, then who it covers.
@@ -328,10 +343,12 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
     const details: string[] = [], citations: ChatCitation[] = [];
     for (const d of onlyHits.filter((x) => x.role !== "app_screenshot")) details.push(unusableLine(d, unusableKind(d)!));
     for (const d of shots) {
-      const lines = bestLines(pages.get(d.id) ?? [], text, { limit: 3, always: [/\bsum assured|next premium|in force\b/i] });
-      const shown = lines.length ? lines : bestLines(pages.get(d.id) ?? [], "", { limit: 3, always: [/\bsum assured|next premium|in force\b/i], min: 2 });
-      details.push(q(d.file) + " is a screenshot of " + (cleanInsurer(d.insurer) ? cleanInsurer(d.insurer) + "’s" : "the insurer’s") + " app — a summary from the app, not a policy document — and shows: " + shown.map((l) => "“" + flagUnclearFigures(l.line) + "” (page " + l.page + ")").join("; ") + ".");
-      citations.push(...cite(d, "the app screenshot (" + d.file + ")", shown.map((l) => l.page)));
+      // 19 Nov: the screenshot's title line ("TermGuard 65") is what its label already says, so it is not quoted again.
+      const notTitle = (l: { line: string }) => !titleLine(l.line, d.product) && !namesOnly(l.line, d);
+      const lines = bestLines(pages.get(d.id) ?? [], text, { limit: 3, always: [/\bsum assured|next premium|in force\b/i] }).filter(notTitle);
+      const shown = lines.length ? lines : bestLines(pages.get(d.id) ?? [], "", { limit: 3, always: [/\bsum assured|next premium|in force\b/i], min: 2 }).filter(notTitle);
+      details.push(q(d.label) + " is a screenshot of " + (cleanInsurer(d.insurer) ? cleanInsurer(d.insurer) + "’s" : "the insurer’s") + " app — a summary from the app, not a policy document" + (shown.length ? " — and shows: " + shown.map((l) => "“" + flagUnclearFigures(l.line) + "” (page " + l.page + ")").join("; ") : ", and prints nothing beyond the plan’s name") + ".");
+      citations.push(...cite(d, "the app screenshot, " + d.label, shown.map((l) => l.page)));
     }
     const name = onlyHits.find((d) => d.product)?.product ?? policyWords(onlyHits[0])[0];
     return done("DearPolicy has no readable policy document for " + name + " yet, so it can’t confirm its cover from the policy itself. Here is what is on file:", details, citations,
@@ -354,10 +371,10 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
         plan = { details: r.answer.details.filter((d) => /\b(?:deductible|co-?insurance|co-?pay\w*)\b/i.test(d)).slice(0, 3), citations: r.answer.citations };
       } catch { /* the bill and the decision still stand */ }
       const insurer = decision ? cleanInsurer(decision.insurer) : null;
-      const summary = "A bill isn’t cover: what a plan pays towards it is decided on the claim." + (decision ? " " + (insurer ?? "The insurer") + " declined the claim for this stay (" + q(decision.file) + "), so the plan isn’t paying towards this bill unless that decision changes on review." : "")
+      const summary = "A bill isn’t cover: what a plan pays towards it is decided on the claim." + (decision ? " " + (insurer ?? "The insurer") + " declined the claim for this stay (" + q(decision.label) + "), so the plan isn’t paying towards this bill unless that decision changes on review." : "")
         + (plan.details.length ? " For an eligible stay, the plan pays after the deductible and co-insurance below." : "");
       return done(summary, [...quoted(billLines).map((l) => "Bill: " + l), ...quoted(decisionLines).map((l) => "Decision: " + l), ...plan.details],
-        [...cite(bill, "the hospital bill (" + bill.file + ")", billLines.map((l) => l.page)), ...(decision ? cite(decision, "the claim decision (" + decision.file + ")", decisionLines.map((l) => l.page)) : []), ...plan.citations],
+        [...cite(bill, "the hospital bill, " + bill.label, billLines.map((l) => l.page)), ...(decision ? cite(decision, "the claim decision, " + decision.label, decisionLines.map((l) => l.page)) : []), ...plan.citations],
         owner?.id ?? person?.id ?? null, { documents: { kind: "correspondence", role: "medical_bill", ids: [bill.id] } });
     }
   }
@@ -384,7 +401,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
       // What the document prints about the thing, not about the figure the notes give.
       const printed = await printedLinesAnswer({ accountId: args.accountId, question: topicText.replace(/(?:S\$|SGD\s?|\$)\s?\d[\d,.]*/g, " "), people: subject, family: args.family, min: 1 });
       if (!noteDoc || !noteLine.length || !printed) return null;
-      return done("Your notes (" + q(noteDoc.file) + ") say " + quoted(noteLine)[0].replace(/ \(page \d+\)\.$/, "") + " — but they are your own notes, not the insurer’s. " + printed.summary.replace(/ prints about that:$/, " prints:"),
+      return done("Your notes (" + q(noteDoc.label) + ") say " + quoted(noteLine)[0].replace(/ \(page \d+\)\.$/, "") + " — but they are your own notes, not the insurer’s. " + printed.summary.replace(/ prints about that:$/, " prints:"),
         printed.details, printed.citations, printed.personId,
         { documents: { kind: "correspondence", role: "personal_notes", ids: [noteDoc.id] } }, ["Where your notes and the insurer’s document differ, go by the document — and update your notes."]);
     }
@@ -404,7 +421,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
       personal_notes: [],
     };
     const zero = (l: { line: string }) => /S\$\s?0(?:\.00)?\b(?![\d,])/.test(l.line);
-    const picked = bestLines(docPages, text, { limit: roleAsked === "medical_bill" || roleAsked === "app_screenshot" ? 3 : 4, always: always[roleAsked] }).filter((l) => !zero(l));
+    const picked = bestLines(docPages, text, { limit: roleAsked === "medical_bill" || roleAsked === "app_screenshot" ? 3 : 4, always: always[roleAsked] }).filter((l) => !zero(l) && !(roleAsked === "app_screenshot" && (titleLine(l.line, d.product) || namesOnly(l.line, d))));
     // Round 11: "how much was the bill?" is the bill's total, whatever single charge the question's other words match.
     if (roleAsked === "medical_bill" && /\bhow much\b|\btotal\b|\bamount\b|\bcost\b/i.test(text) && !picked.some((l) => /total charges|amount payable/i.test(l.line))) {
       const total = bestLines(docPages, "total charges amount payable by patient", { limit: 4 }).filter((l) => /(?:^|— )(?:total charges|amount payable by (?:the )?patient):/i.test(l.line) && !zero(l)).slice(0, 1);
@@ -416,17 +433,17 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
     const label = roleAsked === "insurer_letter" ? (insurer ? insurer + "’s letter" : "the insurer’s letter") : roleAsked === "claim_decision" ? (insurer ? insurer + "’s claim decision" : "the claim decision")
       : roleAsked === "medical_bill" ? "the hospital bill" : roleAsked === "app_screenshot" ? "the app screenshot" : "your own notes";
     const lead: Record<CorrespondenceRole, string> = {
-      insurer_letter: "Here is what " + (insurer ? insurer + "’s" : "the insurer’s") + " letter " + q(d.file) + " says" + (owner ? " to " + (isSelf(owner) ? "you" : personName(owner)) : "") + ". It is a letter, not a policy: it tells you about a change, it doesn’t add or confirm cover.",
-      claim_decision: "Here is what " + (insurer ? insurer + "’s" : "the insurer’s") + " decision on " + ownerWords + " claim, " + q(d.file) + ", says" + (paysNothing ? " — it declined the claim and is paying nothing on it" : "") + ". Only the insurer decides a claim; you can ask it to review the decision.",
-      medical_bill: "Here is what " + ownerWords + " hospital bill " + q(d.file) + " shows. A bill lists charges; it isn’t cover, and what a plan pays towards it is decided on the claim.",
-      app_screenshot: q(d.file) + " is a screenshot of " + (insurer ? insurer + "’s" : "the insurer’s") + " app — a summary from the app, not a policy document, so its figures aren’t treated as confirmed cover. It shows:",
-      personal_notes: q(d.file) + " is " + (owner && isSelf(owner) ? "your" : "the family’s") + " own notes, not a document from the insurer, so DearPolicy never uses it as a policy fact" + (/handwrit/i.test(d.message ?? "") ? "; it is handwritten and only parts of it could be read" : "") + ". It says:",
+      insurer_letter: "Here is what " + (insurer ? insurer + "’s" : "the insurer’s") + " letter " + q(d.label) + " says" + (owner ? " to " + (isSelf(owner) ? "you" : personName(owner)) : "") + ". It is a letter, not a policy: it tells you about a change, it doesn’t add or confirm cover.",
+      claim_decision: "Here is what " + (insurer ? insurer + "’s" : "the insurer’s") + " decision on " + ownerWords + " claim, " + q(d.label) + ", says" + (paysNothing ? " — it declined the claim and is paying nothing on it" : "") + ". Only the insurer decides a claim; you can ask it to review the decision.",
+      medical_bill: "Here is what " + ownerWords + " hospital bill " + q(d.label) + " shows. A bill lists charges; it isn’t cover, and what a plan pays towards it is decided on the claim.",
+      app_screenshot: q(d.label) + " is a screenshot of " + (insurer ? insurer + "’s" : "the insurer’s") + " app — a summary from the app, not a policy document, so its figures aren’t treated as confirmed cover. It shows:",
+      personal_notes: q(d.label) + " is " + (owner && isSelf(owner) ? "your" : "the family’s") + " own notes, not a document from the insurer, so DearPolicy never uses it as a policy fact" + (/handwrit/i.test(d.message ?? "") ? "; it is handwritten and only parts of it could be read" : "") + ". It says:",
     };
     const extra: string[] = [];
     // A screenshot standing in for a policy document that couldn't be read: say so.
     if (roleAsked === "app_screenshot") for (const locked of docs.filter((x) => unusableKind(x) === "password" && x.owners.some((o) => d.owners.includes(o))))
-      extra.push("The policy document itself, " + q(locked.file) + ", is locked with a password — enter its password on the Documents page and DearPolicy will read the schedule to confirm.");
-    return done(lead[roleAsked], [...quoted(lines), ...extra], cite(d, label + " (" + d.file + ")", lines.map((l) => l.page)), owner?.id ?? person?.id ?? null,
+      extra.push("The policy document itself, " + q(locked.label) + ", is locked with a password — enter its password on the Documents page and DearPolicy will read the schedule to confirm.");
+    return done(lead[roleAsked], [...quoted(lines), ...extra], cite(d, label === d.label ? label : label + ", " + d.label, lines.map((l) => l.page)), owner?.id ?? person?.id ?? null,
       { documents: { kind: "correspondence", role: roleAsked, ids: [d.id] } });
   }
   // ---- "can you read Mama's scanned CI policy?": how a document was read
@@ -435,7 +452,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
       .filter((d) => !d.superseded);
     if (!target.length) return null;
     const lines = target.slice(0, 3).map((d) => howRead(d));
-    const cited = target.slice(0, 3).flatMap((d) => cite(d, (d.product ?? d.file) + " (" + d.file + ")", [1]));
+    const cited = target.slice(0, 3).flatMap((d) => cite(d, d.label, [1]));
     return done(lines[0], lines.slice(1), cited, ownerOf(target[0])?.id ?? person?.id ?? null, { documents: { kind: "uploads", ids: target.map((d) => d.id) } });
   }
   // ---- "what's printed on page 2 of Mama's scanned CI policy?": that page, as read
@@ -451,7 +468,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
       if (page) {
         const lines = piecesOf(page.text).slice(0, 8).map((l) => "“" + flagUnclearFigures(l) + "”");
         const turned = d.notes.some((x) => new RegExp("^Page " + n + " was (?:sideways|upside down)").test(x));
-        return done("Page " + n + " of " + q(d.file) + (d.product ? " (" + d.product + ")" : "") + (turned ? " — photographed or scanned turned, and read after turning it upright —" : "") + " reads:", lines, cite(d, (d.product ?? d.file) + " (" + d.file + ")", [n]), ownerOf(d)?.id ?? null, { documents: { kind: "uploads", ids: [d.id] } });
+        return done("Page " + n + " of " + q(d.label) + (d.product && !d.label.includes(d.product) ? " (" + d.product + ")" : "") + (turned ? " — photographed or scanned turned, and read after turning it upright —" : "") + " reads:", lines, cite(d, d.label, [n]), ownerOf(d)?.id ?? null, { documents: { kind: "uploads", ids: [d.id] } });
       }
     }
   }
@@ -461,7 +478,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
     if (printed && /is an earlier schedule/.test(printed.summary)) return done(printed.summary, printed.details, printed.citations, printed.personId, { documents: { kind: "uploads", ids: [] } });
   }
   // ---- the uploads themselves
-  if (uploadsAsked || (followUp && prior?.kind === "uploads")) return uploadsAnswer(text, docs, person, namedFiles, ownerOf);
+  if (uploadsAsked || (followUp && prior?.kind === "uploads")) return await uploadsAnswer(args.accountId, text, docs, person, namedFiles, ownerOf);
   return null;
 }
 
@@ -475,22 +492,24 @@ function howRead(d: Doc): string {
   const settled = [...notes.matchAll(/the scan prints “([^”]+)”; DearPolicy read it as ([^ ]+) because/g)].map((m) => m[2].replace(/[.,]$/, ""));
   if (settled.length) bits.push((settled.length === 1 ? "one figure the scan prints unclearly was read as " : "figures the scan prints unclearly were read as ") + listOf(settled) + " because the document prints the same figure clearly elsewhere");
   if (unclear.length) bits.push("some figures can’t be read with certainty (" + unclear.map((u) => flagUnclearFigures(u)).join("; ") + "), so DearPolicy doesn’t use them — check those against the paper copy");
-  return "Yes — DearPolicy read " + q(d.file) + (d.product ? " (" + d.product + ")" : "") + (bits.length ? ": " + bits.join("; ") + "." : ".");
+  return "Yes — DearPolicy read " + q(d.label) + (d.product && !d.label.includes(d.product) ? " (" + d.product + ")" : "") + (bits.length ? ": " + bits.join("; ") + "." : ".");
 }
 
-function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, namedFiles: Doc[], ownerOf: (d: Doc) => ClaimPerson | null): DocumentAnswer {
+async function uploadsAnswer(accountId: string, text: string, docs: Doc[], person: ClaimPerson | null, namedFiles: Doc[], ownerOf: (d: Doc) => ClaimPerson | null): Promise<DocumentAnswer> {
   const forPerson = (d: Doc) => !person || d.owners.includes(person.id);
   const who = (d: Doc) => { const o = ownerOf(d); return o ? (isSelf(o) ? "you" : personName(o)) : "your household"; };
   // Round 15: each upload listed is cited at its first page, as every other answer's documents are.
   const listed = (ids: string[]): ChatCitation[] => docs.filter((d) => ids.includes(d.id) && d.status === "ready").slice(0, 20)
-    .map((d) => ({ chunkId: "page:" + d.id + ":1", policyId: d.id, policyName: d.product ?? d.file, ...(d.insurer ? { insurer: cleanInsurer(d.insurer) ?? undefined } : {}), pageStart: 1, pageEnd: 1, documentRole: d.role }));
+    .map((d) => ({ chunkId: "page:" + d.id + ":1", policyId: d.id, policyName: d.label, ...(d.insurer ? { insurer: cleanInsurer(d.insurer) ?? undefined } : {}), pageStart: 1, pageEnd: 1, documentRole: d.role }));
   const done = (summary: string, details: string[], ids: string[], personId: string | null): DocumentAnswer => ({ summary, details, nextSteps: [], citations: listed(ids), personId, patch: { documents: { kind: "uploads", ids } } });
   const copies = docs.filter((d) => d.superseded && d.notes.some((n) => /^Same schedule as|^An earlier schedule/.test(n)));
   const describeCopy = (d: Doc) => {
     const note = d.notes.find((n) => /^Same schedule as|^An earlier schedule/.test(n)) ?? "";
-    const keeper = note.match(/“([^”]+)”/)?.[1];
-    return /^Same schedule/.test(note) ? q(d.file) + " is the same schedule as " + q(keeper ?? "the other upload") + " (a photo or scan of it), so DearPolicy keeps one: answers use " + q(keeper ?? "the other upload") + ", which reads more reliably."
-      : q(d.file) + " is an earlier schedule of the same policy" + (note.match(/\(ending ([^)]+)\)/) ? ", for the period ending " + note.match(/\(ending ([^)]+)\)/)![1] : "") + "; the current one is " + q(keeper ?? "the newer upload") + ", so answers use that. The earlier one is kept for reference.";
+    // The stored note names the kept upload by its file; say its title instead (DC 18 Nov: no file names).
+    const keeperFile = note.match(/“([^”]+)”/)?.[1];
+    const keeper = docs.find((x) => x.file === keeperFile)?.label;
+    return /^Same schedule/.test(note) ? q(d.label) + " is the same schedule as " + q(keeper ?? "the other upload") + " (a photo or scan of it), so DearPolicy keeps one: answers use " + q(keeper ?? "the other upload") + ", which reads more reliably."
+      : q(d.label) + " is an earlier schedule of the same policy" + (note.match(/\(ending ([^)]+)\)/) ? ", for the period ending " + note.match(/\(ending ([^)]+)\)/)![1] : "") + "; the current one is " + q(keeper ?? "the newer upload") + ", so answers use that. The earlier one is kept for reference.";
   };
   // Copies and earlier schedules: "which upload is the current schedule?", "is the photo the same as the PDF?"
   if ((/\b(?:same|twice|duplicate|copy|copies|current|latest|newest|which one|did you use|do you use|older|earlier|previous|both|and then)\b|\b20\d\d\b/i.test(text)
@@ -504,7 +523,7 @@ function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, na
       const keeperFile = shown[0].notes.join(" ").match(/“([^”]+)”/)?.[1];
       const keeper = docs.find((d) => d.file === keeperFile);
       const lines = shown.map(describeCopy);
-      const lead = keeper && /\bcurrent|latest|newest|which one|use\b/i.test(text) ? "The current schedule is " + q(keeper.file) + (keeper.product ? " (" + keeper.product + ")" : "") + ". " : "";
+      const lead = keeper && /\bcurrent|latest|newest|which one|use\b/i.test(text) ? "The current schedule is " + q(keeper.label) + ". " : "";
       return done(lead + lines[0], lines.slice(1), shown.map((d) => d.id), ownerOf(shown[0])?.id ?? null);
     }
   }
@@ -516,35 +535,40 @@ function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, na
     const base = b.file.replace(/\.pdf$/i, "");
     const mine = [b, ...parts.filter((p) => p.file.startsWith(base + " — part "))];
     const n = mine.length;
-    const lines = mine.map((d) => (d.product ?? d.file) + " — for " + who(d) + (d === b ? " (pages " + (b.notes.join(" ").match(/pages (\d+–\d+) are read here/)?.[1] ?? "1") + " of the file)" : " (" + (d.file.match(/\((pages [^)]+)\)/)?.[1] ?? "") + ")") + ".");
+    const lines = mine.map((d) => (d.product ?? d.label) + " — for " + who(d) + (d === b ? " (pages " + (b.notes.join(" ").match(/pages (\d+–\d+) are read here/)?.[1] ?? "1") + " of the file)" : " (" + (d.file.match(/\((pages [^)]+)\)/)?.[1] ?? "") + ")") + ".");
     const count = n === 3 ? "three" : n === 2 ? "two" : String(n);
     // "Which policies were in it?": the policies first, then how they were read.
     const which = /\b(?:which|what)\b[^?]{0,20}\b(?:policies|plans|ones)\b/i.test(text);
-    return done(which ? "These " + count + " policies were in " + q(b.file) + " — DearPolicy read each one on its own, as if they had been uploaded separately:"
-      : q(b.file) + " held " + count + " separate policies, so DearPolicy read each one on its own, as if they had been uploaded separately:", lines, mine.map((d) => d.id), null);
+    return done(which ? "These " + count + " policies were in " + q(b.label) + " — DearPolicy read each one on its own, as if they had been uploaded separately:"
+      : q(b.label) + " held " + count + " separate policies, so DearPolicy read each one on its own, as if they had been uploaded separately:", lines, mine.map((d) => d.id), null);
   }
   // Pages out of order.
   const outOfOrder = docs.filter((d) => d.notes.some((n) => /out of order/i.test(n)) && forPerson(d));
   if (/\border\b|\bmixed\b|\bshuffl|\bsequence\b|\bpages?\b[^?]{0,40}\blike\b/i.test(text) && outOfOrder.length) {
     const d = namedFiles.find((x) => outOfOrder.includes(x)) ?? outOfOrder[0];
     const note = d.notes.find((n) => /out of order/i.test(n))!;
-    return done(note.replace(/^The pages of this file/, "The pages of " + q(d.file)), [], [d.id], ownerOf(d)?.id ?? null);
+    return done(note.replace(/^The pages of this file/, "The pages of " + q(d.label)), [], [d.id], ownerOf(d)?.id ?? null);
   }
   // Which uploads are letters, bills, notes, screenshots -- and which are policies.
   const shown = docs.filter((d) => forPerson(d) && (!/\bmerlion\b/i.test(text) || /merlion/i.test((d.insurer ?? "") + " " + d.file)));
   const kind = (d: Doc) => NON_COVER_ROLES.has(d.role ?? "") ? ROLE_WORDS[d.role as CorrespondenceRole] : d.status !== "ready" ? "couldn’t be read" : d.superseded ? "a copy or earlier version" : /policy_wording|product_summary|benefit_guide|brochure/.test(d.role ?? "") ? "general policy wording" : /statement|receipt|renewal/.test(d.role ?? "") ? "a statement or notice" : "a policy";
+  // A letter or notice is also said by its printed heading; the product is not said again after a title that opens with it.
+  const headed = (h: Map<string, string>, d: Doc) => h.get(d.id) ? " (headed " + q(h.get(d.id)!) + ")" : "";
+  const productAfter = (d: Doc) => d.product && !NON_COVER_ROLES.has(d.role ?? "") && !opensWith(d.label, d.product) ? " (" + d.product + ")" : "";
   const lettersOnly = /\bletters?\b|\brather than\b|not (?:a )?polic/i.test(text);
   // Round 11: "the CareCash photo I uploaded": that upload, and what became of it -- not every file on record.
   const askedWords = (text.match(/[A-Za-z]{4,}/g) ?? []).map((w) => w.toLowerCase()).filter((w) => !/^(?:what|about|that|this|which|uploaded|upload|photo|picture|image|file|document|scan|from|with|have|does|policy|plan|insurance|mama|papa|your|their)$/.test(w));
   const photoAsked = /\b(?:photo|picture|pic|image|snap(?:shot)?)\b/i.test(text);
   const pointed = shown.filter((d) => askedWords.some((w) => (d.file + " " + (d.product ?? "")).toLowerCase().replace(/[^a-z]+/g, " ").split(" ").some((x) => x.length >= 4 && x.startsWith(w.slice(0, 6)))) && (!photoAsked || /\.(?:jpe?g|png|heic|webp)$/i.test(d.file)));
   if (!lettersOnly && pointed.length && pointed.length <= 3 && pointed.length < shown.length && !/\bwhich\b|\bfrom\b|\blist\b|\ball\b/i.test(text)) {
-    const lines = pointed.map((d) => q(d.file) + " — " + kind(d) + (d.product && !NON_COVER_ROLES.has(d.role ?? "") ? " (" + d.product + ")" : "") + (person ? "" : ", for " + who(d)) + "." + (d.status === "failed" ? " It couldn’t be read because " + failureOf(d).why + ". " + failureOf(d).step : ""));
+    const headings = await printedHeadings(accountId, pointed.filter((d) => d.status === "ready" && !isPolicyRole(d.role)).map((d) => d.id));
+    const lines = pointed.map((d) => q(d.label) + headed(headings, d) + " — " + kind(d) + productAfter(d) + (person ? "" : ", for " + who(d)) + "." + (d.status === "failed" ? " It couldn’t be read because " + failureOf(d).why + ". " + failureOf(d).step : ""));
     return done(lines[0], lines.slice(1), pointed.map((d) => d.id), ownerOf(pointed[0])?.id ?? person?.id ?? null);
   }
   const list = (lettersOnly ? shown.filter((d) => NON_COVER_ROLES.has(d.role ?? "")) : shown);
   if (!list.length) return done("I couldn’t find uploads like that on file.", [], [], person?.id ?? null);
-  const lines = list.map((d) => q(d.file) + " — " + kind(d) + (d.product && !NON_COVER_ROLES.has(d.role ?? "") ? " (" + d.product + ")" : "") + (person ? "" : ", for " + who(d)) + ".");
+  const headings = await printedHeadings(accountId, list.filter((d) => d.status === "ready" && !isPolicyRole(d.role)).map((d) => d.id));
+  const lines = list.map((d) => q(d.label) + headed(headings, d) + " — " + kind(d) + productAfter(d) + (person ? "" : ", for " + who(d)) + ".");
   const target = person ? (isSelf(person) ? "you" : personName(person)) : "your household";
   return done(lettersOnly ? "These uploads are letters, bills, screenshots or notes rather than policies, so none of them is counted as cover:" : list.length + " uploads are on file for " + target + ":", lines.slice(0, 20), list.map((d) => d.id), person?.id ?? null);
 }
@@ -659,8 +683,11 @@ async function printedLinesAnswerInner(args: { accountId: string; question: stri
   const whose = owner ? (isSelf(owner) ? "your" : personName(owner) + "’s") : "the";
   const what = best.d.role === "annual_statement" ? " statement" : best.d.role === "renewal_statement" ? " renewal notice" : "";
   const summary = best.d.superseded
-    ? q(best.d.file) + " is an earlier schedule of " + whose + " " + (best.d.product ?? "policy") + ", kept for reference (answers about the current year use the newer one). For that earlier year it prints:"
-    : "Here is what " + whose + " " + (best.d.product ?? q(best.d.file)) + what + " prints about that:";
+    ? (best.d.product && opensWith(best.d.label, best.d.product)
+      // 19 Nov: the title already names the product, so it is said once ("same policy listed twice" otherwise).
+      ? q(best.d.label) + " is an earlier schedule of " + whose + " policy, kept for reference (answers about the current year use the newer one). For that earlier year it prints:"
+      : q(best.d.label) + " is an earlier schedule of " + whose + " " + (best.d.product ?? "policy") + ", kept for reference (answers about the current year use the newer one). For that earlier year it prints:")
+    : "Here is what " + whose + " " + (best.d.product ?? q(best.d.label)) + what + " prints about that:";
   // Round 7 (port): a per-column table row says only the column asked (or this person's, on the household's own group plan), or is not quoted.
   const self = args.family.find((p) => /^self$/i.test(p.relationship ?? ""));
   const columns = args.people.length === 1 && self && best.d.owners.includes(self.id) ? columnsFor(args.people[0].relationship) : [];
@@ -671,7 +698,7 @@ async function printedLinesAnswerInner(args: { accountId: string; question: stri
   if (!lines.length) return null;
   best.lines = lines;
   return { summary, details: quoted(best.lines),
-    citations: cite(best.d, (best.d.product ?? best.d.file) + " (" + best.d.file + ")", best.lines.map((l) => l.page)), personId: owner?.id ?? null };
+    citations: cite(best.d, best.d.label, best.lines.map((l) => l.page)), personId: owner?.id ?? null };
 }
 /** Round 10: an answer that misses what was asked ("instead of the daily rate?", "early cancer" with no
  * amount) while a line of the person's own documents says it: that line, quoted. */
@@ -701,7 +728,7 @@ export async function provenanceAnswer(args: { accountId: string; conversationId
   const docs = await loadDocuments(args.accountId);
   const byId = new Map(docs.map((d) => [d.id, d]));
   const isPolicy = (d: Doc) => !NON_COVER_ROLES.has(d.role ?? "") && d.role !== "app_screenshot";
-  const what = (d: Doc) => d.role && d.role in ROLE_WORDS ? ROLE_WORDS[d.role as CorrespondenceRole].replace("'", "’") + ", not a policy document" : d.product ? "the " + d.product + " policy document" : "a policy document";
+  const what = (d: Doc) => d.role && d.role in ROLE_WORDS ? ROLE_WORDS[d.role as CorrespondenceRole].replace("'", "’") + ", not a policy document" : d.product && !opensWith(d.label, d.product) ? "the " + d.product + " policy document" : "a policy document";
   const pageWords = (ps: number[]) => ps.length === 1 ? "page " + ps[0] : "pages " + listOf(ps.map(String));
   // The pages the answer cited, by document.
   const cited = new Map<string, number[]>();
@@ -716,21 +743,21 @@ export async function provenanceAnswer(args: { accountId: string; conversationId
     const used = [...cited].map(([id, ps]) => ({ d: byId.get(id)!, ps: ps.sort((x, y) => x - y) }));
     const all = used.every((u) => isPolicy(u.d)), none = used.every((u) => !isPolicy(u.d));
     const lead = asksPolicy ? (all ? "Yes — " : none ? "No — " : "Partly — ") : "";
-    const parts = used.map((u) => q(u.d.file) + " (" + what(u.d) + "), " + pageWords(u.ps));
-    const citations = used.flatMap((u) => cite(u.d, u.d.product ? u.d.product + " (" + u.d.file + ")" : u.d.file, u.ps));
+    const parts = used.map((u) => q(u.d.label) + " (" + what(u.d) + "), " + pageWords(u.ps));
+    const citations = used.flatMap((u) => cite(u.d, u.d.label, u.ps));
     return { summary: lead + (lead ? "that" : "That") + " answer came from " + listOf(parts) + ".", details: [], nextSteps: [], citations, personId, patch: {} };
   }
   // No page was cited: the uploads the answer named, for what they are.
   const said = [last.summary, ...(last.details ?? [])].join("\n");
-  const named = docs.filter((d) => said.includes(q(d.file)));
+  const named = docs.filter((d) => said.includes(q(d.label)));
   const details: string[] = [], citations: ChatCitation[] = [];
   for (const d of named) {
-    if (unusableKind(d)) { details.push(q(d.file) + " couldn’t be read, so nothing in that answer comes from it."); continue; }
+    if (unusableKind(d)) { details.push(q(d.label) + " couldn’t be read, so nothing in that answer comes from it."); continue; }
     if (d.status !== "ready") continue;
     // An app screenshot is one page.
     const ps = d.role === "app_screenshot" ? [1] : [];
-    details.push("It is based on " + q(d.file) + (ps.length ? ", " + pageWords(ps) : "") + " — " + what(d) + ".");
-    citations.push(...cite(d, d.role === "app_screenshot" ? "the app screenshot (" + d.file + ")" : d.product ?? d.file, ps));
+    details.push("It is based on " + q(d.label) + (ps.length ? ", " + pageWords(ps) : "") + " — " + what(d) + ".");
+    citations.push(...cite(d, d.role === "app_screenshot" ? "the app screenshot, " + d.label : d.label, ps));
   }
   const fromPolicy = named.some((d) => isPolicy(d) && d.status === "ready" && !unusableKind(d));
   const summary = fromPolicy ? "That answer didn’t quote a page of any document; it said what is on file. These are the documents it named."

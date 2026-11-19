@@ -114,10 +114,10 @@ async function checks(saved: Saved[], h: Awaited<ReturnType<typeof startHarness>
     assert.ok((s.answer.citations ?? []).some((c: any) => c.policyId === wording.id && c.pageStart === 1), JSON.stringify(s.answer.citations));
     assert.ok(!/Other Fracture[^.\n]*S\$\d/.test(v), v);
   });
-  await check("S52C: the inventory lists every readable upload for each person and the unreadable IMG_0042.jpg, without the generic \"I couldn’t confirm an answer\" line", () => {
+  await check("S52C: the inventory lists every readable upload for each person and the unreadable photo (said as \"Photo uploaded <day>\", never IMG_0042.jpg -- DC approved 19 Nov), without the generic \"I couldn’t confirm an answer\" line", () => {
     const v = visible(T("S52C").answer);
     for (const d of LH.DOCS.filter((x) => !x.account && x.key !== "SCAN")) assert.ok(v.includes(d.product), d.product);
-    assert.match(v, /its contents could not be read: IMG_0042\.jpg\. Nothing in it can be used; linking it to a person would not change that/); assert.ok(!/link it to a person so it can be used/.test(v), v);
+    assert.match(v, /its contents could not be read: Photo uploaded \d{1,2} [A-Z][a-z]{2} \d{4}\. Nothing in it can be used; linking it to a person would not change that/); assert.ok(!/IMG_0042/.test(v), v); assert.ok(!/link it to a person so it can be used/.test(v), v);
     assert.ok(!/couldn’t confirm an answer/.test(v), v);
   });
   await check("S52B is unchanged from live: amounts and certificate date, then Cheryl's PA S$600,000 correcting the S$1,000,000 premise", () => {
@@ -136,7 +136,7 @@ async function checks(saved: Saved[], h: Awaited<ReturnType<typeof startHarness>
       "S52A#1": { removed: [/and the policy wording says reasonable costs/, /says to notify Kestrel Life Ltd of a death and provide/, /^Contact the group personal accident insurer about .*; keep the death certificate/], added: [/^The policy wording says reasonable costs of returning the remains to Singapore are reimbursed up to 2,000 \(printed with a “\$” sign; the document does not say which currency\)\.$/, /^For Adrian, the group accident wording provides Repatriation of Mortal Remains of S\$2,000 if death occurs outside Singapore as a result of an Accident\.$/, /notify Kestrel Life Ltd of a death within 6 months/, /does not document travel cover for Japan/,
         // reliable chat (contract C): the live next step's three independent actions are three steps, each checked whole
         /^Contact the group personal accident insurer about the Accidental Death and Repatriation of Mortal Remains benefits\.$/, /^Keep the death certificate and reasonable repatriation-cost records\.$/, /^Ask what claim forms and supporting documents are required\.$/] },
-      "S52C#0": { removed: [/^I couldn’t confirm an answer to that from your documents\.$/, /IMG_0042\.jpg \(could not be read\) -- link it to a person so it can be used for them\.$/], added: [/its contents could not be read: IMG_0042\.jpg\. Nothing in it can be used; linking it to a person would not change that/] },
+      "S52C#0": { removed: [/^I couldn’t confirm an answer to that from your documents\.$/, /IMG_0042\.jpg \(could not be read\) -- link it to a person so it can be used for them\.$/], added: [/its contents could not be read: Photo uploaded \d{1,2} [A-Z][a-z]{2} \d{4}\. Nothing in it can be used; linking it to a person would not change that/] }, // 19 Nov (DC approved): the photo by its upload day, not "IMG_0042.jpg"
       "S52D#0": { removed: [/do not provide Adrian’s Group Personal Accident Sum Insured/], added: [] },
     };
     const seen: Record<string, number> = {};

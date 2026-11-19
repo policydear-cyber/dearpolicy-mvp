@@ -12,6 +12,9 @@ export type Turn = { say: string; expect?: Expect };
 export type Conversation = { name: string; member: string | null; scope?: "family"; account?: "other"; turns: Turn[] };
 
 const NOT_FOUND = /(?:didn[’']t|did not|could not|couldn[’']t) find|not (?:found|stated|printed|shown) in|no .{0,40}(?:on file|in (?:your|the|her|his|\w+[’']s) documents)|isn[’']t (?:in|stated|printed|shown)|doesn[’']t (?:say|state|show|print)|don[’']t (?:say|state|show|print)|no (?:\w+ )?polic(?:y|ies)/i;
+// 19 Nov (#564, DC 18 Nov: no file names in answers): expectations that looked for a file name now look for the document's
+// title as the answer shows it, and the unreadable-upload and inventory cases also fail if a file name shows. The cases and
+// what they check are unchanged; see docs/verification/grader-changes-2026-11-19.md.
 const Y = (person: string | null, mentions?: RegExp | RegExp[], notMentions?: RegExp): Expect => ({ person, mentions, notMentions });
 /** A bill or claim figure presented as what a plan covers. */
 const BILL_AS_COVER = /(?:cover(?:s|ed)?|limit|sum (?:insured|assured)|pays? up to)[^.]{0,40}S\$24,816\.40|S\$24,816\.40[^.]{0,30}(?:of cover|cover limit|sum insured|limit)/i;
@@ -45,11 +48,11 @@ export function battery(): Conversation[] {
     ["What is the deductible after Papa turns 81?", Y(BH, /S\$5,250/)],
     ["Does Papa's rider pay for pro-ration?", Y(BH, /not paid|pro-?ration/i)],
     ["Can Papa use MediSave for the rider premium?", Y(BH, /cash|cannot|can[’']t|not/i)],
-    ["Which upload is Papa's current SilverShield schedule?", Y(BH, [/SilverShield_Schedule_2026\.pdf|2026/], /SilverShield_2025_photo\.png[^.]{0,40}(?:is|as) (?:the )?current/i)],
-    ["I uploaded Papa's SilverShield schedule twice, a photo and the PDF. Which one do you use?", Y(BH, [/SilverShield_Schedule_2026\.pdf|PDF/i, /same|duplicate|copy/i])],
+    ["Which upload is Papa's current SilverShield schedule?", Y(BH, [/(?:current one is|answers use) “SilverShield Integrated Plan \(PDF\)”/], /\(photo, ending 0417\)”?[^.]{0,40}(?:is|as) (?:the )?current|_|\.pdf\b|\.png\b|\.jpg\b/i)],
+    ["I uploaded Papa's SilverShield schedule twice, a photo and the PDF. Which one do you use?", Y(BH, [/answers use “SilverShield Integrated Plan \(PDF\)”/, /same|duplicate|copy/i], /_|\.pdf\b|\.png\b|\.jpg\b/)],
     ["Is the photo IMG_20260412_093015.jpg the same as the SilverShield PDF?", Y(BH, /same|duplicate|copy/i)],
-    ["What was Papa's SilverShield premium last year?", Y(BH, [/2025/], /S\$1,962\.00(?! is unclear)/)],
-    ["What period did the 2025 SilverShield photo cover?", Y(BH, /1 April 2025|31 March 2026/)],
+    ["What was Papa's SilverShield premium last year?", Y(BH, [/“SilverShield Integrated Plan \(photo, ending 0417\)” is an earlier schedule|2025/], /S\$1,962\.00(?! is unclear)|\(PDF\)” is an earlier schedule|_|\.pdf\b|\.png\b|\.jpg\b/)],
+    ["What period did the 2025 SilverShield photo cover?", Y(BH, /1 April 2025|31 March 2026/, /_|\.pdf\b|\.png\b|\.jpg\b/)],
   ]);
   // ---- 2. the insurer's letter: premium increase and rider withdrawn
   qs("letter", KL, [
@@ -171,8 +174,8 @@ export function battery(): Conversation[] {
     ["What do my handwritten notes say?", { unreadable: "handwriting" }],
     ["Can you read the handwritten notes I uploaded for Papa?", { person: BH, unreadable: "handwriting" }],
     ["I tried to upload a HEIC photo from my iPhone. Why didn't it work?", { unreadable: "heic" }],
-    ["Which of our documents couldn't be read?", Y(null, [/TermGuard65_Schedule_locked\.pdf/, /CareCash_Renewal_2026_damaged\.pdf/, /CareCash_photo_blurry\.jpg/])],
-    ["Are any of Mama's documents unreadable?", Y(AL, [/CareCash_Renewal_2026_damaged\.pdf|CareCash_photo_blurry\.jpg/])],
+    ["Which of our documents couldn't be read?", Y(null, [/“TermGuard65 Schedule locked”/, /“CareCash Renewal 2026 damaged”/, /“CareCash photo blurry”/], /_|\.pdf\b|\.jpg\b/)],
+    ["Are any of Mama's documents unreadable?", Y(AL, [/“CareCash Renewal 2026 damaged”|“CareCash photo blurry”/], /_|\.pdf\b|\.jpg\b/)],
     ["What should I do about the documents you couldn't read?", Y(null, /password|original|retake|photo|re-?upload|upload/i)],
     ["Is anything still being read?", Y(null, /no|nothing|all|finished|done/i, /still being read/i)],
     ["What's in my insurance notes Word file?", Y(KL, /notes|your own|not from the insurer|typed/i)],
@@ -190,8 +193,8 @@ export function battery(): Conversation[] {
     ["How many policies did the bundle PDF contain?", Y(null, /three|3/i)],
     ["Which policies were in the Chua_family_policies_bundle.pdf?", Y(null, [/SeniorGuard/, /Heritage Whole Life/, /Wanderer/])],
     ["What were the pages of the CareCash PDF like?", Y(AL, /order/i)],
-    ["Which documents are letters rather than policies?", Y(null, [/Merlion_Premium_Revision_Aug2026\.pdf|premium/i, /Merlion_Claim_Decision_CLM-2026-118842\.pdf|claim/i])],
-    ["List every document I uploaded for Papa.", Y(BH, [/SilverShield_Schedule_2026\.pdf/, /Merlion_Claim_Decision/])],
+    ["Which documents are letters rather than policies?", Y(null, [/\(letter\)|premium/i, /\(claim decision\)|claim/i], /_|\.pdf\b|\.png\b|\.jpg\b/)],
+    ["List every document I uploaded for Papa.", Y(BH, [/“SilverShield Integrated Plan \(PDF\)”/, /“SilverShield Integrated Plan \(claim decision\)”/], /_|\.pdf\b|\.png\b|\.jpg\b/)],
     ["Does anyone in the family have critical illness cover?", Y(null, /Golden Years/, /didn[’']t find anything about/)],
     ["Does Papa have critical illness cover?", Y(BH, NOT_FOUND, /Golden Years[^.]{0,40}(?:covers|for) (?:Papa|him|Boon Huat)/i)],
     ["Who has hospital cash cover?", Y(null, /CareCash|SeniorGuard/)],
@@ -203,7 +206,7 @@ export function battery(): Conversation[] {
     ["Is Mama's early cancer payout S$12,500?", Y(AL, UNCLEAR)],
     ["Mama's angioplasty cap is S$5,000 right?", Y(AL, UNCLEAR)],
     ["What does the photo of Papa's schedule say the policy year limit is?", Y(BH, /S\$1,000,000|same|duplicate|PDF/i, /S\$1,OOO,OOO|S\$1\b(?![,.\d])/)],
-    ["Was Papa's 2025 premium S$1,962?", Y(BH, /S\$1,962|unclear|2025/i)],
+    ["Was Papa's 2025 premium S$1,962?", Y(BH, /S\$1,962|unclear|2025|\(photo, ending 0417\)/i, /_|\.pdf\b|\.png\b|\.jpg\b/)],
     ["What's printed on page 2 of Mama's scanned CI policy?", Y(AL, /benefit|critical illness|cancer/i)],
     // Round 10 (integration): rows whose amount the scan prints unclearly are read out too, said to be unclear.
     ["Read me the benefits table on Mama's CI scan", Y(AL, [/cancer|angioplasty|critical illness/i, /Early stage cancer[^\n]{0,80}unclear/i, /Angioplasty[^\n]{0,80}unclear/i])],
@@ -239,7 +242,7 @@ export function battery(): Conversation[] {
     { say: "what's his deductible?", expect: Y(BH, /S\$3,500/) },
     { say: "and his policy year limit?", expect: Y(BH, /S\$1,000,000/, /S\$1,OOO/) },
     // Round 10 (integration): where that figure came from -- the schedule and its page.
-    { say: "is that from the policy?", expect: Y(BH, [/^Yes\b|Yes —/, /SilverShield_Schedule_2026\.pdf/, /page \d/], /policy year limit: S\$1,000,000/i) },
+    { say: "is that from the policy?", expect: Y(BH, [/^Yes\b|Yes —/, /“SilverShield Integrated Plan \(PDF\)”/, /page \d/], /policy year limit: S\$1,000,000/i) },
   ]);
   conv("mama-ci", KL, [
     { say: "What critical illness cover does Mama have?", expect: Y(AL, /Golden Years/) },
@@ -259,7 +262,7 @@ export function battery(): Conversation[] {
     { say: "and any waiting period on CareCash?", expect: Y(AL, /30 days/) },
   ]);
   conv("unreadable", KL, [
-    { say: "Which of Mama's documents couldn't you read?", expect: Y(AL, [/CareCash_Renewal_2026_damaged\.pdf|CareCash_photo_blurry\.jpg/]) },
+    { say: "Which of Mama's documents couldn't you read?", expect: Y(AL, [/“CareCash Renewal 2026 damaged”|“CareCash photo blurry”/], /_|\.pdf\b|\.jpg\b/) },
     { say: "why not the renewal PDF?", expect: { person: AL, unreadable: "damaged" } },
     { say: "and the photo?", expect: { person: AL, unreadable: "blurry" } },
     { say: "how should I take the photo again?", expect: Y(AL, /light|flat|shadow|whole page|frame|focus/i) },
@@ -276,7 +279,7 @@ export function battery(): Conversation[] {
   conv("termguard", KL, [
     { say: "how much life cover do I have?", expect: Y(KL, /TermGuard/) },
     // Round 10 (integration): answered directly -- which document and page -- not the last answer again.
-    { say: "is that from the policy?", expect: Y(KL, [/screenshot|app|password|locked/i, /Screenshot_20260918_MerlionApp\.png/, /page 1\b/], /no life policy on file/i) },
+    { say: "is that from the policy?", expect: Y(KL, [/screenshot|app|password|locked/i, /“TermGuard 65”/, /page 1\b/], /no life policy on file|Screenshot_20260918/i) },
     { say: "why can't you read the PDF?", expect: { person: KL, unreadable: "password" } },
     { say: "when is the next premium?", expect: Y(KL, /5 Nov(?:ember)? 2026|screenshot|app/i) },
     { say: "ok and my travel insurance?", expect: Y(KL, /Wanderer/) },

@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { documentCardTitle } from "@/lib/policies/document-name";
+import { documentCardTitle, documentLabels, isPlaceholderName } from "@/lib/policies/document-name";
 import { documentName } from "@/lib/policies/inventory";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.test(k)) delete process.env[k];
@@ -84,6 +84,41 @@ test("shared naming module is pure (imports only modules with no imports)", () =
   assert.doesNotMatch(shared.replace(/^\s*import\s[^;]*?from\s+"@\/lib\/[^"]+";?/gm, ""), /^\s*import\s/m);
 });
 test("GET /api/policies selects insurer, document_role, policy_number", () => { for (const c of ["p.insurer", "p.document_role", "p.policy_number"]) assert.ok(route.includes(c), c); });
+
+// Ask labels (DC 18 Nov: no file names): a part of a multi-policy upload is stored as "<file> — part N of M (pages a–b).pdf"
+// (lib/rag/ingest.ts) and reads by the file it came from; twins read apart by number, format, Singapore day, copy (TE M1, L1).
+test("documentLabels: multi-policy parts, nameless uploads and twins never show a file name, and every label is unique", () => {
+  const d = (id: string, f: string, p: string | null, n: string | null = null, c = "2026-11-03T02:00:00Z") => ({ id, original_filename: f, product_name: p, policy_number: n, created_at: c });
+  const labels = [...documentLabels([
+    d("a", "output_202611180000009 — part 2 of 2 (pages 3–4).pdf", null),
+    d("b", "817d6e8b-874f-4527-a45d-05e03adaf14c — part 1 of 2 (pages 1–2).PDF", null, null, "2026-11-04T02:00:00Z"),
+    d("c", "Pelican Family — part 3 of 3 (pages 5–6).pdf", null),
+    d("d", "IMG_0042.jpg", null, null, "2026-11-17T16:30:00Z"),
+    d("e", "x.pdf", "Finch Life", "FL-0001"), d("f", "y.pdf", "Finch Life", "FL-0002"),
+    d("g", "z.pdf", "Shield (PDF)"), d("h", "s.pdf", "Shield"), d("i", "s.jpg", "Shield"),
+  ], { describeUnnamed: true }).values()];
+  assert.deepEqual(labels.slice(0, 6), ["PDF uploaded 3 Nov 2026 (part 2 of 2)", "PDF uploaded 4 Nov 2026 (part 1 of 2)", "Pelican Family (part 3 of 3)",
+    "Photo uploaded 18 Nov 2026", "Finch Life (ending 0001)", "Finch Life (ending 0002)"]);
+  assert.equal(new Set(labels).size, labels.length, labels.join(" | "));
+  for (const l of labels) assert.doesNotMatch(l, /\.(?:pdf|jpe?g)\b|output_|817d6e8b|IMG_|pages \d/i, l);
+});
+
+// #564 (19 Nov): a letter or claim decision that carries the policy's name reads as what it is, not as "copy 2"; a PDF
+// tool's stand-in title ("(anonymous)") is never a name.
+test("documentLabels: letters and decisions read by kind; placeholder titles are not names", () => {
+  const d = (id: string, f: string, p: string | null, r: string | null) => ({ id, original_filename: f, product_name: p, document_role: r, created_at: "2026-11-03T02:00:00Z" });
+  const m = documentLabels([
+    d("s", "a.pdf", "Shield Plan", "personal_schedule"), d("l", "b.pdf", "Shield Plan", "insurer_letter"),
+    d("c", "c.pdf", "Shield Plan", "claim_decision"), d("x", "Novena_Final_Bill.pdf", "(anonymous)", "medical_bill"),
+    d("u", "IMG_0042.pdf", "Untitled", null),
+  ], { describeUnnamed: true });
+  assert.deepEqual([...m.values()], ["Shield Plan", "Shield Plan (letter)", "Shield Plan (claim decision)", "Novena Final Bill", "PDF uploaded 3 Nov 2026"]);
+  for (const t of ["Untitled-1", "Document1", "Microsoft Word - Document1", "untitled.pdf", "N/A", "-", "Unknown"]) assert.ok(isPlaceholderName(t), t);
+  for (const t of ["Anonymous Benefits Plan", "Untitled Life Plan", "Document Plan", "Shield"]) assert.ok(!isPlaceholderName(t), t);
+  assert.equal(documentCardTitle({ product_name: "Microsoft Word - Shield Plan Schedule.docx", original_filename: "a.pdf" }), "Shield Plan Schedule");
+  assert.equal(documentCardTitle({ product_name: "Shield.pdf", original_filename: "a.pdf" }), "Shield");
+  assert.equal(documentCardTitle({ product_name: "(anonymous)", original_filename: "IMG_1.pdf", insurer: "Merlion", document_role: "medical_bill" }), "Merlion medical bill");
+});
 
 console.log(`doc-card-title: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }

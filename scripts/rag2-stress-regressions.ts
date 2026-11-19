@@ -49,7 +49,8 @@ const C1: Conv = { id: "C1", title: "household inventory", turns: [
     () => [call("household_documents", {})],
     (v) => { const r = v.find("household_documents"); return [call("final_answer", { sentences: [S("Here are the documents on file for your household.")] })]; void r; },
   ] },
-], expect: [{ must: [/Ivan/, /Arbor Civil Service Group Scheme - Certificate/, /Lena/, /SecureLife Term Plan/, /Harbourline Life/, /Policy Wording/, /reference/i, /Annual Travel Plan/, /not linked|isn['’]t linked|no one|nobody/i, /lena-hospital-plan\.pdf/, /password/i, /IMG_2231\.jpg/, /Noah/], never: [/S\$\d/, /\(2025\)/, /ACS-779999|Tan, Ivan/, ...SAFETY_NEVER], noCalc: true, question: null }] };
+], // 19 Nov (DC approved): unreadable uploads by title or "Photo uploaded <day>", never by file name.
+  expect: [{ must: [/Ivan/, /Arbor Civil Service Group Scheme - Certificate/, /Lena/, /SecureLife Term Plan/, /Harbourline Life/, /Policy Wording/, /reference/i, /Annual Travel Plan/, /not linked|isn['’]t linked|no one|nobody/i, /Lena Hospital Plan/, /password/i, /Photo uploaded \d{1,2} [A-Z][a-z]{2} \d{4}/, /Noah/], never: [/lena-hospital-plan\.pdf|IMG_2231/, /S\$\d/, /\(2025\)/, /ACS-779999|Tan, Ivan/, ...SAFETY_NEVER], noCalc: true, question: null }] };
 
 const C1b: Conv = { id: "C1b", title: "household inventory, the model lists policies per person and adds figures", turns: [
   { user: "What policies does my family have?", steps: [

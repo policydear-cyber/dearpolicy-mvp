@@ -159,11 +159,13 @@ jobs:
         run: npm run policies:folders-test
       - name: Policy folders on the Documents page (names, suggestions never across people or insurers)
         run: npm run policies:folder-view-test
+      - name: A letter is named by its printed heading, never the addressee or a handling line
+        run: npm run policies:printed-heading-test
       - name: Policy dates (end dates, proof of renewal)
         run: npm run policies:dates-test
       - name: Life stages
         run: npm run policies:life-stages-test
-      - name: "I didn't renew it" (owner only, own household, refused before the date passes, Home cards and chat follow, Undo; PGlite)
+      - name: 'Owner marks "I didn''t renew it" (owner only, own household, refused before the date passes, Home cards and chat follow, Undo; PGlite)'
         run: npm run policies:not-renewed-test
       - name: Premium end dates, maturity dates and illustrated values kept only where printed
         run: npm run benefit-table:term-dates-test

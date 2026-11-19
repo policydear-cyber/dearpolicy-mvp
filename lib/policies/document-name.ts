@@ -56,8 +56,10 @@ function documentKind(role:string|null|undefined):string {
 export function documentName(doc:{product_name:string|null;original_filename:string;insurer?:string|null;document_role?:string|null;policy_number?:string|null}):string {
   const product=doc.product_name?.trim();
   // A system's code stored as the product ("SGGRP_COI_APP", from a PDF's own title) is not a name a person reads: one word
-  // joined by underscores. The document is then named as if it had none (re-upload check, 10 Nov).
-  if(product&&!isCodeName(product))return product;
+  // joined by underscores. Nor is a PDF tool's stand-in title ("(anonymous)", "Untitled"). The document is then named as
+  // if it had none (re-upload check, 10 Nov; #564, 19 Nov).
+  // A title an office tool wrote keeps only the name a person gave ("Microsoft Word - Shield Plan.docx" -> "Shield Plan"; TE #564 L-F2).
+  if(product&&!isCodeName(product)&&!isPlaceholderName(product))return cleanTitle(product);
   // An ID number in the file name is masked before the name is made readable: spacing splits it ("S7712345D" ->
   // "S7712345 D") into a shape no mask knows (TE pr181 F2).
   if(!isMachineFilename(doc.original_filename))return prettifyFilename(maskIdentityText(doc.original_filename));
@@ -73,6 +75,17 @@ export function documentName(doc:{product_name:string|null;original_filename:str
  * words joined by underscores. */
 export function isCodeName(name:string):boolean {const t=name.trim();return !/\s/.test(t)&&/_/.test(t);}
 
+/** A title as a person gave it, without an office tool's prefix or a file extension ("Microsoft Word - Shield Plan.docx" ->
+ * "Shield Plan"; TE #564 L-F2, L-F3). */
+export function cleanTitle(title:string):string{return title.replace(/^microsoft\s+(?:word|excel|powerpoint)\s*-\s*/i,"").replace(/\.(?:pdf|docx?|xlsx?|pptx?|jpe?g|png)$/i,"").trim()||title.trim();}
+
+/** A title a PDF tool writes when the author gave none ("(anonymous)", "Untitled", "(no title)"), never a document's name. */
+export function isPlaceholderName(name:string):boolean {
+  // "Microsoft Word - Document1" is Word's own title for an unsaved file; what follows the dash is judged on its own.
+  const t=name.trim().replace(/^microsoft\s+(?:word|excel|powerpoint)\s*-\s*/i,"").replace(/\.(?:pdf|docx?|jpe?g|png)$/i,"").trim();
+  return !/[\p{L}\p{N}]/u.test(t)||/^[([]?\s*(?:anonymous|untitled(?:\s+document)?|no\s+title|none|null|undefined|unknown|n\/?a|document|doc)(?:[\s_-]*\d+)?\s*[)\]]?$/i.test(t);
+}
+
 /** A policy or group number with only its letters and digits, upper-cased, for comparing. */
 export function normalizedIdentifier(value:string|null|undefined){return (value??"").toUpperCase().replace(/[^A-Z0-9]/g,"");}
 
@@ -81,4 +94,84 @@ export function normalizedIdentifier(value:string|null|undefined){return (value?
  * the API sends without a file name still gets a name. The file name itself stays visible as the card's small line. */
 export function documentCardTitle(doc:{product_name:string|null;original_filename:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null}):string {
   return documentName({...doc,original_filename:doc.original_filename??""});
+}
+
+type LabelDoc={id:string;original_filename:string|null;product_name:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null;created_at?:string|Date|null};
+const FORMAT_WORDS:[RegExp,string][]=[[/\.(?:jpe?g|png|heic|heif|webp|gif|tiff?)(?:\s|$)/i,"photo"],[/\.pdf(?:\s|$)/i,"PDF"],[/\.docx?(?:\s|$)/i,"Word file"]];
+/** What a document that is not the policy itself is, as a tell ("letter", "claim decision"); "" for the policy's own pages. */
+const roleTell=(d:LabelDoc)=>{const r=d.document_role??"";
+  return ["","unknown","other","personal_schedule","schedule","policy","policy_document","policy_schedule","certificate"].includes(r)?"":documentKind(r);};
+const MONTH_WORDS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+/** The day a document was uploaded, in Singapore time ("3 Nov 2026"), from a Date, an ISO string or Postgres's text form. */
+export function uploadDay(value:string|Date|null|undefined):string{
+  if(!value)return "";
+  const iso=typeof value==="string"&&/^\d{4}-\d{2}-\d{2} \d/.test(value)?value.replace(" ","T").replace(/(\.\d{3})\d+/,"$1").replace(/([+-]\d{2})$/,"$1:00"):value;
+  const t=new Date(iso as string|Date).getTime();
+  if(Number.isNaN(t))return "";
+  const sg=new Date(t+8*3600_000);
+  return `${sg.getUTCDate()} ${MONTH_WORDS[sg.getUTCMonth()]} ${sg.getUTCFullYear()}`;
+}
+/** What a household calls each of its documents in a sentence: the document's title (documentName), never its file name
+ * (DC 18 Nov). Two documents with one title read apart by what the upload is ("the photo", "the PDF"), the part of a file
+ * that held several policies ("part 2 of 3"), and the day it was uploaded ("uploaded 3 Nov 2026"), only as much as needed. */
+export function documentLabels(docs:LabelDoc[],opts:{describeUnnamed?:boolean}={}):Map<string,string>{
+  const fmt=(x:LabelDoc)=>FORMAT_WORDS.find(([re])=>re.test(x.original_filename??""))?.[1]??"";
+  const head=new Map(docs.map(d=>{
+    // A part of a file that held several policies is stored as "<file> — part N of M (pages a–b).pdf" (lib/rag/ingest.ts):
+    // its own name is judged from the file it came from, without the part words or the extension (TE M1).
+    const file=d.original_filename??"",part=file.match(/ — part (\d+) of (\d+) \(pages /);
+    const whole={...d,product_name:d.product_name??null,original_filename:file.replace(/ — part \d+ of \d+ \(pages [^)]*\)(?:\.[a-z0-9]{1,5})?$/i,"")};
+    const base=opts.describeUnnamed&&!hasOwnName(whole)?unnamedDescription(d):documentName(whole);
+    return [d.id,{base,tells:part?[`part ${part[1]} of ${part[2]}`]:[] as string[]}];
+  }));
+  const text=(id:string)=>{const h=head.get(id)!;return h.tells.length?`${h.base} (${h.tells.join(", ")})`:h.base;};
+  // Documents whose labels read the same are told apart step by step -- by format, then upload day, then copy number --
+  // until every label is unique, so no label can point at two documents (Critic MED-1: a title "Shield (PDF)" beside a
+  // "Shield" PDF). All tells share one bracket ("Shield (part 1 of 2, uploaded 3 Nov 2026)", Critic L3).
+  const steps:((d:LabelDoc,group:LabelDoc[])=>string)[]=[
+    // A letter, bill or claim decision that carries a policy's name reads as what it is, never as a "copy" of the policy (#564).
+    (d,g)=>new Set(g.map(roleTell)).size>1?roleTell(d):"",
+    (d,g)=>new Set(g.map(fmt)).size>1?fmt(d):"",
+    // Different policies are told apart by their numbers, as documentName does, never as "copies" (TE L1).
+    (d,g)=>{const end=(x:LabelDoc)=>{const n=normalizedIdentifier(x.policy_number);return /\d/.test(n)?n.slice(-4):"";};
+      return new Set(g.map(end)).size>1&&end(d)&&!head.get(d.id)!.base.includes(`ending ${end(d)}`)?`ending ${end(d)}`:"";},
+    (d,g)=>{const day=uploadDay(d.created_at);return day&&!head.get(d.id)!.base.includes(`uploaded ${day}`)&&new Set(g.map(x=>uploadDay(x.created_at))).size>1?`uploaded ${day}`:"";},
+    (d,g)=>`copy ${g.findIndex(x=>x.id===d.id)+1}`,
+  ];
+  for(const step of steps){
+    const groups=new Map<string,LabelDoc[]>();
+    for(const d of docs)groups.set(text(d.id),[...(groups.get(text(d.id))??[]),d]);
+    for(const group of groups.values()){
+      if(group.length<2)continue;
+      const add=group.map(d=>step(d,group));
+      group.forEach((d,i)=>{if(add[i])head.get(d.id)!.tells.push(add[i]);});
+    }
+  }
+  // A title that itself reads like a tell ("Shield (copy 1)") could still meet a twin's label: bump the copy number until
+  // the label is free (Critic L6).
+  const out=new Map<string,string>(),used=new Set<string>();
+  for(const d of docs){
+    let label=text(d.id);
+    for(let k=2;used.has(label);k++)label=`${text(d.id)} (copy ${k})`;
+    used.add(label);out.set(d.id,label);
+  }
+  return out;
+}
+
+/** Whether a document has a name of its own to be called by: a product, a file name a person chose, an insurer, or a
+ * known kind. An upload with none of these (a phone photo "IMG_0042.jpg" that could not be read) would read only as
+ * "Document". */
+export function hasOwnName(doc:{product_name:string|null;original_filename:string|null;insurer?:string|null;document_role?:string|null}):boolean{
+  const product=doc.product_name?.trim();
+  if(product&&!isCodeName(product)&&!isPlaceholderName(product))return true;
+  if(!isMachineFilename(doc.original_filename??""))return true;
+  return !!doc.insurer?.trim()||!["","unknown"].includes(doc.document_role??"");
+}
+/** A document with no name of its own, described by what the upload is and the day it came ("Photo uploaded 3 Nov
+ * 2026"), never by its file name (DC 18 Nov; DC 19 Nov approved this wording for the household inventory). */
+export function unnamedDescription(doc:{original_filename:string|null;created_at?:string|Date|null}):string{
+  const fmt=FORMAT_WORDS.find(([re])=>re.test(doc.original_filename??""))?.[1]??"file",day=uploadDay(doc.created_at);
+  // Written as a title ("Photo uploaded 3 Nov 2026"), so it reads right in quotes and at the start of a sentence (Critic L7).
+  const word=fmt==="PDF"?"PDF":fmt.charAt(0).toUpperCase()+fmt.slice(1);
+  return `${word}${day?` uploaded ${day}`:""}`;
 }

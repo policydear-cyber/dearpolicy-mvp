@@ -14,6 +14,7 @@ import { setEnv, startHarness } from "./fixtures/rag2-loop/harness";
 import * as P from "./fixtures/rag2-pr50/household";
 import type { ScriptView } from "@/lib/rag2/loop/scripted-model";
 import { uniqueSteps } from "@/components/next-steps";
+import { namesDocument, showsFileName } from "./rag2-live/spoken-name";
 
 const HOUSEHOLD = P as unknown as Parameters<typeof startHarness>[0];
 setEnv(HOUSEHOLD);
@@ -233,26 +234,36 @@ async function main() {
   const peopleOf = (v: ScriptView) => (([...v.turn].reverse().find((x) => x.name === "household_documents")?.result?.data ?? {}) as any);
   // the live model named every readable document itself (the travel insurer's two by their file names) and wrote its own
   // unreadable-file sentence citing a readable document's evidence
-  const modelLines = (v: ScriptView) => { const d = peopleOf(v); const ppl = (d.people ?? []) as any[]; const unl = (d.unlinked ?? []) as any[];
+  let inventoryJson = "";
+  const modelLines = (v: ScriptView) => { const d = peopleOf(v); inventoryJson = JSON.stringify(d); const ppl = (d.people ?? []) as any[]; const unl = (d.unlinked ?? []) as any[];
     const ev = ppl.flatMap((p) => (p.documents as any[]).map((x) => x.evidence?.evidence_id)).filter(Boolean);
     return [
       ...ppl.filter((p) => p.documents.length).map((p: any) => ({ text: `${p.short}: ${(p.documents as any[]).map((x) => `${x.name} (${x.insurer}${x.kind === "personal" ? ", personal certificate" : ", reference wording"})`).join("; ")}.`, evidence_ids: (p.documents as any[]).map((x) => x.evidence?.evidence_id).filter(Boolean) })),
       ...ppl.filter((p) => !p.documents.length).map((p: any) => ({ text: `${p.short} has no documents on file.` })),
-      { text: `Linked to nobody: ${unl.filter((x) => x.readable === "ready").map((x) => `${x.filename} (${x.insurer}, reference wording)`).join("; ")}.`, evidence_ids: unl.map((x) => x.evidence?.evidence_id).filter(Boolean) },
-      { text: `${unl.find((x) => x.readable !== "ready")?.filename} could not be read.`, evidence_ids: ev.slice(0, 1) },
+      { text: `Linked to nobody: ${unl.filter((x) => x.readable === "ready").map((x) => `${x.label} (${x.insurer}, reference wording)`).join("; ")}.`, evidence_ids: unl.map((x) => x.evidence?.evidence_id).filter(Boolean) },
+      { text: `${unl.find((x) => x.readable !== "ready")?.label} could not be read.`, evidence_ids: ev.slice(0, 1) },
     ]; };
   const [c1] = await run([{ user: ASK, steps: [() => [call("household_documents", {})], (v: ScriptView) => [call("final_answer", { sentences: modelLines(v) })]] }]);
   const [c2] = await run([{ user: ASK, steps: [() => [call("household_documents", {})], () => [call("final_answer", { sentences: [{ text: "Here are the documents on file for your household." }] })]] }]);
-  const shownFor = (d: (typeof P.DOCS)[number]) => [d.product, d.filename, d.filename?.replace(/\.[a-z0-9]+$/i, "")].filter((x): x is string => !!x && x.trim().length > 0);
+  // 19 Nov (DC approved): the inventory carries no file names; a document is shown by its title, or "Photo uploaded <day>"
+  // when it has no name of its own (scripts/rag2-live/spoken-name.ts).
+  const shownIn = (d: (typeof P.DOCS)[number], text: string) => namesDocument(d, text);
   for (const [label, x] of [["model's own lines", c1], ["inventory lines", c2]] as const) await check(`C [${NAMES} file names, ${label}] every eligible upload survives to the saved and returned answer by document identity (five readable, the failed one with its status); deleted and other-household documents are absent; reference wording is not presented as personal cover`, () => {
     if (process.env.PR50_SHOW) console.log("C dropped", label, JSON.stringify(x.trace.dropped));
-    const missing = P.ELIGIBLE.map((k) => P.doc(k)).filter((d) => !shownFor(d).some((n) => x.v.includes(n)));
+    const missing = P.ELIGIBLE.map((k) => P.doc(k)).filter((d) => !shownIn(d, x.v));
     assert.deepEqual(missing.map((d) => d.key), [], `missing: ${missing.map((d) => d.key)}\nsaved:\n${x.v}\ncomposed:\n${(x.trace.composed ?? []).join("\n")}`);
     assert.equal(x.v, x.returned);
     assert.ok(!/Old Benefit Summary|other household/.test(x.v), x.v);
     assert.match(x.v, /could not be read/);
-    for (const k of ["TRAVEL_WORDING", "TRAVEL_SUMMARY"]) { const d = P.doc(k); const line = x.v.split("\n").find((l) => shownFor(d).some((n) => l.includes(n))) ?? ""; assert.ok(!/personal (?:policy document|certificate)/.test(line.split(";").find((s) => shownFor(d).some((n) => s.includes(n))) ?? ""), line); }
+    for (const k of ["TRAVEL_WORDING", "TRAVEL_SUMMARY"]) { const d = P.doc(k); const line = x.v.split("\n").find((l) => shownIn(d, l)) ?? ""; assert.ok(!/personal (?:policy document|certificate)/.test(line.split(";").find((s) => shownIn(d, s)) ?? ""), line); }
+    for (const d of P.DOCS) if (d.filename) assert.ok(!x.v.includes(d.filename), `file name shown: ${d.filename}\n${x.v}`);
     assert.ok((x.answer.citations ?? []).length > 0);
+  });
+  // TE #564 F1: what the model is given (household_documents) carries no file name and no stem of a nameless upload's file
+  // name, so neither the model nor the output guard's library-name exemption can bring one back.
+  await check(`C0 [${NAMES}] the household_documents result the model reads holds no file name (nor a nameless upload's stem)`, () => {
+    assert.ok(inventoryJson.length > 2, "the inventory was read");
+    for (const d of P.DOCS) assert.ok(!showsFileName(d, inventoryJson), `${d.key} file name in the inventory: ${inventoryJson}`);
   });
   // Negative control for the output-guard repair: only the household's own library names are protected.
   await check(`G [${NAMES}] the output guard still drops an internal identifier or id that is not one of the answer's library names`, async () => {
@@ -288,8 +299,8 @@ async function main() {
       assert.ok(!c3.v.includes(n), `${n} shown:\n${c3.v}`);
       assert.ok(!(c3.answer.libraryNames ?? []).includes(n), `${n} in libraryNames`);
     }
-    for (const k of P.ELIGIBLE) { const d = P.doc(k); if (d.filename && d.key !== "CERT" && !d.product) assert.ok(c3.v.includes(d.filename), `${d.filename} not shown exactly:\n${c3.v}`); }
-    assert.ok(c3.v.includes(P.doc("SCAN").filename!), c3.v);
+    // 19 Nov (DC approved): the household's own uploads are shown by title (or "Photo uploaded <day>"), never by file name.
+    for (const k of P.ELIGIBLE) { const d = P.doc(k); assert.ok(shownIn(d, c3.v), `${d.key} not shown:\n${c3.v}`); if (d.filename) assert.ok(!c3.v.includes(d.filename), `${d.filename} shown:\n${c3.v}`); }
   });
   // Grader controls for the pre-registered live run (scripts/rag2-live/pr50-check.ts): these scripted turns, saved in the
   // run-record shape, are graded by the same grader (PR50_CONTROL_OUT=<file>).

@@ -11,6 +11,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { replacedFigures, type Replacement } from "@/lib/policies/amendments";
 import type { ChatCitation } from "@/types";
+import { householdDocumentLabels } from "@/lib/policies/household-labels";
 import type { RegistryAnswer } from "./registry-answers";
 import { bindFigure, citeLine, figuresIn, printedRowFor } from "./answer-verification";
 
@@ -36,9 +37,12 @@ export async function amendmentAnswer(args: { accountId: string; question: strin
   const citesOld = [...replaced.values()].some((r) => r.rows.some((row) => quoted.includes(row.before)));
   // "before?", "previously?" right after a question about a plan that was changed: what it was before the change.
   if (!CHANGE_ASKED.test(text) && !citesOld && !bareBefore) return null;
-  const docs = (await query<{ id: string; file: string; product: string | null; dated: string | null; role: string | null; insurer: string | null }>(
-    `SELECT p.id::text, p.original_filename AS file, p.product_name AS product, coalesce(p.document_date, p.effective_date)::text AS dated, p.document_role AS role, p.insurer
-       FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready'`, [args.accountId]).catch(() => ({ rows: [] }))).rows;
+  const rows = (await query<{ id: string; file: string; product: string | null; dated: string | null; role: string | null; insurer: string | null; policy_number: string | null; created: string | null }>(
+    `SELECT p.id::text, p.original_filename AS file, p.product_name AS product, coalesce(p.document_date, p.effective_date)::text AS dated, p.document_role AS role, p.insurer, p.policy_number, p.created_at::text AS created
+       FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready' ORDER BY p.created_at, p.id`, [args.accountId]).catch(() => ({ rows: [] }))).rows;
+  // A document is said by its title, never its file name (DC 18 Nov).
+  const labels = await householdDocumentLabels(args.accountId).catch(() => new Map<string, string>());
+  const docs = rows.map((d) => ({ ...d, label: labels.get(d.id) ?? "the document" }));
   const byId = new Map(docs.map((d) => [d.id, d]));
   // One change per amending document; the plan the question (or the chat) names, when it names one.
   const changes = new Map<string, { by: string; olds: string[]; rows: { before: number; after: number; label: string; page: number; line: string }[]; date: string; product: string | null }>();
@@ -67,10 +71,10 @@ export async function amendmentAnswer(args: { accountId: string; question: strin
     return r.label + ": " + (printed[0] ?? money(r.before, false)) + " before the change, " + (printed[1] ?? money(r.after, false)) + " from " + longDate(c.date) + " (" + direction(r) + ").";
   });
   const olds = c.olds.map((id) => byId.get(id)).filter((d): d is NonNullable<typeof d> => !!d);
-  const summary = (c.product ?? "The policy") + " was changed by " + (title ? titleWords : "an endorsement") + ", dated " + longDate(c.date) + (by.file ? " (“" + by.file + "”)" : "") + ": "
+  const summary = (c.product ?? "The policy") + " was changed by " + (title ? titleWords : "an endorsement") + ", dated " + longDate(c.date) + (by.label && by.label !== c.product ? " (“" + by.label + "”)" : "") + ": "
     + (cover.length ? "the cover was " + direction(cover[0]) + " to " + ((cover[0].line.match(MONEY) ?? [])[1] ?? money(cover[0].after, false)) : "the figures below changed")
     + (premium ? " and the annual premium is now " + ((premium.line.match(MONEY) ?? [])[1] ?? money(premium.after, true)) : "") + ". "
-    + (olds.length ? "The earlier " + (olds.length === 1 ? "schedule" : "documents") + " (" + olds.map((d) => "“" + d.file + "”" + (d.dated ? ", dated " + longDate(d.dated) : "")).join("; ") + ") still " + (olds.length === 1 ? "prints" : "print") + " the figures from before the change, which the endorsement replaces"
+    + (olds.length ? "The earlier " + (olds.length === 1 ? "schedule" : "documents") + " (" + olds.map((d) => "“" + d.label + "”" + (d.dated ? ", dated " + longDate(d.dated) : "")).join("; ") + ") still " + (olds.length === 1 ? "prints" : "print") + " the figures from before the change, which the endorsement replaces"
       + (unchanged ? "; everything else on " + (olds.length === 1 ? "it" : "them") + " stays as printed" : "") + "." : "");
   const details = [...lines];
   // Gate R17: each figure is read from the amending document's own Before / After row, on its page: bound to that row
@@ -89,6 +93,6 @@ export async function amendmentAnswer(args: { accountId: string; question: strin
       }
     }
   });
-  const citations: ChatCitation[] = [{ chunkId: "page:" + c.by + ":" + (c.rows[0]?.page ?? 1), policyId: c.by, policyName: c.product ?? by.file, insurer: by.insurer ?? undefined, pageStart: c.rows[0]?.page ?? 1, pageEnd: c.rows[0]?.page ?? 1, documentRole: by.role }];
+  const citations: ChatCitation[] = [{ chunkId: "page:" + c.by + ":" + (c.rows[0]?.page ?? 1), policyId: c.by, policyName: c.product ?? by.label, insurer: by.insurer ?? undefined, pageStart: c.rows[0]?.page ?? 1, pageEnd: c.rows[0]?.page ?? 1, documentRole: by.role }];
   return { summary, details, citations, personId: null, topic: c.product ?? undefined };
 }
