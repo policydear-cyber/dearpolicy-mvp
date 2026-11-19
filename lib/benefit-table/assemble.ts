@@ -395,7 +395,7 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
   // explanation of how the row pays (Live site tester, 19 Nov: every row of a reading still being checked said "paid as a
   // share printed in the row's words").
   const withheld = (b as { figureCheck?: { status: "confirm" | "checking"; field: string }[] }).figureCheck?.find((n) => n.field === "value");
-  if (withheld) return { kind: "none", why: withheld.status === "checking" ? "still being checked against the document's page" : "not confirmed against the document's page: please check this figure" };
+  if (withheld) return { kind: "none", why: withheld.status === "checking" ? "still being checked against the document's page" : "not confirmed against the document's page" };
   if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row"
     : b.pays === "words" && b.paymentSchedule ? "payment schedule, not a cover amount"
     : b.pays === "words" && /\d\s*%/.test(b.source.excerpt) ? "paid as a share printed in the row's words, with no amount worked out: see the document" : "no figure printed" };
