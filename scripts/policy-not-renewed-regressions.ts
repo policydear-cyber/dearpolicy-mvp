@@ -224,9 +224,15 @@ async function main() {
       { id: "s2", kind: "benefit_terms", text: "Death benefit S$100,000", personName: "John Doe", amount: { text: "S$100,000" }, source: { citationIds: ["c1"] } },
       { id: "s3", kind: "benefit_terms", text: "Medical S$150,000", personName: "Jane Doe", amount: { text: "S$150,000" }, source: { citationIds: ["c1"] } },
       { id: "s4", kind: "benefit_terms", text: "Baggage S$3,000", personName: "Jane Doe (Jane)", amount: { text: "S$3,000" }, source: { citationIds: ["c1"] } },
-      { id: "s5", kind: "benefit_terms", text: "Delay S$500", personName: "Someone Else", amount: { text: "S$500" }, source: { citationIds: ["c1"] } }] };
-    const left = dropNotRenewedAmounts(reply, h);
-    assert.deepEqual(left, ["Death benefit S$100,000", "Medical S$150,000", "Baggage S$3,000", "Delay S$500"], "the 'Display (Preferred)' form and a name that resolves to no one both go (Critic MED-7)");
+      { id: "s5", kind: "benefit_terms", text: "Delay S$500", personName: "Someone Else", amount: { text: "S$500" }, source: { citationIds: ["c1"] } },
+      { id: "s6", kind: "benefit_terms", text: "Cancellation S$5,000", personName: null, amount: { text: "S$5,000" }, source: { citationIds: ["c1"] } }],
+      bottomLine: "Your documents list this benefit for Jane Doe. The amount is shown below." as string | null };
+    const unnamed = structuredClone(reply.statements[5]);
+    const left = dropNotRenewedAmounts(reply, h, "Jane Doe");
+    assert.deepEqual(left, ["Death benefit S$100,000", "Medical S$150,000", "Baggage S$3,000", "Delay S$500", "Cancellation S$5,000"], "the 'Display (Preferred)' form and a name that resolves to no one both go (Critic MED-7); an unnamed one in Jane's chat too (TE F3c)");
+    assert.match(reply.bottomLine ?? "", /^Here is what your documents say\. .*not renewed after 7 Nov 2026 for Jane Doe/, "the bottom line no longer promises the dropped amount (TE F3b)");
+    const forNoOne = { citations: reply.citations, statements: [unnamed] };
+    assert.deepEqual(dropNotRenewedAmounts(forNoOne, h, null), [], "unnamed, in a chat for no one, on a joint document John still holds: kept");
     assert.deepEqual(reply.statements.map((x) => [x.personName, x.amount ? "amount" : x.kind]), [["Jane Doe", "fact"], ["John Doe", "amount"]]);
     assert.match(reply.statements[0].text, /not renewed after 7 Nov 2026 for Jane Doe, as the household told DearPolicy/);
     assert.equal((await answer(A, { member: jane, key: t.key, endsOn: t.endsOn, notRenewed: false })).status, 200);

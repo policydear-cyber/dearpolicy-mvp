@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     const policy = policies.find((p) => p.key === body.key && p.endsOn === body.endsOn);
     const contractKey = contractKeys.get(body.key);
     const allowed = !!contractKey && (body.notRenewed ? policy?.state === "renewal_due" && !policy.severalPolicies : policy?.state === "not_renewed");
-    if (!policy || !allowed) return NextResponse.json({ error: "That policy has changed since this page loaded. Please refresh and try again." }, { status: 409 });
+    if (!policy || !allowed) return NextResponse.json({ error: "That policy changed since this page loaded. The list now shows it as it stands." }, { status: 409 });
     await setNotRenewed({ accountId: ctx.householdId, memberId: body.member, contractKey: contractKey!, endsOn: body.endsOn, userId: ctx.userId, notRenewed: body.notRenewed });
     return NextResponse.json({ ok: true });
   } catch (error) {

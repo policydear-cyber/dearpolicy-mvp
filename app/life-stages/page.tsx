@@ -48,9 +48,9 @@ function Body({ data }: { data: Payload }) {
     {!!renewalDue.length && <div className="life-note warn" role="status">
       <strong>Renewed?</strong> The printed end date of {listOf(renewalDue)} has passed, so {renewalDue.length === 1 ? "it isn't" : "they aren't"} shown here. <Link href={home}>Answer on Home</Link>
     </div>}
-    {!!notRenewed.length && <p className="muted">Not shown: {listOf(notRenewed)}, which you said you didn&rsquo;t renew.</p>}
+    {!!notRenewed.length && <p className="muted">Not shown: {listOf(notRenewed)}, which the household said wasn&rsquo;t renewed.</p>}
     {data.age == null && !!policies.length && <p className="muted">Add {data.member!.name ? `${data.member!.name}’s` : "a"} date of birth in <Link href="/family">Family</Link> to see ages here.</p>}
-    {!policies.length ? <section className="section"><div className="empty-card">No current policies on file for {data.member!.name ?? "this person"} yet. <Link href="/policies">Upload a policy schedule</Link> to see its dates here.</div></section> : <>
+    {!policies.length ? <section className="section"><div className="empty-card">{renewalDue.length || notRenewed.length ? <>No other policies to show for {data.member!.name ?? "this person"}.</> : <>No policies on file for {data.member!.name ?? "this person"} yet. <Link href="/policies">Upload a policy schedule</Link> to see its dates here.</>}</div></section> : <>
       <section className="section life-section" aria-labelledby="life-timeline-title">
         <h2 id="life-timeline-title">Timeline</h2>
         {anyDate ? <Timeline policies={policies} age={data.age} /> : <p className="muted">None of these policies prints an end, premium end or maturity date yet.</p>}

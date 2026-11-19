@@ -49,6 +49,15 @@ export async function loadPolicyDates(accountId: string, memberId: string | null
   }
   // Or, with no benefit table or no policy numbers read on it, two of the person's contracts share a document (MED-6).
   const shared = sharingDocuments(contracts);
+  // A policy whose documents store no product name is named from its file name (documentName); when its reading prints a
+  // product, that is the name instead, so a file name never names a policy here (TE F4, DC 18 Nov: no file names).
+  const productOf = new Map<string, string>();
+  for (const c of table?.covers ?? []) if (!c.riderOf && c.product?.trim() && !productOf.has(c.source.documentId)) productOf.set(c.source.documentId, c.product.trim());
+  for (const c of contracts) {
+    if (c.documents.some((d) => (d as { product_name?: string | null }).product_name?.trim())) continue;
+    const printed = c.documents.map((d) => productOf.get(d.id)).find(Boolean);
+    if (printed) c.name = printed;
+  }
   const policies = householdPolicyDates(contracts, covers, payments, singaporeDay(new Date()), answers).map((p) => ({ ...p, key: pageKey(p.key),
     ...(shared.has(p.key) || p.documentIds.some((id) => (numbersOn.get(id)?.size ?? 0) > 1) ? { severalPolicies: true } : {}) }));
   return { memberId: member.id, policies, answersReady: await notRenewedReady(), contractKeys, table,
