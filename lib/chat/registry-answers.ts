@@ -22,6 +22,7 @@
  */
 import { query } from "@/lib/db/client";
 import { documentLabels, isPlaceholderName } from "@/lib/policies/document-name";
+import { isPolicyRole, printedHeadings } from "@/lib/policies/printed-heading";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation, ComputationOperand, FigureBinding } from "@/types";
@@ -549,8 +550,12 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
     if (!dated.length) return null;
     const pick = oldest ? dated[0] : dated[dated.length - 1];
     const what = changeAsked ? "change on file" : "document on file";
-    return { summary: "The " + (oldest ? "oldest" : changeAsked ? "latest" : "newest") + " " + what + (pointed && pointed.length < docs.length && pick.product ? " for " + pick.product : "") + " is the " + describe(pick) + " (“" + pick.label + "”), dated " + longDate(dateOf(pick)!) + ".",
-      details: dated.map((d) => longDate(dateOf(d)!) + " — " + describe(d) + " (“" + d.label + "”)."), citations: [cite(pick)], personId: null, topic: pick.product ?? undefined };
+    // A letter or notice is also said by the heading it prints ("Confirmation of Reinstatement"), which tells two letters
+    // about one policy apart where their titles cannot (#564: titles, never file names).
+    const headings = await printedHeadings(args.accountId, dated.filter((d) => !isPolicyRole(d.role)).map((d) => d.id));
+    const named = (d: Doc) => "(“" + d.label + "”" + (headings.get(d.id) ? ", headed “" + headings.get(d.id) + "”" : "") + ")";
+    return { summary: "The " + (oldest ? "oldest" : changeAsked ? "latest" : "newest") + " " + what + (pointed && pointed.length < docs.length && pick.product ? " for " + pick.product : "") + " is the " + describe(pick) + " " + named(pick) + ", dated " + longDate(dateOf(pick)!) + ".",
+      details: dated.map((d) => longDate(dateOf(d)!) + " — " + describe(d) + " " + named(d) + "."), citations: [cite(pick)], personId: null, topic: pick.product ?? undefined };
   }
 
   // ---------------------------------------------------------------- counting

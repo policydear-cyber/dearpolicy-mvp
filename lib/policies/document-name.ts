@@ -95,7 +95,7 @@ type LabelDoc={id:string;original_filename:string|null;product_name:string|null;
 const FORMAT_WORDS:[RegExp,string][]=[[/\.(?:jpe?g|png|heic|heif|webp|gif|tiff?)(?:\s|$)/i,"photo"],[/\.pdf(?:\s|$)/i,"PDF"],[/\.docx?(?:\s|$)/i,"Word file"]];
 /** What a document that is not the policy itself is, as a tell ("letter", "claim decision"); "" for the policy's own pages. */
 const roleTell=(d:LabelDoc)=>{const r=d.document_role??"";
-  return ["","unknown","personal_schedule","schedule","policy","policy_document","policy_schedule","certificate"].includes(r)?"":documentKind(r);};
+  return ["","unknown","other","personal_schedule","schedule","policy","policy_document","policy_schedule","certificate"].includes(r)?"":documentKind(r);};
 const MONTH_WORDS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 /** The day a document was uploaded, in Singapore time ("3 Nov 2026"), from a Date, an ISO string or Postgres's text form. */
 export function uploadDay(value:string|Date|null|undefined):string{

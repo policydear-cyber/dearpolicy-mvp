@@ -34,6 +34,7 @@ import { askedCoverage, bestLines, columnsFor, narrowToColumn, piecesOf, quoted,
 import { citeAnswerLines } from "./answer-verification";
 import { planKind, type PlanKind } from "./plan-kinds";
 import { documentLabels, isPlaceholderName } from "@/lib/policies/document-name";
+import { isPolicyRole, printedHeadings } from "@/lib/policies/printed-heading";
 
 export type DocumentAnswer = { summary: string; details: string[]; nextSteps: string[]; citations: ChatCitation[]; personId: string | null; patch: Partial<ConversationState> };
 type Doc = { id: string; file: string;
@@ -477,7 +478,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
     if (printed && /is an earlier schedule/.test(printed.summary)) return done(printed.summary, printed.details, printed.citations, printed.personId, { documents: { kind: "uploads", ids: [] } });
   }
   // ---- the uploads themselves
-  if (uploadsAsked || (followUp && prior?.kind === "uploads")) return uploadsAnswer(text, docs, person, namedFiles, ownerOf);
+  if (uploadsAsked || (followUp && prior?.kind === "uploads")) return await uploadsAnswer(args.accountId, text, docs, person, namedFiles, ownerOf);
   return null;
 }
 
@@ -494,7 +495,7 @@ function howRead(d: Doc): string {
   return "Yes — DearPolicy read " + q(d.label) + (d.product && !d.label.includes(d.product) ? " (" + d.product + ")" : "") + (bits.length ? ": " + bits.join("; ") + "." : ".");
 }
 
-function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, namedFiles: Doc[], ownerOf: (d: Doc) => ClaimPerson | null): DocumentAnswer {
+async function uploadsAnswer(accountId: string, text: string, docs: Doc[], person: ClaimPerson | null, namedFiles: Doc[], ownerOf: (d: Doc) => ClaimPerson | null): Promise<DocumentAnswer> {
   const forPerson = (d: Doc) => !person || d.owners.includes(person.id);
   const who = (d: Doc) => { const o = ownerOf(d); return o ? (isSelf(o) ? "you" : personName(o)) : "your household"; };
   // Round 15: each upload listed is cited at its first page, as every other answer's documents are.
@@ -551,18 +552,23 @@ function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, na
   // Which uploads are letters, bills, notes, screenshots -- and which are policies.
   const shown = docs.filter((d) => forPerson(d) && (!/\bmerlion\b/i.test(text) || /merlion/i.test((d.insurer ?? "") + " " + d.file)));
   const kind = (d: Doc) => NON_COVER_ROLES.has(d.role ?? "") ? ROLE_WORDS[d.role as CorrespondenceRole] : d.status !== "ready" ? "couldn’t be read" : d.superseded ? "a copy or earlier version" : /policy_wording|product_summary|benefit_guide|brochure/.test(d.role ?? "") ? "general policy wording" : /statement|receipt|renewal/.test(d.role ?? "") ? "a statement or notice" : "a policy";
+  // A letter or notice is also said by its printed heading; the product is not said again after a title that opens with it.
+  const headed = (h: Map<string, string>, d: Doc) => h.get(d.id) ? " (headed " + q(h.get(d.id)!) + ")" : "";
+  const productAfter = (d: Doc) => d.product && !NON_COVER_ROLES.has(d.role ?? "") && !opensWith(d.label, d.product) ? " (" + d.product + ")" : "";
   const lettersOnly = /\bletters?\b|\brather than\b|not (?:a )?polic/i.test(text);
   // Round 11: "the CareCash photo I uploaded": that upload, and what became of it -- not every file on record.
   const askedWords = (text.match(/[A-Za-z]{4,}/g) ?? []).map((w) => w.toLowerCase()).filter((w) => !/^(?:what|about|that|this|which|uploaded|upload|photo|picture|image|file|document|scan|from|with|have|does|policy|plan|insurance|mama|papa|your|their)$/.test(w));
   const photoAsked = /\b(?:photo|picture|pic|image|snap(?:shot)?)\b/i.test(text);
   const pointed = shown.filter((d) => askedWords.some((w) => (d.file + " " + (d.product ?? "")).toLowerCase().replace(/[^a-z]+/g, " ").split(" ").some((x) => x.length >= 4 && x.startsWith(w.slice(0, 6)))) && (!photoAsked || /\.(?:jpe?g|png|heic|webp)$/i.test(d.file)));
   if (!lettersOnly && pointed.length && pointed.length <= 3 && pointed.length < shown.length && !/\bwhich\b|\bfrom\b|\blist\b|\ball\b/i.test(text)) {
-    const lines = pointed.map((d) => q(d.label) + " — " + kind(d) + (d.product && !NON_COVER_ROLES.has(d.role ?? "") ? " (" + d.product + ")" : "") + (person ? "" : ", for " + who(d)) + "." + (d.status === "failed" ? " It couldn’t be read because " + failureOf(d).why + ". " + failureOf(d).step : ""));
+    const headings = await printedHeadings(accountId, pointed.filter((d) => d.status === "ready" && !isPolicyRole(d.role)).map((d) => d.id));
+    const lines = pointed.map((d) => q(d.label) + headed(headings, d) + " — " + kind(d) + productAfter(d) + (person ? "" : ", for " + who(d)) + "." + (d.status === "failed" ? " It couldn’t be read because " + failureOf(d).why + ". " + failureOf(d).step : ""));
     return done(lines[0], lines.slice(1), pointed.map((d) => d.id), ownerOf(pointed[0])?.id ?? person?.id ?? null);
   }
   const list = (lettersOnly ? shown.filter((d) => NON_COVER_ROLES.has(d.role ?? "")) : shown);
   if (!list.length) return done("I couldn’t find uploads like that on file.", [], [], person?.id ?? null);
-  const lines = list.map((d) => q(d.label) + " — " + kind(d) + (d.product && !NON_COVER_ROLES.has(d.role ?? "") ? " (" + d.product + ")" : "") + (person ? "" : ", for " + who(d)) + ".");
+  const headings = await printedHeadings(accountId, list.filter((d) => d.status === "ready" && !isPolicyRole(d.role)).map((d) => d.id));
+  const lines = list.map((d) => q(d.label) + headed(headings, d) + " — " + kind(d) + productAfter(d) + (person ? "" : ", for " + who(d)) + ".");
   const target = person ? (isSelf(person) ? "you" : personName(person)) : "your household";
   return done(lettersOnly ? "These uploads are letters, bills, screenshots or notes rather than policies, so none of them is counted as cover:" : list.length + " uploads are on file for " + target + ":", lines.slice(0, 20), list.map((d) => d.id), person?.id ?? null);
 }
