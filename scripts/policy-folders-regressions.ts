@@ -418,6 +418,20 @@ async function main() {
     assert.deepEqual(f.documents.map((d) => d.policyId), [s2]);
     assert.equal((await folderWith(hand)).length, 1, "the hand-filed wording stays in its one folder");
   });
+  await test("AU10 a newer copy of a schedule that is in a folder: no second folder for it", async () => {
+    asUser(ownerA);
+    const old = id("f9800000", 28), copy = id("f9800000", 29);
+    await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,processing_status,original_filename,storage_key,file_hash,quarantine_status)
+      VALUES($1,$2,$3,'Example Life','Example Shield','personal_schedule','ready','old.pdf','k',$4,'scan_clean')`, [old, A, jane, "sha256:" + old]);
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: old, people: [jane], documents: [{ policyId: old, slot: "schedule" }] }] }))).json()).made, 1);
+    await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,processing_status,original_filename,storage_key,file_hash,quarantine_status,supersedes_id)
+      VALUES($1,$2,$3,'Example Life','Example Shield','personal_schedule','ready','new.pdf','k',$4,'scan_clean',$5)`, [copy, A, jane, "sha256:" + copy, old]);
+    await pool.query("UPDATE policies SET superseded_at=now() WHERE id=$1", [old]);
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: copy, people: [jane], documents: [{ policyId: copy, slot: "schedule" }] }] }))).json()).made, 0);
+    assert.deepEqual(await folderWith(copy), []);
+    const [f] = (await folders.listFolders(A)).filter((x) => x.replacements.some((r) => r.by === copy));
+    assert.ok(f, "the old folder offers the copy");
+  });
   await test("AU8 the database itself refuses a record naming another household's document; browsers can only read their own", async () => {
     await assert.rejects(pool.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2)", [bDoc, A]), /another household/);
     const asBrowser = async <T>(userId: string, fn: () => Promise<T>) => serial(async () => {

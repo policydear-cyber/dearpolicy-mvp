@@ -5,6 +5,7 @@
  * every document and person named belongs to the household before anything is written. Until sql/policy-folders.sql is
  * applied, foldersReady() is false, reads give no folders and writes are refused with FoldersNotReadyError. */
 import { pool, query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 
 export type FolderSlot = "schedule" | "wording" | "rider" | "other";
 export const FOLDER_SLOTS: readonly FolderSlot[] = ["schedule", "wording", "rider", "other"];
@@ -182,10 +183,10 @@ export async function updateFolder(accountId: string, folderId: string, change: 
     }
     await addDocuments(tx, accountId, folderId, add);
     if (remove.length) {
-      await tx.query("DELETE FROM policy_folder_documents WHERE folder_id=$1 AND account_id=$2 AND policy_id = ANY($3::uuid[])", [folderId, accountId, remove]);
       // A document the household took out is never put into a folder again on its own.
-      if (autoOn) await tx.query(`INSERT INTO policy_folder_auto(policy_id, account_id) SELECT p.id, p.account_id FROM policies p
-        WHERE p.account_id=$1 AND p.id = ANY($2::uuid[]) ON CONFLICT DO NOTHING`, [accountId, remove]);
+      if (autoOn) await tx.query(`INSERT INTO policy_folder_auto(policy_id, account_id) SELECT fd.policy_id, fd.account_id FROM policy_folder_documents fd
+        WHERE fd.folder_id=$1 AND fd.account_id=$2 AND fd.policy_id = ANY($3::uuid[]) ON CONFLICT DO NOTHING`, [folderId, accountId, remove]);
+      await tx.query("DELETE FROM policy_folder_documents WHERE folder_id=$1 AND account_id=$2 AND policy_id = ANY($3::uuid[])", [folderId, accountId, remove]);
     }
     const documentsChanged = add.length > 0 || remove.length > 0;
     const complete: boolean | undefined = change.complete ?? (documentsChanged ? false : undefined);
@@ -232,6 +233,13 @@ export async function handledDocuments(accountId: string): Promise<string[]> {
   return r.rows.map((x) => String(x.policy_id));
 }
 
+/** Whether a document is in a folder, or is a newer copy of one that is. */
+async function filedOrCopyOfFiled(tx: Tx, accountId: string, policyId: string): Promise<boolean> {
+  const r = await tx.query(`SELECT 1 FROM policy_folder_documents fd WHERE fd.account_id=$1 AND (fd.policy_id=$2 OR fd.policy_id =
+      (SELECT n.supersedes_id FROM policies n WHERE n.id=$2 AND n.account_id=$1 AND ${activePredicate("n")})) LIMIT 1`, [accountId, policyId]);
+  return r.rows.length > 0;
+}
+
 export type AutoFolderInput = { scheduleId: string; people: string[]; documents: FolderDocumentInput[] };
 /** Makes the folders the page worked out from the household's documents (lib/policies/folder-view.ts policyStarters), each
  * not complete, so the household checks and confirms it. A schedule that already had its folder made, or left one, is
@@ -247,16 +255,15 @@ export async function makeAutoFolders(accountId: string, starters: AutoFolderInp
       await checkDocuments(tx, accountId, docs.map((d) => d.policyId));
       const first = await tx.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING policy_id", [s.scheduleId, accountId]);
       if (!first.rows.length) return 0;
-      // The schedule is in no folder now (a folder made by hand since the page loaded keeps it).
-      const filed = await tx.query("SELECT 1 FROM policy_folder_documents WHERE account_id=$1 AND policy_id=$2 LIMIT 1", [accountId, s.scheduleId]);
-      if (filed.rows.length) return 0;
+      // The schedule is in no folder now (a folder made by hand since the page loaded keeps it), and is not a newer copy of a
+      // document in a folder: that folder offers it as "Add it" instead (TE #554 MED).
+      if (await filedOrCopyOfFiled(tx, accountId, s.scheduleId)) return 0;
       // Every other document joins only if it is in no folder and was never made into one or taken out of one, whatever the
       // page sent (Critic #554 MED-2).
       const joining: FolderDocumentInput[] = [docs.find((d) => d.policyId === s.scheduleId)!];
       for (const d of docs) {
         if (d.policyId === s.scheduleId) continue;
-        const inFolder = await tx.query("SELECT 1 FROM policy_folder_documents WHERE account_id=$1 AND policy_id=$2 LIMIT 1", [accountId, d.policyId]);
-        if (inFolder.rows.length) continue;
+        if (await filedOrCopyOfFiled(tx, accountId, d.policyId)) continue;
         const fresh = await tx.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING policy_id", [d.policyId, accountId]);
         if (fresh.rows.length) joining.push(d);
       }

@@ -120,7 +120,8 @@ export type PolicyStarter = { scheduleId: string; documents: { policyId: string;
  * not by a plan match), with any other document in no folder that prints the same policy number, from the same insurer, for
  * those same people. Nothing is made until the household taps; a document linked to nobody starts nothing. */
 export function policyStarters(docs: FolderDoc[], folders: FolderView[], handled: ReadonlySet<string> = new Set()): PolicyStarter[] {
-  const filed = new Set(folders.flatMap((f) => f.documents.map((d) => d.policyId)));
+  // In a folder, or a newer copy of one that is (the folder offers it as "Add it"), counts as filed.
+  const filed = new Set(folders.flatMap((f) => [...f.documents.map((d) => d.policyId), ...(f.replacements ?? []).map((r) => r.by)]));
   // A document already made into a folder, or one the household took out of one, never starts or joins one again.
   const free = docs.filter((d) => !filed.has(d.id) && !handled.has(d.id));
   const out: PolicyStarter[] = [], taken = new Set<string>();

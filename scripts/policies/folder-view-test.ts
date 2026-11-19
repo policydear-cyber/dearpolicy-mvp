@@ -121,6 +121,9 @@ test("P5b a document already made into a folder, or taken out of one, neither st
   const docs = [sch("a", { policy_number: "AB123456" }), d("r", { policy_number: "AB123456" }), sch("gone")];
   assert.deepEqual(policyStarters(docs, [], new Set(["r", "gone"])), [{ scheduleId: "a", personIds: ["jane"], documents: [{ policyId: "a", slot: "schedule" }] }]);
 });
+test("P5c a newer copy of a schedule in a folder starts no second folder (the folder offers it as Add it)", () => {
+  assert.deepEqual(policyStarters([sch("new")], [f({ documents: [], replacements: [{ policyId: "old", slot: "schedule", by: "new" }] })]), []);
+});
 test("P6 two schedules with one number (a renewal) make one policy, not two", () => {
   const s = policyStarters([sch("a", { policy_number: "AB123456" }), sch("b", { policy_number: "AB123456" })], []);
   assert.equal(s.length, 1);
