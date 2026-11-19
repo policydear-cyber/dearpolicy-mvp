@@ -8,7 +8,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DOCS, M, doc } from "../fixtures/rag2-livelib/household";
-import { namesDocument, showsFileName } from "./spoken-name";
+import { namesDocument, sentencesIn, showsFileName } from "./spoken-name";
 
 type Check = { conv: string; turn: number; name: string; ok: boolean; kind: "correctness" | "usefulness"; detail?: string };
 const A = M.adrian.id, C = M.cheryl.id, CERT = doc("CERT").id;
@@ -66,7 +66,7 @@ export function gradeLivelib(convs: any[]): { verdict: "PASS" | "FAIL" | "INCOMP
   // S52C: inventory
   { const t = turnOf("S52C", 1); if (t) { const v = vis(t);
     // 19 Nov (DC approved): the nameless photo is said as "Photo uploaded <day>", never "IMG_0042.jpg" (spoken-name.ts).
-    add("S52C", 1, "the unreadable upload is included (Photo uploaded <day>, could not be read, on the same line; never its file name or stem)", !showsFileName(doc("SCAN"), v) && v.split("\n").some((l) => namesDocument(doc("SCAN"), l) && /could not be read|couldn.t be read|unreadable|failed/i.test(l)), "usefulness", v);
+    add("S52C", 1, "the unreadable upload is included (Photo uploaded <day>, could not be read, in the same sentence; never its file name or stem)", !showsFileName(doc("SCAN"), v) && sentencesIn(v).some((l) => namesDocument(doc("SCAN"), l) && /could not be read|couldn.t be read|unreadable|failed/i.test(l)), "usefulness", v);
     const missing = DOCS.filter((d) => !d.account && d.key !== "SCAN" && !v.includes(d.product)).map((d) => d.product);
     add("S52C", 1, "every readable upload is listed", !missing.length, "usefulness", "missing: " + missing.join("; ") + " :: " + v);
   } }

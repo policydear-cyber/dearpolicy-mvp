@@ -20,14 +20,20 @@ export function unnamedShape(d: FixtureDoc): RegExp {
   const word = /\.(?:jpe?g|png|heic|heif|webp|gif|tiff?)$/i.test(file) ? "Photo" : /\.pdf$/i.test(file) ? "PDF" : /\.docx?$/i.test(file) ? "Word file" : "File";
   return new RegExp(`\\b${escape(word)} uploaded \\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \\d{4}\\b`);
 }
-/** Text that names the upload by its file: the whole file name, or (for a nameless upload) its stem, in any case
- * ("IMG_0042.jpg", "IMG_0042", "img_0042.JPG"). */
+/** Text that names the upload by its file: the whole file name, or (for a nameless upload) its stem as a whole word, in
+ * any case and with any separators ("IMG_0042.jpg", "IMG_0042", "img-0042", "(IMG 0042)"; TE #564 L-C). A stem shorter
+ * than 4 characters, or one made only of common words with no digit ("photo", "scan", "document"), is too ordinary to
+ * tell a file name from plain words, so only the whole file name counts for it (TE #564 L-B). */
+const COMMON_STEM = /^(?:photo|image|img|picture|pic|scan|scanned|document|doc|file|pdf|upload|new|copy|page|untitled|output)$/;
+const spaced = (t: string) => " " + t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim() + " ";
 export function showsFileName(d: FixtureDoc, text: string): boolean {
   const file = d.filename?.trim();
   if (!file) return false;
-  const stem = file.replace(/\.[a-z0-9]{1,5}$/i, "");
-  const t = text.toLowerCase();
-  return t.includes(file.toLowerCase()) || (!hasOwnName(asRow(d)) && t.includes(stem.toLowerCase()));
+  if (text.toLowerCase().includes(file.toLowerCase())) return true;
+  if (hasOwnName(asRow(d))) return false;
+  const stem = spaced(file.replace(/\.[a-z0-9]{1,5}$/i, "")).trim();
+  if (stem.replace(/ /g, "").length < 4 || (!/\d/.test(stem) && stem.split(" ").every((w) => COMMON_STEM.test(w)))) return false;
+  return spaced(text).includes(" " + stem + " ");
 }
 
 /** The words an answer uses for this document: its product, and its title. Empty for an upload with no name of its own. */
@@ -42,4 +48,9 @@ export function namesDocument(d: FixtureDoc, text: string): boolean {
   if (showsFileName(d, text)) return false;
   const names = spokenNames(d);
   return names.length ? names.some((n) => text.includes(n)) : unnamedShape(d).test(text);
+}
+/** The sentences of a displayed answer, line by line: a status and the document it is about must be in one sentence, not
+ * only on one line (TE #564 L-A: "Photo uploaded 3 Nov 2026 is on file. The letter could not be read." is two). */
+export function sentencesIn(text: string): string[] {
+  return text.split("\n").flatMap((l) => l.split(/(?<=[.!?])\s+(?=[A-Z“"(])/));
 }

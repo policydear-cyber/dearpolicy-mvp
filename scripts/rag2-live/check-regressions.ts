@@ -371,6 +371,10 @@ t("C34 L5 the correct answer has no whole-answer failure", () => assert.deepEqua
     const w = good(); (w[2].loaded.turns[0] as any).visible = (w[2].loaded.turns[0] as any).visible.replace(" Photo uploaded 19 Nov 2026 could not be read.", ""); assert.ok(fails(w).some((f) => /unreadable upload/.test(f)));
     // 19 Nov (DC approved): naming the photo by its file name now fails the same check.
     const fn = good(); (fn[2].loaded.turns[0] as any).visible = (fn[2].loaded.turns[0] as any).visible.replace("Photo uploaded 19 Nov 2026", "IMG_0042.jpg"); assert.ok(fails(fn).some((f) => /unreadable upload/.test(f)));
+    // TE #564 L-C: the stem with other separators is still the file name.
+    const sp = good(); (sp[2].loaded.turns[0] as any).visible = (sp[2].loaded.turns[0] as any).visible.replace("Photo uploaded 19 Nov 2026", "Photo uploaded 19 Nov 2026 (IMG 0042)"); assert.ok(fails(sp).some((f) => /unreadable upload/.test(f)));
+    // TE #564 L-A: the photo and "could not be read" in two sentences of one line is not the status of the photo.
+    const two = good(); (two[2].loaded.turns[0] as any).visible = (two[2].loaded.turns[0] as any).visible.replace("Photo uploaded 19 Nov 2026 could not be read.", "Photo uploaded 19 Nov 2026 is on file. Another upload could not be read."); assert.ok(fails(two).some((f) => /unreadable upload/.test(f)));
     const u = good(); (u[3].loaded.turns[0] as any).answer = { calculations: [] }; assert.ok(fails(u).some((f) => /saved, re-runnable/.test(f)));
     assert.deepEqual(borrowed365("Permanent Dismemberment is payable if the loss occurs within 365 days of the Accident."), []);
   });

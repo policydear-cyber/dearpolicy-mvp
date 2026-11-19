@@ -52,6 +52,11 @@ would now fail these checks, as intended.
 - A nameless upload must be said with its own format word ("Photo" for a .jpg, never "PDF") and with the exact casing.
   Only the day is open, because it depends on when the fixture was seeded.
 - livelib-check S52C now needs the "could not be read" status on the same line as the photo, as pr50-check C3 already did.
+- TE #564 L-A to L-C: pr50-check C3 and livelib-check S52C now need the photo and its status in the same sentence, not
+  only on the same line. A nameless upload's stem counts as its file name with any separators ("IMG 0042", "img-0042"),
+  as a whole word. A stem under 4 characters, or made only of common words with no digit ("photo", "scan"), is too
+  ordinary to tell from plain words, so only its whole file name counts. New controls in
+  scripts/rag2-live/check-regressions.ts cover the separator and two-sentence cases.
 
 ## Test battery and browser specs updated with the CI fixes
 

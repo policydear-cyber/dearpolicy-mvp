@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DOCS, ELIGIBLE } from "../fixtures/rag2-pr50/household";
-import { namesDocument } from "./spoken-name";
+import { namesDocument, sentencesIn } from "./spoken-name";
 import { uniqueSteps } from "../../components/next-steps";
 import { recomputeCalculation } from "../../lib/claims/calc-record";
 
@@ -63,7 +63,7 @@ export function gradeP50C(t: any): Check[] {
   const notSaved = ELIGIBLE.map(byKey).filter((d) => !saved.has(d.id) && !(a?.libraryNames ?? []).some((n: string) => names(d, n)));
   add("C2", "each displayed upload is in the saved record (a citation of its document id, or its library name)", !notSaved.length, notSaved.map((d) => d.key).join(", "));
   const scan = byKey("SCAN");
-  add("C3", "the failed upload is stated as unreadable (on the line naming it); nothing is quoted from it", lines.some((l) => names(scan, l) && /could not be read|couldn['’]t be read|unreadable|not readable|failed/i.test(l)), v);
+  add("C3", "the failed upload is stated as unreadable (in the sentence naming it); nothing is quoted from it", sentencesIn(v).some((l) => names(scan, l) && /could not be read|couldn['’]t be read|unreadable|not readable|failed/i.test(l)), v);
   const gone = ["DELETED", "OTHER"].map(byKey).filter((d) => names(d, v) || (!!d.filename && v.includes(d.filename)) || saved.has(d.id)); // by title, file name or id (Critic #564 LOW-1: no looser than before)
   add("C4", "the deleted upload and the other household's upload are absent (by name and by id)", !gone.length, gone.map((d) => d.key).join(", "));
   const travel = ["TRAVEL_WORDING", "TRAVEL_SUMMARY"].map(byKey);
