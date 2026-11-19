@@ -37,7 +37,11 @@ export function showsFileName(d: FixtureDoc, text: string): boolean {
   // With the separators left out ("IMG0042"), or a long digit run taken from the stem ("20241003_153045"): TE #564 L-E.
   const bare = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
   if (bare(stem).length >= 6 && /\d/.test(stem) && bare(text).includes(bare(stem))) return true;
-  return (stem.match(/\d{6,}/g) ?? []).some((run) => text.replace(/[^\d]+/g, " ").split(" ").some((t) => t.length >= 6 && run.includes(t)));
+  // The stem's digit runs together, in order ("20241003 153045"), or one whole run of 10+ digits: a single date or number
+  // that only happens to sit inside the stem is not the file name (TE #564 L-E2).
+  const runs = stem.match(/\d{6,}/g) ?? [];
+  if (runs.length >= 2 && new RegExp("(?<!\\d)" + runs.join("\\D{1,3}") + "(?!\\d)").test(text)) return true;
+  return runs.some((run) => run.length >= 10 && text.replace(/[^\d]+/g, " ").split(" ").includes(run));
 }
 
 /** The words an answer uses for this document: its product, and its title. Empty for an upload with no name of its own. */
@@ -57,12 +61,14 @@ export function namesDocument(d: FixtureDoc, text: string): boolean {
  * only on one line (TE #564 L-A: "Photo uploaded 3 Nov 2026 is on file. The letter could not be read." is two). */
 export function sentencesIn(text: string): string[] {
   // Never after an abbreviation or an initial ("Pte. Ltd.", "Dr. Tan", "No. A12", "e.g. The", "J. Lim": TE #564 L-D).
-  const ABBR = /(?:^|[\s(])(?:pte|ltd|co|inc|corp|bhd|sdn|dr|mr|mrs|ms|mdm|st|no|nos|vol|ref|fig|approx|e\.g|i\.e|etc|vs|[A-Za-z])\.$/i;
+  // A first sentence that really ends in "Ltd.", "Co." or "etc." still ends there (TE #564 L-D2): "Pte." holds only before "Ltd".
+  const ABBR = /(?:^|[\s(])(?:dr|mr|mrs|ms|mdm|st|no|nos|vol|ref|fig|approx|e\.g|i\.e|vs)\.$/i;
   return text.split("\n").flatMap((l) => {
     const out: string[] = [];
     let start = 0;
     for (const m of l.matchAll(/(?<=[.!?])\s+(?=[A-Z“"(])/g)) {
-      if (ABBR.test(l.slice(start, m.index))) continue;
+      const before = l.slice(start, m.index), after = l.slice(m.index! + m[0].length);
+      if (ABBR.test(before) || (/\bPte\.$/i.test(before) && /^Ltd\b/i.test(after))) continue;
       out.push(l.slice(start, m.index)); start = m.index! + m[0].length;
     }
     out.push(l.slice(start));

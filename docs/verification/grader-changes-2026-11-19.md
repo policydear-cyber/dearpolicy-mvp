@@ -92,3 +92,11 @@ follow-up, not part of this change.
   SilverShield and letters case now also fails if a file name shows.
 - L-F (product): placeholder titles also cover "Untitled-1", "Document1", "Microsoft Word - Document1", "untitled.pdf",
   "N/A", "-" and "Unknown".
+
+## TE #564 round on 40f03c7d
+
+- L-D2: the sentence split again ends a sentence after "Ltd.", "Co.", "etc." or an initial; it holds only after titles and
+  references (Dr, Mr, No, Ref, e.g., ...) and after "Pte." before "Ltd".
+- L-E2: a single date or number that sits inside a stem's digit run is not the file name; the stem's runs together and in
+  order, or one whole run of 10 or more digits, still are.
+- R3: "schedule uploaded twice" needs the PDF named as the one answers use, not "PDF" anywhere.

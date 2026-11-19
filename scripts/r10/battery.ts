@@ -49,7 +49,7 @@ export function battery(): Conversation[] {
     ["Does Papa's rider pay for pro-ration?", Y(BH, /not paid|pro-?ration/i)],
     ["Can Papa use MediSave for the rider premium?", Y(BH, /cash|cannot|can[’']t|not/i)],
     ["Which upload is Papa's current SilverShield schedule?", Y(BH, [/(?:current one is|answers use) “SilverShield Integrated Plan \(PDF\)”/], /\(photo, ending 0417\)”?[^.]{0,40}(?:is|as) (?:the )?current|_|\.pdf\b|\.png\b|\.jpg\b/i)],
-    ["I uploaded Papa's SilverShield schedule twice, a photo and the PDF. Which one do you use?", Y(BH, [/SilverShield Integrated Plan \(PDF\)|PDF/i, /same|duplicate|copy/i], /_|\.pdf\b|\.png\b|\.jpg\b/)],
+    ["I uploaded Papa's SilverShield schedule twice, a photo and the PDF. Which one do you use?", Y(BH, [/answers use “SilverShield Integrated Plan \(PDF\)”/, /same|duplicate|copy/i], /_|\.pdf\b|\.png\b|\.jpg\b/)],
     ["Is the photo IMG_20260412_093015.jpg the same as the SilverShield PDF?", Y(BH, /same|duplicate|copy/i)],
     ["What was Papa's SilverShield premium last year?", Y(BH, [/“SilverShield Integrated Plan \(photo, ending 0417\)” is an earlier schedule|2025/], /S\$1,962\.00(?! is unclear)|\(PDF\)” is an earlier schedule|_|\.pdf\b|\.png\b|\.jpg\b/)],
     ["What period did the 2025 SilverShield photo cover?", Y(BH, /1 April 2025|31 March 2026/, /_|\.pdf\b|\.png\b|\.jpg\b/)],

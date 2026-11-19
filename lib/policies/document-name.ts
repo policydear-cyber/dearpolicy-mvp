@@ -58,7 +58,8 @@ export function documentName(doc:{product_name:string|null;original_filename:str
   // A system's code stored as the product ("SGGRP_COI_APP", from a PDF's own title) is not a name a person reads: one word
   // joined by underscores. Nor is a PDF tool's stand-in title ("(anonymous)", "Untitled"). The document is then named as
   // if it had none (re-upload check, 10 Nov; #564, 19 Nov).
-  if(product&&!isCodeName(product)&&!isPlaceholderName(product))return product;
+  // A title an office tool wrote keeps only the name a person gave ("Microsoft Word - Shield Plan.docx" -> "Shield Plan"; TE #564 L-F2).
+  if(product&&!isCodeName(product)&&!isPlaceholderName(product))return product.replace(/^microsoft\s+(?:word|excel|powerpoint)\s*-\s*/i,"").replace(/\.(?:pdf|docx?|xlsx?|pptx?|jpe?g|png)$/i,"").trim()||product;
   // An ID number in the file name is masked before the name is made readable: spacing splits it ("S7712345D" ->
   // "S7712345 D") into a shape no mask knows (TE pr181 F2).
   if(!isMachineFilename(doc.original_filename))return prettifyFilename(maskIdentityText(doc.original_filename));

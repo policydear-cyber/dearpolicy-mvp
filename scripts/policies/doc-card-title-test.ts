@@ -115,6 +115,8 @@ test("documentLabels: letters and decisions read by kind; placeholder titles are
   assert.deepEqual([...m.values()], ["Shield Plan", "Shield Plan (letter)", "Shield Plan (claim decision)", "Novena Final Bill", "PDF uploaded 3 Nov 2026"]);
   for (const t of ["Untitled-1", "Document1", "Microsoft Word - Document1", "untitled.pdf", "N/A", "-", "Unknown"]) assert.ok(isPlaceholderName(t), t);
   for (const t of ["Anonymous Benefits Plan", "Untitled Life Plan", "Document Plan", "Shield"]) assert.ok(!isPlaceholderName(t), t);
+  assert.equal(documentCardTitle({ product_name: "Microsoft Word - Shield Plan Schedule.docx", original_filename: "a.pdf" }), "Shield Plan Schedule");
+  assert.equal(documentCardTitle({ product_name: "Shield.pdf", original_filename: "a.pdf" }), "Shield");
   assert.equal(documentCardTitle({ product_name: "(anonymous)", original_filename: "IMG_1.pdf", insurer: "Merlion", document_role: "medical_bill" }), "Merlion medical bill");
 });
 
