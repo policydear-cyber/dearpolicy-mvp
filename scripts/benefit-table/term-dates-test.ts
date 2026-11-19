@@ -123,5 +123,15 @@ test("an age band is never an age a value is printed for, even with three bands 
   assert.deepEqual(ill.map((x) => (x as { atAge?: number }).atAge ?? null), [45, 50, 55], "an illustration's rows keep their ages");
 });
 
+test("a table by year keeps its years whatever words sit beside them; the band test never reads an amount (Critic MED-11)", () => {
+  const r = (atPolicyYear: number, atAge: number, quote: string, pays = "amount", benefit = "Guaranteed death benefit (payable up to age 100)") => ({ benefit, section: null, column: "Guaranteed", pays, atPolicyYear, atAge, quote });
+  const table = byYearOnly([r(10, 45, "10 45 150,000"), r(20, 55, "20 55 250,000")]);
+  assert.deepEqual(table.map((x) => (x as { atPolicyYear?: number }).atPolicyYear ?? null), [10, 20], "case 9's table with 'payable up to age 100' in its name");
+  const value = byYearOnly([r(20, 55, "Guaranteed death benefit (payable up to age 100) 20 55 150,000", "value")]);
+  assert.equal((value[0] as { atAge?: number }).atAge, 55, "a value row is never band-tested");
+  const amounts = byYearOnly([1, 2, 3].map((i) => ({ benefit: "Death benefit", section: null, column: "Total", pays: "amount", atAge: 50 + i * 5, quote: `Death benefit ${10 + i * 5} ${50 + i * 5} Age ${50 + i * 5} - 120,500` })));
+  assert.deepEqual(amounts.map((x) => (x as { atAge?: number }).atAge ?? null), [55, 60, 65], "'Age 55 - 120,500' is an age and an amount, not a band");
+});
+
 if (failures.length) { console.error(failures.join("\n")); console.error(`${failures.length} failed, ${passed} passed`); process.exit(1); }
 console.log(`term-dates: ${passed} passed`);
