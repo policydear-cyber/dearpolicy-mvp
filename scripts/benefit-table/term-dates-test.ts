@@ -5,11 +5,12 @@
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 import assert from "node:assert/strict";
-import { termDates, valueAt } from "@/lib/benefit-table/check";
+import { checkReading, termDates, valueAt, type SourceDoc } from "@/lib/benefit-table/check";
+import { assembleTable } from "@/lib/benefit-table/assemble";
 import { READING_PROMPT, READING_SCHEMA } from "@/lib/benefit-table/reading";
 import { atYearFigure, type Figure } from "@/lib/benefit-table/assemble";
 import { keyBenefits, type SummaryRow } from "@/lib/benefit-table/headline";
-import { categoryRows } from "@/lib/coverage/table-figures";
+import { categoryOfRow, categoryRows } from "@/lib/coverage/table-figures";
 
 let passed = 0; const failures: string[] = [];
 function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
@@ -66,6 +67,24 @@ test("a figure printed for an age or policy year is never a current amount: not 
   assert.deepEqual(keyBenefits([later, now]), [1], "the current death benefit leads; the year-20 row never does");
   assert.deepEqual(keyBenefits([later]), []);
   assert.deepEqual(categoryRows("Death", [later, now] as never[]).map((r: { figure: Figure }) => r.figure.kind), ["printed"]);
+});
+
+test("an age limit on an ordinary benefit is not a year it is printed for: the row stays the current death figure (Critic MED-8)", () => {
+  const PERSON = "Lim Wei Jie";
+  const line = "Death or TPD before age 70\tS$200,000";
+  const src: SourceDoc = { id: "doc-1", name: "Schedule", readable: true, pages: [{ page: 1, text: `Life Assured: ${PERSON}\nPolicy Number: 55001234\nBenefit\tSum Assured\n${line}\nCurrency: Singapore Dollar` }] };
+  const reading = checkReading(src, { document: { kind: "personal_proof", product: "Harbour Term", insurer: "Example Assurance", namedPeople: [PERSON], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: PERSON, product: "Harbour Term", cover: "Harbour Term", plan: null, riderOf: null, policyNumber: "55001234", premium: null, premiumFrequency: null, asOf: null, startDate: null, endDate: null, page: 1, sumInsured: 200000, quote: line }],
+    benefits: [{ section: null, column: "Sum Assured", benefit: "Death or TPD before age 70", pays: "amount", value: 200000, period: null, basis: null, asOf: null, percentOf: null,
+      baseAmount: null, baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 1, quote: line, atAge: 70 }] });
+  const rows = assembleTable([reading], [{ id: "m1", display_name: PERSON }], []).people[0]?.rows ?? [];
+  const death = rows.find((r) => /death/i.test(r.benefit));
+  assert.ok(death, "the death row is on the table");
+  assert.equal(death!.valueAt, undefined);
+  assert.equal(death!.figure.kind, "printed");
+  const category = categoryOfRow(death as never)!;
+  assert.ok(category, "the row has a Home category");
+  assert.deepEqual(categoryRows(category, rows as never[]).map((r: { figure: Figure }) => r.figure.kind), ["printed"], "it still reaches Home's card as it does on main");
 });
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`${failures.length} failed, ${passed} passed`); process.exit(1); }

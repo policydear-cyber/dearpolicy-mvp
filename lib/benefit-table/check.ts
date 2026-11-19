@@ -2573,7 +2573,9 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}), ...(columnMarks.length ? { columnMarks } : {}),
       ...(ownShareNamed ? { ownShareNamed } : {}), ...(baseFromWords && percentOf === "sum_insured" ? { baseFromWords, ...(shareSentence ? { shareSentence } : {}) } : {}), ...(paymentSchedule && pays === "words" ? { paymentSchedule } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}), ...(childNote ? { childNote } : {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}),
-      ...valueAt(b, source.excerpt, pageText(source.page)),
+      // Only a value row (a table of values by year) keeps its age or year: an age limit on an ordinary benefit ("Death or
+      // TPD before age 70") is never a year the row is printed for (Critic MED-8).
+      ...(pays === "value" ? valueAt(b, source.excerpt, pageText(source.page)) : {}),
       ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
   }
   out.benefits = foldChildColumns(out.benefits, out.dropped);
