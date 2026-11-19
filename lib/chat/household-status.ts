@@ -8,7 +8,7 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { documentName, referenceRoles } from "@/lib/policies/inventory";
-import { documentLabels } from "@/lib/policies/document-name";
+import { householdDocumentLabels } from "@/lib/policies/household-labels";
 import { failedDocumentAdvice, READING_LIMIT_RESETS, type FailedDocumentAdvice } from "@/lib/documents/failure-advice";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation } from "@/types";
@@ -49,8 +49,7 @@ export async function documentsByPerson(accountId: string, people: ClaimPerson[]
        FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
       WHERE p.account_id=$1 AND pm.family_member_id::text=ANY($2::text[]) AND ${activePredicate("p")} AND p.superseded_at IS NULL
       ORDER BY p.created_at,p.id`, [accountId, people.map((p) => p.id)]);
-  const unique = [...new Map(r.rows.map((row) => [row.id, row])).values()];
-  const labels = documentLabels(unique.map((row) => ({ ...row, created_at: row.created })));
+  const labels = await householdDocumentLabels(accountId).catch(() => new Map<string, string>());
   for (const row of r.rows) {
     out.get(row.family_member_id)?.push({ id: row.id, name: documentName(row), label: labels.get(row.id) ?? documentName(row), filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
       policyType: row.policy_type, confirmed: row.personal_coverage_confirmed, tier: row.tier, effectiveDate: row.effective_date, renewalOrExpiryDate: row.renewal_or_expiry_date, ...personDocumentStatus(row) });

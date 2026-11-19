@@ -33,7 +33,7 @@ import { replacedFigures } from "@/lib/policies/amendments";
 import { askedCoverage, bestLines, columnsFor, narrowToColumn, piecesOf, quoted, wordsOf } from "./printed-lines";
 import { citeAnswerLines } from "./answer-verification";
 import { planKind, type PlanKind } from "./plan-kinds";
-import { documentLabels } from "@/lib/policies/document-name";
+import { householdDocumentLabels } from "@/lib/policies/household-labels";
 
 export type DocumentAnswer = { summary: string; details: string[]; nextSteps: string[]; citations: ChatCitation[]; personId: string | null; patch: Partial<ConversationState> };
 type Doc = { id: string; file: string;
@@ -58,7 +58,7 @@ async function loadDocuments(accountId: string): Promise<Doc[]> {
             p.superseded_at IS NOT NULL AS superseded,p.extracted_json->'documentNotes' AS notes,p.family_member_id::text AS uploaded_to,
             ARRAY(SELECT pm.family_member_id::text FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id) AS owners,p.created_at::text AS created
        FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} ORDER BY p.created_at,p.id`, [accountId]).catch(() => ({ rows: [] }))).rows;
-  const labels = documentLabels(rows.map((r) => ({ id: r.id, original_filename: r.file, product_name: r.product, insurer: r.insurer, document_role: r.role, policy_number: r.policy_number, created_at: r.created })));
+  const labels = await householdDocumentLabels(accountId).catch(() => new Map<string, string>());
   return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", label: labels.get(r.id) ?? "Document", role: r.role, status: r.status, message: r.message,
     failure: r.status === "failed" ? failedDocumentChatAdvice(r.error, { hasPages: !!r.pages }) : null, product: r.product, insurer: r.insurer, type: r.type, superseded: !!r.superseded,
     notes: Array.isArray(r.notes) ? (r.notes as unknown[]).map(String) : [], uploadedTo: r.uploaded_to, owners: r.owners?.length ? r.owners : [r.uploaded_to], created: r.created }));
@@ -522,7 +522,7 @@ function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, na
     const base = b.file.replace(/\.pdf$/i, "");
     const mine = [b, ...parts.filter((p) => p.file.startsWith(base + " — part "))];
     const n = mine.length;
-    const lines = mine.map((d) => (d.product ?? d.file) + " — for " + who(d) + (d === b ? " (pages " + (b.notes.join(" ").match(/pages (\d+–\d+) are read here/)?.[1] ?? "1") + " of the file)" : " (" + (d.file.match(/\((pages [^)]+)\)/)?.[1] ?? "") + ")") + ".");
+    const lines = mine.map((d) => (d.product ?? d.label) + " — for " + who(d) + (d === b ? " (pages " + (b.notes.join(" ").match(/pages (\d+–\d+) are read here/)?.[1] ?? "1") + " of the file)" : " (" + (d.file.match(/\((pages [^)]+)\)/)?.[1] ?? "") + ")") + ".");
     const count = n === 3 ? "three" : n === 2 ? "two" : String(n);
     // "Which policies were in it?": the policies first, then how they were read.
     const which = /\b(?:which|what)\b[^?]{0,20}\b(?:policies|plans|ones)\b/i.test(text);

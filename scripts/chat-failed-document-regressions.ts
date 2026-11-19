@@ -33,7 +33,7 @@ const spouse = { id: "00000000-0000-4000-8000-000000000002", display_name: "Tan 
 
 type Row = { status: string; error: string | null; pageCount?: number | null; member?: string; file?: string };
 let rows: Row[] = [];
-// The stub answers documentsByPerson's one query, and the document questions' (lib/chat/document-questions.ts) document
+// The stub answers documentsByPerson's query and the household's document labels (lib/policies/household-labels.ts), and the document questions' (lib/chat/document-questions.ts) document
 // and page reads, with made-up rows.
 (pool as unknown as { query: (text: string, params?: unknown[]) => Promise<unknown> }).query = async (text: string) => /FROM policy_pages/.test(text) ? { rows: [] }
   : /processing_error AS error/.test(text) ? { rows: rows.map((r, i) => ({
@@ -43,7 +43,7 @@ let rows: Row[] = [];
   })) } : ({
   rows: rows.map((r, i) => ({
     id: "00000000-0000-4000-8000-0000000001" + String(i).padStart(2, "0"), product_name: null, insurer: "Example Insurance",
-    original_filename: `example-${i + 1}.pdf`, policy_number: null, document_role: null, policy_type: null, personal_coverage_confirmed: false,
+    original_filename: r.file ?? `example-${i + 1}.pdf`, policy_number: null, document_role: null, policy_type: null, personal_coverage_confirmed: false,
     processing_status: r.status, processing_error: r.error, page_count: r.pageCount ?? null, family_member_id: r.member ?? self.id, tier: null,
     effective_date: null, renewal_or_expiry_date: null,
   })),

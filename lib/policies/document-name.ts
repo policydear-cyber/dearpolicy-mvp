@@ -98,28 +98,46 @@ export function uploadDay(value:string|Date|null|undefined):string{
 /** What a household calls each of its documents in a sentence: the document's title (documentName), never its file name
  * (DC 18 Nov). Two documents with one title read apart by what the upload is ("the photo", "the PDF"), the part of a file
  * that held several policies ("part 2 of 3"), and the day it was uploaded ("uploaded 3 Nov 2026"), only as much as needed. */
-export function documentLabels(docs:LabelDoc[]):Map<string,string>{
-  const title=(d:LabelDoc)=>{
+export function documentLabels(docs:LabelDoc[],opts:{describeUnnamed?:boolean}={}):Map<string,string>{
+  const fmt=(x:LabelDoc)=>FORMAT_WORDS.find(([re])=>re.test(x.original_filename??""))?.[1]??"";
+  const head=new Map(docs.map(d=>{
     const file=d.original_filename??"",part=file.match(/ — part (\d+) of (\d+) \(pages /);
-    const base=documentName({...d,product_name:d.product_name??null,original_filename:file.replace(/ — part \d+ of \d+ \(pages [^)]*\)$/,"")});
-    return part?`${base} (part ${part[1]} of ${part[2]})`:base;
-  };
-  const titles=new Map(docs.map(d=>[d.id,title(d)]));
-  const out=new Map<string,string>();
-  for(const d of docs){
-    const t=titles.get(d.id)!,twins=docs.filter(x=>titles.get(x.id)===t);
-    if(twins.length<2){out.set(d.id,t);continue;}
-    const fmt=(x:LabelDoc)=>FORMAT_WORDS.find(([re])=>re.test(x.original_filename??""))?.[1]??"";
-    const tells:string[]=[];
-    if(new Set(twins.map(fmt)).size>1&&fmt(d))tells.push(fmt(d));
-    const sameFmt=twins.filter(x=>fmt(x)===fmt(d));
-    if(sameFmt.length>1||!tells.length){
-      const day=uploadDay(d.created_at);
-      if(day)tells.push(`uploaded ${day}`);
-      const sameDay=sameFmt.filter(x=>uploadDay(x.created_at)===day);
-      if(sameDay.length>1)tells.push(`copy ${sameDay.findIndex(x=>x.id===d.id)+1}`);
+    const base=opts.describeUnnamed&&!hasOwnName(d)?unnamedDescription(d):documentName({...d,product_name:d.product_name??null,original_filename:file.replace(/ — part \d+ of \d+ \(pages [^)]*\)$/,"")});
+    return [d.id,{base,tells:part?[`part ${part[1]} of ${part[2]}`]:[] as string[]}];
+  }));
+  const text=(id:string)=>{const h=head.get(id)!;return h.tells.length?`${h.base} (${h.tells.join(", ")})`:h.base;};
+  // Documents whose labels read the same are told apart step by step -- by format, then upload day, then copy number --
+  // until every label is unique, so no label can point at two documents (Critic MED-1: a title "Shield (PDF)" beside a
+  // "Shield" PDF). All tells share one bracket ("Shield (part 1 of 2, uploaded 3 Nov 2026)", Critic L3).
+  const steps:((d:LabelDoc,group:LabelDoc[])=>string)[]=[
+    (d,g)=>new Set(g.map(fmt)).size>1?fmt(d):"",
+    (d,g)=>{const day=uploadDay(d.created_at);return day&&!head.get(d.id)!.base.includes(`uploaded ${day}`)&&new Set(g.map(x=>uploadDay(x.created_at))).size>1?`uploaded ${day}`:"";},
+    (d,g)=>`copy ${g.findIndex(x=>x.id===d.id)+1}`,
+  ];
+  for(const step of steps){
+    const groups=new Map<string,LabelDoc[]>();
+    for(const d of docs)groups.set(text(d.id),[...(groups.get(text(d.id))??[]),d]);
+    for(const group of groups.values()){
+      if(group.length<2)continue;
+      const add=group.map(d=>step(d,group));
+      group.forEach((d,i)=>{if(add[i])head.get(d.id)!.tells.push(add[i]);});
     }
-    out.set(d.id,tells.length?`${t} (${tells.join(", ")})`:t);
   }
-  return out;
+  return new Map(docs.map(d=>[d.id,text(d.id)]));
+}
+
+/** Whether a document has a name of its own to be called by: a product, a file name a person chose, an insurer, or a
+ * known kind. An upload with none of these (a phone photo "IMG_0042.jpg" that could not be read) would read only as
+ * "Document". */
+export function hasOwnName(doc:{product_name:string|null;original_filename:string|null;insurer?:string|null;document_role?:string|null}):boolean{
+  const product=doc.product_name?.trim();
+  if(product&&!isCodeName(product))return true;
+  if(!isMachineFilename(doc.original_filename??""))return true;
+  return !!doc.insurer?.trim()||!["","unknown"].includes(doc.document_role??"");
+}
+/** A document with no name of its own, described by what the upload is and the day it came ("the photo uploaded 3 Nov
+ * 2026"), never by its file name (DC 18 Nov; DC 19 Nov approved this wording for the household inventory). */
+export function unnamedDescription(doc:{original_filename:string|null;created_at?:string|Date|null}):string{
+  const fmt=FORMAT_WORDS.find(([re])=>re.test(doc.original_filename??""))?.[1]??"file",day=uploadDay(doc.created_at);
+  return `the ${fmt}${day?` uploaded ${day}`:""}`;
 }

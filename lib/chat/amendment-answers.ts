@@ -11,7 +11,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { replacedFigures, type Replacement } from "@/lib/policies/amendments";
 import type { ChatCitation } from "@/types";
-import { documentLabels } from "@/lib/policies/document-name";
+import { householdDocumentLabels } from "@/lib/policies/household-labels";
 import type { RegistryAnswer } from "./registry-answers";
 import { bindFigure, citeLine, figuresIn, printedRowFor } from "./answer-verification";
 
@@ -41,7 +41,7 @@ export async function amendmentAnswer(args: { accountId: string; question: strin
     `SELECT p.id::text, p.original_filename AS file, p.product_name AS product, coalesce(p.document_date, p.effective_date)::text AS dated, p.document_role AS role, p.insurer, p.policy_number, p.created_at::text AS created
        FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready' ORDER BY p.created_at, p.id`, [args.accountId]).catch(() => ({ rows: [] }))).rows;
   // A document is said by its title, never its file name (DC 18 Nov).
-  const labels = documentLabels(rows.map((d) => ({ id: d.id, original_filename: d.file, product_name: d.product, insurer: d.insurer, document_role: d.role, policy_number: d.policy_number, created_at: d.created })));
+  const labels = await householdDocumentLabels(args.accountId).catch(() => new Map<string, string>());
   const docs = rows.map((d) => ({ ...d, label: labels.get(d.id) ?? "the document" }));
   const byId = new Map(docs.map((d) => [d.id, d]));
   // One change per amending document; the plan the question (or the chat) names, when it names one.
