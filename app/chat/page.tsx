@@ -87,13 +87,13 @@ class StoppedWaiting extends Error{}
 
 /** What the household's library is like right now, so an empty chat says what a first question will be answered from:
  * nothing uploaded yet, documents still being read, or documents that could not be read. */
-type Library={total:number;reading:number;failed:{id:string;name:string}[]};
+type Library={total:number;reading:number;failed:{id:string;name:string;plain:boolean}[]};
 const READING_STATUSES=new Set(["queued","uploaded","extracting","indexing"]);
 type LibraryPolicy={id:string;original_filename?:string|null;product_name?:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null;processing_status?:string;quarantine_status?:string};
 function libraryOf(policies:LibraryPolicy[]):Library{
   return {total:policies.length,
     reading:policies.filter(p=>READING_STATUSES.has(p.processing_status??"")&&(p.quarantine_status??"clean")!=="rejected").length,
-    failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:documentCardTitle({product_name:p.product_name??null,original_filename:p.original_filename??null,insurer:p.insurer,document_role:p.document_role,policy_number:p.policy_number})}))};
+    failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:documentCardTitle({product_name:p.product_name??null,original_filename:p.original_filename??null,insurer:p.insurer,document_role:p.document_role,policy_number:p.policy_number}),plain:!p.product_name?.trim()&&!p.insurer?.trim()}))};
 }
 
 /** The empty chat: an open invitation to ask anything in your own words (no fixed list of questions), plus what the
@@ -106,7 +106,7 @@ function ChatWelcome({library}:{library:Library|null}){
     </>:<>
       <p><strong>Ask anything about your policies, in your own words.</strong> If something happened, say who and what.</p>
       {library&&library.reading>0?<p className="chat-library-note" role="status">{library.reading===1?"One document is":`${library.reading} documents are`} still being read. You can ask now; answers use {library.reading===1?"it":"them"} once {library.reading===1?"it is":"they are"} ready.</p>:null}
-      {library&&library.failed.length?<p className="chat-library-note">{library.failed.length===1?<>&ldquo;{library.failed[0].name}&rdquo; couldn&rsquo;t be read, so answers can&rsquo;t use it.</>:<>{library.failed.length} documents couldn&rsquo;t be read, so answers can&rsquo;t use them.</>} <Link className="text-link" href={library.failed.length===1?`/policies#doc-${library.failed[0].id}`:"/policies"}>See Documents →</Link></p>:null}
+      {library&&library.failed.length?<p className="chat-library-note">{library.failed.length===1?<>{library.failed[0].plain?"One document":<>&ldquo;{library.failed[0].name}&rdquo;</>} couldn&rsquo;t be read, so answers can&rsquo;t use it.</>:<>{library.failed.length} documents couldn&rsquo;t be read, so answers can&rsquo;t use them.</>} <Link className="text-link" href={library.failed.length===1?`/policies#doc-${library.failed[0].id}`:"/policies"}>See Documents →</Link></p>:null}
     </>}
   </div>;
 }
