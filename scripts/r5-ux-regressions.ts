@@ -219,6 +219,9 @@ async function main() {
     assert.match(payments, /p\.totals\.map\(t=><strong key=\{t\.currency\}>\{formatMoney\(t\.monthly,t\.currency\)\}/, "monthly, one line per currency");
     assert.match(payments, /p\.totals\.map\(t=><strong key=\{t\.currency\}>\{formatMoney\(t\.annual,t\.currency\)\}/, "yearly, one line per currency");
     assert.doesNotMatch(payments, /Home shows the same cost|Newest first/, "no filler lines");
+    // TE #560 N4: a person whose only premium is paid once, or whose premiums are all left out with a reason, is never told none was found.
+    assert.match(payments, /p\.oneOff\.length\?"No monthly or yearly total: "/, "a one-off premium is not 'no premium found'");
+    assert.match(payments, /p\.note\?"No monthly or yearly total yet\. The note below says why\."/, "a premium left out with a reason is not 'no premium found'");
   });
   await test("signed-out pages carry no app navigation", () => {
     const shell = read("components/AppShell.tsx");

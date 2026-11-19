@@ -41,7 +41,7 @@ function PersonPremiums({ person }: { person: Person }) {
   const p=person.premiums;
   return <section className="section premium-breakdown-panel">
     <div className="section-heading"><div><h2>{person.display_name}</h2>
-      {!p.totals.length&&<p className="note premium-cost-line">{p.items.length?"These premiums are not added up: none of them says which currency it is in.":p.countedElsewhere?.length&&!p.missing.length?"No separate premium: "+person.display_name+"’s cover is paid under another family member’s policy (see the note below).":"No premium found yet."}</p>}</div></div>
+      {!p.totals.length&&<p className="note premium-cost-line">{p.items.length?"These premiums are not added up: none of them says which currency it is in.":p.countedElsewhere?.length&&!p.missing.length?"No separate premium: "+person.display_name+"’s cover is paid under another family member’s policy (see the note below).":p.oneOff.length?"No monthly or yearly total: "+(p.oneOff.length===1?"the premium below is":"the premiums below are")+" paid once.":p.note?"No monthly or yearly total yet. The note below says why.":"No premium found yet."}</p>}</div></div>
     {p.totals.length>0&&<PersonTotal p={p}/>}
     <div className="premium-breakdown-list">
       {p.items.map(i=><PremiumRow item={i} key={i.id}/>)}

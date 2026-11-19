@@ -132,6 +132,30 @@ async function main() {
       assert.ok(!s.missing.some((m) => /Wording/i.test(m)), JSON.stringify(s.missing));
       assert.deepEqual(s.missing, []);
     });
+    // TE #560 N1: a premium filed under no one on a policy two people share is one payment. It is counted once, under the
+    // policy's own holder (or its first-linked member when the holder is not a member), and named as counted there for the other.
+    const joint = await household("Test household joint life CA$");
+    const ana = await joint.person("Ana Duarte", "self"), ben = await joint.person("Ben Duarte", "spouse"), lea = await joint.person("Lea Duarte", "child");
+    const jl = await joint.policy(ben.id, [ana.id, ben.id], "Joint Life Cover", "JL-88310", "Life", "Lives assured: Ana Duarte, Ben Duarte\nPremium CA$50.00 monthly");
+    await query("INSERT INTO premium_records(account_id,policy_id,family_member_id,amount,currency,frequency,source_document_id,source_page,policy_number,product_name) VALUES($1,$2,NULL,50,'CAD','monthly',$2,1,'JL-88310','Joint Life Cover')", [joint.id, jl]);
+    // A household policy whose holder (the account owner) is not one of its members: counted under its first-linked member.
+    const ho = await joint.policy(ana.id, [lea.id, ben.id], "Kids and Dad Dental", "KD-11402", "Health", "Members: Lea Duarte, Ben Duarte\nPremium CA$20.00 monthly");
+    await query("INSERT INTO premium_records(account_id,policy_id,family_member_id,amount,currency,frequency,source_document_id,source_page,policy_number,product_name) VALUES($1,$2,NULL,20,'CAD','monthly',$2,1,'KD-11402','Kids and Dad Dental')", [joint.id, ho]);
+    await test("a shared premium filed under no one is counted once, under the policy's holder (CA$)", async () => {
+      const b = await summarisePremiums(joint.id, ben), a = await summarisePremiums(joint.id, ana);
+      assert.equal(Math.round(b.annual * 100) / 100, 600, "Ben holds Joint Life Cover: CA$50 a month counted in his total, and nothing of the dental plan");
+      assert.equal(a.annual, 0, "never again in Ana's total");
+      assert.deepEqual(a.countedElsewhere, [{ name: "Joint Life Cover", owner: "Ben Duarte" }]);
+      assert.deepEqual(a.missing, [], "not called missing either");
+      assert.match(a.note ?? "", /Joint Life Cover is on file under Ben Duarte, so it is counted in Ben Duarte’s total, not again here/);
+    });
+    await test("a shared premium whose holder is not a member is counted under its first-linked member only (CA$)", async () => {
+      const l = await summarisePremiums(joint.id, lea), b = await summarisePremiums(joint.id, ben);
+      assert.equal(Math.round(l.annual * 100) / 100, 240, "Lea was linked first: CA$20 a month in her total");
+      assert.deepEqual(b.countedElsewhere, [{ name: "Kids and Dad Dental", owner: "Lea Duarte" }]);
+      const people = [l, b, await summarisePremiums(joint.id, ana)];
+      assert.equal(Math.round(people.reduce((t, x) => t + x.annual, 0) * 100) / 100, 840, "the household's people add up to each premium once");
+    });
     await test("the chat answer for the child says whose policy pays, never that no premium is printed", async () => {
       const a = await premiumAnswer({ accountId: gb.id, people: [son], question: "How much do we pay for Tobi's insurance?" });
       assert.match(a.summary, /Tobi Okafor has no separate premium\. Family Health Plan is paid under Amara Okafor’s policy/);

@@ -25,6 +25,8 @@ export type PremiumRecordRow = { id: string; policy_id: string | null; family_me
   amount: string; currency: string | null; frequency: string | null; payment_date: string | null; period_start: string | null; period_end?: string | null; created_at: string; notes?: string | null;
   /** The document_role of the current document the record was read from (null: unknown, or that document is no longer current). */
   source_role?: string | null;
+  /** For a premium filed under no one on a shared policy: the one member it is counted under (TE #560 N1). */
+  payer_id?: string | null; payer_name?: string | null;
   /** The cover period its own document prints (policies.effective_date and renewal_or_expiry_date), for a record that
    * prints no period of its own: a trip's premium read from its schedule (5 Nov). */
   document_start?: string | null; document_end?: string | null };
@@ -466,8 +468,16 @@ function filedPremiums(accountId: string): Promise<FiledPremium[]> {
 export async function summarisePremiums(accountId: string, member: ClaimPerson, table?: { covers: TablePremiumCover[]; today: number }, memo?: PremiumSummaryMemo): Promise<PremiumSummary> {
   const r = await query<PremiumRecordRow>(
     `SELECT pr.id,pr.policy_id,pr.family_member_id,pr.insurer,pr.product_name,pr.policy_number,pr.amount::text,pr.currency,pr.frequency,pr.payment_date::text,pr.period_start::text,pr.period_end::text,pr.created_at::text,pr.notes,sd.document_role AS source_role,
-            pd.effective_date::text AS document_start,pd.renewal_or_expiry_date::text AS document_end
-       FROM premium_records pr LEFT JOIN policies sd ON sd.id=pr.source_document_id AND sd.account_id=pr.account_id AND ${activePredicate("sd")}
+            pd.effective_date::text AS document_start,pd.renewal_or_expiry_date::text AS document_end,
+            payer.id::text AS payer_id,payer.display_name AS payer_name
+       FROM premium_records pr
+       -- A premium filed under no one but a policy several people share is one payment: it is counted once, under the
+       -- policy's own holder when they are a member, else its first-linked member, never in full under each (TE #560 N1).
+       LEFT JOIN LATERAL (SELECT fm2.id,fm2.display_name FROM policy_members pm2 JOIN family_members fm2 ON fm2.id=pm2.family_member_id AND fm2.account_id=pm2.account_id AND ${activePredicate("fm2")}
+                LEFT JOIN policies pp ON pp.id=pm2.policy_id AND pp.account_id=pm2.account_id
+               WHERE pr.family_member_id IS NULL AND pm2.policy_id=pr.policy_id AND pm2.account_id=pr.account_id
+               ORDER BY (pm2.family_member_id=pp.family_member_id) DESC NULLS LAST,pm2.created_at,pm2.family_member_id LIMIT 1) payer ON true
+       LEFT JOIN policies sd ON sd.id=pr.source_document_id AND sd.account_id=pr.account_id AND ${activePredicate("sd")}
        LEFT JOIN policies pd ON pd.id=coalesce(pr.source_document_id,pr.policy_id) AND pd.account_id=pr.account_id AND ${activePredicate("pd")}
       WHERE pr.account_id=$1 AND (pr.family_member_id=$2 OR (pr.family_member_id IS NULL AND pr.policy_id IS NOT NULL AND EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=pr.policy_id AND pm.account_id=pr.account_id AND pm.family_member_id=$2)))
       ORDER BY COALESCE(pr.payment_date,pr.period_start,pr.created_at::date) DESC,pr.created_at DESC`, [accountId, member.id]);
@@ -484,7 +494,10 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
       lapsedOrEnded: ["lapsed"].includes(printedStatus(pages.rows.filter((p) => p.policy_id === d.id).map((p) => ({ page: p.page_number, text: p.text })), d.expiry, todayIso).state) }]));
     ({ items: fromTable, leftOut: tableLeftOut } = tablePremiumItems(table.covers.filter((c) => documents.has(c.source.documentId)), r.rows, member, table.today, documents));
   }
-  const all = [...summariseRecords(r.rows), ...fromTable], items = all.filter((i) => !i.oneOff && !i.shortPeriod && !i.unclearFrequency);
+  // A shared premium counted under another member is named as counted there, never added again here.
+  const sharedElsewhere = r.rows.filter((row) => !row.family_member_id && row.payer_id && row.payer_id !== member.id);
+  const own = r.rows.filter((row) => !sharedElsewhere.includes(row));
+  const all = [...summariseRecords(own), ...fromTable], items = all.filter((i) => !i.oneOff && !i.shortPeriod && !i.unclearFrequency);
   const oneOff = all.filter((i) => i.oneOff), shortPeriod = all.filter((i) => i.shortPeriod), unclear = all.filter((i) => i.unclearFrequency);
   const annual = items.reduce((sum, item) => sum + item.annual, 0);
   const cashAnnual = items.some((i) => i.cashAnnual != null) ? items.reduce((sum, i) => sum + (i.cashAnnual ?? i.annual), 0) : null;
@@ -507,6 +520,7 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
       // has no premium of its own to print: it is never said to be missing one.
       if (c.documents.length && c.documents.every((d) => WORDING_ROLES.has(d.document_role ?? ""))) return false;
       const numbers = new Set(c.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean));
+      if (sharedElsewhere.some((row) => row.policy_id && ids.has(row.policy_id))) return false;
       return !all.some((i) => (i.policy_id && ids.has(i.policy_id)) || (normalizedIdentifier(i.policy_number) && numbers.has(normalizedIdentifier(i.policy_number))));
     });
     // A policy whose premium is filed under another family member (a family plan's one premium, read from the
@@ -530,6 +544,7 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     missing = unpaid.filter((c) => !paidElsewhere.has(c)).map((c) => c.name);
     missingPolicies = unpaid.filter((c) => !paidElsewhere.has(c)).flatMap((c) => c.documents.map((d) => ({ policy_number: d.policy_number, product_name: d.product_name ?? c.name, insurer: d.insurer })));
   } catch { missing = []; }
+  for (const row of sharedElsewhere) countedElsewhere.push({ name: row.product_name?.trim() || (row.insurer ? row.insurer + " policy" : "a shared policy"), owner: row.payer_name ?? "another family member" });
   missing = [...new Set(missing)];
   // A table policy the inventory does not list (an unconfirmed schedule) with no premium read is named too, never silent;
   // when the inventory could not be read, every such policy is named rather than none (Critic R300 L2).
