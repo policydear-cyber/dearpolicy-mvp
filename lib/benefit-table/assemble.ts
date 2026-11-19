@@ -391,6 +391,11 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
   if (b.pays === "value") return { kind: "value", amount: b.value!, currency: b.currency, asOf: b.asOf };
   // A child's share read two ways (check.ts foldChildColumns): no amount for anyone.
   if (b.pays === "percent" && b.childLimitConflict) return { kind: "none", why: "the row's share for an insured child was read two ways: see the document" };
+  // A figure the page-image check has not confirmed (guards.ts applyGuards: its row is left in words): says so, never an
+  // explanation of how the row pays (Live site tester, 19 Nov: every row of a reading still being checked said "paid as a
+  // share printed in the row's words").
+  const withheld = (b as { figureCheck?: { status: "confirm" | "checking"; field: string }[] }).figureCheck?.find((n) => n.field === "value");
+  if (withheld) return { kind: "none", why: withheld.status === "checking" ? "still being checked against the document's page" : "not confirmed against the document's page: please check this figure" };
   if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row"
     : b.pays === "words" && b.paymentSchedule ? "payment schedule, not a cover amount"
     : b.pays === "words" && /\d\s*%/.test(b.source.excerpt) ? "paid as a share printed in the row's words, with no amount worked out: see the document" : "no figure printed" };
