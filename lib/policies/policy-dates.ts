@@ -95,7 +95,8 @@ export function printedProductName(contract: Pick<DatedContract, "documents">, c
   if (own.length === 1) return own[0];
   if (own.length > 1) return null;
   for (const id of ids) {
-    const products = [...new Set(base.filter((c) => c.documentId === id).map((c) => c.product!.trim()))];
+    // A cover printing another policy's number is that policy's, never this one's (Critic MED-10b).
+    const products = [...new Set(base.filter((c) => c.documentId === id && (!numbers.size || !normalizedIdentifier(c.policyNumber) || numbers.has(normalizedIdentifier(c.policyNumber)))).map((c) => c.product!.trim()))];
     if (products.length === 1) return products[0];
     if (products.length > 1) return null;
   }

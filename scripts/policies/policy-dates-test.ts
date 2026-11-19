@@ -105,6 +105,7 @@ test("a policy with no stored name takes its own printed product, never another 
   assert.equal(printedProductName(contract("b", [doc("s1", { policy_number: "HT-200" })]), stmt), "Heron Term");
   assert.equal(printedProductName(contract("c", [doc("s1")]), stmt), null, "two products and no number of its own: keep the stored name");
   assert.equal(printedProductName(contract("d", [doc("d1")]), [cov("d1", "Kingfisher Whole Life", null)]), "Kingfisher Whole Life");
+  assert.equal(printedProductName(contract("e", [doc("s2", { policy_number: "KF-100" })]), [cov("s2", "Heron Term", "HT-200")]), null, "the only read cover is another policy's (Critic MED-10b)");
 });
 
 test("a group number counts only for a record naming the person; a short number alone needs both insurers (Critic L2, L3)", () => {
