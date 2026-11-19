@@ -235,7 +235,7 @@ export default function AppShell({ children, signedIn = true }: { children: Reac
           </div>
         </div>
         {/* Household pages only; Account settings has its own currency section. */}
-        {householdPage && pathname !== "/household" && <HouseholdCurrencyPrompt key={pathname} />}
+        {!noNav && !reviewerArea && !operatorArea && pathname !== "/household" && <HouseholdCurrencyPrompt key={pathname} />}
         {children}
         {!noNav && <p className="trust-line mobile-privacy" data-testid="mobile-privacy"><Icon name="lock" />{hosted ? "Private to your household." : "Stays on this computer."}</p>}
       </main>
