@@ -18,11 +18,11 @@ import { crossCheckPages, suspectPages, uncheckedPagesNote } from "@/lib/documen
 import { chunkPages } from "@/lib/documents/chunk";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { buildCodeOnlyExtraction, extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
-import { REFERENCE_ROLES, deterministicDocumentRole, documentAuthority, looksLikeActualPersonName, printedDocumentRole, roleOnReread, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
+import { REFERENCE_ROLES, deterministicDocumentRole, formNameExact, documentAuthority, looksLikeActualPersonName, printedDocumentRole, roleOnReread, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
 import { factCheckExtraction, personPrinted } from "@/lib/documents/fact-check";
 import { PolicyExtractionSchema } from "@/lib/ai/extract-policy";
 import { normalizeCoverageCategory } from "@/lib/insurance";
-import { familyMembersForAccount, findFamilyMatchWithKind, householdNameMatches, linkRelatedReferenceDocuments, preferHouseholdMatch, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
+import { familyMembersForAccount, findFamilyMatchWithKind, householdNameMatches, onlyTheirWords, linkRelatedReferenceDocuments, preferHouseholdMatch, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
 import { runPolicyQuarantineGate } from "@/lib/policies/quarantine/store";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
@@ -211,8 +211,9 @@ function evidenceMatches(hay: string, needle: string) {
   return hits / unique.length >= 0.7;
 }
 
-function verifyExtractionEvidence(extraction: PolicyExtraction, pages: { pageNumber: number; text: string }[]) {
+export function verifyExtractionEvidence(extraction: PolicyExtraction, pages: { pageNumber: number; text: string }[]) {
   const pageMap = new Map(pages.map((p) => [p.pageNumber, normalizeEvidence(p.text)]));
+  const rawPages = new Map(pages.map((p) => [p.pageNumber, p.text]));
   return {
     ...extraction,
     insuredPeople: extraction.insuredPeople.map((person) => ({
@@ -221,7 +222,10 @@ function verifyExtractionEvidence(extraction: PolicyExtraction, pages: { pageNum
         const hay = coverage.sourcePage ? pageMap.get(coverage.sourcePage) ?? "" : "";
         const needle = coverage.evidenceText ? normalizeEvidence(coverage.evidenceText) : "";
         const nameNeedle = normalizeEvidence(person.name);
-        const evidenceVerified = Boolean(hay && needle.length >= 3 && evidenceMatches(hay, coverage.evidenceText ?? "") && hay.includes(nameNeedle));
+        const evidenceVerified = Boolean(hay && needle.length >= 3 && evidenceMatches(hay, coverage.evidenceText ?? "")
+          // The whole name, or exactly the name a form prints in its own fields ("Family Name: <surname> <tab> Given Name:
+          // <given names>"): the same words, never a part of a longer printed name or words from other fields or people (TE #561).
+          && (hay.includes(nameNeedle) || formNameExact(rawPages.get(coverage.sourcePage!) ?? "", person.name)));
         return { ...coverage, evidenceVerified };
       }),
     })),
@@ -841,7 +845,10 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // document to a profile they chose, and it names exactly ONE insured
       // person: that choice is the link (flagged for review below). With
       // several named people nothing is guessed.
-      if (!match && args.linkUploadMember && extraction.personalCoverageConfirmed && extraction.insuredPeople.length === 1 && !dismissed.has(nameKey(person.name))) {
+      // Never when the printed name may be someone else in the household: every word of it is one of another member's
+      // own (a given name alone, uploaded to one member's profile, when another member carries that given name; TE #561).
+      if (!match && args.linkUploadMember && extraction.personalCoverageConfirmed && extraction.insuredPeople.length === 1 && !dismissed.has(nameKey(person.name))
+        && !family.some((member) => member.id !== args.familyMemberId && onlyTheirWords(person.name, member))) {
         match = family.find((member) => member.id === args.familyMemberId) ?? null;
         if (match) { link = { source: "upload_hint", confidence: 0.70 }; uploadProfileLinks.push(`${person.name} (linked to ${match.display_name}, the profile it was uploaded to)`); }
       }

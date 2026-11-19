@@ -80,12 +80,80 @@ const PLACEHOLDER_PERSON = /\b(?:your\s+name|name\s+here|full\s+name|first\s+nam
 /** Every title a summary prints about itself. Lower-case text. */
 const SUMMARY_TITLE = /\b(?:insurance|policy|product|cover|travel|plan)\s+summary\b|^\s*summary of (?:cover|benefits|your (?:cover|policy|plan))\b|^\s*benefits at a glance\b/m;
 
-/** The policy's own number (not a group or master scheme's) and a labelled person's name ("Insured person: Ana Rivera").
- * Lower-case text. */
+/** The policy's own number (not a group or master scheme's) and a labelled person's name ("Insured person: Ana Rivera"),
+ * on a page that is not a specimen. Lower-case text. */
 function personalParticulars(t: string) {
   return /(?<!(?:group|master)\s)\bpolicy\s+(?:number|no\.?)\s*[:#-]?\s*[a-z0-9-]*\d[a-z0-9-]{3,}/.test(t)
-    && new RegExp(String.raw`\b(?:policy ?holder|policy owner|insured person|life assured|your name|name of (?:the )?insured)\b[^\n:]{0,20}:[ \t]*` + PERSON_VALUE).test(t);
+    && (new RegExp(String.raw`\b(?:` + ROLE_LABEL + String.raw`)\b[^\n:]{0,20}:[ \t]*(?!(?:` + ROLE_LABEL + "|" + FORM_FIELD + String.raw`)\b[^\n:]{0,20}:)` + PERSON_VALUE).test(t)
+      || formNamed(t))
+    // A specimen or sample prints a made-up person (Critic #561 MED-2).
+    && !specimenPage(t);
 }
+
+/** The person's role before their name, as schedules print it (unchanged since before #561). */
+const ROLE_LABEL = String.raw`policy ?holder|policy owner|insured person|life assured|your name|name of (?:the )?insured`;
+/** Other fields a form prints beside a name: a blank name field is followed by the next label, never by a name ("Family
+ * Name: Given Name:"), so a value that is itself a label is no one (Critic #561 MED-1). */
+const FORM_FIELD = String.raw`date of birth|nric|fin|passport|nationality|gender|sex|address|email|e-mail|mobile|phone|contact|occupation|relationship|policy|family name|surname|last name|given names?|first name|full name`;
+
+/** A person named on an application or quote form, for any insurer (#561): a Singlife travel "Quote and Summary of Cover"
+ * printed its traveller only as "Family Name: <surname> <tab> Given Name: <given names>", so it was taken for generic
+ * wording and Home showed no travel cover. Counts, read cell by cell (cells split by tabs or wide gaps):
+ *  - a whole name after a whole-name label ("Full name", "Traveller's name", "Name of applicant"): two words or more;
+ *  - a family name AND a given name, both filled in, on ONE line (a lone given name may be another household member's).
+ * A value is a name only when it is the whole cell, holds no colon (a blank field runs into the next label), is no
+ * instruction ("please print", "must match") and no stand-in ("John Doe", "sample"). Lower-case text; closed lists. */
+function formNamed(t: string): boolean {
+  return formNames(t).length > 0;
+}
+
+/** The names a form prints, line by line (formNamed's rule): each whole name, and each line's family name joined to its
+ * given name. Lower-case. One family and one given name per line, else that line's parts name no one. */
+export function formNames(text: string): string[] {
+  const out: string[] = [];
+  for (const line of text.toLowerCase().split("\n")) {
+    const cells = line.split(/\t+| {2,}/).map((c) => c.trim()).filter(Boolean);
+    const family: string[] = [], given: string[] = [];
+    for (let i = 0; i < cells.length; i++) {
+      const m = /^(.*?)\s*:\s*(.*)$/.exec(cells[i]);
+      if (!m) continue;
+      // A note on the label ("Full Name (as in passport)") is not part of it.
+      const label = m[1].replace(/\s*\([^)]*\)$/, ""), value = m[2] || (cells[i + 1] && !cells[i + 1].includes(":") ? cells[i + 1] : "");
+      if (!FORM_NAME_VALUE.test(value) || STAND_IN.test(value)) continue;
+      if (WHOLE_NAME_LABEL.test(label) && value.split(/[\s,]+/).filter(Boolean).length >= 2) out.push(value);
+      if (FAMILY_LABEL.test(label)) family.push(value);
+      if (GIVEN_LABEL.test(label)) given.push(value);
+    }
+    if (family.length === 1 && given.length === 1) out.push(`${given[0]} ${family[0]}`);
+  }
+  return out;
+}
+
+/** Is this person's name printed in ONE of the form's names (formNames): every word of it in that one name, in any order.
+ * A household often keeps a shorter name than the form prints (the given name and surname only, for "Family Name:
+ * <surname>  Given Name: <given names>"), so a part of one printed name counts, as it does on main; words gathered from other fields or other people on
+ * the line never do (a surname field, a given-name field and another person's field never make a name from words of each; TE #561).
+ * Who the person is stays the household matcher's decision (lib/policies/linking). */
+export function formNamePrinted(text: string, name: string): boolean {
+  const wanted = formWords(name);
+  return wanted.length > 0 && formNames(text).some((n) => { const w = formWords(n); return wanted.every((x) => w.includes(x)); });
+}
+/** Is this person's name EXACTLY one of the form's names (formNames): the same words, in any order (surname and given
+ * names from one line's two fields). What verifies a figure for a person: a part of a longer printed name never
+ * does (two of three printed words may be another person or a short form; words alone cannot tell, so no figure; TE #561 W1). */
+export function formNameExact(text: string, name: string): boolean {
+  const wanted = formWords(name).sort().join(" ");
+  return !!wanted && formNames(text).some((n) => formWords(n).sort().join(" ") === wanted);
+}
+/** A name's words, without the words that only join a name ("bin", "binte", "s/o"). */
+const formWords = (n: string) => n.normalize("NFKC").toLowerCase().replace(/(?<![\p{L}])(?:[sd]\s*\/\s*o|a\s*\/\s*[lp])(?![\p{L}])/gu, " ")
+  .split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w && !["bin", "binte", "binti", "bte", "bt"].includes(w));
+
+const WHOLE_NAME_LABEL = /^(?:full name|life assured|insured person|policy ?holder|policy owner|(?:insured|traveller|traveler|applicant|proposer|policy ?holder)(?:'s)? (?:full )?name|name of (?:the )?(?:insured|policy ?holder|policy owner|proposer|applicant|traveller|traveler|life assured))$/;
+const FAMILY_LABEL = /^(?:family name|surname|last name)$/;
+const GIVEN_LABEL = /^(?:given names?|first names?)$/;
+const FORM_NAME_VALUE = /^(?!(?:any|the|a|an|all|each|every|eligible|means|refers|see|as|please|must|should|enter|write|print|block|same|refer|to|in|on|your|n\/?a|nil)\b)[a-z][a-z.'/-]*(?:[ ,]+[a-z][a-z.'/-]*)*$/;
+const STAND_IN = /\b(?:john doe|jane doe|joe bloggs|name here|sample|specimen|example|test|dummy|xxx+|not applicable|insured|traveller|traveler|applicant|policy ?holder|proposer)\b/;
 
 /** A printed person's name after a label ("Life Assured: Lim Wei Jie"), not a definition ("any eligible employee",
  * "the person named in Part 1"). Lower-case text. */
