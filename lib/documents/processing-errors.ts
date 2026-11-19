@@ -19,6 +19,9 @@ export const PDF_PASSWORD_INCORRECT_MESSAGE =
 /** Read again pressed on a locked PDF without its password (app/api/policies/reprocess): refused before anything changes. */
 export const PDF_PASSWORD_NEEDED_MESSAGE =
   "This PDF has a password. Enter it to read the document again. Until then, it stays as it is.";
+/** Read again with a password that doesn't open the PDF: refused before anything changes, so the reading stays. */
+export const PDF_PASSWORD_DIDNT_OPEN_MESSAGE =
+  "That password didn’t open the PDF. Check it (passwords are case-sensitive) and try again. Nothing has changed.";
 
 /** V1.1: a document that cannot be read tells the household, in one
  * sentence, WHAT is unavailable -- never the model, provider, retry or

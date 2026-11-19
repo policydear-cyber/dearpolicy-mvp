@@ -8,8 +8,8 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { enqueuePolicyProcessing,livePolicyJob,makePolicyJobDueNow,restartWaitingPolicyJob,POLICY_PROCESSING_JOB_TYPE,UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
 import { appendJobAudit, recordJobEvent, recoverExpiredLeases, WITHOUT_PASSWORD_SQL, type BackgroundJobRow } from "@/lib/jobs/queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
-import { pdfNeedsOpenPassword } from "@/lib/documents/pdf";
-import { PDF_PASSWORD_NEEDED_MESSAGE } from "@/lib/documents/processing-errors";
+import { pdfPasswordProblem } from "@/lib/documents/pdf";
+import { PDF_PASSWORD_DIDNT_OPEN_MESSAGE, PDF_PASSWORD_NEEDED_MESSAGE } from "@/lib/documents/processing-errors";
 import { readPolicyFile } from "@/lib/storage";
 import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
 import { runAfterResponse } from "@/lib/http/background";
@@ -69,15 +69,14 @@ export async function POST(request: NextRequest) {
 
     if (!policy) return NextResponse.json({ error: "Document not found" }, { status: 404 });
 
-    // A locked PDF is read only with its password, which is never stored. Read again without it would fail and take the
-    // document's working reading with it (19 Nov: a group certificate's 310 rows), so it is refused here, before anything
-    // changes, and the household is asked for the password. A file that can't be fetched just now goes ahead as before.
-    if (!body.pdfPassword) {
-      const bytes = await readPolicyFile(policy.storage_key).catch(() => null);
-      if (bytes && await pdfNeedsOpenPassword(bytes)) {
-        return NextResponse.json({ error: PDF_PASSWORD_NEEDED_MESSAGE, reasonCode: "PDF_PASSWORD_NEEDED" }, { status: 409 });
-      }
-    }
+    // A locked PDF is read only with its password, which is never stored. Read again without it, or with a mistyped one,
+    // would fail and take the document's working reading with it (19 Nov: a group certificate's 310 rows), so it is
+    // refused here, before anything changes, and the household is asked for the password (again). A file that can't be
+    // fetched just now goes ahead as before.
+    const bytes = await readPolicyFile(policy.storage_key).catch(() => null);
+    const locked = bytes ? await pdfPasswordProblem(bytes, body.pdfPassword || undefined) : null;
+    if (locked === "needed") return NextResponse.json({ error: PDF_PASSWORD_NEEDED_MESSAGE, reasonCode: "PDF_PASSWORD_NEEDED" }, { status: 409 });
+    if (locked === "incorrect") return NextResponse.json({ error: PDF_PASSWORD_DIDNT_OPEN_MESSAGE, reasonCode: "PDF_PASSWORD_INCORRECT" }, { status: 409 });
 
     // The household's plan: an unreadable document doesn't count, so reading it again could take it past the limit.
     try {
