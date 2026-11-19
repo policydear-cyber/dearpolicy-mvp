@@ -26,6 +26,7 @@
  * `needs_document` with no amount, exactly like an unresolved death-benefit
  * or CI coverage does.
  */
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { canonicalProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
@@ -328,7 +329,7 @@ export function resolveDisabilityEvidence(coverages: OwnedCoverage[], rows: Disa
           ...("deferredPeriodMonths" in rule ? { deferredPeriodMonths: rule.deferredPeriodMonths } : {}),
           ...("maximumBenefitMonths" in rule ? { maximumBenefitMonths: rule.maximumBenefitMonths } : {}),
           citation: {
-            chunkId: `page:${first.policy_id}:${rule.page}`, policyId: first.policy_id, policyName: first.product_name ?? first.original_filename,
+            chunkId: `page:${first.policy_id}:${rule.page}`, policyId: first.policy_id, policyName: first.product_name ?? documentCardTitle({ product_name: null, original_filename: first.original_filename, insurer: first.insurer, document_role: first.document_role, policy_number: first.group_policy_number }),
             insurer: first.insurer ?? undefined, pageStart: rule.page, pageEnd: rule.pageEnd, documentRole: first.document_role,
             personalEvidence: false, evidenceLabel: `${rule.label} wording`,
           },
