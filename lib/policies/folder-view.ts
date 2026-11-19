@@ -18,6 +18,8 @@ export type FolderDoc = {
   insurer: string | null;
   policy_number: string | null;
   linked_people: { id: string; source?: string }[];
+  /** What the reading found the document to be ("personal_schedule", "policy_wording", ...), when the page has it. */
+  document_role?: string | null;
 };
 
 /** The slots on "Create a policy", in the order asked, with the household's words for each. */
@@ -97,6 +99,46 @@ export function folderSuggestions(docs: FolderDoc[], folders: FolderView[]): Fol
     const ids = group.map((d) => d.id);
     if (folders.some((f) => ids.every((id) => f.documents.some((d) => d.policyId === id)))) continue;
     out.push({ policyNumber: group[0].policy_number!.trim(), policyIds: ids, personIds: shared });
+  }
+  return out;
+}
+
+/** The roles that are a policy's own schedule or certificate: the document a policy starts from. */
+const SCHEDULE_ROLES = new Set(["personal_schedule", "schedule", "certificate"]);
+/** The slot a document goes in by what it was read as; a guide only, as when the household picks it. */
+export function slotForRole(role: string | null | undefined): FolderSlot {
+  if (role && SCHEDULE_ROLES.has(role)) return "schedule";
+  if (role === "policy_wording") return "wording";
+  if (role === "rider" || role === "endorsement") return "rider";
+  return "other";
+}
+const ownPeople = (d: FolderDoc) => new Set(d.linked_people.filter((p) => p.source !== "scheme_reference_match").map((p) => p.id));
+
+export type PolicyStarter = { scheduleId: string; documents: { policyId: string; slot: FolderSlot }[]; personIds: string[] };
+/** Existing documents offered as ready-made policies, so a household with documents on file sees its folders in a tap each:
+ * every schedule or certificate in no folder yet starts one, for the people it is linked to (by the household or the reading,
+ * not by a plan match), with any other document in no folder that prints the same policy number, from the same insurer, for
+ * those same people. Nothing is made until the household taps; a document linked to nobody starts nothing. */
+export function policyStarters(docs: FolderDoc[], folders: FolderView[]): PolicyStarter[] {
+  const filed = new Set(folders.flatMap((f) => f.documents.map((d) => d.policyId)));
+  const free = docs.filter((d) => !filed.has(d.id));
+  const out: PolicyStarter[] = [], taken = new Set<string>();
+  for (const schedule of free) {
+    if (!schedule.document_role || !SCHEDULE_ROLES.has(schedule.document_role) || taken.has(schedule.id)) continue;
+    let people = [...ownPeople(schedule)];
+    if (!people.length) continue;
+    const key = numberKey(schedule.policy_number), insurer = insurerKey(schedule.insurer);
+    const companions = key.length < 5 ? [] : free.filter((d) => d.id !== schedule.id && !taken.has(d.id) && numberKey(d.policy_number) === key
+      && (!insurer || !insurerKey(d.insurer) || insurerKey(d.insurer) === insurer) && people.some((id) => ownPeople(d).has(id)));
+    // A companion joins only while some person is every document's own, so a folder never puts two people's documents together.
+    const joined: FolderDoc[] = [];
+    for (const c of companions) {
+      const kept = people.filter((id) => ownPeople(c).has(id));
+      if (kept.length) { people = kept; joined.push(c); }
+    }
+    const group = [schedule, ...joined];
+    group.forEach((d) => taken.add(d.id));
+    out.push({ scheduleId: schedule.id, personIds: people, documents: group.map((d) => ({ policyId: d.id, slot: d.id === schedule.id ? "schedule" : slotForRole(d.document_role) })) });
   }
   return out;
 }

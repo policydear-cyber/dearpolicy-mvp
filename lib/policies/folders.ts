@@ -168,6 +168,7 @@ export async function updateFolder(accountId: string, folderId: string, change: 
   name?: string | null; complete?: boolean; people?: string[]; add?: FolderDocumentInput[]; remove?: string[];
 }): Promise<void> {
   if (!await foldersReady()) throw new FoldersNotReadyError("Policy folders are not switched on yet.");
+  const autoOn = await autoFoldersReady();
   await inTransaction(async (tx) => {
     await lockFolder(tx, accountId, folderId);
     const add = [...new Map((change.add ?? []).map((d) => [d.policyId, d])).values()], remove = unique(change.remove ?? []);
@@ -180,7 +181,12 @@ export async function updateFolder(accountId: string, folderId: string, change: 
       for (const p of people) await tx.query("INSERT INTO policy_folder_people(folder_id, account_id, family_member_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING", [folderId, accountId, p]);
     }
     await addDocuments(tx, accountId, folderId, add);
-    if (remove.length) await tx.query("DELETE FROM policy_folder_documents WHERE folder_id=$1 AND account_id=$2 AND policy_id = ANY($3::uuid[])", [folderId, accountId, remove]);
+    if (remove.length) {
+      await tx.query("DELETE FROM policy_folder_documents WHERE folder_id=$1 AND account_id=$2 AND policy_id = ANY($3::uuid[])", [folderId, accountId, remove]);
+      // A document the household took out is never put into a folder again on its own.
+      if (autoOn) await tx.query(`INSERT INTO policy_folder_auto(policy_id, account_id) SELECT p.id, p.account_id FROM policies p
+        WHERE p.account_id=$1 AND p.id = ANY($2::uuid[]) ON CONFLICT DO NOTHING`, [accountId, remove]);
+    }
     const documentsChanged = add.length > 0 || remove.length > 0;
     const complete: boolean | undefined = change.complete ?? (documentsChanged ? false : undefined);
     if (complete && await documentCount(tx, accountId, folderId) === 0) throw new FolderInputError("Add at least one document first.");
@@ -197,9 +203,60 @@ export async function updateFolder(accountId: string, folderId: string, change: 
   });
 }
 
-/** Deletes the folder only: its documents stay in the library. */
+/** Deletes the folder only: its documents stay in the library, and none of them is made into a folder again on its own. */
 export async function deleteFolder(accountId: string, folderId: string): Promise<void> {
   if (!await foldersReady()) throw new FoldersNotReadyError("Policy folders are not switched on yet.");
-  const r = await query("DELETE FROM policy_folders WHERE id=$1 AND account_id=$2", [folderId, accountId]);
-  if (!r.rowCount) throw new FolderInputError("That policy is not in this household.");
+  const autoOn = await autoFoldersReady();
+  await inTransaction(async (tx) => {
+    if (autoOn) await tx.query(`INSERT INTO policy_folder_auto(policy_id, account_id)
+      SELECT fd.policy_id, fd.account_id FROM policy_folder_documents fd WHERE fd.folder_id=$1 AND fd.account_id=$2 ON CONFLICT DO NOTHING`, [folderId, accountId]);
+    const r = await tx.query("DELETE FROM policy_folders WHERE id=$1 AND account_id=$2", [folderId, accountId]);
+    if (!r.rowCount) throw new FolderInputError("That policy is not in this household.");
+  });
+}
+
+let autoReady: Promise<boolean> | null = null;
+/** Whether sql/policy-folders-auto.sql is applied: until it is, no folder is made for the household. */
+export function autoFoldersReady(): Promise<boolean> {
+  autoReady ??= query<{ t: string | null }>("SELECT to_regclass('public.policy_folder_auto')::text AS t")
+    .then((r) => !!r.rows[0]?.t).catch(() => false)
+    .then((ok) => { if (!ok) autoReady = null; return ok; });
+  return autoReady;
+}
+export function resetAutoFoldersReady() { autoReady = null; }
+
+/** The documents that have had a folder made, or left one: never made into a folder again on their own. */
+export async function handledDocuments(accountId: string): Promise<string[]> {
+  if (!await foldersReady() || !await autoFoldersReady()) return [];
+  const r = await query<{ policy_id: string }>("SELECT policy_id FROM policy_folder_auto WHERE account_id=$1", [accountId]);
+  return r.rows.map((x) => String(x.policy_id));
+}
+
+export type AutoFolderInput = { scheduleId: string; people: string[]; documents: FolderDocumentInput[] };
+/** Makes the folders the page worked out from the household's documents (lib/policies/folder-view.ts policyStarters), each
+ * not complete, so the household checks and confirms it. A schedule that already had its folder made, or left one, is
+ * skipped, so two open pages make one folder and a deleted folder is never made again. Returns how many were made. */
+export async function makeAutoFolders(accountId: string, starters: AutoFolderInput[]): Promise<number> {
+  if (!await foldersReady() || !await autoFoldersReady()) throw new FoldersNotReadyError("Policy folders are not switched on yet.");
+  let made = 0;
+  for (const s of starters) {
+    const people = unique(s.people), docs = [...new Map(s.documents.map((d) => [d.policyId, d])).values()];
+    if (!people.length || !docs.some((d) => d.policyId === s.scheduleId)) throw new FolderInputError("A policy needs its schedule and who it is for.");
+    made += await inTransaction(async (tx) => {
+      await checkPeople(tx, accountId, people);
+      await checkDocuments(tx, accountId, docs.map((d) => d.policyId));
+      const first = await tx.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING policy_id", [s.scheduleId, accountId]);
+      if (!first.rows.length) return 0;
+      // The schedule is in no folder now (a folder made by hand since the page loaded keeps it).
+      const filed = await tx.query("SELECT 1 FROM policy_folder_documents WHERE account_id=$1 AND policy_id=$2 LIMIT 1", [accountId, s.scheduleId]);
+      if (filed.rows.length) return 0;
+      for (const d of docs) await tx.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [d.policyId, accountId]);
+      const created = await tx.query("INSERT INTO policy_folders(account_id) VALUES($1) RETURNING id", [accountId]);
+      const id = String(created.rows[0].id);
+      for (const p of people) await tx.query("INSERT INTO policy_folder_people(folder_id, account_id, family_member_id) VALUES($1,$2,$3)", [id, accountId, p]);
+      await addDocuments(tx, accountId, id, docs);
+      return 1;
+    });
+  }
+  return made;
 }

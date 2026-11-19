@@ -4,7 +4,7 @@
  * number or documents already together. Made-up documents; no database.
  *   npm run -s policies:folder-view-test */
 import assert from "node:assert/strict";
-import { folderSuggestions, folderTitle, type FolderDoc, type FolderView } from "@/lib/policies/folder-view";
+import { folderSuggestions, folderTitle, policyStarters, slotForRole, type FolderDoc, type FolderView } from "@/lib/policies/folder-view";
 
 let passed = 0;
 const failures: string[] = [];
@@ -85,6 +85,45 @@ test("S6 already together in one folder: not suggested again; in two folders: st
 });
 test("S7 a document linked to nobody: nothing suggested", () => {
   assert.deepEqual(folderSuggestions([d("a", { policy_number: "AB123456", linked_people: [] }), d("b", { policy_number: "AB123456" })], []), []);
+});
+
+const sch = (id: string, over: Partial<FolderDoc> = {}) => d(id, { document_role: "personal_schedule", ...over });
+test("P1 every schedule or certificate in no folder starts its own policy, for its own people", () => {
+  const s = policyStarters([sch("a"), d("c", { document_role: "certificate", linked_people: [{ id: "jane" }, { id: "john" }] }), d("w", { document_role: "policy_wording" })], []);
+  assert.deepEqual(s, [
+    { scheduleId: "a", personIds: ["jane"], documents: [{ policyId: "a", slot: "schedule" }] },
+    { scheduleId: "c", personIds: ["jane", "john"], documents: [{ policyId: "c", slot: "schedule" }] },
+  ]);
+});
+test("P2 a same-number receipt from the same insurer (printed Pte Ltd / Pte. Ltd.) for the same person joins its schedule", () => {
+  const s = policyStarters([sch("a", { policy_number: "26-0001 877", insurer: "Example Singapore Pte Ltd" }), d("r", { document_role: "premium_receipt", policy_number: "260001877", insurer: "Example Singapore Pte. Ltd." })], []);
+  assert.deepEqual(s, [{ scheduleId: "a", personIds: ["jane"], documents: [{ policyId: "a", slot: "schedule" }, { policyId: "r", slot: "other" }] }]);
+});
+test("P3 never across people, insurers or a plan match; a short number joins nothing", () => {
+  const docs = [sch("a", { policy_number: "AB123456", insurer: "One" }),
+    d("john", { policy_number: "AB123456", insurer: "One", linked_people: [{ id: "john" }] }),
+    d("other", { policy_number: "AB123456", insurer: "Two" }),
+    d("plan", { policy_number: "AB123456", insurer: "One", linked_people: [{ id: "jane", source: "scheme_reference_match" }] }),
+    sch("s", { policy_number: "12-3" }), d("t", { policy_number: "123" })];
+  const s = policyStarters(docs, []);
+  assert.deepEqual(s.map((x) => x.documents.map((y) => y.policyId)), [["a"], ["s"]]);
+});
+test("P4 a schedule already in a folder, linked to nobody, linked only by plan match, or not read yet starts nothing", () => {
+  const docs = [sch("filed"), sch("nobody", { linked_people: [] }), sch("plan", { linked_people: [{ id: "jane", source: "scheme_reference_match" }] }), d("reading", { document_role: null })];
+  assert.deepEqual(policyStarters(docs, [f({ documents: [{ policyId: "filed", slot: null }] })]), []);
+});
+test("P5 a companion that would leave no person common to all is left out; the folder keeps one person's documents", () => {
+  const docs = [sch("a", { policy_number: "AB123456", linked_people: [{ id: "jane" }, { id: "john" }] }),
+    d("j", { policy_number: "AB123456", linked_people: [{ id: "jane" }] }), d("k", { policy_number: "AB123456", linked_people: [{ id: "john" }] })];
+  assert.deepEqual(policyStarters(docs, []), [{ scheduleId: "a", personIds: ["jane"], documents: [{ policyId: "a", slot: "schedule" }, { policyId: "j", slot: "other" }] }]);
+});
+test("P6 two schedules with one number (a renewal) make one policy, not two", () => {
+  const s = policyStarters([sch("a", { policy_number: "AB123456" }), sch("b", { policy_number: "AB123456" })], []);
+  assert.equal(s.length, 1);
+  assert.deepEqual(s[0].documents.map((x) => x.policyId), ["a", "b"]);
+});
+test("P7 slots from what was read: schedule, wording, rider, else other", () => {
+  assert.deepEqual(["certificate", "policy_wording", "endorsement", "premium_receipt", null].map(slotForRole), ["schedule", "wording", "rider", "other", "other"]);
 });
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }

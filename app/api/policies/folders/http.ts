@@ -20,6 +20,11 @@ export const UpdateFolder = z.object({
   remove: z.array(uuid).max(100).optional(),
 });
 
+export const AutoFolders = z.object({
+  starters: z.array(z.object({ scheduleId: uuid, people: z.array(uuid).min(1).max(50), documents: z.array(DocumentInput).min(1).max(100) })
+    .transform((s) => ({ scheduleId: s.scheduleId, people: s.people, documents: s.documents }))).max(100),
+});
+
 /** The household's words for each refusal; anything else is the shared route error. */
 export function folderError(error: unknown, request: NextRequest): NextResponse {
   if (error instanceof ZodError) return NextResponse.json({ error: "That request was not complete. Please try again." }, { status: 400 });
