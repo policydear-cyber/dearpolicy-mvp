@@ -84,8 +84,14 @@ const SUMMARY_TITLE = /\b(?:insurance|policy|product|cover|travel|plan)\s+summar
  * Lower-case text. */
 function personalParticulars(t: string) {
   return /(?<!(?:group|master)\s)\bpolicy\s+(?:number|no\.?)\s*[:#-]?\s*[a-z0-9-]*\d[a-z0-9-]{3,}/.test(t)
-    && new RegExp(String.raw`\b(?:` + PERSON_LABEL + String.raw`)\b[^\n:]{0,20}:[ \t]*` + PERSON_VALUE).test(t);
+    && new RegExp(String.raw`\b(?:` + PERSON_LABEL + String.raw`)\b[^\n:]{0,20}:[ \t]*(?!(?:` + PERSON_LABEL + "|" + FORM_FIELD + String.raw`)\b[^\n:]{0,20}:)` + PERSON_VALUE).test(t)
+    // A specimen or sample prints a made-up person (Critic #561 MED-2).
+    && !specimenPage(t);
 }
+
+/** Other fields a form prints beside a name: a blank name field is followed by the next label, never by a name ("Family
+ * Name: Given Name:", "Surname:\tFirst name:"), so a value that is itself a label is no one (Critic #561 MED-1). */
+const FORM_FIELD = String.raw`date of birth|nric|fin|passport|nationality|gender|sex|address|email|e-mail|mobile|phone|contact|occupation|relationship|policy`;
 
 /** The labels a form prints before a person's own name, for any insurer: the person's role ("Policyholder", "Life
  * assured", "Insured person", "Traveller", "Applicant", "Proposer") or the parts of a name an application or quote form

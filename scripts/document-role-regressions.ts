@@ -24,7 +24,8 @@ async function t(name: string, fn: () => unknown | Promise<unknown>) {
 }
 
 async function main() {
-  const { deterministicDocumentRole, sanitizePolicyExtraction } = await import("@/lib/documents/intelligence");
+  const intelligence = await import("@/lib/documents/intelligence");
+  const { deterministicDocumentRole, sanitizePolicyExtraction } = intelligence;
   const { correspondenceRole, schedulePage } = await import("@/lib/documents/messy");
   const { detectHighConfidenceReferenceRole, buildCodeOnlyExtraction, compactSample } = await import("@/lib/ai/extract-policy");
   const doc = (...texts: string[]): PdfPage[] => texts.map((text, i) => ({ pageNumber: i + 1, text } as PdfPage));
@@ -131,6 +132,17 @@ async function main() {
     assert.equal(detectHighConfidenceReferenceRole(agentOnly), "policy_wording");
     const groupNumber = doc(formSummary[0].text.replace("Policy No.: 70012345", "Group Policy No.: G700123"), formSummary[1].text);
     assert.equal(detectHighConfidenceReferenceRole(groupNumber), "policy_wording", "a group scheme's number is not the person's own policy");
+  });
+  await t("3b control (Critic #561): a blank form whose name fields run into the next label, and a specimen, are not personal", () => {
+    const { personalDocumentTitle } = intelligence;
+    assert.equal(personalDocumentTitle("Travel insurance summary\nPolicy Number: 2024-00012345\nFamily Name: Given Name:\nNRIC:"), null);
+    assert.equal(personalDocumentTitle("Policy summary\nPolicy No: TR12345678\nSurname:\tFirst name:\nDate of birth:"), null);
+    assert.equal(personalDocumentTitle("Summary of cover\nPolicy No: TR12345678\nSurname: Date of Birth:"), null);
+    assert.equal(personalDocumentTitle("SPECIMEN\nTravel insurance summary\nPolicy Number: 12345678\nFull Name: Tan Ah Kow"), null);
+    assert.equal(personalDocumentTitle("Travel insurance summary\nPolicy Number: 12345678\nFull name: means the name in your passport"), null);
+    // Still personal: a filled form, on one line or two.
+    assert.equal(personalDocumentTitle("Summary of cover\nPolicy No.: 70012345\nFamily Name: Tan\nGiven Name: Wei Jie"), "personal_schedule");
+    assert.equal(personalDocumentTitle("Summary of cover\nPolicy No.: 70012345\nSurname:\tTan\tFirst name:\tWei Jie"), "personal_schedule");
   });
   await t("3 control: a generic summary with no printed policy number stays reference", () => {
     const generic = doc("Travel insurance summary of benefits\nThe policyholder is the person named in the schedule. Policy number means the number on your schedule.\nTerms and conditions apply. Please read the policy wording.");
