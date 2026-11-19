@@ -20,7 +20,6 @@ import { startOfMonth, usageByOperationAndModel, type UsageReport } from "@/lib/
 import type { PlanId } from "@/lib/plans/catalogue";
 import { ADMIN_TIME_ZONE } from "./format";
 
-const SIGNUP_DAYS = 14;
 const HOUSEHOLD_LIMIT = 500;
 const ERROR_WINDOW_DAYS = 7;
 
@@ -56,7 +55,11 @@ export type Totals = {
   accounts: number | null;
   confirmedAccounts: number | null;
   signups7d: number | null;
+  /** Sign-ups in the 7 days before the last 7, to show the change. */
+  signupsPrev7d: number | null;
   signups30d: number | null;
+  /** Households where a member signed in during the last 30 days. */
+  activeHouseholds30d: number | null;
   documents: number;
   documentsRead: number;
   documentsUnreadable: number;
@@ -71,37 +74,67 @@ export async function readTotals(): Promise<Section<Totals>> {
               count(*) FILTER (WHERE p.processing_status='failed')::int AS failed
          FROM policies p JOIN accounts a ON a.id = p.account_id AND ${activePredicate("a")}
         WHERE p.superseded_at IS NULL AND ${activePredicate("p")}`)).rows[0];
-    let accounts: number | null = null, confirmed: number | null = null, s7: number | null = null, s30: number | null = null;
+    let accounts: number | null = null, confirmed: number | null = null, s7: number | null = null, p7: number | null = null, s30: number | null = null;
+    let active: number | null = null;
     if (await authUsersPresent()) {
-      const u = (await query<{ total: number; confirmed: number; s7: number; s30: number }>(
+      const u = (await query<{ total: number; confirmed: number; s7: number; p7: number; s30: number }>(
         `SELECT count(*)::int AS total, count(*) FILTER (WHERE email_confirmed_at IS NOT NULL)::int AS confirmed,
                 count(*) FILTER (WHERE created_at >= now() - interval '7 days')::int AS s7,
+                count(*) FILTER (WHERE created_at >= now() - interval '14 days' AND created_at < now() - interval '7 days')::int AS p7,
                 count(*) FILTER (WHERE created_at >= now() - interval '30 days')::int AS s30
            FROM auth.users`)).rows[0];
-      accounts = num(u?.total); confirmed = num(u?.confirmed); s7 = num(u?.s7); s30 = num(u?.s30);
+      accounts = num(u?.total); confirmed = num(u?.confirmed); s7 = num(u?.s7); p7 = num(u?.p7); s30 = num(u?.s30);
+      active = num((await query<{ n: number }>(
+        `SELECT count(DISTINCT a.id)::int AS n FROM accounts a JOIN household_members hm ON hm.household_id = a.id
+           JOIN auth.users u ON u.id = hm.user_id
+          WHERE ${activePredicate("a")} AND u.last_sign_in_at >= now() - interval '30 days'`)).rows[0]?.n);
     }
     const total = num(docs?.total), ready = num(docs?.ready), failed = num(docs?.failed);
-    return { households: num(hh?.n), accounts, confirmedAccounts: confirmed, signups7d: s7, signups30d: s30,
+    return { households: num(hh?.n), accounts, confirmedAccounts: confirmed, signups7d: s7, signupsPrev7d: p7, signups30d: s30, activeHouseholds30d: active,
       documents: total, documentsRead: ready, documentsUnreadable: failed, documentsInProgress: Math.max(0, total - ready - failed) };
   });
 }
 
-export type SignupDay = { day: string; accounts: number | null; households: number };
+export const TREND_DAYS = 30;
 
-/** The last 14 days, one row per day (Singapore time), oldest first. Accounts come from Supabase Auth's own record of
- * sign-ups; households from DearPolicy's. */
-export async function readSignupsByDay(): Promise<Section<SignupDay[]>> {
+/** One value per day, oldest first; null for a series whose table isn't there. */
+export type Trends = {
+  days: string[];
+  accounts: number[] | null;
+  households: number[];
+  questions: number[] | null;
+  spendUsd: number[] | null;
+};
+
+/** The last 30 days (Singapore time), one point per day: new accounts (Supabase Auth), new households, questions
+ * households sent to Ask DearPolicy (chat messages still on file), and recorded model spend. */
+export async function readTrends(): Promise<Section<Trends>> {
   return section(async () => {
-    const withUsers = await authUsersPresent();
-    const users = withUsers
-      ? `(SELECT count(*)::int FROM auth.users u WHERE (u.created_at AT TIME ZONE $1)::date = d.day)`
-      : `NULL::int`;
-    const { rows } = await query<{ day: string; accounts: number | null; households: number }>(
-      `WITH d AS (SELECT generate_series((now() AT TIME ZONE $1)::date - ($2::int - 1), (now() AT TIME ZONE $1)::date, interval '1 day')::date AS day)
-       SELECT d.day::text AS day, ${users} AS accounts,
-              (SELECT count(*)::int FROM accounts a WHERE (a.created_at AT TIME ZONE $1)::date = d.day AND ${activePredicate("a")}) AS households
-         FROM d ORDER BY d.day`, [ADMIN_TIME_ZONE, SIGNUP_DAYS]);
-    return rows.map((r) => ({ day: r.day, accounts: r.accounts == null ? null : num(r.accounts), households: num(r.households) }));
+    const days = (await query<{ day: string }>(
+      `SELECT generate_series((now() AT TIME ZONE $1)::date - ($2::int - 1), (now() AT TIME ZONE $1)::date, interval '1 day')::date::text AS day`,
+      [ADMIN_TIME_ZONE, TREND_DAYS])).rows.map((r) => r.day);
+    const from = days[0];
+    const byDay = async (sql: string): Promise<number[] | null> => {
+      try {
+        const m = new Map((await query<{ day: string; v: string }>(sql, [ADMIN_TIME_ZONE, from])).rows.map((r) => [r.day, Number(r.v) || 0]));
+        return days.map((d) => m.get(d) ?? 0);
+      } catch (e) {
+        if (isMissingRelation(e)) return null;
+        throw e;
+      }
+    };
+    const accounts = (await authUsersPresent())
+      ? await byDay(`SELECT (created_at AT TIME ZONE $1)::date::text AS day, count(*)::text AS v FROM auth.users
+                      WHERE (created_at AT TIME ZONE $1)::date >= $2::date GROUP BY 1`)
+      : null;
+    const households = (await byDay(`SELECT (a.created_at AT TIME ZONE $1)::date::text AS day, count(*)::text AS v FROM accounts a
+                      WHERE (a.created_at AT TIME ZONE $1)::date >= $2::date AND ${activePredicate("a")} GROUP BY 1`)) ?? days.map(() => 0);
+    const questions = await byDay(`SELECT (m.created_at AT TIME ZONE $1)::date::text AS day, count(*)::text AS v
+                      FROM chat_messages m JOIN accounts a ON a.id = m.account_id AND ${activePredicate("a")}
+                     WHERE m.role = 'user' AND (m.created_at AT TIME ZONE $1)::date >= $2::date GROUP BY 1`);
+    const spendUsd = await byDay(`SELECT (created_at AT TIME ZONE $1)::date::text AS day, coalesce(sum(cost_usd), 0)::text AS v FROM model_executions
+                      WHERE (created_at AT TIME ZONE $1)::date >= $2::date GROUP BY 1`);
+    return { days, accounts, households, questions, spendUsd };
   });
 }
 
