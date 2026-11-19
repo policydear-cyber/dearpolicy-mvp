@@ -513,6 +513,72 @@ const SPLIT_FIGURE = new RegExp(String.raw`(${MONEY_SIGN}${RUN_SPACE}?\d{1,3})${
 /** A row's own text with its table cells kept apart by tabs, except a cell break inside one spaced money figure. */
 export const cellsApart = (row: string) => row.replace(SPLIT_FIGURE, "$1 ");
 /** A printed date (""06/10/2022", "1 June 2040") is kept only when its digits are printed together on the page. */
+/** A cover's premium end date, premium term and maturity date, each kept only where printed (check.ts covers): a date in
+ * the cover's own quote, or on one page line that names it (premium or maturity) and prints that date; a term only where
+ * its words are on the page. Nothing is worked out. */
+export function termDates(c: { premiumEndDate?: unknown; premiumTerm?: unknown; maturityDate?: unknown }, quote: string, page: string): { premiumEndDate?: string; premiumTerm?: string; maturityDate?: string } {
+  const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  const lined = (date: string | null, label: RegExp) => !date ? null : dateOnPage(date, quote) ?? (page.split("\n").some((l) => label.test(l) && dateOnPage(date, l) != null) ? date : null);
+  const premiumEndDate = lined(s(c.premiumEndDate), /premium/i), maturityDate = lined(s(c.maturityDate), /matur/i);
+  const term = s(c.premiumTerm), premiumTerm = term && squashed(page).includes(squashed(term)) ? term : null;
+  return { ...(premiumEndDate ? { premiumEndDate } : {}), ...(premiumTerm ? { premiumTerm } : {}), ...(maturityDate ? { maturityDate } : {}) };
+}
+/** A value's age, policy year and illustrated rate, each kept only where printed: the age and year in the row's own quote,
+ * the rate on the row's page. */
+/** A row keeps the age or policy year it is printed for only when it is a value row, or when its document prints the same
+ * benefit in the same column for two or more different ages or years (a table by year, whatever the reader called its
+ * rows: Critic #562 MED-8 and its follow-up). An age limit on an ordinary benefit ("Death or TPD before age 70") is one row
+ * on its own, so it reads as a current figure, as on main. */
+/** Whether the row's own age or policy year is printed as a band of when the benefit pays ("before age 40", "from age 60",
+ * "age 40 to 60", "during policy year 1", "from policy year 2", "year 2 onwards"): a limit, never a point the row is printed
+ * for (TE F5, F6). Only the row's own number counts, so "payable up to age 100" beside an age-55 row of an illustration is
+ * not a band (Critic MED-11), and a range never reads into an amount ("Age 55 - 120,500"). */
+function printedAsBand(text: string, age: number | null | undefined, year: number | null | undefined): boolean {
+  const n = (x: number) => `0*${x}(?![\\d,.])`;
+  const range = (lead: string, x: number) => new RegExp(`\\b${lead}\\s+(?:\\d{1,3}\\s*(?:-|–|to)\\s*${n(x)}|${n(x)}\\s*(?:-|–|to)\\s*\\d{1,3}(?![\\d,.]))`, "i");
+  if (age != null && (new RegExp(`\\b(?:before|under|below|up\\s+to|until|till|from|over|above|after|to|between|aged)\\s+(?:the\\s+)?(?:age|ages|anb|alb)\\s+${n(age)}`, "i").test(text)
+    || range("(?:age|ages)", age).test(text)
+    || new RegExp(`\\b(?:age|ages)\\s+${n(age)}\\s*(?:and|or)\\s+(?:above|over|below|under|older|younger)\\b`, "i").test(text))) return true;
+  // "in policy year 10" is a point in time, not a band (Critic L/M-12); a year range ends the phrase, never a column of numbers.
+  const yearEnd = `(?![\\d,.])(?!\\s*[-–]\\s*\\d)`;
+  if (year != null && (new RegExp(`\\b(?:during|from|after|before|until|till|up\\s+to|within(?:\\s+the\\s+first)?)\\s+(?:the\\s+)?(?:policy\\s+)?years?\\s+${n(year)}`, "i").test(text)
+    || new RegExp(`\\b(?:policy\\s+)?years?\\s+(?:\\d{1,3}\\s*(?:-|–|to)\\s*0*${year}|0*${year}\\s*(?:-|–|to)\\s*\\d{1,3})${yearEnd}`, "i").test(text)
+    || new RegExp(`\\b(?:policy\\s+)?year\\s+${n(year)}\\s*(?:onwards?|and\\s+(?:after|above|thereafter|beyond)|\\+)`, "i").test(text))) return true;
+  return false;
+}
+export function byYearOnly<T extends { benefit: string; section?: string | null; column?: string | null; pays?: unknown; atAge?: number | null; atPolicyYear?: number | null; rate?: string | null; quote?: string | null }>(rows: T[]): T[] {
+  // The same benefit in the same section and column: a step-down schedule ("before age 65", "from 65 to 70") prints two ages,
+  // an illustration prints policy years, or at least three ages (first row, every fifth year, last: Critic MED-9).
+  const norm = (x: string | null | undefined) => (x ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  const key = (r: T) => `${norm(r.benefit)}|${norm(r.section)}|${norm(r.column)}`;
+  const years = new Map<string, Set<number>>(), ages = new Map<string, Set<number>>();
+  for (const r of rows) {
+    if (r.atPolicyYear != null) years.set(key(r), new Set([...(years.get(key(r)) ?? []), r.atPolicyYear]));
+    if (r.atAge != null) ages.set(key(r), new Set([...(ages.get(key(r)) ?? []), r.atAge]));
+  }
+  return rows.map((r) => {
+    if (r.atAge == null && r.atPolicyYear == null && r.rate == null) return r;
+    // A value row keeps its ages and years.
+    if (r.pays === "value") return r;
+    // Otherwise a row whose own age or year is printed as a band is a limit on when it pays, read as a current figure as
+    // on main; and the rest keep theirs only as a table: two or more policy years, or three or more ages.
+    if (!printedAsBand(`${r.benefit} ${r.quote ?? ""}`, r.atAge, r.atPolicyYear)
+      && ((years.get(key(r))?.size ?? 0) >= 2 || (ages.get(key(r))?.size ?? 0) >= 3)) return r;
+    const { atAge: _a, atPolicyYear: _y, rate: _r, ...rest } = r;
+    return rest as T;
+  });
+}
+
+export function valueAt(b: { atAge?: unknown; atPolicyYear?: unknown; rate?: unknown }, quote: string, page: string): { atAge?: number; atPolicyYear?: number; rate?: string } {
+  const whole = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 130 ? v : null);
+  const inQuote = (n: number | null) => n != null && numbersIn(quote.replace(/[,]/g, " ")).includes(n) ? n : null;
+  const atAge = inQuote(whole(b.atAge)), atPolicyYear = inQuote(whole(b.atPolicyYear));
+  const r = typeof b.rate === "string" ? b.rate.trim() : "";
+  // The rate as its own figure on the page: "5%" is not read inside "4.25%".
+  const printed = /^\d{1,2}(?:\.\d{1,2})?\s?%$/.test(r) && new RegExp(`(?<![\\d.])${r.replace(/\s+/g, "").replace(".", "\\.").replace("%", "\\s?%")}`).test(page);
+  const rate = printed ? r : null;
+  return { ...(atAge != null ? { atAge } : {}), ...(atPolicyYear != null ? { atPolicyYear } : {}), ...(rate ? { rate } : {}) };
+}
 export function dateOnPage(date: string | null, pageText: string): string | null {
   if (!date) return null;
   const digits = date.match(/\d+/g);
@@ -2153,7 +2219,10 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     const notional = sumInsured != null && printsNotionalSum(page) && !str(c.riderOf) && !RIDER_NAME.test(`${cover ?? ""} ${product ?? ""} ${quote}`);
     out.covers.push({ person, product, cover, plan: str(c.plan), riderOf: str(c.riderOf), policyNumber, sumInsured: notional ? null : sumInsured, ...(notional ? { notionalSum: sumInsured } : {}), premium,
       premiumFrequency: premium == null || !str(c.premiumFrequency) || !squashed(page).includes(squashed(str(c.premiumFrequency)!)) ? null : str(c.premiumFrequency), asOf: dateOnPage(str(c.asOf), page),
-      startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency, premiumSource, premiumLabel });
+      startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency, premiumSource, premiumLabel,
+      // Premium end and maturity dates count only in the cover's own line (a table row prints its dates side by side), or on
+      // a page line that names a premium or maturity and prints the date; a premium term only in those words on the page.
+      ...termDates(c, source.excerpt, page) });
   }
   // A premium the reading did not give is taken from the cover's page when the page prints exactly one plain premium line
   // and names no other life, the same test as a premium the reading gave (release-set A6: "Instalment Premium : 470.85",
@@ -2548,8 +2617,12 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}), ...(columnMarks.length ? { columnMarks } : {}),
       ...(ownShareNamed ? { ownShareNamed } : {}), ...(baseFromWords && percentOf === "sum_insured" ? { baseFromWords, ...(shareSentence ? { shareSentence } : {}) } : {}), ...(paymentSchedule && pays === "words" ? { paymentSchedule } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}), ...(childNote ? { childNote } : {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}),
+      // Only a value row (a table of values by year) keeps its age or year: an age limit on an ordinary benefit ("Death or
+      // TPD before age 70") is never a year the row is printed for (Critic MED-8).
+      ...valueAt(b, source.excerpt, pageText(source.page)),
       ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
   }
+  out.benefits = byYearOnly(out.benefits);
   out.benefits = foldChildColumns(out.benefits, out.dropped);
   Object.assign(out, lifeNotesOf(doc.pages, { ...out, kind: o.notesKind ?? out.kind, insurer: str(d.insurer) }));
   return out;

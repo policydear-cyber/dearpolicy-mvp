@@ -5,6 +5,7 @@ import { customerError } from "@/components/customer-text";
 import { documentCardTitle } from "@/lib/policies/document-name";
 import { HomeAsk, HomeAttention } from "@/components/home-attention";
 import { HomeNotFound, homeGaps } from "@/components/home-not-found";
+import { HomePolicyDates } from "@/components/home-policy-dates";
 import { homeView } from "@/lib/format/home-view";
 import { Icon, coverCard, coverIcon, type IconName } from "@/components/icons";
 import { homeCardSource, homeGridColumns } from "@/lib/coverage/home-card";
@@ -101,6 +102,8 @@ export default function DashboardPage(){
     {/* Gaps (DC 17 Nov): the main kinds of cover with no card, once the person has a card and nothing is still being read,
         so a gap is never shown for a document DearPolicy has not finished. Never "not covered". */}
     {!loading&&!personEmpty&&covered.length>0&&!data?.reading&&<HomeNotFound {...homeGaps(data?.coverages??[],active?.relationship)} memberId={active?.id??""} name={name} note={data?.notFullyRead} pending={data?.gapsPending===true}/>}
+    {/* When each policy ends, as printed; a passed date asks for proof of renewal (DC 19 Nov). */}
+    {!loading&&!personEmpty&&returning&&<HomePolicyDates memberId={active?.id} onChanged={()=>void load(want.current,true)}/>}
    </section>
    <HomeAsk memberId={active?.id} name={name}/>
   </div>
