@@ -19,6 +19,8 @@ export function headingIn(pageText: string, insurer: string | null = null): stri
     // Only a line that names a kind of paper: never the addressee ("MR <NAME>") or a handling line ("PRIVATE AND
     // CONFIDENTIAL"), which insurers print above the heading (Critic #564 MED-1).
     if (/^(?:MR|MRS|MS|MDM|DR|MISS|MADAM)\b|\b(?:CONFIDENTIAL|BY EMAIL|URGENT)\b/.test(l)) continue;
+    // A sender line ("CLAIMS DEPARTMENT", "PAYMENT SERVICES UNIT") names who wrote it, not what it is.
+    if (/\b(?:DEPARTMENT|DIVISION|SECTION|TEAM|UNIT|CENTRE|CENTER|SERVICES|OFFICE)\b/.test(l)) continue;
     if (!DOCUMENT_WORD.test(l)) continue;
     return words.map((w, k) => k > 0 && /^(?:OF|AND|THE|FOR|TO|IN|ON|A|AN)$/.test(w) ? w.toLowerCase() : w.charAt(0) + w.slice(1).toLowerCase()).join(" ");
   }
