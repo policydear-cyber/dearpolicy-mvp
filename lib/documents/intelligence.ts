@@ -142,7 +142,7 @@ export function formNamePrinted(text: string, name: string): boolean {
 const formWords = (n: string) => n.normalize("NFKC").toLowerCase().replace(/(?<![\p{L}])(?:[sd]\s*\/\s*o|a\s*\/\s*[lp])(?![\p{L}])/gu, " ")
   .split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w && !["bin", "binte", "binti", "bte", "bt"].includes(w));
 
-const WHOLE_NAME_LABEL = /^(?:full name|(?:insured|traveller|traveler|applicant|proposer|policy ?holder)(?:'s)? (?:full )?name|name of (?:the )?(?:insured|policy ?holder|policy owner|proposer|applicant|traveller|traveler|life assured))$/;
+const WHOLE_NAME_LABEL = /^(?:full name|life assured|insured person|policy ?holder|policy owner|(?:insured|traveller|traveler|applicant|proposer|policy ?holder)(?:'s)? (?:full )?name|name of (?:the )?(?:insured|policy ?holder|policy owner|proposer|applicant|traveller|traveler|life assured))$/;
 const FAMILY_LABEL = /^(?:family name|surname|last name)$/;
 const GIVEN_LABEL = /^(?:given names?|first names?)$/;
 const FORM_NAME_VALUE = /^(?!(?:any|the|a|an|all|each|every|eligible|means|refers|see|as|please|must|should|enter|write|print|block|same|refer|to|in|on|your|n\/?a|nil)\b)[a-z][a-z.'/-]*(?:[ ,]+[a-z][a-z.'/-]*)*$/;

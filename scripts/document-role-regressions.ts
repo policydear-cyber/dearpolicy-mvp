@@ -189,6 +189,7 @@ async function main() {
     assert.equal(personPrinted("Full name: Ahmad bin Ismail", "Ahmad Ismail"), true);
     assert.equal(personPrinted("Policyholder: Daniel Lim\nFamily Name: Lim\tGiven Name: Wei Jie, Daniel", "Daniel Lim"), true);
     assert.equal(personPrinted("Full name: Tan Ah Kow\nLife Assured: Tan Ah Kow", "Tan Ah Kow"), true);
+    assert.equal(personPrinted("Full name: Mei Ling Tan\tLife Assured: Lim Daniel", "Daniel Lim"), true, "another role field on a form line (Critic #561 LOW)");
     assert.equal(personPrinted("Insured: Lim Wei Jie  Sum assured 100,000", "Lim Wei Jie"), true, "a page with no form name field reads as before");
     assert.equal(personPrinted("Lim, Wei Jie   Plan A", "Wei Jie Lim"), true, "a line with no form name field reads as before");
   });
