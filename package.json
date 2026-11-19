@@ -478,6 +478,7 @@
     "documents:image-currency-test": "node --import tsx scripts/documents/image-currency-test.ts",
     "documents:household-currency-test": "node --import tsx scripts/documents/household-currency-test.ts",
     "billing:plans-test": "node --import tsx --test scripts/billing/plans-test.ts",
+    "admin:console-test": "node --import tsx --test scripts/admin/console-test.ts",
     "policies:folders-test": "node --import tsx scripts/policy-folders-regressions.ts",
     "policies:folder-view-test": "node --import tsx scripts/policies/folder-view-test.ts",
     "simple:folder-whole-sum-test": "node --import tsx scripts/simple-answer/folder-whole-sum-test.ts",

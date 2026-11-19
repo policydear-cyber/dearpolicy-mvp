@@ -103,8 +103,9 @@ export type UsageReport = { since: string; scope: "household" | "all_households"
  * an accountId, only that household's calls; with null, every call on the
  * provider account (the owner's view, the one to hold against the owner's
  * provider budget). The model is the provider-reported one when present. */
-export async function usageByOperationAndModel(accountId: string | null, since: Date): Promise<UsageReport> {
-  await ensureProvenanceSchema();
+export async function usageByOperationAndModel(accountId: string | null, since: Date, opts: { ensureSchema?: boolean } = {}): Promise<UsageReport> {
+  // The admin console passes ensureSchema: false so a page view never runs DDL (it checks the table exists first).
+  if (opts.ensureSchema !== false) await ensureProvenanceSchema();
   const params: unknown[] = [since.toISOString()];
   let where = "created_at >= $1";
   if (accountId) { params.push(pseudonymizeId(accountId)); where += " AND household_ref = $2"; }
