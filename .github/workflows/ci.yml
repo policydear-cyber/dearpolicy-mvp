@@ -167,7 +167,7 @@ jobs:
         run: npm run documents:locked-pdf-test
       - name: Read again on a locked PDF (refused before anything changes; refused presses don't use the read allowance; PGlite)
         run: npm run documents:reread-locked-test
-      - name: "I didn't renew it" (owner only, own household, refused before the date passes, Home cards and chat follow, Undo; PGlite)
+      - name: '"I didn''t renew it" (owner only, own household, refused before the date passes, Home cards and chat follow, Undo; PGlite)'
         run: npm run policies:not-renewed-test
       - name: Premium end dates, maturity dates and illustrated values kept only where printed
         run: npm run benefit-table:term-dates-test
