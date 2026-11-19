@@ -1,18 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { customerError } from "@/components/customer-text";
 import { uploadPolicyDocument } from "@/components/upload-document";
 import { documentReadLabel } from "@/lib/documents/upload-problems";
-import { folderSuggestions, folderTitle, SLOT_HINTS, SLOT_LABELS, type FolderDoc, type FolderSuggestion, type FolderView } from "@/lib/policies/folder-view";
+import { folderSuggestions, folderTitle, policyStarters, SLOT_HINTS, SLOT_LABELS, type FolderDoc, type FolderSuggestion, type FolderView } from "@/lib/policies/folder-view";
 import type { FolderSlot } from "@/lib/policies/folders";
 
 /* Policy folders on the Documents page (sql/policy-folders.sql, app/api/policies/folders). The household puts the documents
  * of one policy into one folder: who it is for, its schedule or certificate, its wording, its riders and anything else, and
  * then answers "Are these all the documents for this policy?". Each policy shows as a folder with Add a document and Remove.
- * Nothing is guessed: a shared policy number only offers "Make these one policy?". Only the household's owner changes
- * folders; a member sees them. Until the folders table exists this shows nothing at all. */
+ * Each schedule or certificate on file starts its own folder, for the people it is linked to, with any document printing
+ * the same policy number (DC, 19 Nov: "Make them all automatically"); the household checks and confirms each, and a folder
+ * it deletes is not made again. Only the household's owner changes folders; a member sees them. Until the folders table
+ * exists this shows nothing at all. */
 
 export type FolderPageDoc = FolderDoc & {
   original_filename: string;
@@ -73,19 +75,36 @@ export function PolicyFolders({ documents, family, name, onLibraryChanged, onFol
   const [ready, setReady] = useState(false);
   const [canManage, setCanManage] = useState(false);
   const [folders, setFolders] = useState<FolderView[]>([]);
+  const [auto, setAuto] = useState<{ on: boolean; handled: Set<string> }>({ on: false, handled: new Set() });
+  const tried = useRef(new Set<string>());
   const [creating, setCreating] = useState<{ people: string[]; existing: string[] } | null>(null);
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const docs = useMemo(() => new Map(documents.map((d) => [d.id, d])), [documents]);
   const title = useCallback((f: FolderView) => folderTitle(f, docs), [docs]);
 
   const load = useCallback(async () => {
-    const r = await fetch("/api/policies/folders", { cache: "no-store" }).then((x) => x.ok ? x.json() : null).catch(() => null) as { ready?: boolean; canManage?: boolean; folders?: FolderView[] } | null;
+    const r = await fetch("/api/policies/folders", { cache: "no-store" }).then((x) => x.ok ? x.json() : null).catch(() => null) as { ready?: boolean; canManage?: boolean; auto?: boolean; handled?: string[]; folders?: FolderView[] } | null;
     setReady(r?.ready === true);
     setCanManage(r?.canManage === true);
+    setAuto({ on: r?.auto === true, handled: new Set(r?.handled ?? []) });
     setFolders(r?.folders ?? []);
   }, []);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { onFolders?.(folders, title); }, [folders, title, onFolders]);
+
+  // Each schedule or certificate in no folder, not made into one before: its folder is made once, for the owner's page.
+  useEffect(() => {
+    if (!ready || !canManage || !auto.on) return;
+    const starters = policyStarters(documents, folders, auto.handled).filter((s) => !tried.current.has(s.scheduleId));
+    if (!starters.length) return;
+    starters.forEach((s) => tried.current.add(s.scheduleId));
+    void send("/api/policies/folders/auto", "POST", { starters: starters.map((s) => ({ scheduleId: s.scheduleId, people: s.personIds, documents: s.documents })) })
+      .then(async (r: { made?: number }) => {
+        await load();
+        if (r.made) setNotice({ text: `Made ${r.made === 1 ? "a policy folder" : `${r.made} policy folders`} from your documents. Check who each is for, add its wording or riders, then confirm it has all its documents.`, error: false });
+      })
+      .catch((e: unknown) => setNotice({ text: customerError(e, "Your policy folders could not be made just now."), error: true }));
+  }, [ready, canManage, auto, documents, folders, load]);
 
   const suggestions = useMemo(() => folderSuggestions(documents, folders), [documents, folders]);
   if (!ready) return null;
@@ -95,7 +114,7 @@ export function PolicyFolders({ documents, family, name, onLibraryChanged, onFol
 
   return <section className="section policy-folders" data-testid="policy-folders">
     <div className="section-heading">
-      <div className="icon-heading"><span className="title-icon"><Icon name="folder"/></span><h2>Your policies</h2></div>
+      <div className="icon-heading"><span className="title-icon"><Icon name="folder"/></span><h2>Policy folders</h2></div>
       {canManage && !creating && <button type="button" className="button primary" onClick={() => startFrom()} data-testid="create-policy"><Icon name="plus"/> Create a policy</button>}
     </div>
     {!canManage && <p className="muted" data-testid="owner-only-note">Only the household owner can change policies.</p>}
@@ -144,7 +163,7 @@ function Folder({ folder, title, allFolders, titleOf, docs, documents, family, n
   };
   const forWhom = folder.people.map((p) => p.name).join(", ");
   const docName = (id: string) => { const d = docs.get(id); return d ? withFile(d, name) : "this document"; };
-  return <div className={`document-card policy-folder${folder.complete ? "" : " unfinished"}`} data-testid="policy-folder" data-folder-id={folder.id}>
+  return <div className={`folder-card policy-folder${folder.complete ? "" : " unfinished"}`} data-testid="policy-folder" data-folder-id={folder.id}>
     <div className="document-head">
       <div className="policy-logo"><Icon name="folder"/></div>
       <div className="document-title"><strong>{title}</strong><span>{forWhom ? `For ${forWhom}` : "Not linked to anyone yet"}</span></div>

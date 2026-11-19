@@ -5,6 +5,7 @@
  * every document and person named belongs to the household before anything is written. Until sql/policy-folders.sql is
  * applied, foldersReady() is false, reads give no folders and writes are refused with FoldersNotReadyError. */
 import { pool, query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 
 export type FolderSlot = "schedule" | "wording" | "rider" | "other";
 export const FOLDER_SLOTS: readonly FolderSlot[] = ["schedule", "wording", "rider", "other"];
@@ -59,14 +60,24 @@ export async function listFolders(accountId: string): Promise<PolicyFolder[]> {
          JOIN policies p ON p.id=fd.policy_id AND p.account_id=fd.account_id AND p.lifecycle_state='active' AND p.superseded_at IS NULL
         WHERE fd.account_id=$1 AND fd.folder_id = ANY($2::uuid[]) ORDER BY fd.created_at, fd.policy_id`, [accountId, ids]),
   ]);
-  // Documents in a folder that a newer copy has replaced since, with that copy when it is in the library.
+  // Documents in a folder that a newer copy has replaced since, with the newest copy in the library: followed through every
+  // copy (v1 -> v2 -> v3), so a folder whose v2 was never added still offers v3. A document whose later copy is already in
+  // the folder offers nothing itself; that copy's own row does.
   const replaced = await query<{ folder_id: string; account_id: string; policy_id: string; slot: FolderSlot | null; by: string }>(
-    `SELECT fd.folder_id, fd.account_id, fd.policy_id, fd.slot, n.id AS by FROM policy_folder_documents fd
-       JOIN policies p ON p.id=fd.policy_id AND p.account_id=fd.account_id AND p.lifecycle_state='active' AND p.superseded_at IS NOT NULL
-       JOIN policies n ON n.supersedes_id=p.id AND n.account_id=fd.account_id AND n.lifecycle_state='active' AND n.superseded_at IS NULL
-      WHERE fd.account_id=$1 AND fd.folder_id = ANY($2::uuid[])
-        AND NOT EXISTS (SELECT 1 FROM policy_folder_documents x WHERE x.folder_id=fd.folder_id AND x.policy_id=n.id)
-      ORDER BY fd.created_at, fd.policy_id`, [accountId, ids]);
+    `WITH RECURSIVE chain(folder_id, account_id, start_id, slot, created_at, id, depth) AS (
+       SELECT fd.folder_id, fd.account_id, fd.policy_id, fd.slot, fd.created_at, fd.policy_id, 0 FROM policy_folder_documents fd
+         JOIN policies p ON p.id=fd.policy_id AND p.account_id=fd.account_id AND p.lifecycle_state='active' AND p.superseded_at IS NOT NULL
+        WHERE fd.account_id=$1 AND fd.folder_id = ANY($2::uuid[])
+       UNION ALL
+       SELECT c.folder_id, c.account_id, c.start_id, c.slot, c.created_at, n.id, c.depth + 1 FROM chain c
+         JOIN policies n ON n.supersedes_id=c.id AND n.account_id=c.account_id AND n.lifecycle_state='active'
+        WHERE c.depth < 20)
+     SELECT c.folder_id, c.account_id, c.start_id AS policy_id, c.slot, c.id AS by FROM chain c
+       JOIN policies n ON n.id=c.id AND n.account_id=c.account_id AND n.lifecycle_state='active' AND n.superseded_at IS NULL
+      WHERE c.depth > 0
+        AND NOT EXISTS (SELECT 1 FROM chain y JOIN policy_folder_documents x ON x.folder_id=y.folder_id AND x.policy_id=y.id
+                         WHERE y.folder_id=c.folder_id AND y.start_id=c.start_id AND y.depth > 0)
+      ORDER BY c.created_at, c.start_id`, [accountId, ids]);
   for (const row of [...folders.rows, ...people.rows, ...documents.rows, ...replaced.rows])
     if (String(row.account_id) !== accountId) throw new Error("A folder row from another household was returned");
   return folders.rows.map((f) => ({
@@ -168,6 +179,7 @@ export async function updateFolder(accountId: string, folderId: string, change: 
   name?: string | null; complete?: boolean; people?: string[]; add?: FolderDocumentInput[]; remove?: string[];
 }): Promise<void> {
   if (!await foldersReady()) throw new FoldersNotReadyError("Policy folders are not switched on yet.");
+  const autoOn = await autoFoldersReady();
   await inTransaction(async (tx) => {
     await lockFolder(tx, accountId, folderId);
     const add = [...new Map((change.add ?? []).map((d) => [d.policyId, d])).values()], remove = unique(change.remove ?? []);
@@ -180,7 +192,12 @@ export async function updateFolder(accountId: string, folderId: string, change: 
       for (const p of people) await tx.query("INSERT INTO policy_folder_people(folder_id, account_id, family_member_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING", [folderId, accountId, p]);
     }
     await addDocuments(tx, accountId, folderId, add);
-    if (remove.length) await tx.query("DELETE FROM policy_folder_documents WHERE folder_id=$1 AND account_id=$2 AND policy_id = ANY($3::uuid[])", [folderId, accountId, remove]);
+    if (remove.length) {
+      // A document the household took out is never put into a folder again on its own.
+      if (autoOn) await tx.query(`INSERT INTO policy_folder_auto(policy_id, account_id) SELECT fd.policy_id, fd.account_id FROM policy_folder_documents fd
+        WHERE fd.folder_id=$1 AND fd.account_id=$2 AND fd.policy_id = ANY($3::uuid[]) ON CONFLICT DO NOTHING`, [folderId, accountId, remove]);
+      await tx.query("DELETE FROM policy_folder_documents WHERE folder_id=$1 AND account_id=$2 AND policy_id = ANY($3::uuid[])", [folderId, accountId, remove]);
+    }
     const documentsChanged = add.length > 0 || remove.length > 0;
     const complete: boolean | undefined = change.complete ?? (documentsChanged ? false : undefined);
     if (complete && await documentCount(tx, accountId, folderId) === 0) throw new FolderInputError("Add at least one document first.");
@@ -197,9 +214,94 @@ export async function updateFolder(accountId: string, folderId: string, change: 
   });
 }
 
-/** Deletes the folder only: its documents stay in the library. */
+/** Deletes the folder only: its documents stay in the library, and none of them is made into a folder again on its own. */
 export async function deleteFolder(accountId: string, folderId: string): Promise<void> {
   if (!await foldersReady()) throw new FoldersNotReadyError("Policy folders are not switched on yet.");
-  const r = await query("DELETE FROM policy_folders WHERE id=$1 AND account_id=$2", [folderId, accountId]);
-  if (!r.rowCount) throw new FolderInputError("That policy is not in this household.");
+  const autoOn = await autoFoldersReady();
+  await inTransaction(async (tx) => {
+    if (autoOn) await tx.query(`INSERT INTO policy_folder_auto(policy_id, account_id)
+      SELECT fd.policy_id, fd.account_id FROM policy_folder_documents fd WHERE fd.folder_id=$1 AND fd.account_id=$2 ON CONFLICT DO NOTHING`, [folderId, accountId]);
+    const r = await tx.query("DELETE FROM policy_folders WHERE id=$1 AND account_id=$2", [folderId, accountId]);
+    if (!r.rowCount) throw new FolderInputError("That policy is not in this household.");
+  });
+}
+
+let autoReady: Promise<boolean> | null = null;
+/** Whether sql/policy-folders-auto.sql is applied: until it is, no folder is made for the household. */
+export function autoFoldersReady(): Promise<boolean> {
+  autoReady ??= query<{ t: string | null }>("SELECT to_regclass('public.policy_folder_auto')::text AS t")
+    .then((r) => !!r.rows[0]?.t).catch(() => false)
+    .then((ok) => { if (!ok) autoReady = null; return ok; });
+  return autoReady;
+}
+export function resetAutoFoldersReady() { autoReady = null; }
+
+/** How many copies back (or forward) a document's versions are followed. Past this, a document counts as settled. */
+const COPY_STEPS = 20;
+
+/** The documents that have had a folder made, or left one, and every newer copy of them: never made into a folder again on
+ * their own, so a folder the household deleted does not come back when its policy gets a new version (TE #554 R4-1). */
+export async function handledDocuments(accountId: string): Promise<string[]> {
+  if (!await foldersReady() || !await autoFoldersReady()) return [];
+  const r = await query<{ policy_id: string }>(`WITH RECURSIVE fwd(id, depth) AS (
+      SELECT policy_id, 0 FROM policy_folder_auto WHERE account_id=$1
+      UNION
+      SELECT n.id, f.depth + 1 FROM fwd f JOIN policies n ON n.supersedes_id=f.id AND n.account_id=$1 AND ${activePredicate("n")}
+       WHERE f.depth < ${COPY_STEPS})
+    SELECT DISTINCT id AS policy_id FROM fwd`, [accountId]);
+  return r.rows.map((x) => String(x.policy_id));
+}
+
+/** Whether a document is settled: it is in a folder, or it is a newer copy (however many copies back) of a document that is
+ * in a folder, had one made, or left one. v3 of a filed v1 whose v2 was never added is settled (the folder offers it as
+ * "Add it"), and so is v2 of a schedule whose folder the household deleted. A chain longer than COPY_STEPS counts as
+ * settled rather than risk a second folder. */
+async function settled(tx: Tx, accountId: string, policyId: string): Promise<boolean> {
+  const r = await tx.query(`WITH RECURSIVE back(id, depth, prev) AS (
+      SELECT n.id, 0, n.supersedes_id FROM policies n WHERE n.id=$2 AND n.account_id=$1 AND ${activePredicate("n")}
+      UNION ALL
+      SELECT n.id, b.depth + 1, n.supersedes_id FROM back b JOIN policies n ON n.id=b.prev AND n.account_id=$1 AND ${activePredicate("n")}
+       WHERE b.depth < ${COPY_STEPS})
+    SELECT 1 FROM back b WHERE EXISTS (SELECT 1 FROM policy_folder_documents fd WHERE fd.account_id=$1 AND fd.policy_id=b.id)
+       OR (b.depth > 0 AND EXISTS (SELECT 1 FROM policy_folder_auto a WHERE a.account_id=$1 AND a.policy_id=b.id))
+       OR (b.depth = ${COPY_STEPS} AND b.prev IS NOT NULL)
+    LIMIT 1`, [accountId, policyId]);
+  return r.rows.length > 0;
+}
+
+export type AutoFolderInput = { scheduleId: string; people: string[]; documents: FolderDocumentInput[] };
+/** Makes the folders the page worked out from the household's documents (lib/policies/folder-view.ts policyStarters), each
+ * not complete, so the household checks and confirms it. A schedule that already had its folder made, or left one, is
+ * skipped, so two open pages make one folder and a deleted folder is never made again. Returns how many were made. */
+export async function makeAutoFolders(accountId: string, starters: AutoFolderInput[]): Promise<number> {
+  if (!await foldersReady() || !await autoFoldersReady()) throw new FoldersNotReadyError("Policy folders are not switched on yet.");
+  let made = 0;
+  for (const s of starters) {
+    const people = unique(s.people), docs = [...new Map(s.documents.map((d) => [d.policyId, d])).values()];
+    if (!people.length || !docs.some((d) => d.policyId === s.scheduleId)) throw new FolderInputError("A policy needs its schedule and who it is for.");
+    made += await inTransaction(async (tx) => {
+      await checkPeople(tx, accountId, people);
+      await checkDocuments(tx, accountId, docs.map((d) => d.policyId));
+      const first = await tx.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING policy_id", [s.scheduleId, accountId]);
+      if (!first.rows.length) return 0;
+      // The schedule is in no folder now (a folder made by hand since the page loaded keeps it), and is not a newer copy of a
+      // document in a folder (that folder offers it as "Add it", TE #554 MED) or of one whose folder was made or deleted.
+      if (await settled(tx, accountId, s.scheduleId)) return 0;
+      // Every other document joins only if it is in no folder and was never made into one or taken out of one, whatever the
+      // page sent (Critic #554 MED-2).
+      const joining: FolderDocumentInput[] = [docs.find((d) => d.policyId === s.scheduleId)!];
+      for (const d of docs) {
+        if (d.policyId === s.scheduleId) continue;
+        if (await settled(tx, accountId, d.policyId)) continue;
+        const fresh = await tx.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING policy_id", [d.policyId, accountId]);
+        if (fresh.rows.length) joining.push(d);
+      }
+      const created = await tx.query("INSERT INTO policy_folders(account_id) VALUES($1) RETURNING id", [accountId]);
+      const id = String(created.rows[0].id);
+      for (const p of people) await tx.query("INSERT INTO policy_folder_people(folder_id, account_id, family_member_id) VALUES($1,$2,$3)", [id, accountId, p]);
+      await addDocuments(tx, accountId, id, joining);
+      return 1;
+    });
+  }
+  return made;
 }

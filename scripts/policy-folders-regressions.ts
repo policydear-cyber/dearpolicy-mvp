@@ -89,6 +89,7 @@ async function main() {
   const folders = await import("@/lib/policies/folders");
   const { GET, POST } = await import("@/app/api/policies/folders/route");
   const item = await import("@/app/api/policies/folders/[id]/route");
+  const autoRoute = await import("@/app/api/policies/folders/auto/route");
   const { readHousehold, renderLibrary } = await import("@/lib/simple-chat/library");
   const asUser = (userId: string) => { process.env.DEV_AUTH_ENABLED = "1"; process.env.DEV_ACCOUNT_ID = userId; };
   const req = (url: string, method: string, household: string, body?: unknown) => new NextRequest(`http://localhost${url}`, {
@@ -102,7 +103,7 @@ async function main() {
     asUser(ownerA);
     const res = await GET(req("/api/policies/folders", "GET", A));
     assert.equal(res.status, 200, await res.clone().text());
-    assert.deepEqual(await res.json(), { ready: false, canManage: true, folders: [] });
+    assert.deepEqual(await res.json(), { ready: false, canManage: true, auto: false, handled: [], folders: [] });
     const made = await POST(req("/api/policies/folders", "POST", A, { people: [jane], documents: [{ policyId: sched }], complete: false }));
     assert.equal(made.status, 409);
     assert.deepEqual(await folders.listFolders(A), []);
@@ -328,6 +329,160 @@ async function main() {
     assert.match(text, /<policy id="P1" name="Jane's CI plan" for="Jane Doe" documents="D1, D2" all_documents="yes, confirmed by the household"\/>/);
     const b = await household(B);
     assert.equal(b.folders, undefined);
+  });
+
+  // ---- folders made for the household (sql/policy-folders-auto.sql; DC 19 Nov "Make them all automatically")
+  const autoSched = id("f9800000", 21), autoReceipt = id("f9800000", 22), handFiled = id("f9800000", 23);
+  for (const [pid, insurer, role, file] of [[autoSched, "Example Life Pte Ltd", "personal_schedule", "Auto schedule.pdf"], [autoReceipt, "Example Life Pte. Ltd.", "premium_receipt", "Auto receipt.pdf"], [handFiled, "Example Life", "personal_schedule", "Hand schedule.pdf"]])
+    await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,policy_number,processing_status,original_filename,storage_key,file_hash,quarantine_status)
+      VALUES($1,$2,$3,$4,'Example Shield',$5,'AU-123456','ready',$6,'k',$7,'scan_clean')`, [pid, A, jane, insurer, role, file, "sha256:" + pid]);
+  const starter = { scheduleId: autoSched, people: [jane], documents: [{ policyId: autoSched, slot: "schedule" }, { policyId: autoReceipt, slot: "other" }] };
+  const handled = async () => ((await (await GET(req("/api/policies/folders", "GET", A))).json()).handled as string[]).sort();
+  const folderWith = async (pid: string) => (await folders.listFolders(A)).filter((f) => f.documents.some((d) => d.policyId === pid));
+
+  await test("AU0 before the auto file is applied: GET says auto is off; making folders is refused (409); nothing written", async () => {
+    folders.resetAutoFoldersReady(); asUser(ownerA);
+    const got = await (await GET(req("/api/policies/folders", "GET", A))).json();
+    assert.equal(got.auto, false); assert.deepEqual(got.handled, []);
+    assert.equal((await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [starter] }))).status, 409);
+    assert.deepEqual(await folderWith(autoSched), []);
+  });
+  await db.exec(await readFile(path.resolve("sql/policy-folders-auto.sql"), "utf8"));
+  await db.exec(await readFile(path.resolve("sql/policy-folders-auto.sql"), "utf8")); // twice is harmless
+  folders.resetAutoFoldersReady();
+  await test("AU1 the owner's page makes one folder from a schedule and its same-number receipt, for Jane, not complete", async () => {
+    asUser(ownerA);
+    const res = await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [starter] }));
+    assert.equal(res.status, 200, await res.clone().text());
+    assert.equal((await res.json()).made, 1);
+    const [f] = await folderWith(autoSched);
+    assert.equal(f.complete, false); assert.equal(f.name, null);
+    assert.deepEqual(f.people.map((p) => p.id), [jane]);
+    assert.deepEqual(f.documents.map((d) => [d.policyId, d.slot]), [[autoSched, "schedule"], [autoReceipt, "other"]]);
+    assert.deepEqual(await handled(), [autoSched, autoReceipt].sort());
+  });
+  await test("AU2 a second page (or a reload) asking again makes nothing more", async () => {
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [starter] }))).json()).made, 0);
+    assert.equal((await folderWith(autoSched)).length, 1);
+  });
+  await test("AU3 a made folder the household deletes is never made again; its documents stay on file", async () => {
+    const [f] = await folderWith(autoSched);
+    assert.equal((await item.DELETE(req(`/api/policies/folders/${f.id}`, "DELETE", A), params(f.id))).status, 200);
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [starter] }))).json()).made, 0);
+    assert.deepEqual(await folderWith(autoSched), []);
+    assert.equal((await pool.query("SELECT lifecycle_state FROM policies WHERE id=$1", [autoSched])).rows[0].lifecycle_state, "active");
+  });
+  await test("AU4 a schedule the household filed by hand since the page loaded: no second folder", async () => {
+    assert.equal((await POST(req("/api/policies/folders", "POST", A, { people: [jane], documents: [{ policyId: handFiled }], complete: false }))).status, 200);
+    const s = { scheduleId: handFiled, people: [jane], documents: [{ policyId: handFiled, slot: "schedule" }] };
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [s] }))).json()).made, 0);
+    assert.equal((await folderWith(handFiled)).length, 1);
+  });
+  await test("AU5 a document taken out of a folder is never put back on its own", async () => {
+    const [f] = await folderWith(handFiled);
+    assert.equal((await item.PATCH(req(`/api/policies/folders/${f.id}`, "PATCH", A, { remove: [handFiled] }), params(f.id))).status, 200);
+    assert.ok((await handled()).includes(handFiled));
+    await item.DELETE(req(`/api/policies/folders/${f.id}`, "DELETE", A), params(f.id));
+  });
+  await test("AU6 a member is refused (403); another household's owner naming A's document or person is refused (400); nothing written", async () => {
+    const fresh = id("f9800000", 24);
+    await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,processing_status,original_filename,storage_key,file_hash,quarantine_status)
+      VALUES($1,$2,$3,'Example Life','Example Shield','personal_schedule','ready','Fresh.pdf','k',$4,'scan_clean')`, [fresh, A, jane, "sha256:" + fresh]);
+    const s = { scheduleId: fresh, people: [jane], documents: [{ policyId: fresh, slot: "schedule" }] };
+    asUser(memberA);
+    assert.equal((await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [s] }))).status, 403);
+    asUser(ownerB);
+    assert.equal((await autoRoute.POST(req("/api/policies/folders/auto", "POST", B, { starters: [s] }))).status, 400);
+    assert.equal((await autoRoute.POST(req("/api/policies/folders/auto", "POST", B, { starters: [{ scheduleId: bDoc, people: [jane], documents: [{ policyId: bDoc }] }] }))).status, 400);
+    asUser(ownerA);
+    assert.deepEqual(await folderWith(fresh), []);
+    assert.ok(!(await handled()).includes(fresh));
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM policy_folder_auto WHERE account_id=$1", [B])).rows[0].n, 0);
+  });
+  await test("AU7 a starter without its schedule among its documents, or with no person, is refused", async () => {
+    asUser(ownerA);
+    assert.equal((await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: autoSched, people: [jane], documents: [{ policyId: wording }] }] }))).status, 400);
+    assert.equal((await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: autoSched, people: [], documents: [{ policyId: autoSched }] }] }))).status, 400);
+  });
+  await test("AU9 a same-number document taken out of a folder, or filed by hand, is not put into a newly made one", async () => {
+    asUser(ownerA);
+    const s2 = id("f9800000", 25), took = id("f9800000", 26), hand = id("f9800000", 27);
+    for (const [pid, role] of [[s2, "personal_schedule"], [took, "premium_receipt"], [hand, "policy_wording"]])
+      await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,policy_number,processing_status,original_filename,storage_key,file_hash,quarantine_status)
+        VALUES($1,$2,$3,'Example Life','Example Shield',$4,'AU-999999','ready','x.pdf','k',$5,'scan_clean')`, [pid, A, jane, role, "sha256:" + pid]);
+    await pool.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2)", [took, A]);
+    assert.equal((await POST(req("/api/policies/folders", "POST", A, { people: [jane], documents: [{ policyId: hand }], complete: false }))).status, 200);
+    const res = await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: s2, people: [jane], documents: [{ policyId: s2, slot: "schedule" }, { policyId: took }, { policyId: hand }] }] }));
+    assert.equal((await res.json()).made, 1);
+    const [f] = await folderWith(s2);
+    assert.deepEqual(f.documents.map((d) => d.policyId), [s2]);
+    assert.equal((await folderWith(hand)).length, 1, "the hand-filed wording stays in its one folder");
+  });
+  await test("AU10 a newer copy of a schedule that is in a folder: no second folder for it", async () => {
+    asUser(ownerA);
+    const old = id("f9800000", 28), copy = id("f9800000", 29);
+    await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,processing_status,original_filename,storage_key,file_hash,quarantine_status)
+      VALUES($1,$2,$3,'Example Life','Example Shield','personal_schedule','ready','old.pdf','k',$4,'scan_clean')`, [old, A, jane, "sha256:" + old]);
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: old, people: [jane], documents: [{ policyId: old, slot: "schedule" }] }] }))).json()).made, 1);
+    await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,processing_status,original_filename,storage_key,file_hash,quarantine_status,supersedes_id)
+      VALUES($1,$2,$3,'Example Life','Example Shield','personal_schedule','ready','new.pdf','k',$4,'scan_clean',$5)`, [copy, A, jane, "sha256:" + copy, old]);
+    await pool.query("UPDATE policies SET superseded_at=now() WHERE id=$1", [old]);
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: copy, people: [jane], documents: [{ policyId: copy, slot: "schedule" }] }] }))).json()).made, 0);
+    assert.deepEqual(await folderWith(copy), []);
+    const [f] = (await folders.listFolders(A)).filter((x) => x.replacements.some((r) => r.by === copy));
+    assert.ok(f, "the old folder offers the copy");
+  });
+  await test("AU11 a third copy of a filed schedule whose second copy was never added: no second folder; the folder offers the newest", async () => {
+    asUser(ownerA);
+    const v1 = id("f9800000", 30), v2 = id("f9800000", 31), v3 = id("f9800000", 32);
+    const ins = (pid: string, prev: string | null) => pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,processing_status,original_filename,storage_key,file_hash,quarantine_status,supersedes_id)
+      VALUES($1,$2,$3,'Example Life','Chain Shield','personal_schedule','ready','v.pdf','k',$4,'scan_clean',$5)`, [pid, A, jane, "sha256:" + pid, prev]);
+    await ins(v1, null);
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: v1, people: [jane], documents: [{ policyId: v1, slot: "schedule" }] }] }))).json()).made, 1);
+    await ins(v2, v1); await pool.query("UPDATE policies SET superseded_at=now() WHERE id=$1", [v1]);
+    await ins(v3, v2); await pool.query("UPDATE policies SET superseded_at=now() WHERE id=$1", [v2]);
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: v3, people: [jane], documents: [{ policyId: v3, slot: "schedule" }] }] }))).json()).made, 0);
+    assert.deepEqual(await folderWith(v3), []);
+    const offers = (await folders.listFolders(A)).flatMap((f) => f.replacements.filter((r) => r.policyId === v1));
+    assert.deepEqual(offers.map((r) => r.by), [v3], "v1's folder offers v3, once");
+  });
+  await test("AU12 a deleted folder does not come back when its schedule gets a newer copy", async () => {
+    asUser(ownerA);
+    const v1 = id("f9800000", 33), v2 = id("f9800000", 34);
+    const ins = (pid: string, prev: string | null) => pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,processing_status,original_filename,storage_key,file_hash,quarantine_status,supersedes_id)
+      VALUES($1,$2,$3,'Example Life','Gone Shield','personal_schedule','ready','v.pdf','k',$4,'scan_clean',$5)`, [pid, A, jane, "sha256:" + pid, prev]);
+    await ins(v1, null);
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: v1, people: [jane], documents: [{ policyId: v1, slot: "schedule" }] }] }))).json()).made, 1);
+    const [f] = await folderWith(v1);
+    assert.equal((await item.DELETE(req(`/api/policies/folders/${f.id}`, "DELETE", A), params(f.id))).status, 200);
+    await ins(v2, v1); await pool.query("UPDATE policies SET superseded_at=now() WHERE id=$1", [v1]);
+    assert.ok((await folders.handledDocuments(A)).includes(v2), "the page is told the newer copy is handled");
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: v2, people: [jane], documents: [{ policyId: v2, slot: "schedule" }] }] }))).json()).made, 0);
+    assert.deepEqual(await folderWith(v2), []);
+  });
+  await test("AU13 a copy chain longer than the steps followed makes no second folder", async () => {
+    asUser(ownerA);
+    const ids = Array.from({ length: 24 }, (_, i) => id("f9810000", i + 1));
+    for (const [i, pid] of ids.entries()) {
+      await pool.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,processing_status,original_filename,storage_key,file_hash,quarantine_status,supersedes_id)
+        VALUES($1,$2,$3,'Example Life','Long Shield','personal_schedule','ready','v.pdf','k',$4,'scan_clean',$5)`, [pid, A, jane, "sha256:" + pid, i ? ids[i - 1] : null]);
+      if (i === 0) assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: pid, people: [jane], documents: [{ policyId: pid, slot: "schedule" }] }] }))).json()).made, 1);
+      else await pool.query("UPDATE policies SET superseded_at=now() WHERE id=$1", [ids[i - 1]]);
+    }
+    const last = ids.at(-1)!;
+    assert.equal((await (await autoRoute.POST(req("/api/policies/folders/auto", "POST", A, { starters: [{ scheduleId: last, people: [jane], documents: [{ policyId: last, slot: "schedule" }] }] }))).json()).made, 0);
+  });
+  await test("AU8 the database itself refuses a record naming another household's document; browsers can only read their own", async () => {
+    await assert.rejects(pool.query("INSERT INTO policy_folder_auto(policy_id, account_id) VALUES($1,$2)", [bDoc, A]), /another household/);
+    const asBrowser = async <T>(userId: string, fn: () => Promise<T>) => serial(async () => {
+      await db.query("BEGIN");
+      try { await db.query("SET LOCAL ROLE authenticated"); await db.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [userId]); return await fn(); }
+      finally { await db.query("ROLLBACK"); }
+    });
+    assert.ok(await asBrowser(memberA, async () => (await db.query("SELECT 1 FROM policy_folder_auto")).rows.length) > 0);
+    assert.equal(await asBrowser(ownerB, async () => (await db.query("SELECT 1 FROM policy_folder_auto")).rows.length), 0);
+    for (const sql of [`INSERT INTO policy_folder_auto(policy_id, account_id) VALUES('${id("f9800000", 24)}','${A}')`, "DELETE FROM policy_folder_auto"])
+      await assert.rejects(asBrowser(ownerA, () => db.query(sql)), /permission denied/, sql);
   });
 
   if (failures.length) { console.error(failures.join("\n\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }

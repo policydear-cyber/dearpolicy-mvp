@@ -152,12 +152,21 @@ test("households: counts per household, deleted ones left out, plans table not s
     assert.ok(totals.data.documents >= 7);
     assert.deepEqual([totals.data.accounts, totals.data.confirmedAccounts, totals.data.signups7d], [3, 2, 3]);
   }
-  const days = await C.readSignupsByDay();
-  assert.ok(days.ok);
-  if (days.ok) {
-    assert.equal(days.data.length, 14);
-    assert.equal(days.data.reduce((n, d) => n + d.households, 0), list.data.rows.length, "only active households");
-    assert.equal(days.data.reduce((n, d) => n + (d.accounts ?? 0), 0), 3);
+  const trends = await C.readTrends();
+  assert.ok(trends.ok);
+  if (trends.ok) {
+    const t = trends.data;
+    assert.equal(t.days.length, C.TREND_DAYS);
+    assert.ok(t.days.every((d, i) => i === 0 || d > t.days[i - 1]), "oldest first");
+    for (const series of [t.accounts, t.households, t.questions, t.spendUsd]) assert.equal(series?.length, C.TREND_DAYS);
+    const sum = (xs: number[] | null) => (xs ?? []).reduce((n, v) => n + v, 0);
+    assert.equal(sum(t.households), list.data.rows.length, "only active households; the deleted one is left out");
+    assert.equal(sum(t.accounts), 3);
+    assert.ok(sum(t.questions) >= 2, "A's two questions are counted");
+  }
+  if (totals.ok) {
+    assert.equal(totals.data.signupsPrev7d, 0);
+    assert.equal(totals.data.activeHouseholds30d, 2, "A and B signed in today; the deleted household never counts");
   }
 });
 
@@ -314,4 +323,59 @@ test("Test engineer re-check on #553: no DDL on a usage view; the overview shows
   }
   const ok = await C.readHouseholds();
   assert.ok(ok.ok && ok.data.questionsAvailable && ok.data.rows.find((h) => h.id === A)!.questionsThisMonth === 2, "with the chat table, A's two questions show");
+});
+
+test("trends: a missing table is null (shown as not available), never a row of zeros", async () => {
+  const db = await database(true);
+  const C = await import("@/lib/admin/console");
+  await db.exec("ALTER TABLE chat_messages RENAME TO chat_messages_moved");
+  try {
+    const t = await C.readTrends();
+    assert.ok(t.ok && t.data.questions === null && t.data.households.length === C.TREND_DAYS);
+  } finally {
+    await db.exec("ALTER TABLE chat_messages_moved RENAME TO chat_messages");
+  }
+});
+
+test("the spreadsheet download neutralises formulas typed into household names", async () => {
+  const { csvCell, householdsCsv } = await import("@/app/admin/_components/households-table");
+  assert.equal(csvCell("=HYPERLINK(\"x\")"), `"'=HYPERLINK(""x"")"`);
+  for (const bad of ["+1", "-1", "@SUM(A1)", "\tx", "  =1+1", " +cmd|' /C calc'!A0", "\n=1+1"]) assert.ok(csvCell(bad).startsWith(`"'`), `${JSON.stringify(bad)} can't run as a formula`);
+  assert.equal(csvCell("Tan, household"), `"Tan, household"`);
+  assert.equal(csvCell(-3), "-3", "a number stays a number");
+  assert.equal(csvCell(null), "");
+  await database(true);
+  const C = await import("@/lib/admin/console");
+  const list = await C.readHouseholds();
+  assert.ok(list.ok);
+  if (!list.ok) return;
+  const csv = householdsCsv(list.data.rows);
+  const lines = csv.split("\r\n");
+  assert.equal(lines.length, list.data.rows.length + 1);
+  assert.match(lines[0], /^Household,Household id,Owner email,Plan/);
+  assert.match(csv, /Tan household/);
+  for (const m of MARKERS) assert.ok(!csv.includes(m), `${m} is not in the download`);
+});
+
+test("Test engineer findings on #556: spend and errors show — when their tables are missing; CSV dates in Singapore time", async () => {
+  const db = await database(true);
+  const C = await import("@/lib/admin/console");
+  const { householdsCsv } = await import("@/app/admin/_components/households-table");
+  const { ensureProvenanceSchema } = await import("@/lib/ai/provenance");
+  await ensureProvenanceSchema();
+  await db.exec("ALTER TABLE model_executions RENAME TO model_executions_moved");
+  try {
+    const l = await C.readHouseholds();
+    assert.ok(l.ok && !l.data.spendAvailable && l.data.rows.every((h) => h.spendUsd === null && h.modelCalls === null), "spend is unknown, not 0");
+    if (l.ok) assert.ok(!householdsCsv(l.data.rows).includes("0.0000"), "the download leaves spend blank, not 0");
+  } finally {
+    await db.exec("ALTER TABLE model_executions_moved RENAME TO model_executions");
+  }
+  const l = await C.readHouseholds();
+  assert.ok(l.ok && l.data.spendAvailable);
+  if (!l.ok) return;
+  const a = l.data.rows.find((h) => h.id === A)!;
+  const csv = householdsCsv([a], { [A]: { created: "1 Nov 2026, 08:00", lastSignIn: "—" } });
+  assert.match(csv, /1 Nov 2026, 08:00/);
+  assert.ok(!csv.includes("+00"), "no raw database time");
 });
