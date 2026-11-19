@@ -37,7 +37,7 @@ export function shortFigure(r: SummaryRow): { text: string; note: string | null 
     if (r.pays === "not_covered") return { text: "Not covered", note: null };
     // The share it pays, in the row's own words, never an amount: "10% of Prevailing Insured Amount".
     if (f.share) return { text: `${f.share.percent}% of ${f.share.of}`,
-      note: f.share.held ? `no amount is worked out yet: ${f.share.held.what === "cap" ? "its maximum" : "the sum insured"} is ${f.share.held.status === "checking" ? "still being checked" : "not confirmed"} against the document's page`
+      note: f.share.held ? `no amount is worked out yet: ${f.share.held.what === "cap" ? "its maximum" : "the sum insured"} is ${f.share.held.status === "checking" ? "still being checked" : "not confirmed"} against the document's page${f.share.held.what === "sum_insured" && f.share.capWords ? `; ${f.share.capWords} (printed with it on p${f.share.capPage})` : ""}`
         : f.share.capMissing ? "a maximum applies, but it was not captured from the page: see the document"
         : f.share.capWords ? `${f.share.capWords} (printed with it on p${f.share.capPage})`
         : "no amount is worked out: the amount it is a share of is not stated with it" };

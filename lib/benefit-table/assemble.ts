@@ -1832,7 +1832,7 @@ export { periodWords };
 
 export function figureText(f: Figure): string {
   if (f.kind === "none") return f.share
-    ? `${f.share.percent}% of ${f.share.of}, no amount worked out (${f.share.held ? f.why : f.share.capMissing ? "a maximum applies, but it was not captured from the page" : f.share.capWords ? `${f.share.capWords}, printed with it on p${f.share.capPage}` : f.why})`
+    ? `${f.share.percent}% of ${f.share.of}, no amount worked out (${f.share.held ? `${f.why}${f.share.held.what === "sum_insured" && f.share.capWords ? `; ${f.share.capWords}, printed with it on p${f.share.capPage}` : ""}` : f.share.capMissing ? "a maximum applies, but it was not captured from the page" : f.share.capWords ? `${f.share.capWords}, printed with it on p${f.share.capPage}` : f.why})`
     : `no amount (${f.why})`;
   const m = money(f.amount, f.currency) + (f.currency ? "" : " (currency not stated)");
   if (f.kind === "value") return `${m} value${f.asOf ? ` as of ${f.asOf}` : " (date not stated)"}`;

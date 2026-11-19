@@ -9,7 +9,7 @@ import { applyGuards, claimsOf, type GuardRecord } from "@/lib/benefit-table/gua
 import { IMAGE_BATCH, IMAGE_CHECK_PROMPT, IMAGE_CHECK_VERSION, blindWhere, copyConfirms, imageQuestions, periodsIn, readCopies, runImageCheck, type ImageChecker, type PageSource } from "@/lib/benefit-table/image-check";
 import { figureCheckMode, figureChecksOn, imageCheckEnabled, imageCheckModels } from "@/lib/benefit-table/guard-flag";
 import { userContent, type Attachment, type TableCall, type TableModel } from "@/lib/benefit-table/model";
-import { assembleTable, coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
+import { assembleTable, coverKeyOf, figureText, sectionKeyOf } from "@/lib/benefit-table/assemble";
 import { shortFigure } from "@/lib/benefit-table/headline";
 import { guardStoredReading, readDocument, setFigureConfirmation, tableFor, type Db, type GuardSetup } from "@/lib/benefit-table/service";
 import { nativePagesOf, pageSourceFor } from "@/lib/benefit-table/page-source";
@@ -449,6 +449,10 @@ async function main() {
     assert.match((death.figure as { why: string }).why, /sum insured of Travel Basic Plan, which is still being checked against the document's page/);
     assert.doesNotMatch((death.figure as { why: string }).why, /no sum insured is printed/);
     assert.match(shortFigure(death).note ?? "", /the sum insured is still being checked against the document's page/);
+    // A maximum the check confirmed is still shown while only the sum is held back (test engineer on #558, N1).
+    const medSum = sumHeld.find((x) => x.benefit === "Medical expenses")!;
+    assert.match(shortFigure(medSum).note ?? "", /the sum insured is still being checked against the document's page; up to S\$20,000 \(printed with it on p2\)/);
+    assert.match(figureText(medSum.figure), /still being checked against the document's page; up to S\$20,000, printed with it on p2/);
     // Asked, not confirmed.
     const sumAsked = tableAt({ ...agreed("value"), ...agreed("cap"), ...Object.fromEntries(keys.filter((k) => k[0] === "sum_insured").map((k) => [k[1], { status: "confirm", value: null, candidates: [] }])) });
     assert.match(shortFigure(sumAsked.find((x) => x.benefit === "Accidental death")!).note ?? "", /the sum insured is not confirmed against the document's page/);
