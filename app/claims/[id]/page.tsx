@@ -10,7 +10,7 @@ import { isMedicalClaimEligibleDocumentType, type ClaimEvidenceDocumentType } fr
 import { HOUSEHOLD_REVIEW_STATUS_COPY, INDICATIVE_ESTIMATE_NOTICE, type HouseholdReviewStatus } from "@/lib/claims/reviewers/copy";
 import { IndicativeEstimatePanel } from "./indicative-panel";
 import { customerError, customerMessage } from "@/components/customer-text";
-import { maybeSgDate } from "@/components/format-date";
+import { maybeSgDate, singaporeDay } from "@/components/format-date";
 
 /** claimDisplayStatus() output (lib/claims/status.ts), attached by the claims
  * API -- the ONLY source of this page's status line and "what to send" list,
@@ -38,7 +38,8 @@ const evidenceName = (doc: Pick<EvidenceDoc, "document_type" | "created_at">) =>
   // Singapore time, never the raw value (TE #559 M2).
   const iso = /^\d{4}-\d{2}-\d{2} \d/.test(doc.created_at)
     ? doc.created_at.replace(" ", "T").replace(/(\.\d{3})\d+/, "$1").replace(/([+-]\d{2})$/, "$1:00") : doc.created_at;
-  const day = maybeSgDate(/^\d{4}-\d{2}-\d{2}T/.test(iso) && !Number.isNaN(Date.parse(iso)) ? iso : "");
+  // The day is Singapore's whatever the device's time zone (TE #559 L2): an upload at 16:01Z is the next day in Singapore.
+  const day = singaporeDay(iso);
   return `${documentTypeLabel(doc.document_type)}${day ? ` (uploaded ${day})` : ""}`;
 };
 

@@ -147,6 +147,13 @@ async function main() {
     const { sgDate } = await import("../components/format-date");
     assert.equal(sgDate("2026-09-29"), "29 Sep 2026");
     assert.equal(sgDate(""), "");
+    // Claim documents are named by their Singapore upload day on every device (TE #559 L2): midnight in Singapore is 16:00Z.
+    const { singaporeDay } = await import("../components/format-date");
+    assert.equal(singaporeDay("2026-11-18T15:59:00.000+00:00"), "18 Nov 2026");
+    assert.equal(singaporeDay("2026-11-18T16:01:00.000+00:00"), "19 Nov 2026");
+    assert.equal(singaporeDay("2026-11-18T16:30:00Z"), "19 Nov 2026");
+    assert.equal(singaporeDay("2026-11-19 04:45:56+00"), "");
+    assert.equal(singaporeDay(null), "");
   });
   await test("a future date of birth is refused on the page and by the API", () => {
     assert.match(read("app/family/page.tsx"), /A date of birth can't be in the future\./);
