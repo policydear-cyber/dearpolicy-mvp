@@ -84,8 +84,20 @@ const SUMMARY_TITLE = /\b(?:insurance|policy|product|cover|travel|plan)\s+summar
  * Lower-case text. */
 function personalParticulars(t: string) {
   return /(?<!(?:group|master)\s)\bpolicy\s+(?:number|no\.?)\s*[:#-]?\s*[a-z0-9-]*\d[a-z0-9-]{3,}/.test(t)
-    && new RegExp(String.raw`\b(?:policy ?holder|policy owner|insured person|life assured|your name|name of (?:the )?insured)\b[^\n:]{0,20}:[ \t]*` + PERSON_VALUE).test(t);
+    && new RegExp(String.raw`\b(?:` + PERSON_LABEL + String.raw`)\b[^\n:]{0,20}:[ \t]*` + PERSON_VALUE).test(t);
 }
+
+/** The labels a form prints before a person's own name, for any insurer: the person's role ("Policyholder", "Life
+ * assured", "Insured person", "Traveller", "Applicant", "Proposer") or the parts of a name an application or quote form
+ * asks for ("Family name", "Surname", "Given name", "Full name"). A Singlife travel "Quote and Summary of Cover" printed
+ * its traveller only as "Family Name: ... Given Name: ...", so it was taken for generic wording (19 Nov). Lower-case text;
+ * a closed list. A company or agent's name ("Company Name", "Agent Name") is never one. */
+const PERSON_LABEL = [
+  String.raw`policy ?holder|policy owner|insured person|life assured|your name`,
+  String.raw`name of (?:the )?(?:insured|policy ?holder|policy owner|proposer|applicant|traveller|traveler|life assured)`,
+  String.raw`(?:insured|traveller|traveler|applicant|proposer)(?:'s)? (?:full )?name`,
+  String.raw`family name|surname|last name|given names?|first name|full name`,
+].join("|");
 
 /** A printed person's name after a label ("Life Assured: Lim Wei Jie"), not a definition ("any eligible employee",
  * "the person named in Part 1"). Lower-case text. */

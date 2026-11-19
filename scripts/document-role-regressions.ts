@@ -112,6 +112,26 @@ async function main() {
     assert.equal(deterministicDocumentRole(summary, "policy_wording"), "personal_schedule");
     assert.equal(detectHighConfidenceReferenceRole(summary), null, "not short-circuited as generic wording");
   });
+  // 3b. A quote-and-summary form naming its traveller by "Family Name / Given Name" and printing its own terms and
+  // conditions (a real household's travel cover filed as policy wording, so Home showed no travel cover; invented here).
+  const formSummary = doc(
+    "Policy No.: 70012345\nDate of Creation: 08/08/2026\nQUOTE AND SUMMARY OF COVER\nTravel Insurance Premium is:\nSGD 52.10\nYour Agent's Details\nAgent Name:\tDIRECT (GEN-INS)\nCompany Name:\tDIRECT (GEN-INS)\nAbout You\nFamily Name:\tRivera\tGiven Name:\tAna Maria\nDate of Birth:\t03-Mar-1990\nSummary of Cover\nPlan Type:\t\tTravel Basic\nTrip Type:\t\tSingle Trip\nCover start date:\t\t11-Jan-2027\nCover end date:\t\t21-Jan-2027",
+    "Declaration\nYou agree to the terms and conditions.\nTerms and Conditions\nGeneral\n1. The Policy is underwritten by Example Insurance Ltd.",
+  );
+  await t("3b: a quote and summary of cover naming its traveller by family and given name is a personal schedule", () => {
+    assert.equal(detectHighConfidenceReferenceRole(formSummary), null, "not short-circuited as generic wording");
+    assert.equal(deterministicDocumentRole(formSummary, null), "personal_schedule");
+    assert.equal(deterministicDocumentRole(formSummary, "policy_wording"), "personal_schedule");
+  });
+  await t("3b control: the same form with blank name fields, or only an agent's and company's name, stays reference", () => {
+    const blank = doc(formSummary[0].text.replace("Family Name:\tRivera\tGiven Name:\tAna Maria", "Family Name:\nGiven Name:"), formSummary[1].text);
+    assert.equal(detectHighConfidenceReferenceRole(blank), "policy_wording");
+    assert.notEqual(deterministicDocumentRole(blank, null), "personal_schedule");
+    const agentOnly = doc(formSummary[0].text.replace("Family Name:\tRivera\tGiven Name:\tAna Maria\n", ""), formSummary[1].text);
+    assert.equal(detectHighConfidenceReferenceRole(agentOnly), "policy_wording");
+    const groupNumber = doc(formSummary[0].text.replace("Policy No.: 70012345", "Group Policy No.: G700123"), formSummary[1].text);
+    assert.equal(detectHighConfidenceReferenceRole(groupNumber), "policy_wording", "a group scheme's number is not the person's own policy");
+  });
   await t("3 control: a generic summary with no printed policy number stays reference", () => {
     const generic = doc("Travel insurance summary of benefits\nThe policyholder is the person named in the schedule. Policy number means the number on your schedule.\nTerms and conditions apply. Please read the policy wording.");
     assert.notEqual(deterministicDocumentRole(generic, null), "personal_schedule");
