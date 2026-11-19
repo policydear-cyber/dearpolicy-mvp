@@ -138,6 +138,13 @@ export function formNamePrinted(text: string, name: string): boolean {
   const wanted = formWords(name);
   return wanted.length > 0 && formNames(text).some((n) => { const w = formWords(n); return wanted.every((x) => w.includes(x)); });
 }
+/** Is this person's name EXACTLY one of the form's names (formNames): the same words, in any order ("Tan Mei Ling" for
+ * "Family Name: Tan  Given Name: Mei Ling"). What verifies a figure for a person: a part of a longer printed name never
+ * does ("Wei Tan" in "Tan Wei Ling" is another person or a short form; words alone cannot tell, so no figure; TE #561 W1). */
+export function formNameExact(text: string, name: string): boolean {
+  const wanted = formWords(name).sort().join(" ");
+  return !!wanted && formNames(text).some((n) => formWords(n).sort().join(" ") === wanted);
+}
 /** A name's words, without the words that only join a name ("bin", "binte", "s/o"). */
 const formWords = (n: string) => n.normalize("NFKC").toLowerCase().replace(/(?<![\p{L}])(?:[sd]\s*\/\s*o|a\s*\/\s*[lp])(?![\p{L}])/gu, " ")
   .split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w && !["bin", "binte", "binti", "bte", "bt"].includes(w));

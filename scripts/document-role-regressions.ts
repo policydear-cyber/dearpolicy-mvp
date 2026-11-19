@@ -178,7 +178,13 @@ async function main() {
     assert.equal(ok("Family Name: Tan    Given Name: Mei Ling    Emergency contact: Wei", "Mei Ling Tan"), true, "the form's own name still verifies");
     // A shorter name the household keeps is part of the one name the form prints: the same person, as on main (Critic #561).
     assert.equal(ok("Full name:\tWei Tan Ah Kow", "Wei Tan Ah Kow"), true);
-    assert.equal(ok("Family Name:\tLim\tGiven Name:\tWei Jie, Daniel", "Daniel Lim"), true);
+    // A part of a longer printed name verifies no figure: "Wei Tan" in "Tan Wei Ling" may be someone else (TE #561 W1, W1b,
+    // L4). A short form gets no figure here, as on main.
+    assert.equal(ok("Family Name:\tTan\tGiven Name:\tWei Ling", "Wei Tan"), false);
+    assert.equal(ok("Insured person: Tan Wei Ling", "Wei Tan"), false);
+    assert.equal(ok("Policyholder: Tan Wei Ling", "Wei Tan"), false);
+    assert.equal(ok("Family Name:\tLim\tGiven Name:\tWei Jie, Daniel", "Daniel Lim"), false);
+    assert.equal(ok("Family Name:\tLim\tGiven Name:\tWei Jie, Daniel", "Lim Wei Jie Daniel"), true);
     const { personPrinted } = await import("@/lib/documents/fact-check");
     assert.equal(personPrinted("Family Name: Tan    Given Name: Mei Ling    Emergency contact: Wei", "Wei Tan"), false, "TE #561 V3: words from two fields");
     assert.equal(personPrinted("Full name: Mei Ling Tan    Full name: Wei Lim", "Wei Tan"), false, "TE #561 V4: words from two people");
