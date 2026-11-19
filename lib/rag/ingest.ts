@@ -22,7 +22,7 @@ import { REFERENCE_ROLES, deterministicDocumentRole, documentAuthority, looksLik
 import { factCheckExtraction, personPrinted } from "@/lib/documents/fact-check";
 import { PolicyExtractionSchema } from "@/lib/ai/extract-policy";
 import { normalizeCoverageCategory } from "@/lib/insurance";
-import { familyMembersForAccount, findFamilyMatchWithKind, householdNameMatches, linkRelatedReferenceDocuments, preferHouseholdMatch, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
+import { familyMembersForAccount, findFamilyMatchWithKind, householdNameMatches, onlyTheirWords, linkRelatedReferenceDocuments, preferHouseholdMatch, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
 import { runPolicyQuarantineGate } from "@/lib/policies/quarantine/store";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
@@ -841,7 +841,10 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // document to a profile they chose, and it names exactly ONE insured
       // person: that choice is the link (flagged for review below). With
       // several named people nothing is guessed.
-      if (!match && args.linkUploadMember && extraction.personalCoverageConfirmed && extraction.insuredPeople.length === 1 && !dismissed.has(nameKey(person.name))) {
+      // Never when the printed name may be someone else in the household: every word of it is one of another member's
+      // own ("Mei Ling" uploaded to Arun's profile while Mei Ling Tan is a member; TE #561).
+      if (!match && args.linkUploadMember && extraction.personalCoverageConfirmed && extraction.insuredPeople.length === 1 && !dismissed.has(nameKey(person.name))
+        && !family.some((member) => member.id !== args.familyMemberId && onlyTheirWords(person.name, member))) {
         match = family.find((member) => member.id === args.familyMemberId) ?? null;
         if (match) { link = { source: "upload_hint", confidence: 0.70 }; uploadProfileLinks.push(`${person.name} (linked to ${match.display_name}, the profile it was uploaded to)`); }
       }

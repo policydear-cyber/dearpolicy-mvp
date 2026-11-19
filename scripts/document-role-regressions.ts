@@ -140,9 +140,24 @@ async function main() {
     assert.equal(personalDocumentTitle("Summary of cover\nPolicy No: TR12345678\nSurname: Date of Birth:"), null);
     assert.equal(personalDocumentTitle("SPECIMEN\nTravel insurance summary\nPolicy Number: 12345678\nFull Name: Tan Ah Kow"), null);
     assert.equal(personalDocumentTitle("Travel insurance summary\nPolicy Number: 12345678\nFull name: means the name in your passport"), null);
-    // Still personal: a filled form, on one line or two.
-    assert.equal(personalDocumentTitle("Summary of cover\nPolicy No.: 70012345\nFamily Name: Tan\nGiven Name: Wei Jie"), "personal_schedule");
+    // Still personal: a filled form with family and given name on one line, or a whole name.
     assert.equal(personalDocumentTitle("Summary of cover\nPolicy No.: 70012345\nSurname:\tTan\tFirst name:\tWei Jie"), "personal_schedule");
+    assert.equal(personalDocumentTitle("Summary of cover\nPolicy No.: 70012345\nFull name:\tTan Wei Jie"), "personal_schedule");
+    assert.equal(personalDocumentTitle("Summary of cover\nPolicy No.: 70012345\nTraveller's name: Ana Rivera"), "personal_schedule");
+  });
+  await t("3b control (TE #561): a lone given name, names split over lines, instructions, stand-ins and blank fields are not personal", () => {
+    const { personalDocumentTitle } = intelligence;
+    const head = "Summary of cover\nPolicy No.: 70012345\n";
+    // A given name alone may be another household member's (TE: "Mei Ling" uploaded to Arun's profile).
+    assert.equal(personalDocumentTitle(head + "Given Name:\tMei Ling"), null);
+    // Family and given name on separate lines: the person check needs the name on one line, so it stays as before.
+    assert.equal(personalDocumentTitle(head + "Family Name: Tan\nGiven Name: Wei Jie"), null);
+    for (const blank of ["Family Name:\tPlan Type:\tTravel Basic", "Full name:\tTrip Type:\tSingle Trip", "Full name:\tCover start date:\t11-Jan-2027", "Full name: Agent Name: Lim Ah Beng", "Surname:\tCountry of residence:\tSingapore\tGiven Name:\tWei Jie"])
+      assert.equal(personalDocumentTitle(head + blank), null, blank);
+    for (const words of ["Surname: please write as in passport\tGiven name: please write as in passport", "Full name: must match your passport", "Full name: please print in block letters", "Full name: John Doe", "Full name: Jane Doe", "Full name: Sample Name", "Surname:\tDoe\tGiven name:\tJohn (sample)"])
+      assert.equal(personalDocumentTitle(head + words), null, words);
+    // The schedule labels that counted before #561 still count.
+    assert.equal(personalDocumentTitle(head + "Policyholder: Lim Wei Jie"), "personal_schedule");
   });
   await t("3 control: a generic summary with no printed policy number stays reference", () => {
     const generic = doc("Travel insurance summary of benefits\nThe policyholder is the person named in the schedule. Policy number means the number on your schedule.\nTerms and conditions apply. Please read the policy wording.");
