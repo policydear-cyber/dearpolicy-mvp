@@ -4,7 +4,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { loadPolicyInventory } from "@/lib/policies/inventory";
 import { singaporeDay } from "@/lib/benefit-table/dates";
 import { householdPolicyDates, printedProductName, sharingDocuments, type DatedCover, type PaymentRecord, type PolicyDate } from "@/lib/policies/policy-dates";
-import { normalizedIdentifier } from "@/lib/policies/document-name";
+import { documentName, normalizedIdentifier } from "@/lib/policies/document-name";
 import type { PersonCover, TableRow } from "@/lib/benefit-table/assemble";
 import { notRenewedKey, notRenewedReady, notRenewedRows } from "@/lib/policies/not-renewed";
 
@@ -55,7 +55,10 @@ export async function loadPolicyDates(accountId: string, memberId: string | null
   for (const c of contracts) {
     if (c.documents.some((d) => (d as { product_name?: string | null }).product_name?.trim())) continue;
     const printed = printedProductName(c, named);
-    if (printed) c.name = printed;
+    // With no product printed anywhere, it is named by insurer and kind, as a made-up file name is: never from the file
+    // name a person gave it, which can hold anything (TE F4b, DC 18 Nov: no file names).
+    const first = c.documents[0] as unknown as Parameters<typeof documentName>[0] | undefined;
+    c.name = printed ?? (first ? documentName({ ...first, original_filename: "" }) : c.name);
   }
   const policies = householdPolicyDates(contracts, covers, payments, singaporeDay(new Date()), answers).map((p) => ({ ...p, key: pageKey(p.key),
     ...(shared.has(p.key) || p.documentIds.some((id) => (numbersOn.get(id)?.size ?? 0) > 1) ? { severalPolicies: true } : {}) }));

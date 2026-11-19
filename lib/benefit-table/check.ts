@@ -529,7 +529,9 @@ export function termDates(c: { premiumEndDate?: unknown; premiumTerm?: unknown; 
  * benefit in the same column for two or more different ages or years (a table by year, whatever the reader called its
  * rows: Critic #562 MED-8 and its follow-up). An age limit on an ordinary benefit ("Death or TPD before age 70") is one row
  * on its own, so it reads as a current figure, as on main. */
-export function byYearOnly<T extends { benefit: string; section?: string | null; column?: string | null; pays?: unknown; atAge?: number | null; atPolicyYear?: number | null; rate?: string | null }>(rows: T[]): T[] {
+/** Words that make an age a band of when a benefit pays (TE F5). */
+const AGE_BAND = /\b(?:before|under|below|up\s+to|until|till|from|over|above|after|to|between|aged)\s+(?:the\s+)?(?:age|ages|anb|alb)\b|\bage\s+\d{1,3}\s*(?:-|–|to)\s*\d{1,3}\b|\b(?:age|ages)\s+\d{1,3}\s*(?:and|or)\s+(?:above|over|below|under|older|younger)\b/i;
+export function byYearOnly<T extends { benefit: string; section?: string | null; column?: string | null; pays?: unknown; atAge?: number | null; atPolicyYear?: number | null; rate?: string | null; quote?: string | null }>(rows: T[]): T[] {
   // The same benefit in the same section and column: a step-down schedule ("before age 65", "from 65 to 70") prints two ages,
   // an illustration prints policy years, or at least three ages (first row, every fifth year, last: Critic MED-9).
   const norm = (x: string | null | undefined) => (x ?? "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -541,7 +543,10 @@ export function byYearOnly<T extends { benefit: string; section?: string | null;
   }
   return rows.map((r) => {
     if (r.atAge == null && r.atPolicyYear == null && r.rate == null) return r;
-    if (r.pays === "value" || (years.get(key(r))?.size ?? 0) >= 2 || (ages.get(key(r))?.size ?? 0) >= 3) return r;
+    // An age band ("before age 40", "from age 60", "up to age 18") is a limit on when it pays, never an age it is printed for
+    // (TE F5), whatever else the page prints.
+    const band = r.atAge != null && AGE_BAND.test(`${r.benefit} ${r.quote ?? ""}`);
+    if (!band && (r.pays === "value" || (years.get(key(r))?.size ?? 0) >= 2 || (ages.get(key(r))?.size ?? 0) >= 3)) return r;
     const { atAge: _a, atPolicyYear: _y, rate: _r, ...rest } = r;
     return rest as T;
   });

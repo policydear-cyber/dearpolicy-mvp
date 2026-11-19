@@ -115,5 +115,13 @@ test("a step-down schedule's two ages are age limits, not a table by year: both 
   assert.deepEqual(kept([r("Death benefit", 65), r("TPD benefit", 70), r("CI benefit", 75)]), [null, null, null], "different benefits never pair");
 });
 
+test("an age band is never an age a value is printed for, even with three bands (TE F5)", () => {
+  const r = (atAge: number, quote: string) => ({ benefit: "Death benefit", section: null, column: "Sum Assured", pays: "amount", atAge, quote });
+  const out = byYearOnly([r(40, "Death benefit before age 40 S$80,000"), r(60, "Death benefit from age 60 S$40,000"), r(70, "Death benefit age 60 to 70 S$20,000")]);
+  assert.deepEqual(out.map((x) => (x as { atAge?: number }).atAge ?? null), [null, null, null]);
+  const ill = byYearOnly([r(45, "10 45 150,000"), r(50, "15 50 180,000"), r(55, "20 55 250,000")]);
+  assert.deepEqual(ill.map((x) => (x as { atAge?: number }).atAge ?? null), [45, 50, 55], "an illustration's rows keep their ages");
+});
+
 if (failures.length) { console.error(failures.join("\n")); console.error(`${failures.length} failed, ${passed} passed`); process.exit(1); }
 console.log(`term-dates: ${passed} passed`);
