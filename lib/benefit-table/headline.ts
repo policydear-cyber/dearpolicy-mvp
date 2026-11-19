@@ -16,7 +16,7 @@ export function periodWords(period: string | null | undefined): string {
   return /\s/.test(p) ? `for every ${p}` : `a ${p.replace("_", " ")}`;
 }
 
-export type SummaryRow = Pick<TableRow, "benefit" | "section" | "pays" | "figure" | "qualifier" | "fromDay" | "maxDays" | "conditions"> &
+export type SummaryRow = Pick<TableRow, "benefit" | "section" | "pays" | "figure" | "qualifier" | "fromDay" | "maxDays" | "conditions"> & Partial<Pick<TableRow, "valueAt">> &
   Partial<Pick<TableRow, "percent" | "base" | "combinedLimit" | "coverEnded">>;
 
 export const MAX_KEY = 8;
@@ -86,7 +86,7 @@ const amountOf = (f: Figure) => (f.kind === "printed" || f.kind === "worked_out"
  * benefit name are never chosen. */
 export function keyBenefits(rows: SummaryRow[]): number[] {
   const usable = rows.map((r, i) => ({ r, i })).filter(({ r }) =>
-    r.figure.kind !== "projected" && r.pays !== "not_covered" && (r.figure.kind !== "none" || r.pays === "as_charged"));
+    r.figure.kind !== "projected" && !r.valueAt && r.pays !== "not_covered" && (r.figure.kind !== "none" || r.pays === "as_charged"));
   const tier = (r: SummaryRow) => (LIFE.test(r.benefit) ? 0 : HOSPITAL.test(r.benefit) ? 1 : OWN_SHARE.test(r.benefit) ? 2 : 3);
   const ordered = usable.sort((a, b) => tier(a.r) - tier(b.r) || (tier(a.r) === 3 ? amountOf(b.r.figure) - amountOf(a.r.figure) : 0) || a.i - b.i);
   const asCharged = rows.filter((r) => r.pays === "as_charged").length * 2 > rows.length;

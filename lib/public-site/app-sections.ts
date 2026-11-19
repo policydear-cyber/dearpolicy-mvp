@@ -3,7 +3,7 @@
  * names no page at all, so middleware lets it through to the ordinary "page not found" instead of asking the
  * visitor to sign in for a page that doesn't exist. Nothing under /api/ is ever decided by this list. */
 export const APP_SECTIONS: ReadonlySet<string> = new Set([
-  "admin", "chat", "claims", "confirm", "coverage", "family", "household", "invite", "learn", "ledger", "login", "operator", "policies",
+  "admin", "chat", "claims", "confirm", "coverage", "family", "household", "invite", "learn", "ledger", "life-stages", "login", "operator", "policies",
   "privacy", "records", "reset-password", "reviewer", "schedule", "signup", "update-password", "usage", "welcome",
 ]);
 
