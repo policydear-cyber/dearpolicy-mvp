@@ -131,6 +131,9 @@ const ROLE_ASK: [CorrespondenceRole, RegExp][] = [
 const DOCUMENT_KIND_WORDS = new Set(["policy", "schedule", "certificate", "summary", "statement", "renewal", "notice", "letter", "document", "of", "the", "your", "and", "for", "insurance", "assurance", "plan", "cover", "page", "details", "member", "members", "membership", "health", "life", "medical", "travel", "general"]);
 /** Words that only a document's title carries ("Policy schedule", "Membership certificate"), never a benefit line. */
 const TITLE_ONLY_WORDS = new Set(["policy", "schedule", "certificate", "summary", "statement", "renewal", "notice", "letter", "document", "details", "membership", "page"]);
+/** Whether a label opens with the product as whole words ("Shield (photo)" does for "Shield"; "Shield Plus" does not), so
+ * the product is said once (Critic #564 LOW-1). */
+const opensWith = (label: string, product: string) => label === product || label.startsWith(product + " ");
 /** A printed line that is only the document's own name ("TermGuard 65" on a screenshot titled "TermGuard 65"). */
 const namesOnly = (line: string, d: { label: string; product: string | null }) => {
   const k = (t: string | null) => (t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -310,7 +313,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
     for (const d of whoTarget) byProduct.set(d.product!, [...(byProduct.get(d.product!) ?? []), d]);
     const lines = [...byProduct].map(([product, ds]) => {
       const owners = [...new Set(ds.flatMap((d) => d.owners))].map((id) => args.family.find((p) => p.id === id)).filter((p): p is ClaimPerson => !!p);
-      return product + " covers " + listOf(owners.map((p) => isSelf(p) ? "you" : personName(p) + " (" + p.display_name + ")")) + ", going by " + (ds.length === 1 && !ds[0].label.startsWith(product) ? q(ds[0].label) : ds.length === 1 ? "its document" : "its documents") + ".";
+      return product + " covers " + listOf(owners.map((p) => isSelf(p) ? "you" : personName(p) + " (" + p.display_name + ")")) + ", going by " + (ds.length === 1 && !opensWith(ds[0].label, product) ? q(ds[0].label) : ds.length === 1 ? "its document" : "its documents") + ".";
     });
     const owners = [...new Set(whoTarget.flatMap((d) => d.owners))];
     // "Is Papa covered by SeniorGuard?": yes or no for the person asked about, then who it covers.
@@ -342,7 +345,7 @@ async function documentQuestionAnswerInner(args: { accountId: string; question: 
       const notTitle = (l: { line: string }) => !titleLine(l.line, d.product) && !namesOnly(l.line, d);
       const lines = bestLines(pages.get(d.id) ?? [], text, { limit: 3, always: [/\bsum assured|next premium|in force\b/i] }).filter(notTitle);
       const shown = lines.length ? lines : bestLines(pages.get(d.id) ?? [], "", { limit: 3, always: [/\bsum assured|next premium|in force\b/i], min: 2 }).filter(notTitle);
-      details.push(q(d.label) + " is a screenshot of " + (cleanInsurer(d.insurer) ? cleanInsurer(d.insurer) + "’s" : "the insurer’s") + " app — a summary from the app, not a policy document — and shows: " + shown.map((l) => "“" + flagUnclearFigures(l.line) + "” (page " + l.page + ")").join("; ") + ".");
+      details.push(q(d.label) + " is a screenshot of " + (cleanInsurer(d.insurer) ? cleanInsurer(d.insurer) + "’s" : "the insurer’s") + " app — a summary from the app, not a policy document" + (shown.length ? " — and shows: " + shown.map((l) => "“" + flagUnclearFigures(l.line) + "” (page " + l.page + ")").join("; ") : ", and prints nothing beyond the plan’s name") + ".");
       citations.push(...cite(d, "the app screenshot, " + d.label, shown.map((l) => l.page)));
     }
     const name = onlyHits.find((d) => d.product)?.product ?? policyWords(onlyHits[0])[0];
@@ -673,7 +676,7 @@ async function printedLinesAnswerInner(args: { accountId: string; question: stri
   const whose = owner ? (isSelf(owner) ? "your" : personName(owner) + "’s") : "the";
   const what = best.d.role === "annual_statement" ? " statement" : best.d.role === "renewal_statement" ? " renewal notice" : "";
   const summary = best.d.superseded
-    ? (best.d.product && best.d.label.startsWith(best.d.product)
+    ? (best.d.product && opensWith(best.d.label, best.d.product)
       // 19 Nov: the title already names the product, so it is said once ("same policy listed twice" otherwise).
       ? q(best.d.label) + " is an earlier schedule of " + whose + " policy, kept for reference (answers about the current year use the newer one). For that earlier year it prints:"
       : q(best.d.label) + " is an earlier schedule of " + whose + " " + (best.d.product ?? "policy") + ", kept for reference (answers about the current year use the newer one). For that earlier year it prints:")
@@ -718,7 +721,7 @@ export async function provenanceAnswer(args: { accountId: string; conversationId
   const docs = await loadDocuments(args.accountId);
   const byId = new Map(docs.map((d) => [d.id, d]));
   const isPolicy = (d: Doc) => !NON_COVER_ROLES.has(d.role ?? "") && d.role !== "app_screenshot";
-  const what = (d: Doc) => d.role && d.role in ROLE_WORDS ? ROLE_WORDS[d.role as CorrespondenceRole].replace("'", "’") + ", not a policy document" : d.product && !d.label.startsWith(d.product) ? "the " + d.product + " policy document" : "a policy document";
+  const what = (d: Doc) => d.role && d.role in ROLE_WORDS ? ROLE_WORDS[d.role as CorrespondenceRole].replace("'", "’") + ", not a policy document" : d.product && !opensWith(d.label, d.product) ? "the " + d.product + " policy document" : "a policy document";
   const pageWords = (ps: number[]) => ps.length === 1 ? "page " + ps[0] : "pages " + listOf(ps.map(String));
   // The pages the answer cited, by document.
   const cited = new Map<string, number[]>();
