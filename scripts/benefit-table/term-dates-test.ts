@@ -7,6 +7,9 @@ globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fe
 import assert from "node:assert/strict";
 import { termDates, valueAt } from "@/lib/benefit-table/check";
 import { READING_PROMPT, READING_SCHEMA } from "@/lib/benefit-table/reading";
+import { atYearFigure, type Figure } from "@/lib/benefit-table/assemble";
+import { keyBenefits, type SummaryRow } from "@/lib/benefit-table/headline";
+import { categoryRows } from "@/lib/coverage/table-figures";
 
 let passed = 0; const failures: string[] = [];
 function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
@@ -49,6 +52,20 @@ test("the reading asks for the new fields as optional, and says never to put a p
   for (const k of ["atAge", "atPolicyYear", "rate"]) { assert.ok(k in benefits.properties, k); assert.ok(!benefits.required.includes(k), k); }
   assert.match(READING_PROMPT, /never the cover's own end date/);
   assert.match(READING_PROMPT, /every fifth policy year/);
+});
+
+test("a figure printed for an age or policy year is never a current amount: not on Home, not leading a card (Critic MED-5)", () => {
+  const printed: Figure = { kind: "printed", amount: 200000, currency: "SGD", unit: "lump_sum" };
+  assert.deepEqual(atYearFigure(printed, { policyYear: 20, age: 55 }), { kind: "value", amount: 200000, currency: "SGD", asOf: "policy year 20, age 55" });
+  assert.equal(atYearFigure(printed, {}), printed, "a row printed for no year is untouched, so every stored reading reads as before");
+  const proj: Figure = { kind: "projected", amount: 52900, currency: "SGD", basis: "non_guaranteed", asOf: null };
+  assert.deepEqual(atYearFigure(proj, { age: 65 }), { ...proj, asOf: "age 65" });
+  const row = (benefit: string, figure: Figure, valueAt?: SummaryRow["valueAt"]) => ({ benefit, section: null, pays: "lump_sum", figure, qualifier: null, fromDay: null, maxDays: null, conditions: [], cover: "Saver 20", product: "Saver 20", plan: null, ...(valueAt ? { valueAt } : {}) }) as unknown as SummaryRow & { cover: string; product: string; plan: null };
+  const now = row("Death benefit", { kind: "printed", amount: 100000, currency: "SGD", unit: "lump_sum" });
+  const later = row("Death benefit", atYearFigure({ kind: "printed", amount: 250000, currency: "SGD", unit: "lump_sum" }, { policyYear: 20 }), { policyYear: 20 });
+  assert.deepEqual(keyBenefits([later, now]), [1], "the current death benefit leads; the year-20 row never does");
+  assert.deepEqual(keyBenefits([later]), []);
+  assert.deepEqual(categoryRows("Death", [later, now] as never[]).map((r: { figure: Figure }) => r.figure.kind), ["printed"]);
 });
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`${failures.length} failed, ${passed} passed`); process.exit(1); }

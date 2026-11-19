@@ -58,11 +58,11 @@ function Body({ data }: { data: Payload }) {
       <section className="section life-section" aria-labelledby="life-stages-title">
         <h2 id="life-stages-title">At each stage</h2>
         <div className="life-table-wrap"><table className="life-table">
-          <thead><tr><th scope="col">Stage</th><th scope="col">Still in place</th><th scope="col">Premiums</th><th scope="col">What changes</th></tr></thead>
+          <thead><tr><th scope="col">Stage</th><th scope="col">Printed cover runs past this point</th><th scope="col">Premiums</th><th scope="col">What changes</th></tr></thead>
           <tbody>{stages.map((s, i) => <tr key={s.from.on}>
             <th scope="row">{stageLabel(s, i)}</th>
-            <td data-label="Still in place">{s.inPlace.length ? s.inPlace.join(", ") : "None with a printed end"}{s.endNotPrinted.length ? <small>End not printed: {s.endNotPrinted.join(", ")}</small> : null}</td>
-            <td data-label="Premiums">{s.paying.length ? `Still paying: ${s.paying.join(", ")}` : "No premium end printed in this stage"}</td>
+            <td data-label="Printed cover runs past this point">{s.inPlace.length ? s.inPlace.join(", ") : "None"}{s.renewedNoEnd.length ? <small>Renewed; new end date not printed: {s.renewedNoEnd.join(", ")}</small> : null}{s.endNotPrinted.length ? <small>End not printed: {s.endNotPrinted.join(", ")}</small> : null}</td>
+            <td data-label="Premiums">{s.paying.length ? `Premiums printed until after this point: ${s.paying.join(", ")}` : "No premium end printed after this point"}</td>
             <td data-label="What changes">{s.events.length ? <ul>{s.events.map((e, j) => <li key={j}>{e.policy}: {e.kind === "premiums_end" ? "premiums stop" : e.kind === "matures" ? "matures" : "cover ends, as printed"}</li>)}</ul> : "—"}</td>
           </tr>)}</tbody>
         </table></div>
@@ -97,7 +97,7 @@ function Timeline({ policies, age }: { policies: LifePolicy[]; age: number | nul
       </li>;
     })}</ul>
     <div className="life-axis" aria-hidden="true">{ticks.map((t) => <span key={t} style={{ left: pos(now + t * 365.25 * DAY) }}>{age != null ? age + t : t === 0 ? "Now" : `+${t} yrs`}</span>)}</div>
-    <p className="life-legend"><span className="life-key paying" />Paying premiums<span className="life-key" />Covered<span className="life-key open" />End not printed<span className="life-key mark" />Matures</p>
+    <p className="life-legend"><span className="life-key paying" />Premiums, as printed<span className="life-key" />Cover period, as printed<span className="life-key open" />End not printed<span className="life-key mark" />Matures</p>
   </div>;
 }
 

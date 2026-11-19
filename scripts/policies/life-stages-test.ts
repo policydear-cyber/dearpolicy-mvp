@@ -65,13 +65,15 @@ test("no date of birth: dates only, no ages", () => {
   assert.equal(r.age, null); assert.ok(r.stages.every((s) => s.from.age === null)); assert.equal(r.stages[1].from.onText, "1 Mar 2036");
 });
 
-test("a renewal receipt's own period end is the policy's end; with none, the policy stays in place with no end shown", () => {
+test("a renewal receipt's own period end is the policy's end; with none, it is said once as renewed with no end printed", () => {
   const dates = [date("a", "Hospital Plan", ["h1"], { state: "renewed", endsOn: "2026-06-30", renewal: { paidOn: "2026-06-20", paidText: "20 Jun 2026", until: "2027-06-30", untilText: "30 Jun 2027", documentId: "r1" } }),
     date("b", "Home Plan", ["h2"], { state: "renewed", endsOn: "2026-06-30", renewal: { paidOn: "2026-06-20", paidText: "20 Jun 2026", until: null, untilText: null, documentId: "r2" } })];
   const r = lifeStages({ dates, covers: [], values: [], dateOfBirth: null, today: TODAY });
   assert.equal(r.policies[0].endsText, "30 Jun 2027"); assert.equal(r.policies[1].endsOn, null);
-  assert.deepEqual(r.stages[0].inPlace, ["Hospital Plan", "Home Plan"]);
-  assert.deepEqual(r.stages[1].inPlace, ["Home Plan"]);
+  assert.deepEqual(r.stages[0].inPlace, ["Hospital Plan"]);
+  assert.deepEqual(r.stages[0].renewedNoEnd, ["Home Plan"]);
+  assert.deepEqual(r.stages[1].inPlace, []);
+  assert.deepEqual(r.stages[1].renewedNoEnd, [], "never carried into a later stage (Critic MED-4)");
   assert.deepEqual(r.stages[1].endNotPrinted, []);
 });
 

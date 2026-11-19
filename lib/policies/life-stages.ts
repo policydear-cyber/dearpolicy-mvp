@@ -35,8 +35,10 @@ export type LifePolicy = {
 export type LifeStage = {
   /** The stage runs from `from` (today for the first) up to `to` (null for the last stage). */
   from: { on: string; onText: string; age: number | null }; to: { on: string; onText: string; age: number | null } | null;
-  /** Policies still in place for the whole stage (cover end printed after it, or renewed with no new end printed yet). */
+  /** Policies whose printed cover end is after the stage starts: dates as printed, never a verdict that cover is in force. */
   inPlace: string[];
+  /** Renewed policies whose new end date is not printed: said in the first stage only, never carried forward (Critic MED-4). */
+  renewedNoEnd: string[];
   /** Policies whose end is not printed: never shown as ending. */
   endNotPrinted: string[];
   /** Policies still paying premiums through the stage, as printed (premium end after it). */
@@ -101,10 +103,11 @@ export function lifeStages(input: { dates: PolicyDate[]; covers: LifeCover[]; va
   const endDay = (p: LifePolicy) => dayOf(p.endsOn);
   const stages: LifeStage[] = starts.map((from, i) => {
     const to = bounds[i] ?? null;
-    const inPlace = policies.filter((p) => { const e = endDay(p); return e != null ? e > from : p.state === "renewed"; }).map((p) => p.name);
+    const inPlace = policies.filter((p) => { const e = endDay(p); return e != null && e > from; }).map((p) => p.name);
+    const renewedNoEnd = i === 0 ? policies.filter((p) => endDay(p) == null && p.state === "renewed").map((p) => p.name) : [];
     const endNotPrinted = policies.filter((p) => endDay(p) == null && p.state !== "renewed").map((p) => p.name);
     const paying = policies.filter((p) => { const d = dayOf(p.premiumsEnd?.on ?? null); return d != null && d > from && (endDay(p) == null || endDay(p)! > from); }).map((p) => p.name);
-    return { from: at(from), to: to != null ? at(to) : null, inPlace, endNotPrinted, paying,
+    return { from: at(from), to: to != null ? at(to) : null, inPlace, renewedNoEnd, endNotPrinted, paying,
       events: i === 0 ? [] : events.filter((e) => e.day === from).map(({ day: _day, ...e }) => e) };
   });
   return { age: ageOn(born, input.today), policies, stages,
