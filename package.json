@@ -481,6 +481,7 @@
     "admin:console-test": "node --import tsx --test scripts/admin/console-test.ts",
     "policies:folders-test": "node --import tsx scripts/policy-folders-regressions.ts",
     "policies:folder-view-test": "node --import tsx scripts/policies/folder-view-test.ts",
+    "policies:printed-heading-test": "node --import tsx scripts/policies/printed-heading-test.ts",
     "simple:folder-whole-sum-test": "node --import tsx scripts/simple-answer/folder-whole-sum-test.ts",
     "documents:code-in-word-test": "node --import tsx scripts/documents/code-in-word-test.ts",
     "policies:catalog-whole-read-test": "node --import tsx scripts/policies/catalog-whole-read-test.ts",

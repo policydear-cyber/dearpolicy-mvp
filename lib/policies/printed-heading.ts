@@ -5,16 +5,21 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 
 export const isPolicyRole = (role: string | null) => ["", "unknown", "personal_schedule", "schedule", "policy", "policy_document", "certificate"].includes(role ?? "");
 /** The heading a letter or notice prints near the top of its first page ("CONFIRMATION OF REINSTATEMENT" -> "Confirmation
- * of Reinstatement"): a line of two to six capitalised words, with no digits, among its first ten lines, other than the
- * insurer's own name or a greeting. Nothing when no line is that shape. */
+ * of Reinstatement"): a line of two to six capitalised words, with no digits, among its first ten lines, that names a kind
+ * of paper (an allow-list), never the insurer, the addressee or a handling line. Nothing when no line is that shape. */
+const DOCUMENT_WORD = /\b(?:NOTICE|CONFIRMATION|LETTER|STATEMENT|ENDORSEMENT|REINSTATEMENT|LAPSE|RENEWAL|DECISION|APPROVAL|REJECTION|ACKNOWLEDGEMENT|RECEIPT|INVOICE|BILL|SUMMARY|ADVICE|REMINDER|CERTIFICATE|SCHEDULE|AMENDMENT|CANCELLATION|TERMINATION|CLAIM|PAYMENT)S?\b/;
 export function headingIn(pageText: string, insurer: string | null = null): string | null {
-  const lines = pageText.split(/\n/).map((l) => l.trim()).filter(Boolean).slice(0, 10);
+  const lines = pageText.split(/\n/).map((l) => l.trim()).filter(Boolean).slice(0, 12);
   const own = (insurer ?? "").toUpperCase();
   for (const l of lines) {
     if (!/^[A-Z][A-Z&'’ -]+[A-Z]$/.test(l) || /\d/.test(l)) continue;
     const words = l.split(/\s+/);
     if (words.length < 2 || words.length > 6 || /^DEAR\b/.test(l) || (own && (own.includes(l) || l.includes(own)))) continue;
     if (/\b(?:PTE|LTD|LIMITED|BERHAD|BHD|INSURANCE|ASSURANCE|BRANCH)\b/.test(l)) continue;
+    // Only a line that names a kind of paper: never the addressee ("MR <NAME>") or a handling line ("PRIVATE AND
+    // CONFIDENTIAL"), which insurers print above the heading (Critic #564 MED-1).
+    if (/^(?:MR|MRS|MS|MDM|DR|MISS|MADAM)\b|\b(?:CONFIDENTIAL|BY EMAIL|URGENT)\b/.test(l)) continue;
+    if (!DOCUMENT_WORD.test(l)) continue;
     return words.map((w, k) => k > 0 && /^(?:OF|AND|THE|FOR|TO|IN|ON|A|AN)$/.test(w) ? w.toLowerCase() : w.charAt(0) + w.slice(1).toLowerCase()).join(" ");
   }
   return null;
