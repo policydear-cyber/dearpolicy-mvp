@@ -3,7 +3,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { loadPolicyInventory } from "@/lib/policies/inventory";
 import { singaporeDay } from "@/lib/benefit-table/dates";
-import { householdPolicyDates, sharingDocuments, type DatedCover, type PaymentRecord, type PolicyDate } from "@/lib/policies/policy-dates";
+import { householdPolicyDates, printedProductName, sharingDocuments, type DatedCover, type PaymentRecord, type PolicyDate } from "@/lib/policies/policy-dates";
 import { normalizedIdentifier } from "@/lib/policies/document-name";
 import type { PersonCover, TableRow } from "@/lib/benefit-table/assemble";
 import { notRenewedKey, notRenewedReady, notRenewedRows } from "@/lib/policies/not-renewed";
@@ -51,11 +51,10 @@ export async function loadPolicyDates(accountId: string, memberId: string | null
   const shared = sharingDocuments(contracts);
   // A policy whose documents store no product name is named from its file name (documentName); when its reading prints a
   // product, that is the name instead, so a file name never names a policy here (TE F4, DC 18 Nov: no file names).
-  const productOf = new Map<string, string>();
-  for (const c of table?.covers ?? []) if (!c.riderOf && c.product?.trim() && !productOf.has(c.source.documentId)) productOf.set(c.source.documentId, c.product.trim());
+  const named = (table?.covers ?? []).map((c) => ({ documentId: c.source.documentId, product: c.product, policyNumber: c.policyNumber, riderOf: c.riderOf }));
   for (const c of contracts) {
     if (c.documents.some((d) => (d as { product_name?: string | null }).product_name?.trim())) continue;
-    const printed = c.documents.map((d) => productOf.get(d.id)).find(Boolean);
+    const printed = printedProductName(c, named);
     if (printed) c.name = printed;
   }
   const policies = householdPolicyDates(contracts, covers, payments, singaporeDay(new Date()), answers).map((p) => ({ ...p, key: pageKey(p.key),

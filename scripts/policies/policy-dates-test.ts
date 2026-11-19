@@ -6,7 +6,7 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.te
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { dayOf, dayText, householdPolicyDates, sharingDocuments, policyDates, renewalAfter, type DatedContract, type DatedCover, type PaymentRecord } from "@/lib/policies/policy-dates";
+import { dayOf, dayText, householdPolicyDates, printedProductName, sharingDocuments, policyDates, renewalAfter, type DatedContract, type DatedCover, type PaymentRecord } from "@/lib/policies/policy-dates";
 
 let passed = 0; const failures: string[] = [];
 function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
@@ -96,6 +96,15 @@ test("a payment made before the date proves nothing, even uploaded after it (Cri
 test("contracts sharing a document are flagged, so one answer never hides another policy on it (Critic MED-6)", () => {
   const shared = sharingDocuments([contract("k1", [doc("stmt"), doc("d1")]), contract("k2", [doc("stmt")]), contract("k3", [doc("d3")])]);
   assert.deepEqual([...shared].sort(), ["k1", "k2"]);
+});
+
+test("a policy with no stored name takes its own printed product, never another policy's on the same document (TE F4, Critic MED-10)", () => {
+  const cov = (documentId: string, product: string, policyNumber: string | null, riderOf: string | null = null) => ({ documentId, product, policyNumber, riderOf });
+  const stmt = [cov("s1", "Kingfisher Whole Life", "KF-100"), cov("s1", "Kingfisher Accident Rider", "KF-100", "Kingfisher Whole Life"), cov("s1", "Heron Term", "HT-200")];
+  assert.equal(printedProductName(contract("a", [doc("s1", { policy_number: "KF-100" })]), stmt), "Kingfisher Whole Life");
+  assert.equal(printedProductName(contract("b", [doc("s1", { policy_number: "HT-200" })]), stmt), "Heron Term");
+  assert.equal(printedProductName(contract("c", [doc("s1")]), stmt), null, "two products and no number of its own: keep the stored name");
+  assert.equal(printedProductName(contract("d", [doc("d1")]), [cov("d1", "Kingfisher Whole Life", null)]), "Kingfisher Whole Life");
 });
 
 test("a group number counts only for a record naming the person; a short number alone needs both insurers (Critic L2, L3)", () => {

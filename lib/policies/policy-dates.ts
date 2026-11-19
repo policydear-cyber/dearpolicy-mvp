@@ -84,6 +84,24 @@ function sameContract(contract: DatedContract, row: PaymentRecord): boolean {
   return number.length >= 6;
 }
 
+/** The product a policy's reading prints, to name a policy whose documents store none (TE F4): the base cover whose printed
+ * policy number is the policy's own; else, only when its document's base covers print exactly one product, that one. A
+ * document printing several policies never lends one policy another's name (Critic MED-10). Null: keep the stored name. */
+export function printedProductName(contract: Pick<DatedContract, "documents">, covers: { documentId: string; product: string | null; policyNumber: string | null; riderOf: string | null }[]): string | null {
+  const ids = new Set(contract.documents.map((d) => d.id));
+  const numbers = new Set(contract.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean));
+  const base = covers.filter((c) => ids.has(c.documentId) && !c.riderOf && c.product?.trim());
+  const own = [...new Set(base.filter((c) => numbers.has(normalizedIdentifier(c.policyNumber))).map((c) => c.product!.trim()))];
+  if (own.length === 1) return own[0];
+  if (own.length > 1) return null;
+  for (const id of ids) {
+    const products = [...new Set(base.filter((c) => c.documentId === id).map((c) => c.product!.trim()))];
+    if (products.length === 1) return products[0];
+    if (products.length > 1) return null;
+  }
+  return null;
+}
+
 /** The person's contracts that share a document with another of their contracts: a document that holds more than one
  * of their policies, which "I didn't renew it" must not take off Home as a whole (Critic MED-3, MED-6). */
 export function sharingDocuments(contracts: Pick<DatedContract, "id" | "documents">[]): Set<string> {
