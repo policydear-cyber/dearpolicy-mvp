@@ -23,7 +23,12 @@ export const PERCENT_OF = ["sum_insured", "fixed_amount", "other"] as const;
 export const FOR_WHOM = ["each_named_insured", "some_insured"] as const;
 
 export type ReadCover = { person: string; product: string; cover: string; plan: string | null; riderOf: string | null; policyNumber: string | null;
-  sumInsured: number | null; premium: number | null; premiumQuote?: string | null; premiumFrequency: string | null; asOf: string | null; startDate: string | null; endDate: string | null; page: number; quote: string };
+  sumInsured: number | null; premium: number | null; premiumQuote?: string | null; premiumFrequency: string | null; asOf: string | null; startDate: string | null; endDate: string | null; page: number; quote: string;
+  /** When premiums stop for this cover, as printed (a "Premium End Date" or "Premium Payable Until" column or line), and the
+   * premium term in its own words when it is printed as a term ("to age 65", "10 years"). Left out when not printed. */
+  premiumEndDate?: string | null; premiumTerm?: string | null;
+  /** The cover's maturity date, when the document prints one under that name. */
+  maturityDate?: string | null };
 export type ReadBenefit = {
   section: string | null; column: string | null; benefit: string; pays: (typeof PAYS)[number]; value: number | null;
   period: (typeof PERIODS)[number] | null; basis: (typeof BASES)[number] | null; asOf: string | null;
@@ -32,6 +37,9 @@ export type ReadBenefit = {
   fromDay: number | null; maxDays: number | null; conditions: string[]; page: number; quote: string;
   /** Left out (undefined) unless the reader says; anything but "each_named_insured" gives the row to no one by this rule. */
   forWhom?: (typeof FOR_WHOM)[number] | null;
+  /** For a value printed for an age or a policy year (a row of a table of values by year): that age or policy year, as
+   * printed, and the assumed yearly rate of return its column is illustrated at ("4.25%"). Left out otherwise. */
+  atAge?: number | null; atPolicyYear?: number | null; rate?: string | null;
 };
 export type Reading = {
   document: { kind: (typeof DOCUMENT_KINDS)[number]; product: string | null; insurer: string | null; namedPeople: string[]; plan: string | null; periodFrom: string | null; periodTo: string | null };
@@ -59,6 +67,7 @@ export const READING_SCHEMA = object({
     riderOf: optional("string"), policyNumber: nullable("string"),
     sumInsured: nullable("number"), premium: optional("number"), premiumQuote: optional("string"), premiumFrequency: optional("string"),
     asOf: nullable("string"), startDate: optional("string"), endDate: optional("string"), page: { type: "integer" }, quote: { type: "string" },
+    premiumEndDate: optional("string"), premiumTerm: optional("string"), maturityDate: optional("string"),
   }) },
   benefits: { type: "array", items: object({
     section: nullable("string"), column: nullable("string"), benefit: { type: "string" },
@@ -68,6 +77,7 @@ export const READING_SCHEMA = object({
     percentOf: { anyOf: [{ type: "string", enum: PERCENT_OF }, { type: "null" }] }, baseAmount: nullable("number"), baseQuote: nullable("string"),
     cap: nullable("number"), capQuote: nullable("string"),
     fromDay: optional("integer"), maxDays: optional("integer"), forWhom: { type: "string", enum: FOR_WHOM, optional: true },
+    atAge: optional("integer"), atPolicyYear: optional("integer"), rate: optional("string"),
     conditions: { type: "array", items: { type: "string" } },
     page: { type: "integer" }, quote: { type: "string" },
   }) },
@@ -81,7 +91,7 @@ document:
 - kind: "personal_proof" when the document names the people it insures and what they hold (a certificate's Part 1, a policy schedule, a personal travel summary, a yearly policy or fund statement). "scheme_terms" for a group scheme's terms for every member (highlights of cover, benefit summary). "policy_wording", "product_summary", "illustration" (a pre-sale benefit illustration or quotation: it shows what might be bought, not what is held), "letter", "bill_or_receipt" or "other" otherwise. A pack can hold several parts: choose the kind by whether any page names an insured person with their cover.
 - product, insurer, plan and period exactly as printed (dates as printed); namedPeople: the insured people the document names, as printed. Never list an address, an agent or a signatory as insured.
 
-covers: only from pages that name a person with their cover. One row per person per cover line, including each rider: the person as printed, the product (the policy or scheme), the cover (the line's own name: a group scheme's separate covers, a basic plan, a rider), riderOf (for a rider, the basic plan or policy it is attached to, as printed; left out otherwise), the plan if printed, the policy number, the sum insured or sum assured as a plain number (600000 for "S$600,000"; null when none is printed), the premium and how often it is paid when the document prints them for that person's cover, with premiumQuote the exact words that print the premium when they are not in quote (each left out otherwise), the "as of" date, the start date and the end, expiry or maturity date as printed (each left out when not printed), the page, and the exact line as quote.
+covers: only from pages that name a person with their cover. One row per person per cover line, including each rider: the person as printed, the product (the policy or scheme), the cover (the line's own name: a group scheme's separate covers, a basic plan, a rider), riderOf (for a rider, the basic plan or policy it is attached to, as printed; left out otherwise), the plan if printed, the policy number, the sum insured or sum assured as a plain number (600000 for "S$600,000"; null when none is printed), the premium and how often it is paid when the document prints them for that person's cover, with premiumQuote the exact words that print the premium when they are not in quote (each left out otherwise), the "as of" date, the start date and the end or expiry date of the cover as printed (each left out when not printed), the page, and the exact line as quote. Also, each only when printed for that cover: premiumEndDate, the date premiums stop ("Premium End Date", "Premium Payable Until", "Premium Term Expiry"), never the cover's own end date; premiumTerm, the premium term in its own words when printed as a term rather than a date ("to age 65", "10 years", "single premium"); maturityDate, a date printed as the maturity date. A table with separate columns for cover expiry and premium end puts each in its own field.
 
 benefits: every row that says what is paid or held, or that something is not covered: benefits, limits, payouts, annuity or income payments, cash, surrender, fund or maturity values, bonuses. Leave out definitions, exclusions on their own and contact details.
 - Be complete: go through every page and every table, row by row. A schedule of 20 rows (a fracture, dismemberment, sight or burns scale) gives 20 rows here, one per printed line, never a summary or a sample. When two documents print the same benefit, each document's rows are listed from that document.
@@ -92,6 +102,7 @@ benefits: every row that says what is paid or held, or that something is not cov
 - value: the figure as a plain number (25 for "25%", 500 for "S$500"), or null.
 - basis: "guaranteed" or "non_guaranteed" when the document says so for this figure; "illustrated" for a projected figure or one at an assumed rate of return; null when it says neither.
 - asOf: the date a value or figure is printed for, as printed; left out otherwise.
+- A table of values by policy year or age (a benefit illustration, a table of surrender, cash, death or maturity values): one row per printed cell of each value column, with pays "value", basis as printed (a column at an assumed rate of return is "illustrated" or "non_guaranteed" as the page says; a guaranteed column "guaranteed"), atPolicyYear and atAge set to the row's own policy year and age as printed (each left out when that row does not print it), and rate set to the yearly rate its column is illustrated at, exactly as printed ("4.25%"), left out for a column with no rate. Give the first row, every fifth policy year, the last row and any row printed as maturity; leave out the other years. Give total premiums paid columns too, as "value" rows with benefit "Total premiums paid".
 - percentOf: for a percentage, what the page says it is a percentage of: "sum_insured" when it says the policy's own headline sum by one of these names: sum insured, sum assured, sum covered (takaful), basic or base sum insured, assured or covered, face amount, coverage amount, jumlah diinsuranskan, jumlah dilindungi; never when the name belongs to another benefit, plan, rider or life ("the death sum assured", "the rider's sum assured", "the sum covered for each child"), or for "amount covered" or "benefit amount"; "fixed_amount" when it prints a figure ("% of S$5,000"), and then baseAmount is that figure and baseQuote the exact words that print it; "other" otherwise. null for other rows.
 - cap and capQuote: for a percentage, the most it pays when the row prints one ("100% of Sum Insured (up to S$400,000)", "15% of Sum Insured or up to S$50,000, whichever is lesser", "up to a maximum amount of $400,000"): cap is that figure as a plain number and capQuote the exact words that print it, with the figure in full. null for both when the row prints no such limit.
 - fromDay and maxDays: for a daily benefit, the first paid day and the most days, as printed.

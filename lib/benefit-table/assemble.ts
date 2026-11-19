@@ -92,6 +92,9 @@ export type TableRow = {
   childNote?: { adult: boolean; age: number | null; days: number[] };
   /** The row is the cover's own line as the schedule prints it (check.ts coverLine): its policy wording is not on file. */
   coverLine?: boolean;
+  /** For a value printed for an age or policy year (a table of values by year): that age and year as printed, and the
+   * yearly rate its column is illustrated at (check.ts valueAt). Life stages places the value by these, never by the label. */
+  valueAt?: { age?: number; policyYear?: number; rate?: string };
 };
 /** What the household said about one person's cover: that its sum insured is right, or the figure it should be. */
 export type Confirmation = { personId: string; coverKey: string; status: "confirmed" | "corrected"; sumInsured: number | null; updatedAt?: string | null };
@@ -1788,7 +1791,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
       const figure: Figure = tier ? { kind: "none", why: tier } : headline ? withShare(b, { kind: "none", why: headline })
         : r.documentId !== c.source.documentId && b.pays !== "not_covered" && printedNotCovered(b, notCoveredOn(c, readings))
           ? { kind: "none", why: "the person's own schedule prints this cover as not covered" } : named ? figureFor(named.b, named.cover, r.kind === "illustration", singaporeDay(now)) : figureFor(b, c, r.kind === "illustration", singaporeDay(now));
-      p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
+      const at = { ...(b.atAge != null ? { age: b.atAge } : {}), ...(b.atPolicyYear != null ? { policyYear: b.atPolicyYear } : {}), ...(b.rate ? { rate: b.rate } : {}) };
+      p.rows.push({ ...(Object.keys(at).length ? { valueAt: at } : {}), personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,
         conditions: [...(b.limitsHeading && belowSumInsured(figure, c) && !b.conditions.includes(b.source.excerpt) ? [...b.conditions, b.source.excerpt] : b.conditions), ...capNotes], source: b.source, baseSource: named ? named.cover.source : b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
         percent: b.pays !== "percent" ? null : b.childLimit && figure.kind === "worked_out" && childStatusOf(b, named ? named.cover : c, singaporeDay(now)) === "child" ? b.childLimit.percent : b.value,

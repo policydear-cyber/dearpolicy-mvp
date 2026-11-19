@@ -513,6 +513,28 @@ const SPLIT_FIGURE = new RegExp(String.raw`(${MONEY_SIGN}${RUN_SPACE}?\d{1,3})${
 /** A row's own text with its table cells kept apart by tabs, except a cell break inside one spaced money figure. */
 export const cellsApart = (row: string) => row.replace(SPLIT_FIGURE, "$1 ");
 /** A printed date (""06/10/2022", "1 June 2040") is kept only when its digits are printed together on the page. */
+/** A cover's premium end date, premium term and maturity date, each kept only where printed (check.ts covers): a date in
+ * the cover's own quote, or on one page line that names it (premium or maturity) and prints that date; a term only where
+ * its words are on the page. Nothing is worked out. */
+export function termDates(c: { premiumEndDate?: unknown; premiumTerm?: unknown; maturityDate?: unknown }, quote: string, page: string): { premiumEndDate?: string; premiumTerm?: string; maturityDate?: string } {
+  const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+  const lined = (date: string | null, label: RegExp) => !date ? null : dateOnPage(date, quote) ?? (page.split("\n").some((l) => label.test(l) && dateOnPage(date, l) != null) ? date : null);
+  const premiumEndDate = lined(s(c.premiumEndDate), /premium/i), maturityDate = lined(s(c.maturityDate), /matur/i);
+  const term = s(c.premiumTerm), premiumTerm = term && squashed(page).includes(squashed(term)) ? term : null;
+  return { ...(premiumEndDate ? { premiumEndDate } : {}), ...(premiumTerm ? { premiumTerm } : {}), ...(maturityDate ? { maturityDate } : {}) };
+}
+/** A value's age, policy year and illustrated rate, each kept only where printed: the age and year in the row's own quote,
+ * the rate on the row's page. */
+export function valueAt(b: { atAge?: unknown; atPolicyYear?: unknown; rate?: unknown }, quote: string, page: string): { atAge?: number; atPolicyYear?: number; rate?: string } {
+  const whole = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 130 ? v : null);
+  const inQuote = (n: number | null) => n != null && numbersIn(quote.replace(/[,]/g, " ")).includes(n) ? n : null;
+  const atAge = inQuote(whole(b.atAge)), atPolicyYear = inQuote(whole(b.atPolicyYear));
+  const r = typeof b.rate === "string" ? b.rate.trim() : "";
+  // The rate as its own figure on the page: "5%" is not read inside "4.25%".
+  const printed = /^\d{1,2}(?:\.\d{1,2})?\s?%$/.test(r) && new RegExp(`(?<![\\d.])${r.replace(/\s+/g, "").replace(".", "\\.").replace("%", "\\s?%")}`).test(page);
+  const rate = printed ? r : null;
+  return { ...(atAge != null ? { atAge } : {}), ...(atPolicyYear != null ? { atPolicyYear } : {}), ...(rate ? { rate } : {}) };
+}
 export function dateOnPage(date: string | null, pageText: string): string | null {
   if (!date) return null;
   const digits = date.match(/\d+/g);
@@ -2153,7 +2175,10 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
     const notional = sumInsured != null && printsNotionalSum(page) && !str(c.riderOf) && !RIDER_NAME.test(`${cover ?? ""} ${product ?? ""} ${quote}`);
     out.covers.push({ person, product, cover, plan: str(c.plan), riderOf: str(c.riderOf), policyNumber, sumInsured: notional ? null : sumInsured, ...(notional ? { notionalSum: sumInsured } : {}), premium,
       premiumFrequency: premium == null || !str(c.premiumFrequency) || !squashed(page).includes(squashed(str(c.premiumFrequency)!)) ? null : str(c.premiumFrequency), asOf: dateOnPage(str(c.asOf), page),
-      startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency, premiumSource, premiumLabel });
+      startDate: dateOnPage(str(c.startDate), page), endDate: dateOnPage(str(c.endDate), page), page: source.page, quote, source, currency, premiumSource, premiumLabel,
+      // Premium end and maturity dates count only in the cover's own line (a table row prints its dates side by side), or on
+      // a page line that names a premium or maturity and prints the date; a premium term only in those words on the page.
+      ...termDates(c, source.excerpt, page) });
   }
   // A premium the reading did not give is taken from the cover's page when the page prints exactly one plain premium line
   // and names no other life, the same test as a premium the reading gave (release-set A6: "Instalment Premium : 470.85",
@@ -2548,6 +2573,7 @@ export function checkReading(doc: SourceDoc, raw: unknown, o: { coverLineRows?: 
       limitsHeading: LIMITS_HEADING.test(str(b.section) ?? ""), ...(capCurrency ? { capCurrency } : {}), ...(columnMarks.length ? { columnMarks } : {}),
       ...(ownShareNamed ? { ownShareNamed } : {}), ...(baseFromWords && percentOf === "sum_insured" ? { baseFromWords, ...(shareSentence ? { shareSentence } : {}) } : {}), ...(paymentSchedule && pays === "words" ? { paymentSchedule } : {}), ...(lines ?? {}), ...(childLimit ? { childLimit } : {}), ...(childNote ? { childNote } : {}),
       ...(b.forWhom === "each_named_insured" || b.forWhom === "some_insured" ? { forWhom: b.forWhom } : {}),
+      ...valueAt(b, source.excerpt, pageText(source.page)),
       ...(fromCoverLine.has(b) ? { coverLine: true } : {}) });
   }
   out.benefits = foldChildColumns(out.benefits, out.dropped);
