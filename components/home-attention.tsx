@@ -67,7 +67,7 @@ export function HomeAttention() {
   const all = policies ?? [];
   const failed = all.filter((p) => p.processing_status === "failed");
   if (failed.length) items.push({ key: "failed", tone: "warn", href: failed.length === 1 ? `/policies#doc-${failed[0].id}` : "/policies", action: "Open",
-    title: failed.length === 1 ? `“${docName(failed[0])}” couldn’t be read` : `${failed.length} documents couldn’t be read`,
+    title: failed.length === 1 ? (!failed[0].product_name?.trim() && !failed[0].insurer?.trim() ? "One document couldn’t be read" : `“${docName(failed[0])}” couldn’t be read`) : `${failed.length} documents couldn’t be read`,
     detail: failed.length === 1 ? "Answers can’t use it until it is read. You can try again or upload a clearer copy." : "Answers can’t use them until they are read. You can try again or upload clearer copies." });
   const names = all.filter((p) => p.personal_coverage_confirmed && p.processing_status === "ready")
     .flatMap((p) => p.detected_people.filter((n) => !n.matchedFamilyMemberId && !notFamily.includes(`${p.id}:${n.name}`)).map((n) => ({ policy: p, name: n.name })));

@@ -34,7 +34,11 @@ type EvidenceDoc = { id: string; document_type: string; original_filename: strin
   reviewStatus?: HouseholdReviewStatus | null };
 /** A claim document as the household knows it: what it is and the day it was uploaded, never its file name (DC 18 Nov). */
 const evidenceName = (doc: Pick<EvidenceDoc, "document_type" | "created_at">) => {
-  const day = maybeSgDate(doc.created_at);
+  // The store sends Postgres's text form ("2026-11-19 04:45:56.472088+00"); read it as a moment, then write the day in
+  // Singapore time, never the raw value (TE #559 M2).
+  const iso = /^\d{4}-\d{2}-\d{2} \d/.test(doc.created_at)
+    ? doc.created_at.replace(" ", "T").replace(/(\.\d{3})\d+/, "$1").replace(/([+-]\d{2})$/, "$1:00") : doc.created_at;
+  const day = maybeSgDate(/^\d{4}-\d{2}-\d{2}T/.test(iso) && !Number.isNaN(Date.parse(iso)) ? iso : "");
   return `${documentTypeLabel(doc.document_type)}${day ? ` (uploaded ${day})` : ""}`;
 };
 
