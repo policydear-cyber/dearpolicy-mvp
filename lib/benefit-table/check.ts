@@ -529,13 +529,19 @@ export function termDates(c: { premiumEndDate?: unknown; premiumTerm?: unknown; 
  * benefit in the same column for two or more different ages or years (a table by year, whatever the reader called its
  * rows: Critic #562 MED-8 and its follow-up). An age limit on an ordinary benefit ("Death or TPD before age 70") is one row
  * on its own, so it reads as a current figure, as on main. */
-export function byYearOnly<T extends { benefit: string; column?: string | null; pays?: unknown; atAge?: number | null; atPolicyYear?: number | null; rate?: string | null }>(rows: T[]): T[] {
-  const key = (r: T) => `${r.benefit.toLowerCase().replace(/\s+/g, " ").trim()}|${(r.column ?? "").toLowerCase().trim()}`;
-  const points = new Map<string, Set<string>>();
-  for (const r of rows) if (r.atAge != null || r.atPolicyYear != null) points.set(key(r), new Set([...(points.get(key(r)) ?? []), `${r.atAge ?? ""}/${r.atPolicyYear ?? ""}`]));
+export function byYearOnly<T extends { benefit: string; section?: string | null; column?: string | null; pays?: unknown; atAge?: number | null; atPolicyYear?: number | null; rate?: string | null }>(rows: T[]): T[] {
+  // The same benefit in the same section and column: a step-down schedule ("before age 65", "from 65 to 70") prints two ages,
+  // an illustration prints policy years, or at least three ages (first row, every fifth year, last: Critic MED-9).
+  const norm = (x: string | null | undefined) => (x ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  const key = (r: T) => `${norm(r.benefit)}|${norm(r.section)}|${norm(r.column)}`;
+  const years = new Map<string, Set<number>>(), ages = new Map<string, Set<number>>();
+  for (const r of rows) {
+    if (r.atPolicyYear != null) years.set(key(r), new Set([...(years.get(key(r)) ?? []), r.atPolicyYear]));
+    if (r.atAge != null) ages.set(key(r), new Set([...(ages.get(key(r)) ?? []), r.atAge]));
+  }
   return rows.map((r) => {
     if (r.atAge == null && r.atPolicyYear == null && r.rate == null) return r;
-    if (r.pays === "value" || (points.get(key(r))?.size ?? 0) >= 2) return r;
+    if (r.pays === "value" || (years.get(key(r))?.size ?? 0) >= 2 || (ages.get(key(r))?.size ?? 0) >= 3) return r;
     const { atAge: _a, atPolicyYear: _y, rate: _r, ...rest } = r;
     return rest as T;
   });

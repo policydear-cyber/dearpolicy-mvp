@@ -106,5 +106,14 @@ test("a table by year keeps its ages and years whatever the reader called its ro
   assert.deepEqual(categoryRows("Death", rows as never[]), []);
 });
 
+test("a step-down schedule's two ages are age limits, not a table by year: both rows stay current figures (Critic MED-9)", () => {
+  const r = (benefit: string, atAge: number, pays = "amount") => ({ benefit, section: null, column: "Sum Assured", pays, atAge });
+  const kept = (rows: ReturnType<typeof r>[]) => byYearOnly(rows).map((x) => (x as { atAge?: number }).atAge ?? null);
+  assert.deepEqual(kept([r("Death benefit", 65), r("Death benefit", 70)]), [null, null], "before age 65 / from 65 to 70");
+  assert.deepEqual(kept([r("Hospital income", 17), r("Hospital income", 18)]), [null, null]);
+  assert.deepEqual(kept([r("Death benefit", 45), r("Death benefit", 50), r("Death benefit", 55)]), [45, 50, 55], "three ages: an illustration");
+  assert.deepEqual(kept([r("Death benefit", 65), r("TPD benefit", 70), r("CI benefit", 75)]), [null, null, null], "different benefits never pair");
+});
+
 if (failures.length) { console.error(failures.join("\n")); console.error(`${failures.length} failed, ${passed} passed`); process.exit(1); }
 console.log(`term-dates: ${passed} passed`);
