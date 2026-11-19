@@ -2548,21 +2548,21 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     const inv = inventoryNow;
     const docs = [...inv.people.flatMap((p) => p.documents), ...inv.unlinked];
     const said = r.composed.sentences.map((x) => x.text).join(" ").toLowerCase();
-    // (An empty name names nothing: an unreadable upload has no product name, only its file name and status.)
+    // (An empty name names nothing. An unreadable upload is named by its label: its title, or "Photo uploaded <day>"; never its file name, DC 18 Nov.)
     const has = (t: string | null | undefined) => !!t && t.trim().length > 0 && said.includes(t.toLowerCase());
-    const named = (d: InventoryDoc) => (d.readable === "ready" ? has(d.name) || has(d.filename) : has(d.filename));
+    const named = (d: InventoryDoc) => (d.readable === "ready" ? has(d.name) || has(d.label) : has(d.label));
     // V1.5 (s52-live-1): an inventory answer that lists the library answers the question -- the generic "couldn't confirm
     // an answer" note (added because some model sentences were taken out) is not shown under it.
     const answered = (notes: string[]) => notes.filter((n) => n !== DROPPED_NOTE);
-    if (docs.every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) return { ...r, composed: { ...r.composed, notes: answered(r.composed.notes), libraryNames: docs.flatMap((d) => [d.name, d.filename]).filter(Boolean) } };
+    if (docs.every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) return { ...r, composed: { ...r.composed, notes: answered(r.composed.notes), libraryNames: docs.flatMap((d) => [d.name, d.label]).filter(Boolean) } };
     // V1.5 (live verification, 14 Oct): a reply that names every readable document but leaves out a file that could not
     // be read keeps what it says and gains that file's status line from the lookup -- the household asked for it, and a
     // status fact needs no page citation (it is the library's own record).
     const statusMissing = docs.filter((d) => d.readable !== "ready" && !named(d));
     if (statusMissing.length && docs.filter((d) => d.readable === "ready").every(named) && inv.people.every((p) => said.includes(p.short.toLowerCase()))) {
       const owner = (d: InventoryDoc) => inv.people.find((p) => p.documents.includes(d))?.short ?? null;
-      const lines = statusMissing.map((d) => ({ text: `${d.filename}: its contents could not be read (${d.reason ?? "it could not be read"}), so nothing in it can be used${owner(d) ? `; it is linked to ${owner(d)}` : "; it is not linked to anyone in the household"}.`, evidenceIds: [] as string[], estimate: false, factKeys: [] as string[] }));
-      return { ...r, composed: { ...r.composed, notes: answered(r.composed.notes), sentences: [...r.composed.sentences, ...lines], libraryNames: docs.flatMap((d) => [d.name, d.filename]).filter(Boolean) } };
+      const lines = statusMissing.map((d) => ({ text: `${d.label.charAt(0).toUpperCase()}${d.label.slice(1)}: its contents could not be read (${d.reason ?? "it could not be read"}), so nothing in it can be used${owner(d) ? `; it is linked to ${owner(d)}` : "; it is not linked to anyone in the household"}.`, evidenceIds: [] as string[], estimate: false, factKeys: [] as string[] }));
+      return { ...r, composed: { ...r.composed, notes: answered(r.composed.notes), sentences: [...r.composed.sentences, ...lines], libraryNames: docs.flatMap((d) => [d.name, d.label]).filter(Boolean) } };
     }
     // V1.4: a sentence whose every figure is verified and bound (person, product, source) is kept with its bindings --
     // an inventory request asked alongside a claim question does not erase the claim's documented amounts.
@@ -2572,7 +2572,7 @@ async function runLoopTurn(input: LoopInput): Promise<LoopOutput> {
     const keptBindings = keep.filter(boundFigures).flatMap((x) => bindingsOf(x.text));
     const lines = inventorySentences(inv).map((l) => ({ text: l.text, evidenceIds: l.evidence.map((e) => evidenceIdOf(state, e, "household_documents")), estimate: false, factKeys: [] as string[] }));
     trace.incomplete = [...(trace.incomplete ?? []), "the inventory was stated from the household's document lookup"];
-    const composed: Composed = { ...r.composed, notes: answered(r.composed.notes), libraryNames: docs.flatMap((d) => [d.name, d.filename]).filter(Boolean), sentences: [...keep, ...lines], figureBindings: keptBindings, computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
+    const composed: Composed = { ...r.composed, notes: answered(r.composed.notes), libraryNames: docs.flatMap((d) => [d.name, d.label]).filter(Boolean), sentences: [...keep, ...lines], figureBindings: keptBindings, computations: [], calculations: [], calcs: [], evidenceIds: [...new Set([...keep.flatMap((x) => x.evidenceIds), ...lines.flatMap((x) => x.evidenceIds)])] };
     return { ...r, composed };
   };
   /** V1.4: the ONE question a printed condition needs, when the reply ends without a question. A benefit of the subject's

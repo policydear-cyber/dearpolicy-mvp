@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DOCS, ELIGIBLE } from "../fixtures/rag2-pr50/household";
+import { namesDocument } from "./spoken-name";
 import { uniqueSteps } from "../../components/next-steps";
 import { recomputeCalculation } from "../../lib/claims/calc-record";
 
@@ -53,19 +54,20 @@ export function gradeP50D(t: any): Check[] {
 export function gradeP50C(t: any): Check[] {
   const checks: Check[] = []; const add = (id: string, name: string, ok: boolean, detail = "") => checks.push({ id, name, ok, ...(!ok ? { detail: detail.slice(0, 900) } : {}) });
   const a = t?.answer; const v = visibleOf(a); const lines = v.split("\n");
-  const names = (d: any) => [d.product, d.filename].filter((x: any): x is string => !!x && x.trim().length > 0);
-  const shown = (d: any) => names(d).some((n) => v.includes(n));
+  // 19 Nov (DC approved): a document is identified by its title, or "Photo uploaded <day>", never its file name.
+  const names = (d: any, text: string) => namesDocument(d, text);
+  const shown = (d: any) => names(d, v);
   const missing = ELIGIBLE.map(byKey).filter((d) => !shown(d));
-  add("C1", "all six eligible uploads are displayed by identity (product name, or the exact file name with its case)", !missing.length, `missing ${missing.map((d) => `${d.key} ${d.id}`).join(", ")}\n${v}`);
+  add("C1", "all six eligible uploads are displayed by identity (product name or title, or \"Photo uploaded <day>\" for an upload with no name; never the file name)", !missing.length, `missing ${missing.map((d) => `${d.key} ${d.id}`).join(", ")}\n${v}`);
   const saved = new Set([...(a?.citations ?? []).map((c: any) => c.policyId)]);
-  const notSaved = ELIGIBLE.map(byKey).filter((d) => !saved.has(d.id) && !names(d).some((n) => (a?.libraryNames ?? []).includes(n)));
+  const notSaved = ELIGIBLE.map(byKey).filter((d) => !saved.has(d.id) && !(a?.libraryNames ?? []).some((n: string) => names(d, n)));
   add("C2", "each displayed upload is in the saved record (a citation of its document id, or its library name)", !notSaved.length, notSaved.map((d) => d.key).join(", "));
   const scan = byKey("SCAN");
-  add("C3", "the failed upload is stated as unreadable (on the line naming it); nothing is quoted from it", lines.some((l) => l.includes(scan.filename!) && /could not be read|couldn['’]t be read|unreadable|not readable|failed/i.test(l)), v);
-  const gone = ["DELETED", "OTHER"].map(byKey).filter((d) => names(d).some((n) => v.includes(n)) || saved.has(d.id));
+  add("C3", "the failed upload is stated as unreadable (on the line naming it); nothing is quoted from it", lines.some((l) => names(scan, l) && /could not be read|couldn['’]t be read|unreadable|not readable|failed/i.test(l)), v);
+  const gone = ["DELETED", "OTHER"].map(byKey).filter((d) => names(d, v) || saved.has(d.id));
   add("C4", "the deleted upload and the other household's upload are absent (by name and by id)", !gone.length, gone.map((d) => d.key).join(", "));
   const travel = ["TRAVEL_WORDING", "TRAVEL_SUMMARY"].map(byKey);
-  const asPersonal = lines.filter((l) => travel.some((d) => names(d).some((n) => l.includes(n)))).flatMap((l) => l.split(/;\s+/)).filter((p) => travel.some((d) => names(d).some((n) => p.includes(n))) && /\bpersonal (?:policy document|certificate|cover|policy)\b/i.test(p) && !/\bnot (?:a |your )?personal\b/i.test(p));
+  const asPersonal = lines.filter((l) => travel.some((d) => names(d, l))).flatMap((l) => l.split(/;\s+/)).filter((p) => travel.some((d) => names(d, p)) && /\bpersonal (?:policy document|certificate|cover|policy)\b/i.test(p) && !/\bnot (?:a |your )?personal\b/i.test(p));
   add("C5", "the travel insurer's documents are not presented as personal cover", !asPersonal.length, asPersonal.join(" | "));
   add("C6", "no token-limit / unfinished fallback", !limitStop(t), v);
   return checks;

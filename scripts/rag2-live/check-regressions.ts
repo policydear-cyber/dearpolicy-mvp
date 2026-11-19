@@ -359,7 +359,7 @@ t("C34 L5 the correct answer has no whole-answer failure", () => assert.deepEqua
       turn("Adrian’s certificate lists Group Term Life of S$1,000,000 and Group Personal Accident of S$600,000 as of 06/10/2022.", { answer: { figureBindings: [b(1000000, "Group Term Life", A), b(600000, "Group Personal Accident", A)] } }),
       turn("No -- Cheryl’s certificate lists Group Personal Accident of S$600,000 as of 6 October 2022; her Group Term Life is S$1,000,000.", { answer: { figureBindings: [b(600000, "Group Personal Accident", C)] } }),
     ] } },
-    { scenario: "S52C", loaded: { turns: [turn("Adrian: Public Officers Group Insurance Scheme - Certificate; Public Officers Group Personal Accident - Summary of Benefits; Public Officers Group Personal Accident - Policy Wording; Public Officers Group Term Life - Product Summary; Single Trip Travel Insurance - Policy Schedule. IMG_0042.jpg could not be read.")] } },
+    { scenario: "S52C", loaded: { turns: [turn("Adrian: Public Officers Group Insurance Scheme - Certificate; Public Officers Group Personal Accident - Summary of Benefits; Public Officers Group Personal Accident - Policy Wording; Public Officers Group Term Life - Product Summary; Single Trip Travel Insurance - Policy Schedule. Photo uploaded 19 Nov 2026 could not be read.")] } },
     { scenario: "S52D", loaded: { turns: [turn("If the Simple Fracture benefit applies, the conditional illustration is S$2,500 (50% of the S$5,000 Simple Fracture Benefit Limit). Other Fracture is a percentage of the Sum Insured instead.", { answer: { calculations: [{ result: { value: 2500 } }] } })] } },
   ];
   const fails = (c: any[]) => gradeLivelib(c).checks.filter((x) => !x.ok).map((x) => `${x.conv}/${x.turn}: ${x.name}`);
@@ -368,7 +368,9 @@ t("C34 L5 the correct answer has no whole-answer failure", () => assert.deepEqua
     const x = good(); (x[0].loaded.turns[0] as any).visible += " Group Living Care Plus is S$300,000."; assert.ok(fails(x).some((f) => /Living Care/.test(f)));
     const y = good(); (y[0].loaded.turns[1] as any).visible += " Accidental Death is payable if death occurs within 365 days of the Accident."; assert.ok(fails(y).some((f) => /borrowed/.test(f)));
     const z = good(); (z[0].loaded.turns[1] as any).trace = { limit: { kind: "turn_tokens" } }; assert.ok(fails(z).some((f) => /limit dead end/.test(f)));
-    const w = good(); (w[2].loaded.turns[0] as any).visible = (w[2].loaded.turns[0] as any).visible.replace(" IMG_0042.jpg could not be read.", ""); assert.ok(fails(w).some((f) => /unreadable upload/.test(f)));
+    const w = good(); (w[2].loaded.turns[0] as any).visible = (w[2].loaded.turns[0] as any).visible.replace(" Photo uploaded 19 Nov 2026 could not be read.", ""); assert.ok(fails(w).some((f) => /unreadable upload/.test(f)));
+    // 19 Nov (DC approved): naming the photo by its file name now fails the same check.
+    const fn = good(); (fn[2].loaded.turns[0] as any).visible = (fn[2].loaded.turns[0] as any).visible.replace("Photo uploaded 19 Nov 2026", "IMG_0042.jpg"); assert.ok(fails(fn).some((f) => /unreadable upload/.test(f)));
     const u = good(); (u[3].loaded.turns[0] as any).answer = { calculations: [] }; assert.ok(fails(u).some((f) => /saved, re-runnable/.test(f)));
     assert.deepEqual(borrowed365("Permanent Dismemberment is payable if the loss occurs within 365 days of the Accident."), []);
   });

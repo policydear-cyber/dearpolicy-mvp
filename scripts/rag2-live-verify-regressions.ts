@@ -17,6 +17,7 @@ import * as BH from "./fixtures/rag2-binding/household";
 import * as LH from "./fixtures/rag2-livelib/household";
 import * as LHM from "./fixtures/rag2-livelib/multiline";
 import type { ScriptView } from "@/lib/rag2/loop/scripted-model";
+import { UNNAMED_UPLOAD } from "./rag2-live/spoken-name";
 
 const PART = process.env.PART === "binding" || process.argv.includes("--binding") ? "binding" : process.env.PART === "livelib" || process.argv.includes("--livelib") ? "livelib" : process.env.PART === "multiline" || process.argv.includes("--multiline") ? "multiline" : "report";
 const MK = RH.M.marcus.id, D = BH.M.darren.id;
@@ -58,11 +59,11 @@ async function main() {
     const [named] = await run([{ user: ASK, steps: [() => [call("household_documents", {})], (v: ScriptView) => [call("final_answer", { sentences: peopleOf(v).map((p: any) => ({ text: `${p.short}: ${(p.documents as any[]).filter((d) => d.readable === "ready").map((d) => d.name).join("; ")}.`, evidence_ids: (p.documents as any[]).map((d) => d.evidence?.evidence_id).filter(Boolean) })) })]] }]);
     void evOf;
     await check("INVENTORY a request for every document, including unreadable ones, is answered as the inventory: the unreadable upload is listed with its reason, saved and displayed", () => {
-      assert.match(plain.v, /Not linked to anyone in the household, and its contents could not be read: scan-0042\.jpg\. Nothing in it can be used; linking it to a person would not change that/, plain.v); assert.ok(!/link it to a person so it can be used/.test(plain.v), "an unreadable file is not presented as usable once linked: " + plain.v); assert.equal(plain.v, plain.returned);
+      assert.match(plain.v, /Not linked to anyone in the household, and its contents could not be read: Photo uploaded \d{1,2} [A-Z][a-z]{2} \d{4}\. Nothing in it can be used; linking it to a person would not change that/, plain.v); assert.ok(!/scan-0042/.test(plain.v), plain.v); /* 19 Nov (DC approved): by upload day, never the file name */ assert.ok(!/link it to a person so it can be used/.test(plain.v), "an unreadable file is not presented as usable once linked: " + plain.v); assert.equal(plain.v, plain.returned);
     });
     await check("INVENTORY a reply that names every readable document but omits the unreadable one keeps its sentences and gains that file's status line from the library record (saved = displayed)", () => {
       assert.match(named.v, /^Marcus: Public Officers Group Scheme - Certificate; /m, named.v);
-      assert.match(named.v, /scan-0042\.jpg: its contents could not be read \([^)]+\), so nothing in it can be used; it is not linked to anyone in the household\./, named.v);
+      assert.ok(!/scan-0042/.test(named.v), named.v); assert.match(named.v, /Photo uploaded \d{1,2} [A-Z][a-z]{2} \d{4}: its contents could not be read \([^)]+\), so nothing in it can be used; it is not linked to anyone in the household\./, named.v);
       assert.equal(named.v, named.returned);
     });
     const { INVENTORY_QUESTION } = await import("@/lib/rag2/loop/loop");
@@ -184,8 +185,10 @@ async function main() {
     const inv = (sentences: (v: ScriptView) => any[]) => ({ user: ASK, steps: [() => [call("household_documents", {})], (v: ScriptView) => [call("final_answer", { sentences: sentences(v) })]] });
     const peopleOf = (v: ScriptView) => (([...v.turn].reverse().find((x) => x.name === "household_documents")?.result?.data?.people ?? []) as any[]);
     const listed = (v: ScriptView) => peopleOf(v).map((p: any) => ({ text: `${p.short}: ${(p.documents as any[]).filter((d) => d.readable === "ready").map((d) => d.name).join("; ")}.`, evidence_ids: (p.documents as any[]).map((d) => d.evidence?.evidence_id).filter(Boolean) }));
-    const exact = (x: any, file: string) => {
-      const line = (x.trace.composed as string[]).find((c) => c.includes(file));
+    // 19 Nov (DC approved): the unreadable upload is said by its title, or "Photo uploaded <day>" when it has no name of its
+    // own, never by its file name (scripts/rag2-live/spoken-name.ts); what is checked about its status line is unchanged.
+    const exact = (x: any, file: string | RegExp) => {
+      const line = (x.trace.composed as string[]).find((c) => typeof file === "string" ? c.includes(file) : file.test(c));
       assert.ok(line, "the composed answer has the unreadable file: " + JSON.stringify(x.trace.composed));
       assert.ok([x.answer.summary, ...x.answer.details].includes(line), `the saved answer keeps the composed status line verbatim: ${line}\n${x.v}`);
       assert.equal(x.v, x.returned, "saved = returned (what the browser renders)");
@@ -197,10 +200,10 @@ async function main() {
     const [i3] = await run([inv(listed)]);
     const [i4] = await run([inv((v) => [...listed(v), { text: "Your Group Personal Accident sum insured is S$5,000.", subject_id: A }])]);
     await h.db.query("UPDATE policies SET original_filename=$2 WHERE id=$1", [LH.doc("SCAN").id, "IMG_0042.jpg"]);
-    await check("INVENTORY the exact live request: the unreadable upload's status line is composed AND saved verbatim and returned to the browser, also when the reply names every readable document itself", () => { exact(i1, "IMG_0042.jpg"); exact(i2, "IMG_0042.jpg"); });
+    await check("INVENTORY the exact live request: the unreadable upload's status line is composed AND saved verbatim and returned to the browser, also when the reply names every readable document itself", () => { exact(i1, UNNAMED_UPLOAD); exact(i2, UNNAMED_UPLOAD); assert.ok(!i1.v.includes("IMG_0042") && !i2.v.includes("IMG_0042"), i1.v); });
     await check("INVENTORY a file name that looks like an amount (\"Claim S$5,000 receipt …\") is a name, not a figure: the save-time gate no longer drops the status line -- the composed-then-omitted failure -- and a REAL uncited figure elsewhere is still refused without taking the status line with it", () => {
-      exact(i3, "Claim S$5,000 receipt 05-03-2024.pdf");
-      assert.ok(i4.v.includes("Claim S$5,000 receipt 05-03-2024.pdf"), i4.v);
+      exact(i3, "Claim S$5,000 receipt");
+      assert.ok(i4.v.includes("Claim S$5,000 receipt"), i4.v); assert.ok(!i4.v.includes("05-03-2024.pdf"), i4.v);
       assert.ok(!/sum insured is S\$5,000/.test(i4.v), "the uncited figure is still refused: " + i4.v);
     });
     // ------------------------------------------------ 2. the 365-day condition belongs to Permanent Dismemberment
@@ -254,7 +257,7 @@ async function main() {
     const [invAll] = await run([inv(() => [{ text: "Here are the documents on file for your household." }])]);
     await check("INVENTORY a broad request still enumerates EVERY document (all five readable uploads and the unreadable one), unaffected by the ranked person_benefits", () => {
       for (const d of LH.DOCS.filter((x) => !x.account && x.key !== "SCAN")) assert.ok(invAll.v.includes(d.product), d.product + "\n" + invAll.v);
-      assert.ok(invAll.v.includes("IMG_0042.jpg"));
+      assert.ok(UNNAMED_UPLOAD.test(invAll.v) && !invAll.v.includes("IMG_0042"), invAll.v);
     });
     const sel = (key: string, benefit: string, want = "amount") => call("select_table_value", { policy_id: LH.doc(key).id, benefit, subject_id: A, want });
     const vid = (v: ScriptView, key: string, re: RegExp) => { const o = [...v.turn].reverse().find((x) => x.name === "select_table_value" && x.args.policy_id === LH.doc(key).id && re.test(String(x.args.benefit))); return o?.result?.data?.valueId as string | undefined; };

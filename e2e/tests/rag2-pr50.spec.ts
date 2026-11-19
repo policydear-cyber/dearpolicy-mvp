@@ -1,6 +1,7 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 import { uniqueSteps } from "../../components/next-steps";
 import * as P from "../../scripts/fixtures/rag2-pr50/household";
+import { namesDocument } from "../../scripts/rag2-live/spoken-name";
 
 /**
  * V1.5 BROWSER REPLAY of the live failures after PR #50 (scenarios P50D fracture, P50C inventory, P50A death; the
@@ -56,9 +57,11 @@ for (const id of ["P50D", "P50C", "P50A"]) {
       // by document identity: each eligible upload's record is in the saved answer (citation or library name) and named on the page
       const ids = new Set([...(saved.citations ?? []).map((c: any) => c.policyId)]);
       for (const k of P.ELIGIBLE) {
-        const doc = P.doc(k); const names = [doc.product, doc.filename].filter((x): x is string => !!x && !!x.trim());
-        expect(names.some((n) => shown.includes(n)), `${k} (${doc.id}) not displayed`).toBeTruthy();
-        expect(names.some((n) => (saved.libraryNames ?? []).includes(n)) || ids.has(doc.id), `${k} (${doc.id}) not in the saved record`).toBeTruthy();
+        // 19 Nov (DC approved): named by title, or "Photo uploaded <day>" when it has no name of its own; never by file name.
+        const doc = P.doc(k);
+        expect(namesDocument(doc, shown), `${k} (${doc.id}) not displayed`).toBeTruthy();
+        expect((saved.libraryNames ?? []).some((n: string) => namesDocument(doc, n)) || ids.has(doc.id), `${k} (${doc.id}) not in the saved record`).toBeTruthy();
+        if (doc.filename) expect(shown, `${k} file name displayed`).not.toContain(doc.filename);
       }
       expect(shown).toMatch(/could not be read/);
       expect(shown).not.toMatch(/Old Benefit Summary|other household/);

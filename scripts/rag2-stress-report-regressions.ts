@@ -48,7 +48,9 @@ async function main() {
   const r1 = await run("R1");
   await check("R1 usefulness: the inventory lists each person's documents with insurer and role, the pet documents as linked to nobody, and the unreadable scan -- no figures", () => {
     const v = r1[0].v;
-    for (const x of [/Marcus:/, /Serena:/, /Public Officers Group Scheme - Certificate/, /Kestrel Assurance/, /personal policy document/, /Summary of Benefits/, /Policy Wording/, /reference wording/, /Not linked to anyone[^\n]*PawSafe Pet Insurance - Policy Wording[^\n]*PawSafe Pet Insurance - Endorsement/, /scan-0042\.jpg could not be read/]) assert.match(v, x, v);
+    for (const x of [/Marcus:/, /Serena:/, /Public Officers Group Scheme - Certificate/, /Kestrel Assurance/, /personal policy document/, /Summary of Benefits/, /Policy Wording/, /reference wording/, /Not linked to anyone[^\n]*PawSafe Pet Insurance - Policy Wording[^\n]*PawSafe Pet Insurance - Endorsement/, /Photo uploaded \d{1,2} [A-Z][a-z]{2} \d{4} could not be read/]) assert.match(v, x, v);
+    // 19 Nov (DC approved): the scan is said by its upload day, never its file name "scan-0042.jpg".
+    assert.ok(!/scan-0042/.test(v), v);
     assert.ok(!/S\$\d/.test(v), v); assert.ok(!/Lee, Marcus|KPA-399999|S\$700,000/.test(v), v);
   });
 
