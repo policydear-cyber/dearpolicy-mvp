@@ -2,6 +2,7 @@ import { z } from "zod";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
+import { householdDocumentLabels } from "@/lib/policies/household-labels";
 import { asksAboutIncomeCover, printedWaitingPeriod, timeOffWork, waitingPeriodSentence } from "./deferred-period";
 import { householdModelFailure,readableModelFailure,structuredCompletion } from "@/lib/ai/llm";
 import { SpendCapReached } from "@/lib/ai/ledger";
@@ -1467,7 +1468,9 @@ async function plainQuestionAnswer(context:ChatContext,state:ConversationState):
   }
   // 2c. "the paper cannot open is it", "then how": a person whose only documents are password-protected.
   if(one&&!pages.length&&/\b(?:open|unlock|password|then how|how now|what now|how to|cannot read|can['’]?t read|what (?:should|do) i do)\b/i.test(text)){
-    const locked=(await query<{file:string|null}>(`SELECT p.original_filename file FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_error ILIKE '%password%' AND (p.family_member_id=$2 OR EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.family_member_id=$2))`,[request.accountId,one.id]).catch(()=>({rows:[] as {file:string|null}[]}))).rows[0]?.file;
+    const lockedId=(await query<{file:string|null}>(`SELECT p.id::text file FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_error ILIKE '%password%' AND (p.family_member_id=$2 OR EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.family_member_id=$2))`,[request.accountId,one.id]).catch(()=>({rows:[] as {file:string|null}[]}))).rows[0]?.file;
+    // Said by its title, never its file name (DC 18 Nov).
+    const locked=lockedId?(await householdDocumentLabels(request.accountId).catch(()=>new Map<string,string>())).get(lockedId)??"the locked document":null;
     if(locked)return {summary:"Yes — “"+locked+"” is locked with a password, so it can’t be read yet. The password is usually in the email or letter the statement came with (often an ID number or a date of birth in a set format); if it can’t be found, the insurer can send an unlocked copy. Upload that copy on the Documents page and I’ll read it straight away.",details:[],nextSteps:[],citations:[]};
   }
   const notOnFile=insurersNotOnFile(text,pages.map(p=>(p.insurer??"")+" "+p.product));

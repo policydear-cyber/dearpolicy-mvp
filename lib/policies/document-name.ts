@@ -101,8 +101,11 @@ export function uploadDay(value:string|Date|null|undefined):string{
 export function documentLabels(docs:LabelDoc[],opts:{describeUnnamed?:boolean}={}):Map<string,string>{
   const fmt=(x:LabelDoc)=>FORMAT_WORDS.find(([re])=>re.test(x.original_filename??""))?.[1]??"";
   const head=new Map(docs.map(d=>{
+    // A part of a file that held several policies is stored as "<file> — part N of M (pages a–b).pdf" (lib/rag/ingest.ts):
+    // its own name is judged from the file it came from, without the part words or the extension (TE M1).
     const file=d.original_filename??"",part=file.match(/ — part (\d+) of (\d+) \(pages /);
-    const base=opts.describeUnnamed&&!hasOwnName(d)?unnamedDescription(d):documentName({...d,product_name:d.product_name??null,original_filename:file.replace(/ — part \d+ of \d+ \(pages [^)]*\)$/,"")});
+    const whole={...d,product_name:d.product_name??null,original_filename:file.replace(/ — part \d+ of \d+ \(pages [^)]*\)(?:\.[a-z0-9]{1,5})?$/i,"")};
+    const base=opts.describeUnnamed&&!hasOwnName(whole)?unnamedDescription(d):documentName(whole);
     return [d.id,{base,tells:part?[`part ${part[1]} of ${part[2]}`]:[] as string[]}];
   }));
   const text=(id:string)=>{const h=head.get(id)!;return h.tells.length?`${h.base} (${h.tells.join(", ")})`:h.base;};
@@ -111,6 +114,9 @@ export function documentLabels(docs:LabelDoc[],opts:{describeUnnamed?:boolean}={
   // "Shield" PDF). All tells share one bracket ("Shield (part 1 of 2, uploaded 3 Nov 2026)", Critic L3).
   const steps:((d:LabelDoc,group:LabelDoc[])=>string)[]=[
     (d,g)=>new Set(g.map(fmt)).size>1?fmt(d):"",
+    // Different policies are told apart by their numbers, as documentName does, never as "copies" (TE L1).
+    (d,g)=>{const end=(x:LabelDoc)=>{const n=normalizedIdentifier(x.policy_number);return /\d/.test(n)?n.slice(-4):"";};
+      return new Set(g.map(end)).size>1&&end(d)&&!head.get(d.id)!.base.includes(`ending ${end(d)}`)?`ending ${end(d)}`:"";},
     (d,g)=>{const day=uploadDay(d.created_at);return day&&!head.get(d.id)!.base.includes(`uploaded ${day}`)&&new Set(g.map(x=>uploadDay(x.created_at))).size>1?`uploaded ${day}`:"";},
     (d,g)=>`copy ${g.findIndex(x=>x.id===d.id)+1}`,
   ];

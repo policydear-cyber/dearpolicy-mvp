@@ -6,6 +6,7 @@
  * (or "Yes --") taken from the printed lines, never a guess.
  */
 import { query } from "@/lib/db/client";
+import { householdDocumentLabels } from "@/lib/policies/household-labels";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ChatCitation } from "@/types";
 import { piecesOf } from "./printed-lines";
@@ -58,13 +59,15 @@ export async function figurePremise(args: { accountId: string; question: string;
   const figure = args.figures.find((n) => !new RegExp("(?<![\\d.])" + String(n) + "(?:\\.00)?(?![\\d])").test(shown));
   if (figure == null) return null;
   const rows = (await query<{ id: string; name: string; page: number; text: string; owners: string[] | null; owner_ids: string[] | null }>(
-    `SELECT p.id::text id, coalesce(p.product_name, p.original_filename) name, pp.page_number page, pp.text,
+    `SELECT p.id::text id, p.product_name name, pp.page_number page, pp.text,
             array_agg(DISTINCT coalesce(nullif(fm.preferred_name,''), fm.display_name)) FILTER (WHERE fm.id IS NOT NULL) owners,
             array_agg(DISTINCT fm.id::text) FILTER (WHERE fm.id IS NOT NULL) owner_ids
        FROM policy_pages pp JOIN policies p ON p.id=pp.policy_id AND p.account_id=pp.account_id
        LEFT JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id LEFT JOIN family_members fm ON fm.id=pm.family_member_id
       WHERE pp.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready' AND p.superseded_at IS NULL
       GROUP BY p.id, p.product_name, p.original_filename, pp.page_number, pp.text ORDER BY p.id, pp.page_number`, [args.accountId]).catch(() => ({ rows: [] as never[] }))).rows;
+  // A document is said by its product, else its title, never its file name (DC 18 Nov).
+  if (rows.some((r) => !r.name?.trim())) { const labels = await householdDocumentLabels(args.accountId).catch(() => new Map<string, string>()); for (const r of rows) if (!r.name?.trim()) r.name = labels.get(r.id) ?? "the document"; }
   const printed = new RegExp("(?:S\\$|SGD\\s?)\\s?" + figure.toLocaleString("en-US").replace(/[.,]/g, "\\$&") + "(?:\\.00)?(?![\\d,])");
   // The line about what was asked ("fracture"), not any line that happens to print the same figure.
   const asked = new Set(args.question.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 4).map((w) => w.slice(0, 5)));

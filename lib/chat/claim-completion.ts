@@ -12,6 +12,7 @@
  *    the question's own words ("didn't find i send the insurer").
  */
 import { query } from "@/lib/db/client";
+import { householdDocumentLabels } from "@/lib/policies/household-labels";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { applyGroupCover, groupCoverFor, loadGroupBooklets } from "@/lib/claims/group-cover";
 import { addRecordedClaimItems, claimFactsFromSubject, recordClaim } from "@/lib/claims/record";
@@ -327,10 +328,12 @@ export async function lockedDocumentsReply(args: { accountId: string; person: { 
   try {
     const row = (await query<{ ready: string; locked: string; file: string | null }>(
       `SELECT count(*) FILTER (WHERE p.processing_status='ready')::text AS ready,count(*) FILTER (WHERE p.processing_error ILIKE '%password%')::text AS locked,
-              max(p.original_filename) FILTER (WHERE p.processing_error ILIKE '%password%') AS file
+              max(p.id::text) FILTER (WHERE p.processing_error ILIKE '%password%') AS file
          FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")}
           AND (p.family_member_id=$2 OR EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.family_member_id=$2))`, [args.accountId, args.person.id])).rows[0];
-    counts = { ready: Number(row?.ready ?? 0), locked: Number(row?.locked ?? 0), file: row?.file ?? null };
+    // The locked document is said by its title, never its file name (DC 18 Nov).
+    const label = row?.file ? (await householdDocumentLabels(args.accountId)).get(row.file) ?? "the locked document" : null;
+    counts = { ready: Number(row?.ready ?? 0), locked: Number(row?.locked ?? 0), file: label };
   } catch { return null; }
   if (counts.ready || !counts.locked) return null;
   const name = args.person.preferred_name?.trim() || args.person.display_name;

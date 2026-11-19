@@ -21,6 +21,7 @@
  * notice and a reinstatement letter, a premium receipt) count as one policy.
  */
 import { query } from "@/lib/db/client";
+import { householdDocumentLabels } from "@/lib/policies/household-labels";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation, ComputationOperand, FigureBinding } from "@/types";
@@ -45,7 +46,8 @@ export type RegistryAnswer = { summary: string; details: string[]; citations: Ch
   keepTopic?: boolean };
 
 type Doc = {
-  id: string; file: string; role: string | null; product: string | null; insurer: string | null; number: string | null; groupNumber: string | null; kind: string | null;
+  /** `file` is for matching only; `label` is what a sentence calls the document (its title, never its file name, DC 18 Nov). */
+  id: string; file: string; label: string; role: string | null; product: string | null; insurer: string | null; number: string | null; groupNumber: string | null; kind: string | null;
   pages: number | null; start: string | null; end: string | null; dated: string | null; paid: string | null; owners: string[]; uploadedTo: string; created: string; superseded: boolean; currencies: string[];
 };
 
@@ -90,7 +92,8 @@ async function loadDocs(accountId: string): Promise<Doc[]> {
             p.family_member_id::text AS uploaded_to, p.created_at::text AS created, p.superseded_at IS NOT NULL AS superseded,
             ARRAY(SELECT DISTINCT upper(c) FROM (SELECT pc.currency c FROM policy_coverages pc WHERE pc.policy_id=p.id UNION ALL SELECT pr.currency FROM premium_records pr WHERE pr.source_document_id=p.id OR pr.policy_id=p.id) x WHERE c IS NOT NULL) AS currencies
        FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready' ORDER BY p.created_at, p.id`, [accountId]).catch(() => ({ rows: [] }))).rows;
-  return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", role: r.role, product: r.product, insurer: cleanInsurer(r.insurer), number: r.number, groupNumber: r.group_number, kind: r.kind,
+  const labels = await householdDocumentLabels(accountId).catch(() => new Map<string, string>());
+  return rows.map((r) => ({ id: r.id, file: r.file ?? "Document", label: labels.get(r.id) ?? "the document", role: r.role, product: r.product, insurer: cleanInsurer(r.insurer), number: r.number, groupNumber: r.group_number, kind: r.kind,
     pages: r.pages, start: r.start, end: r.end_date, dated: r.dated, paid: r.paid, owners: r.owners?.length ? r.owners : [r.uploaded_to], uploadedTo: r.uploaded_to, created: r.created, superseded: !!r.superseded, currencies: r.currencies ?? [] }));
 }
 
@@ -98,8 +101,8 @@ const policyKey = (d: Doc) => (d.number ?? d.groupNumber ?? d.product ?? d.file)
 const isPaper = (d: Doc) => PAPER_ROLES.test(d.role ?? "");
 /** The date a document carries: its own printed date, the payment it records, or the date its cover starts. */
 const dateOf = (d: Doc) => d.dated ?? d.paid ?? d.start;
-const describe = (d: Doc) => (d.product ?? d.file) + (d.role && ROLE_NAME[d.role] ? " " + ROLE_NAME[d.role] : "");
-const cite = (d: Doc): ChatCitation => ({ chunkId: "page:" + d.id + ":1", policyId: d.id, policyName: d.product ?? d.file, insurer: d.insurer ?? undefined, pageStart: 1, pageEnd: 1, documentRole: d.role });
+const describe = (d: Doc) => (d.product ?? d.label) + (d.role && ROLE_NAME[d.role] ? " " + ROLE_NAME[d.role] : "");
+const cite = (d: Doc): ChatCitation => ({ chunkId: "page:" + d.id + ":1", policyId: d.id, policyName: d.product ?? d.label, insurer: d.insurer ?? undefined, pageStart: 1, pageEnd: 1, documentRole: d.role });
 
 /** Distinctive words of a product or insurer name ("EquaLife", "SecureCare", "WanderSafe", "Plus"). */
 function nameTokens(d: Doc): string[] {
@@ -273,7 +276,7 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
     const d = lead(ds);
     const owners = coveredBy(ds).map(nameOf).filter((x): x is string => !!x);
     const papersOnly = ds.every(isPaper);
-    return (d.product ?? d.file) + (kindLabel(d) ? " (" + kindLabel(d) + ")" : "") + (d.insurer ? ", " + d.insurer : "") + (d.number ? ", policy " + d.number : d.groupNumber ? ", group policy " + d.groupNumber : "")
+    return (d.product ?? d.label) + (kindLabel(d) ? " (" + kindLabel(d) + ")" : "") + (d.insurer ? ", " + d.insurer : "") + (d.number ? ", policy " + d.number : d.groupNumber ? ", group policy " + d.groupNumber : "")
       + (withOwners && owners.length ? " — " + (owners.length > 1 && ds.some((x) => /joint/i.test(x.product ?? "")) ? "joint, covering " : "covers ") + listOf(owners) : "")
       + (papersOnly ? " (known from " + listOf([...new Set(ds.map((x) => ROLE_NAME[x.role ?? ""] ?? "a document"))]) + " on file)" : "") + stateOf(ds) + ".";
   };
@@ -416,12 +419,12 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
       rowOf.set(i, { ...r, benefits: [rowBenefit(r), ...(sum ? [sum.charAt(0).toUpperCase() + sum.slice(1).toLowerCase()] : [])] });
     }
     const printedAs = (i: Item, said: string) => { const r = rowOf.get(i); return r && !r.benefits.some((b) => namesBenefit(said, b)) ? ", printed as “" + r.label + "”" : ""; };
-    const lines = byPerson.flatMap((x) => x.items.map((i) => (you(x.p) ? "You" : personName(x.p)) + " — " + what + " on " + (i.d.product ?? i.d.file) + ": " + money(i.amount, i.cur) + printedAs(i, what + label(i.note)) + label(i.note)
+    const lines = byPerson.flatMap((x) => x.items.map((i) => (you(x.p) ? "You" : personName(x.p)) + " — " + what + " on " + (i.d.product ?? i.d.label) + ": " + money(i.amount, i.cur) + printedAs(i, what + label(i.note)) + label(i.note)
       + (i.joint ? " (joint policy: paid once, on the first death of the people it covers)" : "")
       + (!i.cur ? " — not added: the document prints no currency for this amount, and DearPolicy never assumes one" : i.problem ? " — not added: " + plain(i.problem) : "") + "."));
     const sentences = byPerson.map((x) => {
       const whose = you(x.p) ? "Your" : personName(x.p) + "’s";
-      const parts = [...x.totals].map(([c, n]) => money(n, c) + ((x.counts.get(c) ?? 0) > 1 ? " across " + x.counts.get(c) + " policies" : " under " + (x.verified.find((i) => i.cur === c)!.d.product ?? x.verified.find((i) => i.cur === c)!.d.file) + printedAs(x.verified.find((i) => i.cur === c)!, what)));
+      const parts = [...x.totals].map(([c, n]) => money(n, c) + ((x.counts.get(c) ?? 0) > 1 ? " across " + x.counts.get(c) + " policies" : " under " + (x.verified.find((i) => i.cur === c)!.d.product ?? x.verified.find((i) => i.cur === c)!.d.label) + printedAs(x.verified.find((i) => i.cur === c)!, what)));
       const left = x.items.length - x.verified.length;
       if (!parts.length) return whose + " " + what + " on file could not be verified against the documents, so it is not added up; each policy is listed with the reason.";
       return whose + " " + what + " on file " + (x.verified.length > 1 && x.totals.size === 1 ? "adds up to " : "is ") + parts.join(", and ")
@@ -475,7 +478,7 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
     const ownerIds = coveredBy(ds);
     const owner = people.length === 1 ? people[0] : ownerIds.length === 1 ? family.find((p) => p.id === ownerIds[0]) : undefined;
     const whose = owner ? (isSelf(owner) ? "Your " : personName(owner) + "’s ") : "";
-    return { summary: whose + (d.product ?? d.file) + " " + verb + " " + printed + (st?.state === "lapsed" ? " — it lapsed on " + st.printed + ", so it is not in force now" : "") + (page ? ", as page " + page.page + " prints it." : "."),
+    return { summary: whose + (d.product ?? d.label) + " " + verb + " " + printed + (st?.state === "lapsed" ? " — it lapsed on " + st.printed + ", so it is not in force now" : "") + (page ? ", as page " + page.page + " prints it." : "."),
       details: page?.line ? ["“" + page.line.replace(/\t+/g, " · ").replace(/\s+/g, " ").trim() + "” (page " + page.page + ")."] : [],
       citations: [{ ...cite(d), chunkId: "page:" + d.id + ":" + (page?.page ?? 1), pageStart: page?.page ?? 1, pageEnd: page?.page ?? 1 }], personId: null, topic: d.product ?? undefined, keepTopic: true };
   }
@@ -488,8 +491,8 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
     const shown = receipts.filter(forThese);
     if (!shown.length) {
       if (!receipts.length && !/\breceipt/i.test(text) && !pointed) return null;
-      const what = pointed ? listOf([...new Set(pointed.map((d) => d.product ?? d.file))]) : people.length ? listOf(people.map((p) => isSelf(p) ? "you" : personName(p))) : "that";
-      return { summary: "There’s no premium receipt or payment record on file for " + what + ", so your documents don’t show whether or when it was paid. The insurer’s statement or your bank records would show it." + (receipts.length ? " The receipt on file is for " + listOf([...new Set(receipts.map((d) => d.product ?? d.file))]) + "." : ""),
+      const what = pointed ? listOf([...new Set(pointed.map((d) => d.product ?? d.label))]) : people.length ? listOf(people.map((p) => isSelf(p) ? "you" : personName(p))) : "that";
+      return { summary: "There’s no premium receipt or payment record on file for " + what + ", so your documents don’t show whether or when it was paid. The insurer’s statement or your bank records would show it." + (receipts.length ? " The receipt on file is for " + listOf([...new Set(receipts.map((d) => d.product ?? d.label))]) + "." : ""),
         details: [], citations: [], personId: null };
     }
     const pageRows = (await query<{ policy_id: string; page_number: number; text: string }>(`SELECT policy_id::text AS policy_id, page_number, text FROM policy_pages WHERE account_id=$1 AND policy_id::text=ANY($2::text[]) ORDER BY page_number`,
@@ -502,8 +505,8 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
         .filter((x) => x.line.length >= 6 && !/synthetic test document|^page \d+(?: of \d+)?$|\((?:fictitious|fictional|synthetic)\)\s*$/i.test(x.line) && !/^(?:official receipt|receipt)$/i.test(x.line)
           // Machine text a reader left in the page (a bare label, an encoded blob) is not something the receipt prints for people.
           && !/^[A-Z0-9_-]+:$/.test(x.line) && !/[A-Za-z0-9+/=]{40,}/.test(x.line));
-      for (const x of lines.slice(0, 12)) details.push("“" + x.line + "” (" + (d.product ?? d.file) + ", page " + x.page + ").");
-      citations.push({ chunkId: "page:" + d.id + ":" + (rows[0]?.page_number ?? 1), policyId: d.id, policyName: d.product ?? d.file, insurer: d.insurer ?? undefined, pageStart: rows[0]?.page_number ?? 1, pageEnd: rows[0]?.page_number ?? 1, documentRole: d.role });
+      for (const x of lines.slice(0, 12)) details.push("“" + x.line + "” (" + (d.product ?? d.label) + ", page " + x.page + ").");
+      citations.push({ chunkId: "page:" + d.id + ":" + (rows[0]?.page_number ?? 1), policyId: d.id, policyName: d.product ?? d.label, insurer: d.insurer ?? undefined, pageStart: rows[0]?.page_number ?? 1, pageEnd: rows[0]?.page_number ?? 1, documentRole: d.role });
     }
     // "Does the receipt amount match the schedule?": the receipt's figure beside the premium the policy's own schedule prints.
     let compare = "";
@@ -516,7 +519,7 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
         if (paid && scheduled) compare += (Number(paid.amount) === Number(scheduled.amount) ? "Yes — the receipt’s amount is the same as the annual premium the " + (d.product ?? "policy") + " schedule prints. " : "No — the receipt’s amount differs from the annual premium the " + (d.product ?? "policy") + " schedule prints. ");
       }
     }
-    return { summary: compare + (shown.length === 1 ? "Here is what the premium receipt on file (“" + shown[0].file + "”) prints:" : "Here is what the " + shown.length + " premium receipts on file print:"),
+    return { summary: compare + (shown.length === 1 ? "Here is what the premium receipt on file (“" + shown[0].label + "”) prints:" : "Here is what the " + shown.length + " premium receipts on file print:"),
       details, citations, personId: null, topic: shown.length === 1 ? shown[0].product ?? undefined : undefined };
   }
 
@@ -536,15 +539,15 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
         .filter((x) => !!x.at).sort((a, b) => a.at!.localeCompare(b.at!));
       if (!ps.length) return null;
       const pick = oldest ? ps[0] : ps[ps.length - 1];
-      return { summary: "The " + (oldest ? "oldest" : "newest") + " policy on file is " + (pick.d.product ?? pick.d.file) + (pick.d.insurer ? " with " + pick.d.insurer : "") + ", which started on " + longDate(pick.at!) + ".",
-        details: ps.map((x) => (x.d.product ?? x.d.file) + ": started " + longDate(x.at!) + "."), citations: [cite(pick.d)], personId: null, topic: pick.d.product ?? undefined };
+      return { summary: "The " + (oldest ? "oldest" : "newest") + " policy on file is " + (pick.d.product ?? pick.d.label) + (pick.d.insurer ? " with " + pick.d.insurer : "") + ", which started on " + longDate(pick.at!) + ".",
+        details: ps.map((x) => (x.d.product ?? x.d.label) + ": started " + longDate(x.at!) + "."), citations: [cite(pick.d)], personId: null, topic: pick.d.product ?? undefined };
     }
     const dated = pool.filter((d) => !!dateOf(d)).sort((a, b) => dateOf(a)!.localeCompare(dateOf(b)!) || a.created.localeCompare(b.created));
     if (!dated.length) return null;
     const pick = oldest ? dated[0] : dated[dated.length - 1];
     const what = changeAsked ? "change on file" : "document on file";
-    return { summary: "The " + (oldest ? "oldest" : changeAsked ? "latest" : "newest") + " " + what + (pointed && pointed.length < docs.length && pick.product ? " for " + pick.product : "") + " is the " + describe(pick) + " (“" + pick.file + "”), dated " + longDate(dateOf(pick)!) + ".",
-      details: dated.map((d) => longDate(dateOf(d)!) + " — " + describe(d) + " (“" + d.file + "”)."), citations: [cite(pick)], personId: null, topic: pick.product ?? undefined };
+    return { summary: "The " + (oldest ? "oldest" : changeAsked ? "latest" : "newest") + " " + what + (pointed && pointed.length < docs.length && pick.product ? " for " + pick.product : "") + " is the " + describe(pick) + " (“" + pick.label + "”), dated " + longDate(dateOf(pick)!) + ".",
+      details: dated.map((d) => longDate(dateOf(d)!) + " — " + describe(d) + " (“" + d.label + "”)."), citations: [cite(pick)], personId: null, topic: pick.product ?? undefined };
   }
 
   // ---------------------------------------------------------------- counting
@@ -553,7 +556,7 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
     if (/^pages?$/.test(unit)) {
       const ds = (pointed ?? []).filter((d) => d.pages);
       if (!ds.length || ds.length > 3) return null;
-      return { summary: ds.map((d) => "“" + d.file + "” (" + describe(d) + ") has " + d.pages + " page" + (d.pages === 1 ? "" : "s") + ".").join(" "), details: [], citations: ds.map(cite), personId: null };
+      return { summary: ds.map((d) => "“" + d.label + "” (" + describe(d) + ") has " + d.pages + " page" + (d.pages === 1 ? "" : "s") + ".").join(" "), details: [], citations: ds.map(cite), personId: null };
     }
     if (/^polic|^plans?/.test(unit)) {
       let ps = [...policies.values()];
@@ -565,9 +568,9 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
         details: ps.map((ds) => policyLine(ds, !who)), citations: ps.map((ds) => cite(lead(ds))), personId: people.length === 1 ? people[0].id : null };
     }
     const ds = pointed ?? docs;
-    const scope = pointed ? [...new Set(pointed.map((d) => d.product ?? d.file))] : [];
+    const scope = pointed ? [...new Set(pointed.map((d) => d.product ?? d.label))] : [];
     return { summary: ds.length + " " + (ds.length === 1 ? "document is" : "documents are") + " on file" + (scope.length ? " for " + listOf(scope) : "") + ":",
-      details: ds.map((d) => "“" + d.file + "” — " + describe(d) + (dateOf(d) ? ", dated " + longDate(dateOf(d)!) : "") + "."), citations: ds.map(cite), personId: null };
+      details: ds.map((d) => "“" + d.label + "” — " + describe(d) + (dateOf(d) ? ", dated " + longDate(dateOf(d)!) : "") + "."), citations: ds.map(cite), personId: null };
   }
 
   // ---------------------------------------------------------------- insurer
@@ -575,14 +578,14 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
     const ds = pointed ?? (people.length ? docs.filter((d) => d.owners.some((o) => people.some((p) => p.id === o))) : null);
     if (!ds?.length) return null;
     const byProduct = new Map<string, Doc>();
-    for (const d of ds) if (!byProduct.has(d.product ?? d.file)) byProduct.set(d.product ?? d.file, d);
+    for (const d of ds) if (!byProduct.has(d.product ?? d.label)) byProduct.set(d.product ?? d.label, d);
     const shown = [...byProduct.values()];
     const insurers = [...new Set(shown.map((d) => d.insurer).filter((x): x is string => !!x))];
     if (!insurers.length) return null;
     const same = /\bsame\b/i.test(text);
     const summary = same && shown.length >= 2
-      ? (insurers.length === 1 ? "Yes — " + listOf(shown.map((d) => d.product ?? d.file)) + " are both with " + insurers[0] + "." : "No — " + shown.map((d) => (d.product ?? d.file) + " is with " + (d.insurer ?? "an insurer the document doesn’t name")).join(", and ") + ".")
-      : shown.map((d) => (d.product ?? d.file) + " is with " + (d.insurer ?? "an insurer the document doesn’t name")).join("; ") + ".";
+      ? (insurers.length === 1 ? "Yes — " + listOf(shown.map((d) => d.product ?? d.label)) + " are both with " + insurers[0] + "." : "No — " + shown.map((d) => (d.product ?? d.label) + " is with " + (d.insurer ?? "an insurer the document doesn’t name")).join(", and ") + ".")
+      : shown.map((d) => (d.product ?? d.label) + " is with " + (d.insurer ?? "an insurer the document doesn’t name")).join("; ") + ".";
     return { summary, details: [], citations: shown.map(cite), personId: null, topic: shown.length === 1 ? shown[0].product ?? undefined : undefined };
   }
 
@@ -595,8 +598,8 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
     const ps = [...policies.values()].map((ds) => ({ ds, d: lead(ds), end: ds.map((x) => x.end).filter((x): x is string => !!x).sort().at(-1) ?? null })).filter((x) => x.end);
     const soon = ps.filter((x) => x.end! >= from && x.end! <= until).sort((a, b) => a.end!.localeCompare(b.end!));
     const span = Number.isFinite(n) ? "the next " + n + " month" + (n === 1 ? "" : "s") : nextYear ? "next year (" + (today.getUTCFullYear() + 1) + ")" : "the rest of this year";
-    return { summary: soon.length ? listOf(soon.map((x) => x.d.product ?? x.d.file)) + (soon.length === 1 ? " ends" : " end") + " within " + span + ", as the documents print the dates:" : "None of the policies on file prints an end or renewal date within " + span + ".",
-      details: (soon.length ? soon : ps.slice(0, 6)).map((x) => (x.d.product ?? x.d.file) + ": ends or renews on " + longDate(x.end!) + "."), citations: (soon.length ? soon : []).map((x) => cite(x.d)), personId: null };
+    return { summary: soon.length ? listOf(soon.map((x) => x.d.product ?? x.d.label)) + (soon.length === 1 ? " ends" : " end") + " within " + span + ", as the documents print the dates:" : "None of the policies on file prints an end or renewal date within " + span + ".",
+      details: (soon.length ? soon : ps.slice(0, 6)).map((x) => (x.d.product ?? x.d.label) + ": ends or renews on " + longDate(x.end!) + "."), citations: (soon.length ? soon : []).map((x) => cite(x.d)), personId: null };
   }
 
   // ---------------------------------------------------------------- does the group plan cover someone
@@ -624,10 +627,10 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
     const rest = ps.filter((x) => !named.includes(x));
     const restCur = [...new Set(rest.flatMap((x) => x.cur))];
     const restText = !rest.length ? "there are no others" : "the other policies on file are in " + listOf(restCur.map(word));
-    const unknownText = unknown.length ? " " + listOf(unknown.map((x) => x.d.product ?? x.d.file)) + (unknown.length === 1 ? " shows" : " show") + " no currency in the pages read, so DearPolicy assumes none." : "";
-    return { summary: (named.length ? listOf(named.map((x) => (x.d.product ?? x.d.file) + (x.d.insurer ? " (" + x.d.insurer + ")" : ""))) + (named.length === 1 ? " is" : " are") + " in " + listOf([...new Set(named.flatMap((x) => x.cur.filter((c) => c !== "SGD")))].map(word)) + "; " + restText + "."
+    const unknownText = unknown.length ? " " + listOf(unknown.map((x) => x.d.product ?? x.d.label)) + (unknown.length === 1 ? " shows" : " show") + " no currency in the pages read, so DearPolicy assumes none." : "";
+    return { summary: (named.length ? listOf(named.map((x) => (x.d.product ?? x.d.label) + (x.d.insurer ? " (" + x.d.insurer + ")" : ""))) + (named.length === 1 ? " is" : " are") + " in " + listOf([...new Set(named.flatMap((x) => x.cur.filter((c) => c !== "SGD")))].map(word)) + "; " + restText + "."
         : "All the policies on file " + (unknown.length ? "that state a currency " : "") + "are in " + listOf(restCur.map(word)) + "; none is in another currency.") + unknownText,
-      details: ps.map((x) => (x.d.product ?? x.d.file) + ": " + listOf(x.cur.map(word)) + "."), citations: (named.length ? named : ps).map((x) => cite(x.d)), personId: null };
+      details: ps.map((x) => (x.d.product ?? x.d.label) + ": " + listOf(x.cur.map(word)) + "."), citations: (named.length ? named : ps).map((x) => cite(x.d)), personId: null };
   }
 
   // ---------------------------------------------------------------- a kind of plan, by whose it is
@@ -643,7 +646,7 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
       const unreadable = (await query<{ n: number }>(`SELECT count(*)::int AS n FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.processing_status<>'ready' AND (p.family_member_id=$2 OR EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.family_member_id=$2))`, [args.accountId, person.id]).catch(() => ({ rows: [{ n: 1 }] }))).rows[0]?.n ?? 1;
       if (!theirs.length && ofKind.length && !unreadable) {
         const whose = (id: string) => { const p = family.find((x) => x.id === id); return p ? (isSelf(p) ? "yours" : personName(p) + "’s") : null; };
-        const lines = ofKind.map((ds) => (lead(ds).product ?? lead(ds).file) + " — " + listOf(coveredBy(ds).map(whose).filter((x): x is string => !!x)));
+        const lines = ofKind.map((ds) => (lead(ds).product ?? lead(ds).label) + " — " + listOf(coveredBy(ds).map(whose).filter((x): x is string => !!x)));
         return { summary: personName(person) + " has no " + kind.label + " on file. The " + kind.label + (ofKind.length === 1 ? " on file is " : "s on file are ") + listOf(lines) + ".",
           details: ofKind.map((ds) => policyLine(ds)), citations: ofKind.map((ds) => cite(lead(ds))), personId: person.id };
       }
@@ -666,7 +669,7 @@ async function registryAnswerInner(args: { accountId: string; question: string; 
     if (whoAsked.length) {
       const lines = whoAsked.map((p) => {
         const mine = ps.filter((ds) => coveredBy(ds).includes(p.id));
-        return { p, mine, line: (isSelf(p) ? "You" : personName(p)) + ": " + (mine.length ? listOf(mine.map((ds) => (lead(ds).product ?? lead(ds).file) + (kindLabel(lead(ds)) ? " (" + kindLabel(lead(ds)) + ")" : "") + (coveredBy(ds).length > 1 && ds.some((x) => /joint/i.test(x.product ?? "")) ? " — joint" : ""))) : "no policy on file") + "." };
+        return { p, mine, line: (isSelf(p) ? "You" : personName(p)) + ": " + (mine.length ? listOf(mine.map((ds) => (lead(ds).product ?? lead(ds).label) + (kindLabel(lead(ds)) ? " (" + kindLabel(lead(ds)) + ")" : "") + (coveredBy(ds).length > 1 && ds.some((x) => /joint/i.test(x.product ?? "")) ? " — joint" : ""))) : "no policy on file") + "." };
       });
       const one = lines.length === 1 ? lines[0] : null;
       const summary = one ? (one.mine.length ? (isSelf(one.p) ? "You are" : personName(one.p) + " is") + " covered by " + one.mine.length + " " + (one.mine.length === 1 ? "policy" : "policies") + " on file:" : "There is no policy on file that covers " + (isSelf(one.p) ? "you" : personName(one.p)) + ".")
