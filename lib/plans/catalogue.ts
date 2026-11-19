@@ -86,3 +86,10 @@ export function checkQuestionLimit(planId: PlanId, asked: number, now: Date = ne
     " Your documents and earlier answers are still here.";
   return { allowed: false, message, code: "question_limit" };
 }
+
+/** The same refusal for someone who isn't the household's owner: only the owner can upgrade (members view and ask;
+ * DC, 18 Nov), so a member is told who can, never asked to upgrade (DC, 19 Nov). */
+export function limitForMember(check: LimitCheck): LimitCheck {
+  if (check.allowed) return check;
+  return { ...check, message: check.message.replace(/\bUpgrade to /g, "The household’s owner can upgrade to ") };
+}

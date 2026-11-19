@@ -147,6 +147,13 @@ async function main() {
     const { sgDate } = await import("../components/format-date");
     assert.equal(sgDate("2026-09-29"), "29 Sep 2026");
     assert.equal(sgDate(""), "");
+    // Claim documents are named by their Singapore upload day on every device (TE #559 L2): midnight in Singapore is 16:00Z.
+    const { singaporeDay } = await import("../components/format-date");
+    assert.equal(singaporeDay("2026-11-18T15:59:00.000+00:00"), "18 Nov 2026");
+    assert.equal(singaporeDay("2026-11-18T16:01:00.000+00:00"), "19 Nov 2026");
+    assert.equal(singaporeDay("2026-11-18T16:30:00Z"), "19 Nov 2026");
+    assert.equal(singaporeDay("2026-11-19 04:45:56+00"), "");
+    assert.equal(singaporeDay(null), "");
   });
   await test("a future date of birth is refused on the page and by the API", () => {
     assert.match(read("app/family/page.tsx"), /A date of birth can't be in the future\./);
@@ -212,6 +219,16 @@ async function main() {
     assert.match(source, /: "From your documents";/, "an unknown source says the neutral words");
     assert.match(payments, /p\.oneOff\.map/, "a premium paid once is listed, not hidden");
     assert.match(payments, /p\.note&&<p className="note">\{p\.note\}/, "what the total leaves out is said, as on Home");
+    // Tester feedback 19 Nov: each person's total stands out under their name, per month and per year, one line per
+    // stated currency; "so far" while a premium is missing; no "Home shows the same cost" (Home lists none) or "Newest first".
+    assert.match(payments, /\{p\.totals\.length>0&&<PersonTotal p=\{p\}\/>\}/, "the total sits under the person's name");
+    assert.match(payments, /p\.complete\?"Total":"Total so far"/, "an incomplete total says so far");
+    assert.match(payments, /p\.totals\.map\(t=><strong key=\{t\.currency\}>\{formatMoney\(t\.monthly,t\.currency\)\}/, "monthly, one line per currency");
+    assert.match(payments, /p\.totals\.map\(t=><strong key=\{t\.currency\}>\{formatMoney\(t\.annual,t\.currency\)\}/, "yearly, one line per currency");
+    assert.doesNotMatch(payments, /Home shows the same cost|Newest first/, "no filler lines");
+    // TE #560 N4: a person whose only premium is paid once, or whose premiums are all left out with a reason, is never told none was found.
+    assert.match(payments, /p\.oneOff\.length\?"No monthly or yearly total: "/, "a one-off premium is not 'no premium found'");
+    assert.match(payments, /p\.note\?"No monthly or yearly total yet\. The note below says why\."/, "a premium left out with a reason is not 'no premium found'");
   });
   await test("signed-out pages carry no app navigation", () => {
     const shell = read("components/AppShell.tsx");

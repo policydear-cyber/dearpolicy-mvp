@@ -424,7 +424,6 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .document-title strong { font-size: var(--fs-md); overflow-wrap: anywhere; }
 .document-title span { font-size: var(--fs-xs); color: var(--muted); }
 /* The stored file name, under the title DearPolicy read from it: what the person sees in their own files. */
-.document-title .document-file { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; }
 .document-for, .document-found, .document-names { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
 .document-for b, .document-found b { color: var(--ink); margin-right: 4px; }
 .document-found.warn { color: var(--warn-text); }
@@ -1539,6 +1538,22 @@ h1 .title-icon .icon { width: 24px; height: 24px; }
 .mobile-bar-actions { display: flex; gap: 8px; }
 .mobile-bar [data-tip]::after { left: auto; right: 0; top: calc(100% + 8px); bottom: auto; transform: none; }
 
+/* The household's plan beside the light/dark switch (components/plan-status.tsx). Same pill as the switch; a label,
+   not a status, so no status colour. A paid plan is the filled key. */
+.plan-badge { display: inline-flex; align-items: center; min-height: 36px; padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink-2); font-size: var(--fs-xs); font-weight: 650; text-decoration: none; white-space: nowrap; transition: border-color var(--t-hover) var(--ease); }
+.plan-badge:hover { border-color: var(--brand-ink); }
+.plan-badge:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 2px; }
+.plan-badge[data-plan="plus"], .plan-badge[data-plan="family"] { background: var(--brand); border-color: var(--brand); color: var(--bg); }
+.sidebar-controls, .mobile-bar-actions { align-items: center; }
+
+/* One short upgrade line, for a household's owner on Free (components/plan-status.tsx). Quiet: a white sheet with a
+   plain button, so the page's own primary action stays the one dark key. */
+.upgrade-prompt { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; margin: 16px 0; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.upgrade-prompt p { margin: 0; color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.45; min-width: 0; flex: 1 1 220px; }
+.upgrade-prompt strong { color: var(--ink); font-weight: 650; }
+.upgrade-prompt .button { flex: 0 0 auto; }
+@media (max-width: 760px) { .plan-badge { min-height: 44px; } }
+
 /* Status words get a matching mark, so the state reads at a glance. */
 .coverage-icon .icon { width: 20px; height: 20px; }
 .coverage-status { display: inline-flex; align-items: center; gap: 6px; }
@@ -2107,3 +2122,11 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
   .life-table tbody th { white-space: normal; }
   .life-table td[data-label]::before { content: attr(data-label); display: block; color: var(--muted); font-size: var(--fs-xs); }
 }
+
+/* Premiums: each person's total, the first thing under their name. */
+.premium-person-total { display: grid; gap: 6px; margin: 0 0 12px; padding: 14px 16px; border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--accent-tint); }
+.premium-person-figures { display: flex; flex-wrap: wrap; gap: 8px 32px; }
+.premium-person-figures > div { display: grid; gap: 2px; min-width: 0; }
+.premium-person-figures small { font-size: var(--fs-xs); color: var(--ink-2); font-weight: 650; }
+.premium-person-figures strong { font-size: var(--fs-2xl); font-weight: 650; letter-spacing: -.02em; color: var(--money); font-variant-numeric: tabular-nums; line-height: 1.15; overflow-wrap: anywhere; }
+.premium-person-total p { margin: 0; font-size: var(--fs-xs); color: var(--ink-2); line-height: 1.45; }

@@ -41,11 +41,6 @@ function kindLabel(slot: FolderSlot | null, doc: FolderPageDoc | undefined) {
   if (!role || role === "unknown") return "Document";
   const t = role.replaceAll("_", " "); return t.charAt(0).toUpperCase() + t.slice(1);
 }
-/** A document's name, with its file name when the two differ, so two copies of one product can be told apart. */
-function withFile(doc: FolderPageDoc, name: (d: FolderPageDoc) => string) {
-  const n = name(doc), file = doc.original_filename?.trim();
-  return file && file !== n ? `${n} · ${file}` : n;
-}
 const ACCEPT = "application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx";
 
 async function send(url: string, method: string, body?: unknown) {
@@ -139,7 +134,7 @@ export function PolicyFolders({ documents, family, name, onLibraryChanged, onFol
 function DocLine({ doc, name }: { doc: FolderPageDoc | undefined; name: (d: FolderPageDoc) => string }) {
   if (!doc) return <span className="muted">A document no longer on file</span>;
   const read = documentReadLabel(doc);
-  return <><a className="text-link" href={`#doc-${doc.id}`}>{withFile(doc, name)}</a>{read.tone !== "ready" && <small className={`folder-doc-state ${read.tone}`}> · {read.tone === "reading" ? "Reading…" : read.label}</small>}</>;
+  return <><a className="text-link" href={`#doc-${doc.id}`}>{name(doc)}</a>{read.tone !== "ready" && <small className={`folder-doc-state ${read.tone}`}> · {read.tone === "reading" ? "Reading…" : read.label}</small>}</>;
 }
 
 function Folder({ folder, title, allFolders, titleOf, docs, documents, family, name, canManage, onChanged, onLibraryChanged }: {
@@ -162,7 +157,7 @@ function Folder({ folder, title, allFolders, titleOf, docs, documents, family, n
     finally { setBusy(false); setArmed(null); }
   };
   const forWhom = folder.people.map((p) => p.name).join(", ");
-  const docName = (id: string) => { const d = docs.get(id); return d ? withFile(d, name) : "this document"; };
+  const docName = (id: string) => { const d = docs.get(id); return d ? name(d) : "this document"; };
   return <div className={`folder-card policy-folder${folder.complete ? "" : " unfinished"}`} data-testid="policy-folder" data-folder-id={folder.id}>
     <div className="document-head">
       <div className="policy-logo"><Icon name="folder"/></div>
@@ -178,8 +173,8 @@ function Folder({ folder, title, allFolders, titleOf, docs, documents, family, n
     </li>)}</ul> : <p className="muted" data-testid="folder-empty">No documents in it yet.</p>}
 
     {canManage && (folder.replacements ?? []).map((r) => { const copy = docs.get(r.by); return copy ? <div className="folder-suggestion" key={r.by} data-testid="folder-replacement">
-      <span>{withFile(copy, name)} replaced a document in this policy. Add it here too?</span>
-      <button type="button" className="mini-button" disabled={busy} aria-label={`Add ${withFile(copy, name)} to this policy`} onClick={() => void patch({ add: [{ policyId: r.by, slot: r.slot }] }, `Added ${name(copy)} to ${title}.`)}>Add it</button>
+      <span>{name(copy)} replaced a document in this policy. Add it here too?</span>
+      <button type="button" className="mini-button" disabled={busy} aria-label={`Add ${name(copy)} to this policy`} onClick={() => void patch({ add: [{ policyId: r.by, slot: r.slot }] }, `Added ${name(copy)} to ${title}.`)}>Add it</button>
     </div> : null; })}
 
     {canManage && !folder.complete && folder.documents.length > 0 && !adding && <div className="folder-confirm" data-testid="folder-confirm">
@@ -220,12 +215,21 @@ function SlotPicker({ slot, files, onChange }: { slot: FolderSlot; files: File[]
 function OnFile({ documents, skip, chosen, onChange, name, folders, title }: { documents: FolderPageDoc[]; skip: Set<string>; chosen: string[]; onChange: (ids: string[]) => void; name: (d: FolderPageDoc) => string; folders?: FolderView[]; title?: (f: FolderView) => string }) {
   const list = documents.filter((d) => !skip.has(d.id));
   if (!list.length) return null;
+  // Two documents of one product read apart by what each is ("Harbour Term · Policy wording"), then by the policy number's
+  // last four, never by a file name (TE #559 L1).
+  const withKind = (d: FolderPageDoc) => { const n = name(d), k = kindLabel(null, d); return k !== "Document" && !n.toLowerCase().includes(k.toLowerCase()) ? `${n} · ${k}` : n; };
+  const counts = new Map<string, number>();
+  for (const d of list) counts.set(withKind(d), (counts.get(withKind(d)) ?? 0) + 1);
+  const label = (d: FolderPageDoc) => {
+    const l = withKind(d), digits = (d.policy_number ?? "").replace(/[^a-z0-9]/gi, "");
+    return (counts.get(l) ?? 0) > 1 && /\d/.test(digits) && !l.includes(`ending ${digits.slice(-4)}`) ? `${l} (ending ${digits.slice(-4)})` : l;
+  };
   return <fieldset className="field folder-onfile" data-testid="folder-onfile">
     <legend>Already on file</legend>
     {list.map((d) => {
       const inFolders = (folders ?? []).filter((f) => f.documents.some((x) => x.policyId === d.id));
       return <label key={d.id} className="folder-check"><input type="checkbox" checked={chosen.includes(d.id)} onChange={(e) => onChange(e.target.checked ? [...chosen, d.id] : chosen.filter((x) => x !== d.id))}/>
-        <span>{withFile(d, name)}{inFolders.length && title ? <small className="muted"> · in {inFolders.map(title).join(", ")}</small> : null}</span></label>;
+        <span>{label(d)}{inFolders.length && title ? <small className="muted"> · in {inFolders.map(title).join(", ")}</small> : null}</span></label>;
     })}
   </fieldset>;
 }

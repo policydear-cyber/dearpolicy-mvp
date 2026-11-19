@@ -224,8 +224,8 @@ ALTER TABLE policies ADD COLUMN IF NOT EXISTS renewal_or_expiry_date date;
 -- rejects as currency codes (for example S$). Keep persisted data canonical.
 -- Missing information stays missing: a NULL currency means the document did
 -- not state one, and is never coerced to SGD.
-UPDATE policy_coverages SET currency='SGD' WHERE upper(replace(coalesce(currency,''),' ','')) IN ('S$','SG$','$S','$');
-UPDATE premium_records SET currency='SGD' WHERE upper(replace(coalesce(currency,''),' ','')) IN ('S$','SG$','$S','$');
+UPDATE policy_coverages SET currency='SGD' WHERE upper(replace(coalesce(currency,''),' ','')) IN ('S$','SG$','$S');
+UPDATE premium_records SET currency='SGD' WHERE upper(replace(coalesce(currency,''),' ','')) IN ('S$','SG$','$S');
 UPDATE policy_coverages SET currency='USD' WHERE upper(replace(currency,' ','')) IN ('US$','USD$');
 UPDATE premium_records SET currency='USD' WHERE upper(replace(currency,' ','')) IN ('US$','USD$');
 UPDATE policy_coverages SET currency='MYR' WHERE upper(replace(currency,' ',''))='RM';

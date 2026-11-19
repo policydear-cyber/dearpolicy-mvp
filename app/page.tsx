@@ -2,12 +2,14 @@
 import Link from "next/link";
 import { useEffect,useMemo,useRef,useState } from "react";
 import { customerError } from "@/components/customer-text";
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { HomeAsk, HomeAttention } from "@/components/home-attention";
 import { HomeNotFound, homeGaps } from "@/components/home-not-found";
 import { HomePolicyDates } from "@/components/home-policy-dates";
 import { homeView } from "@/lib/format/home-view";
 import { Icon, coverCard, coverIcon, type IconName } from "@/components/icons";
 import { homeCardSource, homeGridColumns } from "@/lib/coverage/home-card";
+import { UpgradePrompt } from "@/components/plan-status";
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 type Coverage={category:string;status:"covered"|"on_file"|"not_covered";reviewRequired:boolean;amount:number|null;displayAmount:string|null;currency:string|null;count:number;policyNames:string[];sources?:string[];derived:boolean;parts?:TilePart[]|null;known?:KnownSum|null;planNote?:string|null;onFileDocuments?:string[]};
@@ -110,10 +112,12 @@ export default function DashboardPage(){
    <p className="muted">Covers more than one person, like a group booklet? <Link href="/policies" className="text-link">Choose everyone it covers on the Documents page →</Link></p>
    {claimError&&<div className="alert error" role="alert">{claimError}</div>}
    <div className="unclaimed-list">{data.unclaimed.map(doc=><div className="unclaimed-row" key={doc.id}>
-    <div><strong>{doc.product_name??doc.original_filename}</strong><span>{[doc.insurer,(doc.document_role??"").replaceAll("_"," ")].filter(Boolean).join(" · ")||doc.original_filename}</span></div>
+    <div><strong>{documentCardTitle(doc)}</strong><span>{[doc.insurer,(doc.document_role??"").replaceAll("_"," ")].filter(Boolean).join(" · ")}</span></div>
     <div className="declare-owner">{data.family.map(m=><button key={m.id} type="button" className="button secondary" disabled={claiming===doc.id} onClick={()=>void claim(doc.id,m.id)}>{m.display_name}</button>)}</div>
    </div>)}</div></section>}
   {returning&&<HomeAttention/>}
+  {/* One short upgrade line for an owner on Free, after what the household came for (components/plan-status.tsx). */}
+  {returning&&<UpgradePrompt place="home"/>}
   </>}
   {/* Phone: Ask stays one tap away, but steps aside while Home's own ask box is on screen, and an empty household has
       nothing to ask about yet (its first step is to add people or upload), so the button never covers that box or a step. */}

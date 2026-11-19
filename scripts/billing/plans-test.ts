@@ -395,3 +395,72 @@ test("landing page: pricing before sign-up, every card starts free; Plan usage u
   assert.match(usage, /!sub\.billingEnabled\)return <small>Upgrades open soon/);
   for (const r of ["checkout", "portal"]) assert.match(readFileSync(`app/api/billing/${r}/route.ts`, "utf8"), /requireHouseholdOwner\(ctx\.userId, ctx\.householdId\)/);
 });
+
+test("plan badge and upgrade prompts: owner on Free with payments on only; every number from the plans table (DC, 19 Nov)", async () => {
+  const { planStatus, mayPromptUpgrade, upgradeLine, questionsNearLimit } = await import("@/lib/plans/prompt");
+  // Who may be asked to upgrade.
+  for (const [planId, isOwner, billingEnabled, want] of [
+    ["free", true, true, true], ["free", false, true, false], ["free", true, false, false],
+    ["plus", true, true, false], ["family", true, true, false], ["plus", false, false, false],
+  ] as const) assert.equal(mayPromptUpgrade({ planId, isOwner, billingEnabled }), want, `${planId} owner=${isOwner} billing=${billingEnabled}`);
+  // The badge names the plan for everyone; counts go out only when a prompt may show.
+  assert.deepEqual(planStatus({ planId: "plus", isOwner: false, billingEnabled: true, documentsKept: 3, questionsThisMonth: 9 }), { plan: "plus", name: "Plus", upgrade: false, owner: false });
+  assert.deepEqual(planStatus({ planId: "free", isOwner: false, billingEnabled: true, documentsKept: 3 }), { plan: "free", name: "Free", upgrade: false, owner: false });
+  const owner = planStatus({ planId: "free", isOwner: true, billingEnabled: true, documentsKept: 3, questionsThisMonth: 7 });
+  assert.deepEqual(owner, { plan: "free", name: "Free", upgrade: true, owner: true, documentsKept: 3, questionsThisMonth: 7 });
+  // The words.
+  assert.deepEqual(upgradeLine("home", owner), { lead: "Upgrade to Family.", detail: "Unlimited documents and 150 questions a month.", plan: "family" });
+  assert.deepEqual(upgradeLine("documents", owner), { lead: "3 of 5 documents on Free.", detail: "Plus keeps 20.", plan: "plus" });
+  assert.equal(upgradeLine("documents", { ...owner, documentsKept: 9 })?.lead, "5 of 5 documents on Free.", "never more than the plan holds");
+  assert.equal(upgradeLine("documents", { ...owner, documentsKept: undefined }), null, "no count, no line");
+  assert.equal(upgradeLine("documents", { ...owner, documentsKept: 0 }), null, "not on a new household's empty page (TE F2)");
+  assert.equal(planStatus({ planId: "plus", isOwner: true, billingEnabled: true }).owner, true, "a paid owner keeps the refusal's link (TE F1)");
+  // Ask: only from 8 of 10 questions.
+  assert.equal(questionsNearLimit(owner), false);
+  assert.equal(upgradeLine("ask", owner), null);
+  assert.deepEqual(upgradeLine("ask", { ...owner, questionsThisMonth: 8 }), { lead: "8 of 10 questions used this month.", detail: "Plus gives 60.", plan: "plus" });
+  // Nobody else sees any line.
+  for (const status of [null, planStatus({ planId: "free", isOwner: false, billingEnabled: true }), planStatus({ planId: "family", isOwner: true, billingEnabled: true }), planStatus({ planId: "free", isOwner: true, billingEnabled: false, documentsKept: 5, questionsThisMonth: 10 })])
+    for (const place of ["home", "documents", "ask"] as const) assert.equal(upgradeLine(place, status), null, `${place} ${JSON.stringify(status)}`);
+});
+
+test("limit refusals: the owner is told to upgrade, a member is told who can", async () => {
+  const { limitForMember } = await import("@/lib/plans/catalogue");
+  const { limitForCaller } = await import("@/lib/billing/limit-for-caller");
+  const doc = checkDocumentLimit("free", 5), q = checkQuestionLimit("free", 10, new Date("2026-11-19T00:00:00Z"));
+  for (const check of [doc, q]) {
+    assert.equal(check.allowed, false);
+    const member = limitForMember(check);
+    if (member.allowed || check.allowed) throw new Error("expected a refusal");
+    assert.doesNotMatch(member.message, /(^|\. )Upgrade to/);
+    assert.match(member.message, /The household’s owner can upgrade to Plus for/);
+    assert.equal(member.code, check.code);
+  }
+  assert.deepEqual(limitForMember({ allowed: true }), { allowed: true });
+  const ctx = { userId: "u", householdId: "h" };
+  const owner = async () => {}, notOwner = async () => { throw new Error("not owner"); };
+  assert.deepEqual(await limitForCaller(doc, ctx, owner), doc);
+  assert.deepEqual(await limitForCaller(doc, ctx, notOwner), limitForMember(doc));
+  let asked = 0;
+  assert.deepEqual(await limitForCaller({ allowed: true }, ctx, async () => { asked++; }), { allowed: true });
+  assert.equal(asked, 0, "no owner check unless something was refused");
+  for (const route of ["app/api/chat/route.ts", "app/api/policies/upload/start/route.ts", "app/api/policies/upload/accept.ts", "app/api/policies/reprocess/route.ts"])
+    assert.match(readFileSync(route, "utf8"), /limitForCaller\(/, `${route} words the refusal for the caller`);
+});
+
+test("plan route and pages: the badge on household pages, prompts only through components/plan-status.tsx", () => {
+  const route = readFileSync("app/api/plan/route.ts", "utf8");
+  assert.match(route, /ROUTE_AUTH = "household-member"/);
+  assert.match(route, /requireHouseholdContext\(request\)/);
+  assert.match(route, /requireHouseholdOwner\(ctx\.userId, ctx\.householdId\)/);
+  assert.ok(route.indexOf("mayPromptUpgrade(input)") < route.indexOf("keptDocumentCount("), "counts read only when a prompt may show");
+  assert.match(route, /\.catch\(\(\) => null\)/, "a count that fails hides prompts, not the badge (TE F3)");
+  assert.match(readFileSync("components/plan-status.tsx", "utf8"), /if \(status && !status\.owner\) return null;/, "refusal link for the owner on any plan");
+  const shell = readFileSync("components/AppShell.tsx", "utf8");
+  assert.equal((shell.match(/<PlanBadge \/>/g) ?? []).length, 2, "beside the switch on computers and phones");
+  assert.match(shell, /<PlanProvider enabled=\{householdPage\}>/);
+  assert.match(readFileSync("app/page.tsx", "utf8"), /<UpgradePrompt place="home"\/>/);
+  assert.match(readFileSync("app/policies/page.tsx", "utf8"), /<UpgradePrompt place="documents"\/>/);
+  assert.match(readFileSync("app/chat/page.tsx", "utf8"), /<UpgradePrompt place="ask"\/>/);
+  assert.doesNotMatch(readFileSync("app/chat/page.tsx", "utf8"), /href="\/usage">See plans/, "the limit message's link shows to the owner only");
+});

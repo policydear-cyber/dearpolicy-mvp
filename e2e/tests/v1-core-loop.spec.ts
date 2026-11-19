@@ -146,7 +146,7 @@ async function uploadAndWait(page: Page, f: Fixture, profileLabel: string | null
   let ownerAction = "none needed";
   if (p) {
     await page.reload();
-    const cardLoc = page.locator(".document-card").filter({ hasText: p.product_name ?? p.original_filename }).first();
+    const cardLoc = page.locator(`.document-card[data-policy-id="${p.id}"]`);
     const cardText = await cardLoc.innerText().catch(() => "");
     leakCheck(cardText, `policies card ${f.file}`);
     if (ownerName && p.processing_status === "ready") {
@@ -421,7 +421,7 @@ test.describe.serial("V1 core loop (phase A)", () => {
     if (target) {
       deletedName = target.product_name ?? target.original_filename;
       await page.goto("/policies");
-      const c = page.locator(".document-card").filter({ hasText: deletedName }).first();
+      const c = page.locator(`.document-card[data-policy-id="${target.id}"]`);
       await c.getByRole("button", { name: "Delete" }).click();
       await c.getByRole("button", { name: "Confirm delete" }).click();
       soft(await expect(page.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/, { timeout: 60_000 }).then(() => true, () => false), `delete of "${deletedName}": no deletion confirmation`);

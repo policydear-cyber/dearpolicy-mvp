@@ -4,17 +4,19 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
 import { Icon } from "@/components/icons";
+import { documentCardTitle } from "@/lib/policies/document-name";
 
 
 type Policy = {
-  id: string; product_name: string | null; original_filename: string | null; processing_status: string; created_at?: string | null;
+  id: string; product_name: string | null; original_filename: string | null; insurer?: string | null; document_role?: string | null; policy_number?: string | null; processing_status: string; created_at?: string | null;
   personal_coverage_confirmed: boolean; detected_people: { name: string; matchedFamilyMemberId: string | null }[];
 };
 type Claim = { id: string; family_member_id: string; conversation_id?: string | null; event_summary: string | null; updated_at: string;
   display?: { label: string; tone: "info" | "waiting" | "ready"; requestedDocuments: string[] } | null };
 type Item = { key: string; tone: "warn" | "info"; title: string; detail: string; href: string; action: string };
 
-const docName = (p: Policy) => p.product_name?.trim() || p.original_filename?.trim() || "A document";
+/** A document's title as its Documents card shows it: never its file name (DC 18 Nov: no file names). */
+const docName = (p: Policy) => documentCardTitle(p);
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function readJson<T>(key: string, fallback: T): T { try { return JSON.parse(localStorage.getItem(key) || "") as T; } catch { return fallback; } }
@@ -65,7 +67,7 @@ export function HomeAttention() {
   const all = policies ?? [];
   const failed = all.filter((p) => p.processing_status === "failed");
   if (failed.length) items.push({ key: "failed", tone: "warn", href: failed.length === 1 ? `/policies#doc-${failed[0].id}` : "/policies", action: "Open",
-    title: failed.length === 1 ? `“${docName(failed[0])}” couldn’t be read` : `${failed.length} documents couldn’t be read`,
+    title: failed.length === 1 ? (!failed[0].product_name?.trim() && !failed[0].insurer?.trim() ? "One document couldn’t be read" : `“${docName(failed[0])}” couldn’t be read`) : `${failed.length} documents couldn’t be read`,
     detail: failed.length === 1 ? "Answers can’t use it until it is read. You can try again or upload a clearer copy." : "Answers can’t use them until they are read. You can try again or upload clearer copies." });
   const names = all.filter((p) => p.personal_coverage_confirmed && p.processing_status === "ready")
     .flatMap((p) => p.detected_people.filter((n) => !n.matchedFamilyMemberId && !notFamily.includes(`${p.id}:${n.name}`)).map((n) => ({ policy: p, name: n.name })));

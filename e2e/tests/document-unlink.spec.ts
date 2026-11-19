@@ -47,7 +47,7 @@ test.describe.serial("removing a person from a document", () => {
   /** The covers chip for one person on this document's card; opens the picker first if it is folded to one line. */
   async function chip(who: string) {
     await page.goto("/policies");
-    const card = page.locator(".document-card").filter({ hasText: doc.product_name ?? file }).first();
+    const card = page.locator(`.document-card[data-policy-id="${doc.id}"]`);
     await expect(card).toBeVisible({ timeout: 60_000 });
     // PR #77: the picker is one line for every document until opened; "Choose" when nobody is linked yet, "Change" otherwise. Was: { name: "Change" } only.
     const change = card.getByTestId("covers-picker").getByRole("button", { name: /^(?:Change|Choose)$/ });

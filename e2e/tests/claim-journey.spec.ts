@@ -246,8 +246,12 @@ test.describe.serial("synthetic claim journey", () => {
     const upload = async (name: string, bytes: Buffer) => {
       await page.locator("select:has(option[value=specialist_memo])").first().selectOption("specialist_memo");
       await page.locator("input[type=file]").setInputFiles({ name, mimeType: "application/pdf", buffer: bytes });
+      // A claim document is shown by its kind and upload day, never its file name: wait for one more Specialist memo card.
+      const memos = page.locator(".action-card strong", { hasText: /^Specialist memo/ });
+      const before = await memos.count();
       await page.getByRole("button", { name: /^upload$/i }).click();
-      await expect(page.getByText(name).first()).toBeVisible({ timeout: 60_000 });
+      await expect(memos).toHaveCount(before + 1, { timeout: 60_000 });
+      await expect(page.getByText(name)).toHaveCount(0);
     };
     await upload(`${PREFIX}-memo.pdf`, await syntheticMemo(s.patientName));
     await upload(`${PREFIX}-flagged-memo.pdf`, await syntheticMemo(s.patientName, [SYNTHETIC_MALWARE_MARKER]));

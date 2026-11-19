@@ -8,6 +8,7 @@ import { MAX_DOCUMENT_BYTES, TOO_LARGE_MESSAGE, resolveUploadFamilyMember, uploa
 import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
 import { signUploadIntent, UPLOAD_INTENT_TTL_MS } from "../intent-token";
 import { mayAddDocument, PlanCheckUnavailable } from "@/lib/billing/household-plan";
+import { limitForCaller } from "@/lib/billing/limit-for-caller";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     // Over the plan's document limit: say so before the file is sent, not after (finalize checks again).
     try {
-      const limit = await mayAddDocument(ctx.householdId, { replacingPolicyId: body.supersedesPolicyId ?? null });
+      const limit = await limitForCaller(await mayAddDocument(ctx.householdId, { replacingPolicyId: body.supersedesPolicyId ?? null }), ctx);
       if (!limit.allowed) return NextResponse.json({ error: limit.message, reasonCode: "PLAN_DOCUMENT_LIMIT", upgradePath: "/usage" }, { status: 403 });
     } catch (error) {
       if (error instanceof PlanCheckUnavailable) return NextResponse.json({ error: error.message, reasonCode: "PLAN_CHECK_UNAVAILABLE" }, { status: 503 });

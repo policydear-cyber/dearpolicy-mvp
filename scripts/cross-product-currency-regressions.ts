@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 /**
  * Cross-product currency provenance (Phase 3).
  *
@@ -239,6 +240,14 @@ test("explanatory text never shows a cover figure whose currency is unverified (
     const verified = assessClaim(died, [life(true)]);
     assert.match(verified.find((x) => x.id === "gtl-death")!.reason, /S\$50,000/, "control: a verified currency is shown with its figure");
   }
+});
+
+test("schema backfill: a bare \"$\" is never turned into SGD when sql/schema.sql is re-applied (TE #560 N2)", () => {
+  const schema = readFileSync(new URL("../sql/schema.sql", import.meta.url), "utf8");
+  const sgd = schema.split("\n").filter((l) => /SET currency='SGD'/.test(l));
+  assert.ok(sgd.length >= 2, "control: the S$ backfill lines are still there");
+  for (const line of sgd) assert.doesNotMatch(line, /'\$'/, "a bare $ names no currency: " + line);
+  assert.ok(sgd.every((l) => /'S\$'/.test(l)), "control: S$ itself is still normalised to SGD");
 });
 
 console.log(`Cross-product currency regressions passed: ${cases} cases (${RUNS} repeated runs where noted).`);

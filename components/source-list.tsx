@@ -28,14 +28,12 @@ export function groupSources(citations: ChatCitation[]): SourceDoc[] {
 /** "product_summary" -> "Product summary". */
 const roleWord = (role: string | null | undefined) => role ? role.replaceAll("_", " ").replace(/^\w/, (m) => m.toUpperCase()) : null;
 
-/** `files` maps a document id to its file name in the household's library, so
- * two documents with the same product name (a certificate and its part 2)
- * read as two different rows. */
-export function SourceList({ citations, files }: { citations: ChatCitation[]; files?: Record<string, string> }) {
+/** A cited document is named by its title, never its file name (DC 18 Nov: no file names). */
+export function SourceList({ citations }: { citations: ChatCitation[] }) {
   return <div className="source-list">{groupSources(citations).map((doc) => {
     const pages = doc.pages.length ? `${doc.pages.length > 1 || doc.pages[0].includes("–") ? "pages" : "page"} ${doc.pages.join(", ")}` : "page not recorded";
     const head = <>
-      <span className="source-name">{doc.insurer ? doc.insurer + " · " : ""}{doc.name}<small>{[doc.label ?? roleWord(doc.role) ?? "Your uploaded document", files?.[doc.policyId], doc.documentDate ? `dated ${doc.documentDate}` : null].filter(Boolean).join(" · ")}</small></span>
+      <span className="source-name">{doc.insurer ? doc.insurer + " · " : ""}{doc.name}<small>{[doc.label ?? roleWord(doc.role) ?? "Your uploaded document", doc.documentDate ? `dated ${doc.documentDate}` : null].filter(Boolean).join(" · ")}</small></span>
       <b>{pages}</b>
     </>;
     return doc.excerpts.length
