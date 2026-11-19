@@ -54,7 +54,7 @@ const page = readFileSync(join(root, "app/policies/page.tsx"), "utf8");
 const route = readFileSync(join(root, "app/api/policies/route.ts"), "utf8");
 const shared = readFileSync(join(root, "lib/policies/document-name.ts"), "utf8");
 test("page titles cards with the shared rule", () => { assert.match(page, /from "@\/lib\/policies\/document-name"/); assert.match(page, /return documentCardTitle\(policy\)/); assert.doesNotMatch(page, /product_name\?\.trim\(\) \|\| policy\.original_filename/); });
-test("page keeps the file name as the secondary line", () => assert.match(page, /documentName\(policy\) !== policy\.original_filename\?\.trim\(\) && <small className="document-file">\{policy\.original_filename\}<\/small>/));
+test("a card never shows the upload's file name (DC 18 Nov: no file names)", () => assert.doesNotMatch(page, /\{policy\.original_filename\}|document-file/));
 // Chat's note about a document that couldn't be read names it as the Documents card does (Critic R316 L1).
 const chatPage = readFileSync(join(root, "app/chat/page.tsx"), "utf8");
 test("chat names a failed document with the shared rule", () => { assert.match(chatPage, /from "@\/lib\/policies\/document-name"/); assert.match(chatPage, /name:documentCardTitle\(/); assert.doesNotMatch(chatPage, /p\.product_name\|\|p\.original_filename/); });

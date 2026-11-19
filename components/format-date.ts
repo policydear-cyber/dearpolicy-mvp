@@ -19,6 +19,15 @@ export function sgDate(value: string | number | Date | null | undefined): string
   return `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
 }
 
+/** The Singapore calendar day of a moment ("2026-11-18T16:01:00Z" is "19 Nov 2026"), the same on every device whatever
+ * its time zone. Empty when the value is not an ISO moment. */
+export function singaporeDay(value: string | null | undefined): string {
+  const t = typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value) ? Date.parse(value) : NaN;
+  if (Number.isNaN(t)) return "";
+  const sg = new Date(t + 8 * 3600_000);
+  return `${sg.getUTCDate()} ${MONTHS[sg.getUTCMonth()]} ${sg.getUTCFullYear()}`;
+}
+
 /** A value that may be a calendar date: formatted if it is one, unchanged otherwise. */
 export function maybeSgDate(value: unknown): string {
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return sgDate(value);
