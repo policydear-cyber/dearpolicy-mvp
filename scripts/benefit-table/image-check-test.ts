@@ -9,7 +9,8 @@ import { applyGuards, claimsOf, type GuardRecord } from "@/lib/benefit-table/gua
 import { IMAGE_BATCH, IMAGE_CHECK_PROMPT, IMAGE_CHECK_VERSION, blindWhere, copyConfirms, imageQuestions, periodsIn, readCopies, runImageCheck, type ImageChecker, type PageSource } from "@/lib/benefit-table/image-check";
 import { figureCheckMode, figureChecksOn, imageCheckEnabled, imageCheckModels } from "@/lib/benefit-table/guard-flag";
 import { userContent, type Attachment, type TableCall, type TableModel } from "@/lib/benefit-table/model";
-import { coverKeyOf, sectionKeyOf } from "@/lib/benefit-table/assemble";
+import { assembleTable, coverKeyOf, figureText, sectionKeyOf } from "@/lib/benefit-table/assemble";
+import { shortFigure } from "@/lib/benefit-table/headline";
 import { guardStoredReading, readDocument, setFigureConfirmation, tableFor, type Db, type GuardSetup } from "@/lib/benefit-table/service";
 import { nativePagesOf, pageSourceFor } from "@/lib/benefit-table/page-source";
 
@@ -419,6 +420,53 @@ async function main() {
       assert.ok(rows.length >= 2);
       assert.ok(rows.every((x) => /still being checked/.test((x.figure as { why: string }).why)), "each withheld row says it is still being checked, never how the row pays (Live site tester, 19 Nov)");
     } finally { envOff(); }
+  });
+
+  await test("a share of a sum insured, or a maximum, that is still being checked says so, never 'not printed' or 'not captured' (test engineer on #555, F1, F2)", () => {
+    const pages = [
+      { page: 1, text: "POLICY SCHEDULE\nInsured: Lim Ah Kow\nCover\tSum Insured\nTravel Basic Plan\tS$100,000" },
+      { page: 2, text: "Section 1 Accident\nBenefit\tBusiness\nAccidental death\t100% of Sum Insured\nMedical expenses\t50% of Sum Insured, up to S$20,000" },
+    ];
+    const doc: SourceDoc = { id: "doc-2", name: "Example Accident Policy", readable: true, people: ["Lim Ah Kow"], pages };
+    const pct = (benefit: string, value: number, quote: string, cap: number | null = null) => ({ section: "Section 1 Accident", column: "Business", benefit, pays: "percent", value, period: null, basis: null,
+      percentOf: "sum_insured", baseAmount: null, baseQuote: null, cap, capQuote: cap ? "up to S$20,000" : null, conditions: [], page: 2, quote });
+    const r = checkReading(doc, {
+      document: { kind: "personal_proof", product: "Example Accident Policy", namedPeople: ["Lim Ah Kow"], plan: "Business" },
+      covers: [{ person: "Lim Ah Kow", product: "Example Accident Policy", cover: "Travel Basic Plan", plan: "Business", policyNumber: null, sumInsured: 100000, premium: null,
+        premiumFrequency: null, asOf: null, page: 1, quote: "Travel Basic Plan\tS$100,000" }],
+      benefits: [pct("Accidental death", 100, "Accidental death\t100% of Sum Insured"), pct("Medical expenses", 50, "Medical expenses\t50% of Sum Insured, up to S$20,000", 20000)],
+    });
+    const keys = claimsOf(r).map((c) => [c.field, c.key] as const);
+    assert.deepEqual(keys.map((k) => k[0]).sort(), ["cap", "sum_insured", "value", "value"].sort());
+    const fam = [{ id: "p1", display_name: "Lim Ah Kow" }];
+    const lk = [{ section: sectionKeyOf(doc.id, { section: "Section 1 Accident", column: "Business" }), cover: coverKeyOf({ product: "Example Accident Policy", cover: "Travel Basic Plan", plan: "Business" }), why: "test" }];
+    const tableAt = (verdicts: Record<string, unknown>) => assembleTable([applyGuards(r, { version: IMAGE_CHECK_VERSION, at: "t", verdicts: verdicts as GuardRecord["verdicts"], spentUsd: 0, calls: 0 })], fam, lk).people[0].rows;
+    const agreed = (field: string) => Object.fromEntries(keys.filter((k) => k[0] === field).map((k) => [k[1], { status: "agreed", value: claimsOf(r).find((c) => c.key === k[1])!.value, candidates: [] }]));
+    // F1: the row's own share is agreed, the sum insured is still being checked.
+    const sumHeld = tableAt({ ...agreed("value"), ...agreed("cap") });
+    const death = sumHeld.find((x) => x.benefit === "Accidental death")!;
+    assert.equal(death.figure.kind, "none");
+    assert.match((death.figure as { why: string }).why, /sum insured of Travel Basic Plan, which is still being checked against the document's page/);
+    assert.doesNotMatch((death.figure as { why: string }).why, /no sum insured is printed/);
+    assert.match(shortFigure(death).note ?? "", /the sum insured is still being checked against the document's page/);
+    // A maximum the check confirmed is still shown while only the sum is held back (test engineer on #558, N1).
+    const medSum = sumHeld.find((x) => x.benefit === "Medical expenses")!;
+    assert.match(shortFigure(medSum).note ?? "", /the sum insured is still being checked against the document's page; up to S\$20,000 \(printed with it on p2\)/);
+    assert.match(figureText(medSum.figure), /still being checked against the document's page; up to S\$20,000, printed with it on p2/);
+    // Asked, not confirmed.
+    const sumAsked = tableAt({ ...agreed("value"), ...agreed("cap"), ...Object.fromEntries(keys.filter((k) => k[0] === "sum_insured").map((k) => [k[1], { status: "confirm", value: null, candidates: [] }])) });
+    assert.match(shortFigure(sumAsked.find((x) => x.benefit === "Accidental death")!).note ?? "", /the sum insured is not confirmed against the document's page/);
+    // F2: the share and the sum are agreed, the maximum is still being checked.
+    const capHeld = tableAt({ ...agreed("value"), ...agreed("sum_insured") });
+    const medical = capHeld.find((x) => x.benefit === "Medical expenses")!;
+    assert.equal(medical.figure.kind, "none", "no amount without its maximum");
+    assert.match((medical.figure as { why: string }).why, /maximum printed with it on p2 that is still being checked against the document's page/);
+    assert.doesNotMatch((medical.figure as { why: string }).why, /not captured/);
+    assert.match(shortFigure(medical).note ?? "", /its maximum is still being checked against the document's page/);
+    assert.equal((capHeld.find((x) => x.benefit === "Accidental death")!.figure as { amount: number }).amount, 100000, "a row with every figure agreed is worked out");
+    // Everything agreed: both rows are worked out, as before.
+    const all = tableAt({ ...agreed("value"), ...agreed("sum_insured"), ...agreed("cap") });
+    assert.deepEqual(all.map((x) => [x.benefit, (x.figure as { amount?: number }).amount]), [["Accidental death", 100000], ["Medical expenses", 20000]]);
   });
 
   await test("switch on: the first check of a stored reading runs without a re-read; the misread goes to the household, the rest is used", async () => {

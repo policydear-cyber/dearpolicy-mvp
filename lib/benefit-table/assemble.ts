@@ -59,8 +59,10 @@ export type Figure =
   /** share: a percentage row whose amount is not worked out (its maximum was not captured, or the amount it is a share
    * of is not stated with it) still says the share it pays, in the row's own words ("10% of Prevailing Insured Amount").
    * Never an amount: capWords is the maximum exactly as printed, or null; capMissing says a maximum applies but its
-   * figure was not captured. */
-  | { kind: "none"; why: string; share?: { percent: number; of: string; capWords: string | null; capPage: number | null; capMissing: boolean } };
+   * figure was not captured. held: the sum it is a share of, or its maximum, is printed but the page-image check has not
+   * confirmed it yet ("checking") or could not ("confirm"). */
+  | { kind: "none"; why: string; share?: { percent: number; of: string; capWords: string | null; capPage: number | null; capMissing: boolean; held?: Held } };
+export type Held = { what: "sum_insured" | "cap"; status: "checking" | "confirm" };
 export type TableRow = {
   personId: string; person: string; coverKey: string; product: string; cover: string; plan: string | null;
   benefit: string; section: string | null; column: string | null; pays: CheckedBenefit["pays"]; figure: Figure;
@@ -394,8 +396,8 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
   // A figure the page-image check has not confirmed (guards.ts applyGuards: its row is left in words): says so, never an
   // explanation of how the row pays (Live site tester, 19 Nov: every row of a reading still being checked said "paid as a
   // share printed in the row's words").
-  const withheld = (b as { figureCheck?: { status: "confirm" | "checking"; field: string }[] }).figureCheck?.find((n) => n.field === "value");
-  if (withheld) return { kind: "none", why: withheld.status === "checking" ? "still being checked against the document's page" : "not confirmed against the document's page" };
+  const withheld = heldBy(b, "value");
+  if (withheld) return { kind: "none", why: heldWords(withheld) };
   if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row"
     : b.pays === "words" && b.paymentSchedule ? "payment schedule, not a cover amount"
     : b.pays === "words" && /\d\s*%/.test(b.source.excerpt) ? "paid as a share printed in the row's words, with no amount worked out: see the document" : "no figure printed" };
@@ -403,8 +405,13 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
   // worked out: the uncapped figure could be more than it pays.
   if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.ownShareNamed ? withoutOwnShareCap(b.source.excerpt, b.value) : withoutChildLimit(b.source.excerpt, b.childLimit)))) {
     const of = shareWords(b);
-    return { kind: "none", why: `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that was not captured: see the document`,
-      ...(of ? { share: { percent: b.value!, of, capWords: null, capPage: null, capMissing: true } } : {}) };
+    // The maximum was read, but the page-image check has held it back (guards.ts applyGuards): it is printed, only not
+    // confirmed yet (test engineer on #555, F2).
+    const capHeld = heldBy(b, "cap");
+    const held: Held | undefined = capHeld ? { what: "cap", status: capHeld } : undefined;
+    return { kind: "none", why: capHeld ? `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that is ${heldWords(capHeld)}`
+      : `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that was not captured: see the document`,
+      ...(of ? { share: { percent: b.value!, of, capWords: null, capPage: null, capMissing: true, ...(held ? { held } : {}) } } : {}) };
   }
   // A cap printed in another currency than the amount it limits ("10% of US$100,000, up to S$15,000") cannot be compared
   // with it: no amount, the row keeps its share and its cap as printed (Critic audit of 5c1075d7, A2).
@@ -422,7 +429,14 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
     // A rider's row that is a share of the basic plan's sum ("20% of the Basic Plan Sum Assured") is not a share of the
     // rider's own sum (Critic, #415): no amount, the share stays as printed.
     if (cover.riderOf && BASIC_PLAN_SHARE.test(b.source.excerpt)) return withShare(b, { kind: "none", why: `${b.value}% of the basic plan's sum, which is not this rider's own sum insured` });
-    if (cover.sumInsured == null) return withShare(b, { kind: "none", why: `${b.value}% of the sum insured, but no sum insured is printed for ${cover.cover}` });
+    if (cover.sumInsured == null) {
+      // The sum insured was read, but the page-image check has held it back: it is printed, only not confirmed yet (test
+      // engineer on #555, F1).
+      const sumHeld = heldBy(cover, "sum_insured");
+      if (sumHeld) { const f = withShare(b, { kind: "none", why: `${b.value}% of the sum insured of ${cover.cover}, which is ${heldWords(sumHeld)}` });
+        return f.kind === "none" && f.share ? { ...f, share: { ...f.share, held: { what: "sum_insured", status: sumHeld } } } : f; }
+      return withShare(b, { kind: "none", why: `${b.value}% of the sum insured, but no sum insured is printed for ${cover.cover}` });
+    }
     // A child's share printed in the row's cell ("For an insured child under 18, limited to 25% of the Sum Insured"): the
     // child's share for a person the schedule's own line proves is that child, the row's own share for one it proves is
     // not, and no amount otherwise (never one of the two by guess).
@@ -521,6 +535,11 @@ function shareWords(b: Pick<CheckedBenefit, "value" | "percentOf" | "benefit" | 
   return b.percentOf === "sum_insured" ? "the sum insured" : null;
 }
 /** A row with no amount keeps its share when the row prints what it is a share of, with any maximum exactly as printed. */
+/** A figure of this row or cover that the page-image check holds back (guards.ts applyGuards), and why. */
+function heldBy(x: object, field: "value" | "cap" | "sum_insured"): Held["status"] | null {
+  return (x as { figureCheck?: { status: Held["status"]; field: string }[] }).figureCheck?.find((n) => n.field === field)?.status ?? null;
+}
+const heldWords = (s: Held["status"]) => s === "checking" ? "still being checked against the document's page" : "not confirmed against the document's page";
 function withShare(b: CheckedBenefit, f: Extract<Figure, { kind: "none" }>): Figure {
   const of = shareWords(b);
   if (!of || b.value == null) return f;
@@ -1813,7 +1832,7 @@ export { periodWords };
 
 export function figureText(f: Figure): string {
   if (f.kind === "none") return f.share
-    ? `${f.share.percent}% of ${f.share.of}, no amount worked out (${f.share.capMissing ? "a maximum applies, but it was not captured from the page" : f.share.capWords ? `${f.share.capWords}, printed with it on p${f.share.capPage}` : f.why})`
+    ? `${f.share.percent}% of ${f.share.of}, no amount worked out (${f.share.held ? `${f.why}${f.share.held.what === "sum_insured" && f.share.capWords ? `; ${f.share.capWords}, printed with it on p${f.share.capPage}` : ""}` : f.share.capMissing ? "a maximum applies, but it was not captured from the page" : f.share.capWords ? `${f.share.capWords}, printed with it on p${f.share.capPage}` : f.why})`
     : `no amount (${f.why})`;
   const m = money(f.amount, f.currency) + (f.currency ? "" : " (currency not stated)");
   if (f.kind === "value") return `${m} value${f.asOf ? ` as of ${f.asOf}` : " (date not stated)"}`;
