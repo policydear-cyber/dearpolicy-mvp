@@ -108,6 +108,13 @@ export default function ClaimEvidencePage() {
   const claimSessionId = params.id;
   const [claim, setClaim] = useState<Claim | null>(null);
   const [documents, setDocuments] = useState<EvidenceDoc[]>([]);
+  // Two documents of one kind uploaded the same day read apart as "(2)", "(3)" in upload order (Critic #559 L2).
+  const nameOf = (doc: EvidenceDoc) => {
+    const base = evidenceName(doc), same = documents.filter((d) => evidenceName(d) === base)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+    const n = same.findIndex((d) => d.id === doc.id);
+    return n > 0 ? `${base} (${n + 1})` : base;
+  };
   const [error, setError] = useState("");
   // Starts empty: only a death claim gets a default (see
   // defaultDocumentTypeFor); anything else must be chosen explicitly.
@@ -184,7 +191,7 @@ export default function ClaimEvidencePage() {
       const res = await fetch(`/api/claims/evidence/${doc.id}?${query}`, { method: "DELETE", headers: { "Idempotency-Key": `delete:${doc.id}` } });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || "This document couldn't be deleted. Try again.");
-      setNotice(`${evidenceName(doc)} was deleted. Anything estimated from it has been removed.`);
+      setNotice(`${nameOf(doc)} was deleted. Anything estimated from it has been removed.`);
       setConfirmDeleteId(null);
       await load();
     } catch (err) {
@@ -213,7 +220,7 @@ export default function ClaimEvidencePage() {
             <strong>Documents to upload <span className="muted">{left ? `${left} of ${items.length} still needed` : "All uploaded"}</span></strong>
             <ul>{items.map(({ text, sent }) => <li key={text} className={sent ? "sent" : ""}>
               <span className="claim-needed-mark" aria-hidden="true">{sent ? "✓" : ""}</span>
-              <span className="claim-needed-text">{text}{sent ? <small>Uploaded: {evidenceName(sent)}</small> : <small>Still needed</small>}</span>
+              <span className="claim-needed-text">{text}{sent ? <small>Uploaded: {nameOf(sent)}</small> : <small>Still needed</small>}</span>
               {!sent && <button type="button" className="button secondary compact" onClick={() => startUpload(text)} aria-label={`Upload ${text}`}>Upload</button>}
             </li>)}</ul>
           </div>;
@@ -271,7 +278,7 @@ export default function ClaimEvidencePage() {
               {(() => {
                 const display = evidenceStatusDisplay(doc);
                 return (<>
-                  <strong>{evidenceName(doc)}</strong> <span className={`status ${doc.status}`}>{display.label}</span>{" "}
+                  <strong>{nameOf(doc)}</strong> <span className={`status ${doc.status}`}>{display.label}</span>{" "}
                   <span className="status">{doc.identity_status === "confirmed" ? "Name matches" : doc.identity_status === "mismatch" ? "Name doesn't match this family member" : doc.identity_status === "needs_review" ? "Name needs checking by a DearPolicy reviewer" : "Name not checked yet"}</span>
                   <p><em>{display.detail}</em></p>
                 </>);
@@ -322,7 +329,7 @@ export default function ClaimEvidencePage() {
                   <button className="button secondary compact" onClick={() => handleReject(doc.id)}>Reject document</button>
                 )}
                 <button className="button secondary compact danger" disabled={!!deletingId} onClick={() => handleDelete(doc)}
-                  aria-label={confirmDeleteId === doc.id ? `Confirm delete ${evidenceName(doc)}` : `Delete ${evidenceName(doc)}`}>
+                  aria-label={confirmDeleteId === doc.id ? `Confirm delete ${nameOf(doc)}` : `Delete ${nameOf(doc)}`}>
                   {deletingId === doc.id ? "Deleting…" : confirmDeleteId === doc.id ? "Confirm delete" : "Delete document"}
                 </button>
                 {confirmDeleteId === doc.id && !deletingId && (
