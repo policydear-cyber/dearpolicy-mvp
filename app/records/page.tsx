@@ -13,18 +13,36 @@ type Person = { id: string; display_name: string; relationship: string; premiums
 function money(amount: string, currency: string) { return formatMoney(amount,currency); }
 // A premium is shown in its record's currency only when the record states one; premiums in two currencies are never added.
 const premiumMoney=(i:CountedPremium,v:number)=>formatMoney(v,i.currencyStated===false?null:i.currency);
-const perCurrency=(totals:CountedPremiums["totals"],k:"monthly"|"annual")=>totals.map(t=>formatMoney(t[k],t.currency)).join(" + ");
 
 function PremiumRow({ item, once }: { item: CountedPremium; once?: boolean }) {
   return <div className="premium-breakdown-row"><div className="payment-brand">{(item.insurer??"IN").slice(0,2).toUpperCase()}</div><div><strong>{item.product_name??item.insurer??"Insurance policy"}</strong><span>{premiumRowDetail(item)}</span></div>
     <div className="premium-breakdown-value">{once?<><strong>{premiumMoney(item,item.amount)}</strong><span>paid once</span></>:<><strong>{premiumMoney(item,item.monthly)}<small>/mo</small></strong><span>{premiumMoney(item,item.annual)} / year</span></>}</div></div>;
 }
 
+// A premium paid monthly gives an exact monthly figure; one paid yearly, quarterly or half-yearly gives its year's
+// premium spread over 12 months, and the total says so rather than present an average as a bill.
+const paidMonthly=(i:CountedPremium)=>Math.abs(i.annual-i.total*12)<0.005;
+
+/** Each person's total, the first thing under their name: per month and per year, one line per stated currency (premiums
+ * in two currencies are never added), and "so far" while a policy's premium is still missing. */
+function PersonTotal({ p }: { p: CountedPremiums }) {
+  const counted=p.items.filter(i=>i.currencyStated!==false), spread=counted.some(i=>!paidMonthly(i));
+  const n=counted.length, label=p.complete?"Total":"Total so far";
+  return <div className="premium-person-total">
+    <div className="premium-person-figures">
+      <div><small>{label} each month</small>{p.totals.map(t=><strong key={t.currency}>{formatMoney(t.monthly,t.currency)}</strong>)}</div>
+      <div><small>{label} each year</small>{p.totals.map(t=><strong key={t.currency}>{formatMoney(t.annual,t.currency)}</strong>)}</div>
+    </div>
+    <p>{n===1?"One premium":`${n} premiums`} {premiumSourceCaption(counted.map(i=>i.source))}.{p.totals.length>1?" Each currency is totalled separately.":""}{spread?" Premiums paid yearly, half-yearly or quarterly are spread over 12 months in the monthly figure.":""}</p>
+  </div>;
+}
+
 function PersonPremiums({ person }: { person: Person }) {
   const p=person.premiums;
   return <section className="section premium-breakdown-panel">
     <div className="section-heading"><div><h2>{person.display_name}</h2>
-      <p className="note premium-cost-line">{p.totals.length?<>{perCurrency(p.totals,"monthly")}/month, about {perCurrency(p.totals,"annual")} a year {premiumSourceCaption(p.items.map(i=>i.source))}. Home shows the same cost.</>:p.items.length?"These premiums are not added up: none of them says which currency it is in.":p.countedElsewhere?.length&&!p.missing.length?"No separate premium: "+person.display_name+"’s cover is paid under another family member’s policy (see the note below).":"No premium found yet."}</p></div></div>
+      {!p.totals.length&&<p className="note premium-cost-line">{p.items.length?"These premiums are not added up: none of them says which currency it is in.":p.countedElsewhere?.length&&!p.missing.length?"No separate premium: "+person.display_name+"’s cover is paid under another family member’s policy (see the note below).":p.oneOff.length?"No monthly or yearly total: "+(p.oneOff.length===1?"the premium below is":"the premiums below are")+" paid once.":p.note?"No monthly or yearly total yet. The note below says why.":"No premium found yet."}</p>}</div></div>
+    {p.totals.length>0&&<PersonTotal p={p}/>}
     <div className="premium-breakdown-list">
       {p.items.map(i=><PremiumRow item={i} key={i.id}/>)}
       {p.oneOff.map(i=><PremiumRow item={i} once key={i.id}/>)}
@@ -53,7 +71,7 @@ export default function RecordsPage() {
       {people?.map((person)=><PersonPremiums person={person} key={person.id}/>)}
       {people && !people.length && <div className="empty-card">Add the people your policies cover in <Link href="/family" className="text-link">Account settings</Link>, then upload their documents. Their premiums are listed here.</div>}
       <section className="section">
-        <div className="section-heading"><div><div className="icon-heading"><span className="title-icon"><Icon name="receipt"/></span><h2>Payment records</h2></div>{records && records.length>1 && <p className="note premium-cost-line">Newest first.</p>}</div></div>
+        <div className="section-heading"><div><div className="icon-heading"><span className="title-icon"><Icon name="receipt"/></span><h2>Payment records</h2></div></div></div>
         <div className="payment-list">
           {failed && <div className="alert error" role="alert">Your payments could not be loaded. Please refresh the page in a moment.</div>}
           {!records && !failed && <div className="empty-card" role="status">Loading your payments…</div>}
