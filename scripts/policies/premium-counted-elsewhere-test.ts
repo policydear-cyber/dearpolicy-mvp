@@ -156,6 +156,18 @@ async function main() {
       const people = [l, b, await summarisePremiums(joint.id, ana)];
       assert.equal(Math.round(people.reduce((t, x) => t + x.annual, 0) * 100) / 100, 840, "the household's people add up to each premium once");
     });
+    // TE #560 L1: a shared premium the payer's total cannot count (no stated currency) is never said to be counted there.
+    const bare = await joint.policy(ben.id, [ben.id, ana.id], "Joint Home Cover", "JH-55021", "Home", "Insured: Ben Duarte, Ana Duarte\nPremium $90 yearly");
+    await query("INSERT INTO premium_records(account_id,policy_id,family_member_id,amount,currency,frequency,source_document_id,source_page,policy_number,product_name) VALUES($1,$2,NULL,90,'$','yearly',$2,1,'JH-55021','Joint Home Cover')", [joint.id, bare]);
+    await test("a shared premium with no stated currency is never said to be in another person's total (bare $)", async () => {
+      const a = await summarisePremiums(joint.id, ana), b = await summarisePremiums(joint.id, ben);
+      assert.ok(!(a.countedElsewhere ?? []).some((c) => c.name === "Joint Home Cover"), JSON.stringify(a.countedElsewhere));
+      assert.doesNotMatch(a.note ?? "", /Joint Home Cover[^.]*counted in/);
+      assert.ok(a.items.some((i) => i.product_name === "Joint Home Cover" && !i.currencyStated), "still listed for Ana, in no total");
+      const stated = (x: typeof b) => Math.round(x.items.filter((i) => i.currencyStated).reduce((t, i) => t + i.annual, 0) * 100) / 100;
+      assert.equal(stated(b), 600, "control: Ben's stated-currency total is unchanged by the bare-$ premium");
+      assert.ok(b.items.some((i) => i.product_name === "Joint Home Cover" && !i.currencyStated), "control: the holder lists it too, in no total");
+    });
     await test("the chat answer for the child says whose policy pays, never that no premium is printed", async () => {
       const a = await premiumAnswer({ accountId: gb.id, people: [son], question: "How much do we pay for Tobi's insurance?" });
       assert.match(a.summary, /Tobi Okafor has no separate premium\. Family Health Plan is paid under Amara Okafor’s policy/);

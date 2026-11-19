@@ -495,7 +495,10 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
     ({ items: fromTable, leftOut: tableLeftOut } = tablePremiumItems(table.covers.filter((c) => documents.has(c.source.documentId)), r.rows, member, table.today, documents));
   }
   // A shared premium counted under another member is named as counted there, never added again here.
-  const sharedElsewhere = r.rows.filter((row) => !row.family_member_id && row.payer_id && row.payer_id !== member.id);
+  // Only a premium the payer's total really counts (a stated currency and a recurring frequency) is said to be counted
+  // there; any other stays listed here, with its own note, and is in no one's total (TE #560 L1).
+  const countable = (row: PremiumRecordRow) => { const i = summariseRecords([row])[0]; return !!i && i.currencyStated && !i.oneOff && !i.shortPeriod && !i.unclearFrequency; };
+  const sharedElsewhere = r.rows.filter((row) => !row.family_member_id && row.payer_id && row.payer_id !== member.id && countable(row));
   const own = r.rows.filter((row) => !sharedElsewhere.includes(row));
   const all = [...summariseRecords(own), ...fromTable], items = all.filter((i) => !i.oneOff && !i.shortPeriod && !i.unclearFrequency);
   const oneOff = all.filter((i) => i.oneOff), shortPeriod = all.filter((i) => i.shortPeriod), unclear = all.filter((i) => i.unclearFrequency);
@@ -555,7 +558,7 @@ export async function summarisePremiums(accountId: string, member: ClaimPerson, 
   const elsewhereNames = [...new Set(countedElsewhere.map((c) => c.name))];
   const elsewhereNote = countedElsewhere.length
     ? (elsewhereNames.length === 1 ? "The premium for " + elsewhereNames[0] + " is" : "The premiums for " + andList(elsewhereNames.slice(0, 4)) + " are") +
-      " on file under " + andList(owners) + ", so " + (elsewhereNames.length === 1 ? "it is" : "they are") + " counted in " + (owners.length === 1 ? owners[0] + "’s" : "their") + " total, not again here."
+      " on file under " + andList(owners) + ", so " + (elsewhereNames.length === 1 ? "it is" : "they are") + " counted in " + (owners.length === 1 ? owners[0] + "’s total" : andList(owners.map((o) => o + "’s")) + " totals") + ", not again here."
     : null;
   const missingNote = missing.length
     ? "The total leaves out " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " and " + (missing.length - 4) + " more" : "") + ": no premium is printed in the documents on file for " + (missing.length === 1 ? "it" : "them") + "."
