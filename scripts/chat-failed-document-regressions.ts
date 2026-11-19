@@ -49,6 +49,8 @@ let rows: Row[] = [];
   })),
 });
 
+// 19 Nov (DC 18 Nov: no file names): a document is said by its title, so the upload "example-1.pdf" reads "Example 1" in
+// every expected sentence below; what each sentence says about the failure is unchanged.
 async function main() {
   const hs = await import("@/lib/chat/household-status");
   const { READ_FAILURE_REASON } = await import("@/lib/policies/read-failures");
@@ -90,7 +92,7 @@ async function main() {
     for (const pageCount of [null, 4]) {
       const { lines, none, docs } = await said([{ status: "failed", error: errors.READING_LIMIT_REACHED_MESSAGE, pageCount }]);
       assert.equal(docs[0].reason, "limit");
-      assert.equal(lines, "“example-1.pdf” couldn’t be read because reading was paused when the monthly reading limit was reached — nothing is wrong with the file. Press “Try reading it again” on the Documents page after the limit resets at the start of next month.");
+      assert.equal(lines, "“Example 1” couldn’t be read because reading was paused when the monthly reading limit was reached — nothing is wrong with the file. Press “Try reading it again” on the Documents page after the limit resets at the start of next month.");
       for (const text of [lines, none]) assert.doesNotMatch(text, /clearer|original|readable text|couldn’t finish|in a little while|\$\s?\d|\b1 Nov/i, text);
     }
   });
@@ -118,14 +120,14 @@ async function main() {
 
   await test("negative controls: the failures chat already explained right say exactly what they said before", async () => {
     const before: [string, string, string][] = [
-      [UNREADABLE_DOCUMENT_MESSAGE, "“example-1.pdf” couldn’t be read. The original PDF or a clearer scan would let DearPolicy read it.",
-        "The only document on file for you, “example-1.pdf”, couldn’t be read yet because DearPolicy couldn’t find readable text in it. Upload the original PDF or a clearer scan and ask again."],
-      [UNREADABLE_PHOTO_MESSAGE, "“example-1.pdf” is a photo too blurred, dark or faint to read. Take it again — page flat, good light, no shadow, phone steady and straight above it, the whole page in the frame — or upload the insurer’s PDF.",
-        "The only document on file for you, “example-1.pdf”, couldn’t be read yet because the photo is too blurred or dark to read. Take the photo again — flat, in good light, the whole page in the frame — or upload the insurer’s PDF."],
-      [INCOMPLETE_PDF_MESSAGE, "“example-1.pdf” is incomplete — the file stops part-way, as when a download is cut off — so it couldn’t be opened. Download it again from the insurer’s email or website and upload the new copy.",
-        "The only document on file for you, “example-1.pdf”, couldn’t be read yet because the file is incomplete (cut off part-way). Download it again from the insurer and upload the new copy."],
-      [UNOPENABLE_DOCUMENT_MESSAGE, "“example-1.pdf” couldn’t be opened — the file may be damaged. Upload the original file again, or ask the insurer for a fresh copy.",
-        "The only document on file for you, “example-1.pdf”, couldn’t be read yet because the file couldn’t be opened. Upload the original PDF or a clearer scan and ask again."],
+      [UNREADABLE_DOCUMENT_MESSAGE, "“Example 1” couldn’t be read. The original PDF or a clearer scan would let DearPolicy read it.",
+        "The only document on file for you, “Example 1”, couldn’t be read yet because DearPolicy couldn’t find readable text in it. Upload the original PDF or a clearer scan and ask again."],
+      [UNREADABLE_PHOTO_MESSAGE, "“Example 1” is a photo too blurred, dark or faint to read. Take it again — page flat, good light, no shadow, phone steady and straight above it, the whole page in the frame — or upload the insurer’s PDF.",
+        "The only document on file for you, “Example 1”, couldn’t be read yet because the photo is too blurred or dark to read. Take the photo again — flat, in good light, the whole page in the frame — or upload the insurer’s PDF."],
+      [INCOMPLETE_PDF_MESSAGE, "“Example 1” is incomplete — the file stops part-way, as when a download is cut off — so it couldn’t be opened. Download it again from the insurer’s email or website and upload the new copy.",
+        "The only document on file for you, “Example 1”, couldn’t be read yet because the file is incomplete (cut off part-way). Download it again from the insurer and upload the new copy."],
+      [UNOPENABLE_DOCUMENT_MESSAGE, "“Example 1” couldn’t be opened — the file may be damaged. Upload the original file again, or ask the insurer for a fresh copy.",
+        "The only document on file for you, “Example 1”, couldn’t be read yet because the file couldn’t be opened. Upload the original PDF or a clearer scan and ask again."],
     ];
     for (const [error, line, none] of before) {
       const got = await said([{ status: "failed", error }]);
@@ -133,7 +135,7 @@ async function main() {
       assert.equal(got.none, none);
     }
     const reading = await said([{ status: "processing", error: null }]);
-    assert.equal(reading.lines, "“example-1.pdf” is still being read. Ask again in a few minutes.");
+    assert.equal(reading.lines, "“Example 1” is still being read. Ask again in a few minutes.");
     const ready = await said([{ status: "ready", error: null, pageCount: 2 }]);
     assert.equal(ready.lines, "", "a read document is not called unusable");
     assert.equal(ready.docs[0].status, "ready");
@@ -176,7 +178,7 @@ async function main() {
       const advice = failedDocumentChatAdvice(error, { hasPages: !!pageCount });
       assert.equal(advice.kind, kind, String(error));
       const text = await asked("Which documents couldn't be read?", [{ status: "failed", error, pageCount }, { status: "ready", error: null, pageCount: 2 }]);
-      assert.ok(text.includes("“example-1.pdf” couldn’t be read because " + advice.why + ". " + advice.step), `${kind}: ${text}`);
+      assert.ok(text.includes("“Example 1” couldn’t be read because " + advice.why + ". " + advice.step), `${kind}: ${text}`);
       assert.doesNotMatch(text, /example-2\.pdf/, "a read document is not listed");
       assert.doesNotMatch(text, /Upload it again|ECONN|worker\.js|timeout|Analysis stopped|\$\s?\d/, text);
       // Only "no readable text" is told about a clearer scan; a service or provider-quota stop never is.
@@ -204,14 +206,14 @@ async function main() {
   await test("document questions: the list of uploads names a failed upload's reason in fixed words, never its stored text", async () => {
     const raw = "Error: connect ECONNREFUSED 10.0.0.1:5432 at /var/task/worker.js";
     const text = await asked("Is the kowshield file I uploaded the latest one?", [{ status: "failed", error: raw, file: "kowshield-renewal.pdf" }, { status: "ready", error: null, pageCount: 2, file: "travel.pdf" }]);
-    assert.match(text, /kowshield-renewal\.pdf/, text);
+    assert.match(text, /“Kowshield Renewal”/, text); assert.doesNotMatch(text, /kowshield-renewal\.pdf/, text);
     assert.doesNotMatch(text, /ECONN|worker\.js|5432/, text);
     assert.ok(text.includes(failedDocumentChatAdvice(raw, { hasPages: false }).step), text);
   });
 
   await test("document questions: negative controls -- still being read and ready documents are unchanged", async () => {
     const reading = await asked("Is anything still being read?", [{ status: "processing", error: null }]);
-    assert.match(reading, /“example-1\.pdf” is still being read\. Ask again in a few minutes\./, reading);
+    assert.match(reading, /“Example 1” is still being read\. Ask again in a few minutes\./, reading);
     const none = await asked("Which documents couldn't be read?", [{ status: "ready", error: null, pageCount: 2 }]);
     assert.match(none, /^Every document on file for your household was read/, none);
   });

@@ -82,3 +82,44 @@ export function normalizedIdentifier(value:string|null|undefined){return (value?
 export function documentCardTitle(doc:{product_name:string|null;original_filename:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null}):string {
   return documentName({...doc,original_filename:doc.original_filename??""});
 }
+
+type LabelDoc={id:string;original_filename:string|null;product_name:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null;created_at?:string|Date|null};
+const FORMAT_WORDS:[RegExp,string][]=[[/\.(?:jpe?g|png|heic|heif|webp|gif|tiff?)(?:\s|$)/i,"photo"],[/\.pdf(?:\s|$)/i,"PDF"],[/\.docx?(?:\s|$)/i,"Word file"]];
+const MONTH_WORDS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+/** The day a document was uploaded, in Singapore time ("3 Nov 2026"), from a Date, an ISO string or Postgres's text form. */
+export function uploadDay(value:string|Date|null|undefined):string{
+  if(!value)return "";
+  const iso=typeof value==="string"&&/^\d{4}-\d{2}-\d{2} \d/.test(value)?value.replace(" ","T").replace(/(\.\d{3})\d+/,"$1").replace(/([+-]\d{2})$/,"$1:00"):value;
+  const t=new Date(iso as string|Date).getTime();
+  if(Number.isNaN(t))return "";
+  const sg=new Date(t+8*3600_000);
+  return `${sg.getUTCDate()} ${MONTH_WORDS[sg.getUTCMonth()]} ${sg.getUTCFullYear()}`;
+}
+/** What a household calls each of its documents in a sentence: the document's title (documentName), never its file name
+ * (DC 18 Nov). Two documents with one title read apart by what the upload is ("the photo", "the PDF"), the part of a file
+ * that held several policies ("part 2 of 3"), and the day it was uploaded ("uploaded 3 Nov 2026"), only as much as needed. */
+export function documentLabels(docs:LabelDoc[]):Map<string,string>{
+  const title=(d:LabelDoc)=>{
+    const file=d.original_filename??"",part=file.match(/ — part (\d+) of (\d+) \(pages /);
+    const base=documentName({...d,product_name:d.product_name??null,original_filename:file.replace(/ — part \d+ of \d+ \(pages [^)]*\)$/,"")});
+    return part?`${base} (part ${part[1]} of ${part[2]})`:base;
+  };
+  const titles=new Map(docs.map(d=>[d.id,title(d)]));
+  const out=new Map<string,string>();
+  for(const d of docs){
+    const t=titles.get(d.id)!,twins=docs.filter(x=>titles.get(x.id)===t);
+    if(twins.length<2){out.set(d.id,t);continue;}
+    const fmt=(x:LabelDoc)=>FORMAT_WORDS.find(([re])=>re.test(x.original_filename??""))?.[1]??"";
+    const tells:string[]=[];
+    if(new Set(twins.map(fmt)).size>1&&fmt(d))tells.push(fmt(d));
+    const sameFmt=twins.filter(x=>fmt(x)===fmt(d));
+    if(sameFmt.length>1||!tells.length){
+      const day=uploadDay(d.created_at);
+      if(day)tells.push(`uploaded ${day}`);
+      const sameDay=sameFmt.filter(x=>uploadDay(x.created_at)===day);
+      if(sameDay.length>1)tells.push(`copy ${sameDay.findIndex(x=>x.id===d.id)+1}`);
+    }
+    out.set(d.id,tells.length?`${t} (${tells.join(", ")})`:t);
+  }
+  return out;
+}

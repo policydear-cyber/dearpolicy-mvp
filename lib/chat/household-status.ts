@@ -8,11 +8,15 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { documentName, referenceRoles } from "@/lib/policies/inventory";
+import { documentLabels } from "@/lib/policies/document-name";
 import { failedDocumentAdvice, READING_LIMIT_RESETS, type FailedDocumentAdvice } from "@/lib/documents/failure-advice";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation } from "@/types";
 
-export type PersonDocument = { id: string; name: string; filename: string; role: string | null; policyType: string | null; confirmed: boolean; tier: string | null;
+export type PersonDocument = { id: string; name: string; filename: string;
+  /** What the household calls it in a sentence: its title, with a tell when two share one (lib/policies/document-name.ts
+   * documentLabels); never the file name (DC 18 Nov). `filename` is only for matching. */
+  label?: string; role: string | null; policyType: string | null; confirmed: boolean; tier: string | null;
   /** V1.3: the insurer recorded for the document (null when none). */
   insurer?: string | null;
   status: "ready" | "processing" | "password" | "unreadable"; effectiveDate: string | null; renewalOrExpiryDate: string | null;
@@ -39,14 +43,16 @@ export async function documentsByPerson(accountId: string, people: ClaimPerson[]
   const out = new Map<string, PersonDocument[]>(people.map((p) => [p.id, []]));
   if (!people.length) return out;
   const r = await query<{ id: string; product_name: string | null; insurer: string | null; original_filename: string; policy_number: string | null; document_role: string | null; policy_type: string | null; personal_coverage_confirmed: boolean;
-    processing_status: string; processing_error: string | null; page_count: number | null; family_member_id: string; tier: string | null; effective_date: string | null; renewal_or_expiry_date: string | null }>(
+    processing_status: string; processing_error: string | null; page_count: number | null; family_member_id: string; tier: string | null; effective_date: string | null; renewal_or_expiry_date: string | null; created: string | null }>(
     `SELECT p.id::text AS id,p.product_name,p.insurer,p.original_filename,p.policy_number,p.document_role,p.policy_type,p.personal_coverage_confirmed,p.processing_status,p.processing_error,p.page_count,
-            pm.family_member_id::text AS family_member_id,to_jsonb(pm)->>'benefit_tier' AS tier,p.effective_date::text,p.renewal_or_expiry_date::text
+            pm.family_member_id::text AS family_member_id,to_jsonb(pm)->>'benefit_tier' AS tier,p.effective_date::text,p.renewal_or_expiry_date::text,p.created_at::text AS created
        FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
       WHERE p.account_id=$1 AND pm.family_member_id::text=ANY($2::text[]) AND ${activePredicate("p")} AND p.superseded_at IS NULL
       ORDER BY p.created_at,p.id`, [accountId, people.map((p) => p.id)]);
+  const unique = [...new Map(r.rows.map((row) => [row.id, row])).values()];
+  const labels = documentLabels(unique.map((row) => ({ ...row, created_at: row.created })));
   for (const row of r.rows) {
-    out.get(row.family_member_id)?.push({ id: row.id, name: documentName(row), filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
+    out.get(row.family_member_id)?.push({ id: row.id, name: documentName(row), label: labels.get(row.id) ?? documentName(row), filename: row.original_filename, role: row.document_role, insurer: row.insurer?.trim() || null,
       policyType: row.policy_type, confirmed: row.personal_coverage_confirmed, tier: row.tier, effectiveDate: row.effective_date, renewalOrExpiryDate: row.renewal_or_expiry_date, ...personDocumentStatus(row) });
   }
   return out;
@@ -88,15 +94,15 @@ export function unusableDocumentLines(p: ClaimPerson, docs: PersonDocument[], sa
   };
   for (const d of docs) {
     // A locked PDF is unlocked where it is: re-uploading the same file is refused as already in DearPolicy.
-    if (d.status === "password") lines.push(whose("“" + d.filename + "” couldn’t be read because " + passwordWhy(d) + ".") + once(UNLOCK_FIX + " and DearPolicy will read it automatically."));
+    if (d.status === "password") lines.push(whose("“" + (d.label ?? d.name) + "” couldn’t be read because " + passwordWhy(d) + ".") + once(UNLOCK_FIX + " and DearPolicy will read it automatically."));
     // Round 10: the advice that fits why it could not be read.
-    else if (d.status === "unreadable" && d.reason === "photo") lines.push(whose("“" + d.filename + "” is a photo too blurred, dark or faint to read.") + once("Take it again — page flat, good light, no shadow, phone steady and straight above it, the whole page in the frame — or upload the insurer’s PDF."));
-    else if (d.status === "unreadable" && d.reason === "incomplete") lines.push(whose("“" + d.filename + "” is incomplete — the file stops part-way, as when a download is cut off — so it couldn’t be opened.") + once("Download it again from the insurer’s email or website and upload the new copy."));
-    else if (d.status === "unreadable" && d.reason === "unopenable") lines.push(whose("“" + d.filename + "” couldn’t be opened — the file may be damaged.") + once("Upload the original file again, or ask the insurer for a fresh copy."));
-    else if (d.status === "unreadable" && d.reason && d.reason !== "no_text") lines.push(whose("“" + d.filename + "” couldn’t be read because " + finishWhy(d) + ".") + once(finishFix(d) + "."));
-    else if (d.status === "unreadable") lines.push(whose("“" + d.filename + "” couldn’t be read.") + once("The original PDF or a clearer scan would let DearPolicy read it."));
-    else if (d.status === "ready" && d.role === "app_screenshot") lines.push(whose("“" + d.filename + "” is a screenshot of the insurer’s app" + (d.name && d.name !== d.filename && !/\bapp screenshot(?: \(ending \w+\))?$/.test(d.name) ? " showing " + d.name : "") + " — a summary from the app, not a policy document, so its figures are not treated as confirmed cover."));
-    else if (d.status === "processing") lines.push(whose("“" + d.filename + "” is still being read.") + once("Ask again in a few minutes."));
+    else if (d.status === "unreadable" && d.reason === "photo") lines.push(whose("“" + (d.label ?? d.name) + "” is a photo too blurred, dark or faint to read.") + once("Take it again — page flat, good light, no shadow, phone steady and straight above it, the whole page in the frame — or upload the insurer’s PDF."));
+    else if (d.status === "unreadable" && d.reason === "incomplete") lines.push(whose("“" + (d.label ?? d.name) + "” is incomplete — the file stops part-way, as when a download is cut off — so it couldn’t be opened.") + once("Download it again from the insurer’s email or website and upload the new copy."));
+    else if (d.status === "unreadable" && d.reason === "unopenable") lines.push(whose("“" + (d.label ?? d.name) + "” couldn’t be opened — the file may be damaged.") + once("Upload the original file again, or ask the insurer for a fresh copy."));
+    else if (d.status === "unreadable" && d.reason && d.reason !== "no_text") lines.push(whose("“" + (d.label ?? d.name) + "” couldn’t be read because " + finishWhy(d) + ".") + once(finishFix(d) + "."));
+    else if (d.status === "unreadable") lines.push(whose("“" + (d.label ?? d.name) + "” couldn’t be read.") + once("The original PDF or a clearer scan would let DearPolicy read it."));
+    else if (d.status === "ready" && d.role === "app_screenshot") lines.push(whose("“" + (d.label ?? d.name) + "” is a screenshot of the insurer’s app" + (d.name && d.name !== (d.label ?? d.name) && !/\bapp screenshot(?: \(ending \w+\))?$/.test(d.name) ? " showing " + d.name : "") + " — a summary from the app, not a policy document, so its figures are not treated as confirmed cover."));
+    else if (d.status === "processing") lines.push(whose("“" + (d.label ?? d.name) + "” is still being read.") + once("Ask again in a few minutes."));
   }
   return lines;
 }
@@ -116,8 +122,8 @@ export function noPoliciesSentence(p: ClaimPerson, docs: PersonDocument[]): stri
     const fix = first.status === "password" ? " " + UNLOCK_FIX + " and ask again." : first.status === "processing" ? " Ask again in a few minutes." : first.reason === "photo" ? " Take the photo again — flat, in good light, the whole page in the frame — or upload the insurer’s PDF."
       : first.reason === "incomplete" ? " Download it again from the insurer and upload the new copy." : first.reason === "no_text" || first.reason === "unopenable" ? " Upload the original PDF or a clearer scan and ask again." : " " + finishFix(first) + ", then ask again.";
     const whose = isSelf(p) ? "you" : who;
-    return (unusable.length === 1 ? "The only document on file for " + whose + ", “" + first.filename + "”, couldn’t be read yet because " + why + "."
-      : "None of the " + unusable.length + " documents on file for " + whose + " could be read yet — for example “" + first.filename + "”, because " + why + ".") + fix
+    return (unusable.length === 1 ? "The only document on file for " + whose + ", “" + (first.label ?? first.name) + "”, couldn’t be read yet because " + why + "."
+      : "None of the " + unusable.length + " documents on file for " + whose + " could be read yet — for example “" + (first.label ?? first.name) + "”, because " + why + ".") + fix
       + (shots.length ? " " + unusableDocumentLines(p, shots).join(" ") : "");
   }
   return "There are no policies on file for " + who + " yet. Upload a policy schedule or certificate for " + (isSelf(p) ? "yourself" : who) + " on the Documents page and ask again.";

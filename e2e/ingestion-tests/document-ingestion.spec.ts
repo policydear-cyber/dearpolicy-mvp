@@ -144,7 +144,8 @@ test.describe.serial("document ingestion in prototype document-safety mode", () 
     await uploadDocument(page, { name: "certificate.pdf", mimeType: "application/pdf", buffer }, ALEX);
 
     // The card appears with the prototype wording, never antivirus language.
-    await expect(page.locator(".document-card").filter({ hasText: "certificate.pdf" }).first()).toBeVisible({ timeout: 30_000 });
+    // Cards never show file names (DC 18 Nov), so this household's only card is found by position, not by "certificate.pdf".
+    await expect(page.locator(".document-card").first()).toBeVisible({ timeout: 30_000 });
     // The gate cascade (uploaded -> quarantined -> scan_pending ->
     // not_scanned_prototype) runs right after the upload response; poll until
     // it settles, asserting it never passes through a scanned/clean state.
