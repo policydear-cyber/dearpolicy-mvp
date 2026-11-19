@@ -23,7 +23,7 @@ import { anyMoneyFigures } from "@/lib/format/currency";
 import { CAP_WORDS, FIGURE_CHANGE, SHARED_LIMIT, TIED_TO_LIVES, livesTogether, marksIn, namesTheLives, noteMarkOf, numbersIn, bindsToGroup, sharesLimitStrongly, sharesStronglyAmong, withoutOwnShareCap, withoutTravelTogether, type CheckedBenefit, type CheckedCover, type CheckedReading, type Source } from "./check";
 import type { CoverType, SectionLink, SectionRef } from "./reading";
 import { headingIsLife } from "./life-heading";
-import { benefitWords } from "./cover-rows";
+import { benefitWords, rowHead } from "./cover-rows";
 import { rowSectionCode, rowSectionNumber } from "./section-id";
 import { childCase, personStatus, personStatusWhy, provenAdult, statusDays, withoutChildLimit, type ChildLimit, householdLife } from "./child-limit";
 
@@ -392,6 +392,7 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
   // A child's share read two ways (check.ts foldChildColumns): no amount for anyone.
   if (b.pays === "percent" && b.childLimitConflict) return { kind: "none", why: "the row's share for an insured child was read two ways: see the document" };
   if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row"
+    : b.pays === "words" && b.paymentSchedule ? "payment schedule, not a cover amount"
     : b.pays === "words" && /\d\s*%/.test(b.source.excerpt) ? "paid as a share printed in the row's words, with no amount worked out: see the document" : "no figure printed" };
   // A row whose words say it is capped, with no cap read and checked (or a reading from before caps were read), is never
   // worked out: the uncapped figure could be more than it pays.
@@ -457,8 +458,28 @@ function headlineSumProblem(b: CheckedBenefit, cover: PersonCover, personCovers:
   const policy = personCovers.filter((x) => x.personId === cover.personId && x.source.documentId === cover.source.documentId && norm(x.product) === norm(cover.product)
     && samePolicy(x) && x.sumInsured != null);
   const labelled = policy.filter((x) => HEADLINE_LABEL.test(`${x.cover ?? ""}\n${x.source.excerpt}`));
-  const sums = new Set((labelled.length ? labelled : policy).map((x) => `${x.sumInsured}|${x.currency ?? ""}`));
-  if (sums.size !== 1 || !sums.has(`${cover.sumInsured}|${cover.currency ?? ""}`))
+  const key = (x: PersonCover) => `${x.sumInsured}|${x.currency ?? ""}`;
+  const sumsOf = (xs: PersonCover[]) => new Set(xs.map(key));
+  const one = (xs: PersonCover[]) => { const s = sumsOf(xs); return s.size === 1 && s.has(key(cover)); };
+  // No line names the headline sum and the policy's lines print different sums ("Comprehensive Critical Illness Benefit
+  // 300,000" and "Death Benefit 5,000"): the share is of the sum of the line the row's own name names, when that is this
+  // cover's line and every line whose name has all the row's words prints that one sum ("3.1 Critical Illness Benefit":
+  // critical, illness). A name two lines with different sums share, or one this cover's line does not carry, stays doubt.
+  const rowWords = new Set([...benefitWords(rowHead(b.benefit))].filter((w) => !/^\d+$/.test(w)));
+  // The name match stands only for a share of "the Sum Assured" or "the Sum Assured of this (Basic) Benefit". Words naming
+  // another owner of the sum ("the Basic Sum Assured", "of the Policy", "under the Plan", "of the Certificate") may mean
+  // the policy's or basic plan's sum, not the named line's own: no name match. An allow-list: any such word anywhere in the
+  // row's own words, other than "this (Basic) Benefit", stops it (Critic S1, S8 to S12). Nor when another of the policy's
+  // lines is named basic or base, which is the basic plan "this Basic Benefit" may mean.
+  const said = `${b.source.excerpt}\n${b.rowText ?? ""}`;
+  const basicPlanWords = /\b(?:basic|base|policy|policies|plans?|certificates?|contracts?)\b/i.test(`${b.source.excerpt}\n${b.shareSentence ?? ""}`.replace(/\bthis\s+(?:(?:basic|base)\s+)?benefit\b/gi, " "));
+  const basicLine = /\b(?:basic|base)\b/i.test(said) && policy.some((x) => x.coverKey !== cover.coverKey && /\b(?:basic|base)\b/i.test(x.cover ?? ""));
+  // A line whose figure is paid per day, week, month or year ("Hospital Income S$200 per day") is not a sum to take a share
+  // of (TE on the share-sum fix).
+  const periodic = /\b(?:per|a|each|every)\s+(?:day|week|month|year|annum)\b|\b(?:daily|weekly|monthly|yearly|annually|p\.?a\.?)\b/i.test(`${cover.cover ?? ""}\n${cover.source.excerpt}`);
+  const byName = rowWords.size && !basicPlanWords && !basicLine && !periodic ? policy.filter((x) => { const w = benefitWords(x.cover ?? ""); return [...rowWords].every((r) => w.has(r)); }) : [];
+  const settled = labelled.length ? one(labelled) : one(policy) || byName.some((x) => x.coverKey === cover.coverKey) && one(byName);
+  if (!settled)
     return `${b.value}% of the policy's sum, but ${cover.cover ?? "this policy"} prints more than one sum for this person, so which one is not settled`;
   return null;
 }

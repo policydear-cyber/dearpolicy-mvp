@@ -12,6 +12,8 @@ import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
 import { runAfterResponse } from "@/lib/http/background";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 
+import { mayAddDocument, mayAddDocumentUnderLock, PlanCheckUnavailable } from "@/lib/billing/household-plan";
+import type { LimitCheck } from "@/lib/plans/catalogue";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 // Re-reading a document can take as long as the original upload; give the
@@ -24,6 +26,7 @@ const rereads = createDbRateLimiter({ name: "policy-reprocess", windowMs: 60 * 6
 const Schema = z.object({ policyId: z.string().uuid(), pdfPassword: z.string().optional() });
 
 class AlreadyProcessing extends Error {}
+class PlanLimitRefused extends Error { constructor(readonly check: LimitCheck) { super("plan document limit"); } }
 class NotClearedForProcessing extends Error {}
 
 export async function POST(request: NextRequest) {
@@ -62,6 +65,15 @@ export async function POST(request: NextRequest) {
 
     if (!policy) return NextResponse.json({ error: "Document not found" }, { status: 404 });
 
+    // The household's plan: an unreadable document doesn't count, so reading it again could take it past the limit.
+    try {
+      const limit = await mayAddDocument(ctx.householdId, { rereadingPolicyId: body.policyId });
+      if (!limit.allowed) return NextResponse.json({ error: limit.message, reasonCode: "PLAN_DOCUMENT_LIMIT", upgradePath: "/usage" }, { status: 403 });
+    } catch (error) {
+      if (error instanceof PlanCheckUnavailable) return NextResponse.json({ error: error.message }, { status: 503 });
+      throw error;
+    }
+
     // A document can sit in an in-flight status forever if its background
     // job died permanently: a lease expiry dead-letters the JOB, but nothing
     // marks the POLICY failed. In-flight therefore only blocks a re-analyse
@@ -97,6 +109,10 @@ export async function POST(request: NextRequest) {
     const tx = await pool.connect();
     try {
       await tx.query("BEGIN");
+      // Checked again under the household's document lock, so Read again on several unreadable documents at once can't
+      // all pass the limit (TE F8). Refused: nothing below runs.
+      const underLock = await mayAddDocumentUnderLock(tx, ctx.householdId, { rereadingPolicyId: body.policyId });
+      if (!underLock.allowed) throw new PlanLimitRefused(underLock);
       const waiting = await tx.query<BackgroundJobRow>(
         `UPDATE background_jobs SET status='cancelled', cancel_requested=true, lease_owner=NULL, lease_expires_at=NULL, updated_at=now(), payload=${WITHOUT_PASSWORD_SQL}
          WHERE job_type=$1 AND idempotency_key=$2
@@ -159,6 +175,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, status: "queued" }, { status: 202 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid request", issues: error.issues }, { status: 400 });
+    if (error instanceof PlanLimitRefused) return NextResponse.json({ error: error.check.allowed ? "" : error.check.message, reasonCode: "PLAN_DOCUMENT_LIMIT", upgradePath: "/usage" }, { status: 403 });
+    if (error instanceof PlanCheckUnavailable) return NextResponse.json({ error: error.message }, { status: 503 });
     if (error instanceof AlreadyProcessing) return NextResponse.json({ error: "This document is already being analysed." }, { status: 409 });
     if (error instanceof NotClearedForProcessing) return NextResponse.json({ error: "This document has not passed malware scanning yet and cannot be re-analysed." }, { status: 409 });
     const authResponse = routeErrorResponse(error);

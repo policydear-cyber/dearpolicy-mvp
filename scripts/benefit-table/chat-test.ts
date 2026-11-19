@@ -451,7 +451,8 @@ async function integration() {
     assert.equal((t.saved.answer.statements ?? []).filter((s) => s.amount).length, 0);
     assert.ok(!(t.saved.answer.statements ?? []).some((s) => s.text === LEFT_OUT_AMOUNT));
     assert.ok(t.saved.state.simpleChat.turns[0].report.dropped.some((d) => d.kind === "amount"), "the dropped amount is in the turn's report");
-    assert.ok(!JSON.stringify(t.saved.answer).includes("777"));
+    // The figure itself, never the digits inside a random id ("…a777b…" once failed this 1 run in 5; TE #546).
+    assert.doesNotMatch(JSON.stringify(t.saved.answer), /(?<![\w-])777(?![\w])/);
   });
 }
 // ------------------------------------------------------------------ chat test 01 follow-ups: stays, cover lines, premiums
@@ -1316,7 +1317,7 @@ test("what prose says about the library is held to the library's own record (liv
   // uploaded for ..." (live 7e6d50e, E1, E4, H12).
   r = run("Mei Ling has two documents.", [{ text: "The group certificate for the scheme.", document: "D1" }, { text: "The scheme's terms.", document: "D2" }]);
   assert.equal(r.texts.length, 1);
-  assert.match(r.texts[0], /^Linked to Lim Ah Kow and Tan Mei Ling, 2 documents, all read: Certificate \(Certificate\.pdf\); .+\.$/);
+  assert.match(r.texts[0], /^Linked to Lim Ah Kow and Tan Mei Ling, 2 documents, all read: Certificate; Scheme terms\.$/);
   assert.equal(r.texts.some((t) => /was read\. It is linked to/.test(t)), false);
   // Every file, one point each (the live E1 shape): one line per set of people, then only what is news about a file.
   r = run("You have 3 documents.", [1, 2, 3].map((i) => ({ text: `File ${i}.`, document: `D${i}` })), "what documents have we uploaded");
@@ -1326,7 +1327,7 @@ test("what prose says about the library is held to the library's own record (liv
   const apart: Household = { ...H, documents: H.documents.map((d, i) => i === 0 ? { ...d, uploadedFor: "Alex Example" } : d) };
   const { answer: a2 } = verifyAnswer(apart, readModelAnswer({ bottomLine: "One file.", nextSteps: [], question: null, statements: [{ kind: "fact", text: "x", person: null, document: "D1", quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: false }] })!, ["which of our documents are about alex"]);
   const t2 = (a2.statements ?? []).map((x) => x.text);
-  assert.deepEqual(t2, ["Certificate (Certificate.pdf) was read. It is linked to Lim Ah Kow and Tan Mei Ling, but it was uploaded for Alex Example."]);
+  assert.deepEqual(t2, ["Certificate was read. It is linked to Lim Ah Kow and Tan Mei Ling, but it was uploaded for Alex Example."]);
   // Asked how to file a claim, or which documents a claim needs, the question is not about the library (TE #104 L9).
   for (const q of ["how do I file a claim for Lim's hip", "what documents do I need to claim"])
     assert.deepEqual(run("Here.", [{ text: "Notice must be given within 30 days.", document: "D2" }], q).texts.filter((t) => /was read\./.test(t)), [], q);
@@ -2156,8 +2157,8 @@ test("for a question about the documents, a point about one person's files is th
   const ask = (statements: Record<string, unknown>[], q = "list my documents") => verifyAnswer(HOUSE, readModelAnswer({ bottomLine: "Here is each adult's list.", nextSteps: [], question: null,
     statements: statements.map((x) => ({ kind: "fact", text: "x", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, ...x })) })!, [q]).answer.statements!.map((x) => x.text);
   assert.deepEqual(ask([{ text: "Lim Ah Kow has 2 documents.", person: "Lim Ah Kow" }, { text: "Tan Mei Ling has the certificate and terms." }, { text: "Ah Kow again.", person: "Lim Ah Kow" }]), [
-    "Lim Ah Kow has 3 documents linked in DearPolicy: Certificate (Certificate.pdf); Scheme terms (Scheme terms.pdf); Policy illustration (Policy illustration.pdf).",
-    "Tan Mei Ling has 3 documents linked in DearPolicy: Certificate (Certificate.pdf); Scheme terms (Scheme terms.pdf); Policy illustration (Policy illustration.pdf)."]);
+    "Lim Ah Kow has 3 documents linked in DearPolicy: Certificate; Scheme terms; Policy illustration.",
+    "Tan Mei Ling has 3 documents linked in DearPolicy: Certificate; Scheme terms; Policy illustration."]);
   const H: Household = { ...HOUSE, members: [...HOUSE.members, { name: "Lim Xiao Ming", relationship: "child" }] };
   assert.deepEqual(verifyAnswer(H, readModelAnswer({ bottomLine: "b", nextSteps: [], question: null, statements: [{ kind: "fact", text: "Xiao Ming has none.", person: "Lim Xiao Ming", document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null }] })!, ["show our files"]).answer.statements!.map((x) => x.text),
     ["No document is linked to Lim Xiao Ming in DearPolicy."]);

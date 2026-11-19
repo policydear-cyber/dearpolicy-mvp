@@ -11,7 +11,7 @@ import type { Household, HouseholdDocument, HouseholdPage } from "./household";
 const md5 = (s: string) => createHash("md5").update(s, "utf8").digest("hex");
 export const pagesDigest = (pages: HouseholdPage[]) => md5([...pages].sort((a, b) => a.page - b.page).map((p) => md5(p.text)).join(""));
 
-type Meta = { accountId: string; members: Household["members"]; documents: (Omit<HouseholdDocument, "pages"> & { pages: number; digest: string })[] };
+type Meta = { accountId: string; members: Household["members"]; currency?: string | null; documents: (Omit<HouseholdDocument, "pages"> & { pages: number; digest: string })[] };
 
 export function buildSnapshot(dir: string): Household {
   const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as Meta;
@@ -21,7 +21,8 @@ export function buildSnapshot(dir: string): Household {
     if (pagesDigest(pages) !== digest) throw new Error(`${doc.name}: copied text does not match the database digest`);
     return { ...doc, pages };
   });
-  return { accountId: meta.accountId, members: meta.members, documents };
+  // The household currency setting (accounts.currency), as readHousehold carries it: null when not chosen.
+  return { accountId: meta.accountId, members: meta.members, currency: meta.currency ?? null, documents };
 }
 
 if (require.main === module) {

@@ -151,6 +151,10 @@ jobs:
 
       - name: Household currency (amounts with no printed currency)
         run: npm run documents:household-currency-test
+      - name: Plans (Free, Plus, Family) limits, Stripe webhook and pricing section (PGlite, fake Stripe)
+        run: npm run billing:plans-test
+      - name: Admin console (allow-list only, every household read-only, no contents, file names or raw errors; PGlite)
+        run: npm run admin:console-test
       - name: Policy folders (owner only, own household's documents and people, add and remove, superseded and deleted documents drop out)
         run: npm run policies:folders-test
       - name: Policy folders on the Documents page (names, suggestions never across people or insurers)
@@ -390,6 +394,9 @@ jobs:
       - name: Invitation link survives sign-in and sign-up; pending invitations show their expiry
         run: npm run auth:invite-return-test
 
+      - name: Emailed sign-up and reset links work in any browser (opened in a mail app's browser too)
+        run: npm run auth:email-link-test
+
       - name: Policy-document quarantine gate regression suite (real Postgres via PGlite, no live DB needed)
         run: npm run security:policy-quarantine-test
 
@@ -505,6 +512,9 @@ jobs:
 
       - name: Printed figures rows shown as a table with the page's own headings; no cell moved
         run: npm run simple:printed-table-test
+
+      - name: An overview answer reads as a list of its policies; no 'also linked to' document lists
+        run: npm run simple:lead-list-test
 
       - name: Member profile (sex and date of birth on the Family page; used only when the document prints nothing; works before the migration)
         run: npm run family:member-profile-test

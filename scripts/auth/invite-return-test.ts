@@ -75,9 +75,11 @@ test("sign-in, sign-up, the emailed link and the first password all keep the inv
   const signin = read("app/api/auth/signin/route.ts");
   assert.match(signin, /const inviteNext = safeInviteNext\(next\);/);
   assert.match(signin, /emailRedirectTo: `\$\{origin\}\/api\/auth\/callback\$\{carry\}`, shouldCreateUser: false/, "an unproven invitee signing in is emailed a link back to the join page");
-  const cb = read("app/api/auth/callback/route.ts");
-  assert.match(cb, /const inviteNext = safeInviteNext\(url\.searchParams\.get\("next"\)\);/);
-  assert.match(cb, /new URL\("\/update-password\?first=1" \+ \(inviteNext \? `&next=\$\{encodeURIComponent\(inviteNext\)\}` : ""\), url\.origin\)/);
+  // 18 Nov 2026: moved unchanged from the callback to lib/auth/finish-email-link.ts (shared with app/api/auth/confirm).
+  const cb = read("lib/auth/finish-email-link.ts");
+  assert.match(cb, /const inviteNext = safeInviteNext\(rawNext\);/);
+  assert.match(cb, /return "\/update-password\?first=1" \+ \(inviteNext \? `&next=\$\{encodeURIComponent\(inviteNext\)\}` : ""\);/);
+  assert.match(read("app/api/auth/callback/route.ts"), /finishEmailLink\(supabase\.auth, data\.user, next, url\.searchParams\.get\("next"\)\)/, "the callback hands the link's own next");
   const up = read("app/update-password/page.tsx");
   assert.match(up, /next = safeInviteNext\(new URLSearchParams\(window\.location\.search\)\.get\("next"\)\);/);
   assert.match(up, /router\.push\(next \?\? "\/"\)/);

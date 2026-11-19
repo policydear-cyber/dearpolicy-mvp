@@ -4,11 +4,13 @@
  *
  * Household isolation: every query filters on account_id, and readHousehold re-checks each returned row's account_id
  * in code before anything reaches a prompt. */
+import { effectiveHouseholdCurrency, HOUSEHOLD_CURRENCY_NOTE } from "@/lib/documents/household-currency";
 import { isCodeName } from "@/lib/policies/document-name";
 import { uncheckedText } from "@/lib/documents/layout-check";
 import { policyJobLive, scanJobLive } from "@/lib/rag/live-job";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { failedDocumentChatAdvice, type FailedDocumentChatAdvice } from "@/lib/documents/failure-advice";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 export { UNCHECKED_PAGE, uncheckedText } from "@/lib/documents/layout-check";
 
 export type HouseholdPage = { page: number; text: string };
@@ -50,6 +52,9 @@ export type HouseholdDocument = {
   tableState?: string | null;
   /** Pages the upload check could not check against the page image: no amount on them is used. */
   uncheckedPages?: number[];
+  /** The figures the stored reading (policy_coverages, as Home shows them) gave the household's currency from the setting
+   * (its note, HOUSEHOLD_CURRENCY_NOTE), by page and person: only those may the chat show the same way. */
+  settingCurrencyFigures?: { page: number; amount: number; person: string }[];
   /** Pages on which some lines could not be checked against the page image: those lines show "[amount not checked]". */
   partCheckedPages?: number[];
   /** Pages that could not be read at all (an illegible scan, or a reader that gave nothing back): nothing printed only
@@ -63,6 +68,10 @@ export type Household = {
    * the model. */
   members: { name: string; relationship: string; date_of_birth?: string | null }[];
   documents: HouseholdDocument[];
+  /** The household's own currency (Account settings, lib/documents/household-currency): a code, or null when it chose
+   * "Don't assume" or has not chosen. Read by the verifier only, for a figure on a page that names no other currency
+   * (householdCurrencyPages), never sent to the model. */
+  currency?: string | null;
   /** The household's policy folders (sql/policy-folders.sql, lib/policies/folders.ts): the documents it put together as one
    * policy, and who that policy is for. Absent or empty when it made none, and nothing about folders is then sent. Only
    * documents in the library (not superseded) are listed. */
@@ -122,6 +131,17 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       WHERE fd.account_id=$1 AND fd.folder_id = ANY($2::uuid[]) ORDER BY fd.created_at, fd.policy_id`, [accountId, folderIds]) : [];
   for (const row of [...members, ...docs, ...links, ...pages, ...folderRows, ...folderPeople, ...folderDocs])
     if (String(row.account_id) !== accountId) throw new Error("A row from another household was returned; refusing to build a prompt");
+  // The household's currency choice: a database without the column, or any failed read, is "not chosen" (nothing assumed).
+  const currency = await run(`SELECT a.id AS account_id, to_jsonb(a)->>'currency' AS currency FROM accounts a WHERE a.id=$1 AND ${activePredicate("a")}`, [accountId])
+    .then((rows) => rows.find((r) => String(r.account_id) === accountId && typeof r.currency === "string")?.currency as string | undefined)
+    .catch(() => undefined);
+  const chosen = effectiveHouseholdCurrency(currency ?? null);
+  const settled = chosen && ids.length ? await run(
+    `SELECT c.account_id, c.policy_id, c.source_page, c.amount, f.display_name FROM policy_coverages c
+       JOIN family_members f ON f.id=c.family_member_id AND f.account_id=c.account_id AND f.lifecycle_state='active'
+      WHERE c.account_id=$1 AND c.policy_id = ANY($2::uuid[]) AND c.currency=$3 AND position($4 in coalesce(c.notes,''))>0
+        AND c.source_page IS NOT NULL AND c.amount IS NOT NULL`,
+    [accountId, ids, chosen, HOUSEHOLD_CURRENCY_NOTE]).catch(() => [] as Row[]) : [];
   const inLibrary = new Set(ids);
   const folders: HouseholdFolder[] = folderRows.map((f) => {
     const documents = folderDocs.filter((d) => String(d.folder_id) === String(f.id) && inLibrary.has(String(d.policy_id))).map((d) => String(d.policy_id));
@@ -136,6 +156,7 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
   return {
     accountId,
     ...(folders.length ? { folders } : {}),
+    currency: chosen,
     members: members.map((m) => ({
       name: m.preferred_name && m.preferred_name !== m.display_name ? `${m.display_name} (${m.preferred_name})` : String(m.display_name),
       relationship: String(m.relationship),
@@ -157,6 +178,8 @@ export async function readHousehold(accountId: string, run: ReadOnlyQuery, notEx
       matchedOnly: [...new Set(links.filter((l) => String(l.policy_id) === String(d.id)).map((l) => String(l.display_name)))]
         .filter((n) => links.every((l) => String(l.policy_id) !== String(d.id) || String(l.display_name) !== n || l.source === "scheme_reference_match")),
       uncheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unchecked").map((p) => Number(p.page_number)),
+      settingCurrencyFigures: (Array.isArray(settled) ? settled : []).filter((r) => String(r.account_id) === accountId && String(r.policy_id) === String(d.id))
+        .map((r) => ({ page: Number(r.source_page), amount: Number(r.amount), person: String(r.display_name) })),
       partCheckedPages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "part_checked").map((p) => Number(p.page_number)),
       unreadablePages: pages.filter((p) => String(p.policy_id) === String(d.id) && p.method === "unreadable").map((p) => Number(p.page_number)),
       // A page whose table text could not be checked (lib/documents/layout-check.ts) gives the answer no words to quote. A

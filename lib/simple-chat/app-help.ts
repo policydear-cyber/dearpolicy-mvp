@@ -1,10 +1,11 @@
 /** Fixed answers for questions about DearPolicy itself rather than about the household's cover ("what is DearPolicy",
  * "delete my account", "who can see my documents"). The documents never say these things, so the model answered "the
  * documents don't say" or pointed to the insurer (overnight run 23 Oct, N286, N288, N289, N296-N299). Each answer says
- * only what the app's own pages show (app/household, app/family, app/usage); nothing about prices, storage or security
+ * only what the app's own pages show (app/household, app/family, app/usage, and the prices on the landing page); nothing about storage or security
  * that no page states: who else handles documents, or how they are secured, is said to be unstated (Critic R185-2). A
  * question that also asks about cover is left to the model. */
 import type { ModelAnswer } from "./prompt";
+import { PLANS, formatSgd } from "@/lib/plans/catalogue";
 
 // Words that make it a question about cover, a claim, a treatment or the insurer, never about the app (Critic R185-1).
 // "Left" is not here: "questions left this month" is the app's own (TE P118-3); "limit left" still has "limit".
@@ -66,7 +67,8 @@ const HELPS: Help[] = [
     id: "cost",
     test: new RegExp(String.raw`\b(?:cost|costs|price|pricing|fee|fees|subscription|charge|pay)\b[^?.!]*(?:${APP}|\bto\s+use\s+(?:it|this)\b)|\bis\s+${APP}\s+free\b|\bfree\s+to\s+use\b|${APP}[^?.!]*\b(?:cost|costs|charge|charges)\b`, "i"),
     answer: {
-      bottomLine: "The app doesn't show a price. Your household's plan, and how much of it you have used this month, are on the Plan usage page.",
+      // The same numbers the landing page's pricing section and Plan usage show (lib/plans/catalogue.ts).
+      bottomLine: `Every household starts on ${PLANS.free.name}, which is free: ${PLANS.free.documents} documents and ${PLANS.free.questionsPerMonth} questions a month. ${PLANS.plus.name} is ${formatSgd(PLANS.plus.priceMonthlySgd)} a month or ${formatSgd(PLANS.plus.priceYearlySgd)} a year, and ${PLANS.family.name} is ${formatSgd(PLANS.family.priceMonthlySgd)} a month or ${formatSgd(PLANS.family.priceYearlySgd)} a year. Your household's plan, and how much of it is used, are on the Plan usage page.`,
       nextSteps: ["Open Account settings, then Plan usage."],
     },
   },

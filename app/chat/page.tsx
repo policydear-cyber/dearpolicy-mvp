@@ -59,7 +59,7 @@ const CHAT_MAX_WAIT_MS=6*60_000;
 const CHAT_POLL_MS=500;
 /** A finished answer, with the earlier answers of the chat it replaced (lib/chat/replaced-live.ts). */
 type Finished={answer:ChatAnswer;replaced:ReplacedAnswer[]};
-type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string;conflict?:boolean;noFamily?:boolean;stopped?:boolean;restored?:boolean};
+type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string;conflict?:boolean;noFamily?:boolean;planLimit?:boolean;stopped?:boolean;restored?:boolean};
 type SavedChat={id:string;family_member_id:string|null;title:string;updated_at:string;revision:string};
 const factFindingStatusCopy:Record<NonNullable<ChatAnswer["factFinding"]>[number]["status"],string>={
   information_needed:"Information needed",evidence_needed:"Evidence needed",reviewer_assessment_needed:"A DearPolicy reviewer will check this",
@@ -82,6 +82,8 @@ function InlineAnswer({kind,disabled,onSubmit}:{kind:"text"|"date";disabled:bool
 class ConflictError extends Error{}
 /** The household has nobody in it yet: the server's own words, with a link to add family members. */
 class NoFamilyError extends Error{}
+/** This month's questions on the household's plan are used up (app/api/chat/route.ts, code "question_limit"). */
+class PlanLimitError extends Error{}
 /** The page stopped waiting; the job may still finish on the server, so the answer can still arrive in this chat. */
 class StoppedWaiting extends Error{}
 
@@ -288,7 +290,7 @@ function ChatContent(){
           question:text,conversationId,conversationRevision:conversationId?revision:undefined,asynchronous:true,
           timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,personChoiceId})});
       const data=await response.json().catch(()=>({}));
-      if(!response.ok){const said=typeof data.error==="string"?data.error:"",kind=sendFailure(response.status,said,data.code);if(kind==="no_family")throw new NoFamilyError(said);if(kind==="conflict")throw new ConflictError();throw new Error(data.error??"DearPolicy couldn't answer just now");}
+      if(!response.ok){const said=typeof data.error==="string"?data.error:"",kind=sendFailure(response.status,said,data.code);if(kind==="no_family")throw new NoFamilyError(said);if(data.code==="question_limit"&&said)throw new PlanLimitError(said);if(kind==="conflict")throw new ConflictError();throw new Error(data.error??"DearPolicy couldn't answer just now");}
       if(version!==requestVersion.current)return;
       setConversationId(data.conversationId);setRevision(data.conversationRevision);rememberConversation(data.conversationId??null);
       const resolved=data.familyMemberId??"";setMemberId(resolved);
@@ -302,14 +304,14 @@ function ChatContent(){
       if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError")){
         const said=String((e as {message?:unknown}|null)?.message??"");
         const kind=e instanceof NoFamilyError?"no_family":e instanceof ConflictError?"conflict":sendFailure(null,said);
-        const noFamily=kind==="no_family",conflict=kind==="conflict";
+        const noFamily=kind==="no_family",conflict=kind==="conflict",planLimit=e instanceof PlanLimitError;
         const stopped=e instanceof StoppedWaiting;
-        const message=noFamily?customerMessage(said,NO_FAMILY_TEXT):conflict?CONFLICT_TEXT:stopped?e.message:customerError(e,ANSWER_FAILED);
+        const message=planLimit?said:noFamily?customerMessage(said,NO_FAMILY_TEXT):conflict?CONFLICT_TEXT:stopped?e.message:customerError(e,ANSWER_FAILED);
         // The unsent text goes back into the box, ready to send again -- unless something new is already typed there, or
         // the page only stopped waiting: that answer may still arrive, and sending again would ask twice.
         const restored=!stopped&&!boxText.current.trim();
         if(restored)setQuestion(text);
-        setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message,conflict,noFamily,stopped,restored}:m));
+        setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message,conflict,noFamily,planLimit,stopped,restored}:m));
       }
     }
     finally{if(version===requestVersion.current){jobId.current=null;setBusy(false);controller.current=null;}}
@@ -493,7 +495,9 @@ function ChatContent(){
           {/* Knowledge library: general explanations of terms this answer uses (static, never changes the answer). */}
           {message.role==="assistant"&&message.answer&&!isStopped(message.answer,message.content)?<LearnLinks texts={[message.content.replace(COVER_NOTE," "),...(message.answer.details??[]),...(message.answer.claimItems??[]).flatMap(item=>[item.reason,...(item.conditions??[])])]}/>:null}
         </div>
-        {message.error?(message.noFamily
+        {message.error?(message.planLimit
+          ?<div className="alert message-inline-error" role="alert" data-testid="chat-plan-limit"><strong>Not sent.</strong><span> {message.error}</span><Link className="mini-button" href="/usage">See plans</Link></div>
+          :message.noFamily
           ?<div className="alert error message-inline-error" role="alert" data-testid="chat-no-family"><strong>Not sent.</strong><span> {message.error}</span><Link className="mini-button" href="/family">Add family members</Link></div>
           :message.conflict
           ?<div className="alert error message-inline-error" role="alert" data-testid="chat-conflict"><strong>Not sent.</strong><span> {message.error}</span>{conversationId?<button type="button" className="mini-button" disabled={busy} onClick={()=>void restore(conversationId)}>Reload this chat</button>:null}</div>

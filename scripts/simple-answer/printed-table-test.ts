@@ -5,7 +5,7 @@
  *   node --import tsx scripts/simple-answer/printed-table-test.ts
  */
 import assert from "node:assert/strict";
-import { cellsOf, tablesFromPrintedRows } from "@/lib/simple-chat/printed-table";
+import { cellsOf, dropQuoteFragments, tablesFromPrintedRows } from "@/lib/simple-chat/printed-table";
 import type { AnswerStatement } from "@/components/answer-cards";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 
@@ -104,6 +104,26 @@ t("left alone: an amount card, a point with conditions, a point with its own wor
     pt("x5", "READYBUILDER 10", "Table 1: Illustration of surrender values"),
   ];
   assert.deepEqual(tablesFromPrintedRows(st, H, label).map((s) => s.table ?? null), [null, null, null, null, null]);
+});
+
+t("a leftover quote that is a fragment or a bare label goes; a whole sentence, a printed row, a card and a point with conditions stay (live f954eb2, ask 8)", () => {
+  const answer = { statements: [
+    pt("f1", "READYBUILDER 10", "the death benefit payable under this policy will be the higher of:"),
+    pt("f2", "Certificate of Insurance", "As of 06/10/2022"),
+    pt("k1", "Term Plan", "The policy ends on the death of the life assured or when the full sum assured is paid."),
+    pt("k2", "READYBUILDER 10", "5/33 23,954 10,000 300 10,300 200"),
+    pt("k3", "Term Plan", "As of 06/10/2022", { conditions: ["Only while the policy is in force"] }),
+    pt("k4", "Term Plan", "As of 06/10/2022", { amount: { text: "S$100,000", currencyResolved: true, illustration: false } as never }),
+    { id: "k5", kind: "fact", text: "The policy covers death.", fullText: "", conditions: [] } as AnswerStatement,
+    // A short whole sentence is an exclusion worth keeping (Critic #546 LOW-3); a short cut-off one is not.
+    pt("k6", "Term Plan", "Cosmetic surgery is not covered."),
+    pt("k7", "Term Plan", "Pre-existing conditions are excluded."),
+    pt("f3", "Term Plan", "and is not covered."),
+    pt("f4", "Term Plan", "Pre-existing conditions are excluded unless"),
+  ] };
+  const removed = dropQuoteFragments(answer);
+  assert.deepEqual(answer.statements.map((s) => s.id), ["k1", "k2", "k3", "k4", "k5", "k6", "k7"]);
+  assert.equal(removed.length, 4);
 });
 
 console.log(`printed table: ${passed} passed, ${failures.length} failed`);

@@ -30,6 +30,9 @@ const OPEN_PATHS = new Set([
   "/api/auth/signup",
   "/api/auth/signin",
   "/api/auth/callback",
+  // Emailed links that work in any browser (lib/auth/email-link.ts): the one-button page and its POST.
+  "/confirm",
+  "/api/auth/confirm",
   "/api/auth/reset-password",
   "/api/health",
 ]);
@@ -55,6 +58,9 @@ const INTERNAL_CALLBACK_PATHS = new Set([
   // lib/jobs/cron-runner.ts's authorizeJobRunner(); refuses every call when
   // CRON_SECRET is not configured.
   "/api/internal/jobs/run",
+  // Stripe's billing webhook: verified by its Stripe-Signature HMAC (lib/billing/stripe.ts verifyStripeSignature()),
+  // and answers 404 while billing is off.
+  "/api/billing/webhook",
 ]);
 
 /** Public, read-only pages a signed-out visitor (or a search engine) may open: the landing page at "/", the Learn

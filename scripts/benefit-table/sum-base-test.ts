@@ -14,7 +14,7 @@
  *   npm run benefit-table:sum-base-test */
 import assert from "node:assert/strict";
 import { assembleTable, coverKeyOf, sectionKeyOf, type FamilyMember } from "@/lib/benefit-table/assemble";
-import { checkReading, headlineSumShare } from "@/lib/benefit-table/check";
+import { checkReading, headlineSumShare, proseHeadlineShare } from "@/lib/benefit-table/check";
 import { amountsFromRows, chatRows, keepLabelledAmounts } from "@/lib/benefit-table/chat";
 import type { Household } from "@/lib/simple-chat/library";
 import { capIntroduces, readModelAnswer, verifyAnswer } from "@/lib/simple-chat/verify";
@@ -31,7 +31,7 @@ function test(name: string, fn: () => void) {
 const ACC = "55555555-5555-4555-8555-555555555555";
 const DOC = "eeeeeeee-1111-4111-8111-000000000001";
 type Cover = { cover: string; sum: number | null; line: string; riderOf?: string | null };
-type Spec = { person: string; others?: string[]; linked?: string[]; product: string; insurer: string; policyNumber: string; page1: string; page2?: string;
+type Spec = { person: string; others?: string[]; linked?: string[]; product: string; insurer: string; policyNumber: string; page1: string; page2?: string; page3?: string;
   covers: Cover[]; benefits: Record<string, unknown>[]; link?: string };
 const ben = (o: Record<string, unknown>) => ({ section: null, column: null, pays: "percent", value: null, period: null, basis: null, asOf: null, percentOf: "other", baseAmount: null,
   baseQuote: null, cap: null, capQuote: null, fromDay: null, maxDays: null, conditions: [], page: 2, ...o });
@@ -41,7 +41,7 @@ const ben = (o: Record<string, unknown>) => ({ section: null, column: null, pays
 function build(s: Spec) {
   const members = [s.person, ...(s.others ?? [])];
   const family: FamilyMember[] = members.map((n, i) => ({ id: `m${i}`, display_name: n }));
-  const pages = [s.page1, ...(s.page2 != null ? [s.page2] : [])].map((text, i) => ({ page: i + 1, text }));
+  const pages = [s.page1, ...(s.page2 != null ? [s.page2] : []), ...(s.page3 != null ? [s.page3] : [])].map((text, i) => ({ page: i + 1, text }));
   const d: Household["documents"][number] = { policyId: DOC, name: `${s.product}.pdf`, insurer: s.insurer, productName: s.product, policyNumber: s.policyNumber, documentType: null,
     documentRole: "personal_schedule", effectiveDate: null, expiryDate: null, uploadedAt: "2026-10-01", uploadedFor: null, linkedPeople: s.linked ?? [s.person], supersededAt: null,
     processingStatus: "ready", pages };
@@ -596,6 +596,256 @@ test("R4-H4 control: a bare \"$\" after the cap word in a wrapped cell gives no 
   const line = "Angioplasty and other invasive treatment for 10% of the Sum Covered, up to a maximum of\ncoronary artery $40,000";
   const a = ask(capCase(line, line), AINA, /Angioplasty/);
   assert.deepEqual(a.amounts.filter((t) => /30,000|40,000/.test(t)), [], JSON.stringify(a.amounts));
+});
+
+// ---------- C. A share of the headline sum paid in a provision's sentence ----------
+// Live re-read 18 Nov: "We will pay one hundred percent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum."
+// was read once with its base as the sum insured and once as "other"; the second reading lost the S$300,000.
+const PROSE = "3.1 Critical Illness Benefit\nWhile this Basic Benefit is in force, if the Life Assured is diagnosed with a covered illness listed in Clause 4, We will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.";
+const PROSE_QUOTE = "We will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.";
+test("C: proseHeadlineShare takes a provision that pays a share of the plan's own sum", () => {
+  for (const [cell, pct] of [
+    ["listed in Clause 4, We will pay one hundred percent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.", 100],
+    ["We will pay 25% of the Sum Insured.", 25], ["We shall pay fifty per cent (50%) of the sum assured of this Policy, up to a maximum of S$100,000.", 50],
+    ["On diagnosis, the Company will pay twenty-five percent (25%) of the Sum Covered under this Plan.", 25],
+  ] as const) assert.equal(proseHeadlineShare(cell, pct), true, cell);
+});
+test("C control: a prose share of another sum, with a reduction, an upper bound, another life or another share stays as read", () => {
+  for (const [cell, pct, next] of [
+    ["We will pay 100% of the Sum Assured of this Rider.", 100, ""], ["We will pay 100% of the Sum Assured less any amount paid under Clause 3.2.", 100, ""],
+    ["We will pay 100% of the Sum Assured.", 100, "Any amount paid under the Early Stage benefit will be deducted."],
+    ["We will pay up to 100% of the Sum Assured.", 100, ""], ["We will pay the balance of 75% of the Sum Assured.", 75, ""],
+    ["We will pay 100% of the death sum assured.", 100, ""], ["We will pay 100% of the Sum Assured per insured child.", 100, ""],
+    ["We will pay 100% of the Sum Assured of Life Assured 2.", 100, ""], ["We will pay 100% of the Sum Assured in instalments.", 100, ""],
+    ["We will pay 20% of the Sum Assured, and a further 5% for each year.", 20, ""], ["We will pay 50% of the Sum Assured.", 25, ""],
+    ["If the claim is admitted and we will pay 50% of the Sum Assured.", 50, ""], ["We will pay 100% of the Sum Assured", 100, ""],
+  ] as const) assert.equal(proseHeadlineShare(cell, pct, next), false, cell);
+});
+const CCI_PAGE1 = "Example Life\nCRITICAL ILLNESS PLAN - POLICY SCHEDULE\nLife assured: Lee Wei Ming\tCurrency: Singapore Dollars (S$)\nBenefit\tSum assured\nCritical Illness Plan\tS$300,000";
+const CCI = (benefit: string, percentOf: string | null) => build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+  page1: CCI_PAGE1, page2: `3 BENEFITS\n${PROSE}`, covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+  benefits: [{ section: "3 BENEFITS", benefit, value: 100, percentOf, quote: PROSE_QUOTE }] });
+for (const [benefit, percentOf] of [["3.1 Critical Illness Benefit", "other"], ["Critical Illness Benefit", "other"], ["3.1 Critical Illness Benefit", null], ["3.1 Critical Illness Benefit", "sum_insured"]] as const)
+  test(`C: "${benefit}" read with its base as ${percentOf} is worked out on the schedule's S$300,000`, () => {
+    assert.equal(amountOf(CCI(benefit, percentOf), "Lee Wei Ming", /Critical Illness Benefit/), 300000);
+  });
+test("C control: the same sentence linked to a rider's cover is not worked out on the rider's sum", () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+    page1: `${CCI_PAGE1}\nEarly CI Rider\tS$100,000`, page2: `3 BENEFITS\n${PROSE}`, link: "Early CI Rider",
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }, { cover: "Early CI Rider", sum: 100000, line: "Early CI Rider\tS$100,000", riderOf: "Critical Illness Plan" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  const r = rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+});
+// The policy's schedule prints a second line with its own, different sum ("Death Benefit 5,000" beside "Comprehensive
+// Critical Illness Benefit 300,000", live check on #544): the share is of the line its own name names.
+const TWO_COVERS: Cover[] = [{ cover: "Comprehensive Critical Illness Benefit", sum: 300000, line: "Comprehensive Critical Illness Benefit\tS$300,000" },
+  { cover: "Health Extra", sum: null, line: "- Health Extra\t---", riderOf: "Comprehensive Critical Illness Benefit" }, { cover: "Death Benefit", sum: 5000, line: "Death Benefit\tS$5,000" }];
+const TWO_LINES = (o: { link?: string; benefit?: string; covers?: Cover[] } = {}) => build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+  page1: [CCI_PAGE1.replace(/\nCritical Illness Plan\tS\$300,000$/, ""), ...(o.covers ?? TWO_COVERS).map((c) => c.line)].join("\n"), page2: `3 BENEFITS\n${PROSE}`,
+  link: o.link ?? "Comprehensive Critical Illness Benefit", covers: o.covers ?? TWO_COVERS,
+  benefits: [{ section: "3 BENEFITS", benefit: o.benefit ?? "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+test("C: a second line with its own sum (a small death benefit) does not unsettle the share of the line the row names", () => {
+  assert.equal(amountOf(TWO_LINES(), "Lee Wei Ming", /Critical Illness Benefit/), 300000);
+});
+test("C control: the same row linked to the death benefit's line is not worked out on either sum", () => {
+  const r = rowOf(TWO_LINES({ link: "Death Benefit" }), "Lee Wei Ming", /Critical Illness Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+  assert.doesNotMatch(JSON.stringify(r.figure), /300,000|5,000/);
+});
+test("C control: a row whose name names none of the lines stays with no amount when the lines print two sums", () => {
+  const r = rowOf(TWO_LINES({ benefit: "3.1 Main Benefit" }), "Lee Wei Ming", /Main Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+});
+test("C control: two lines that both carry the row's name, with different sums, stay with no amount", () => {
+  const r = rowOf(TWO_LINES({ covers: [{ cover: "Comprehensive Critical Illness Benefit", sum: 300000, line: "Comprehensive Critical Illness Benefit\tS$300,000" },
+    { cover: "Critical Illness Benefit (Advance)", sum: 50000, line: "Critical Illness Benefit (Advance)\tS$50,000" }] }), "Lee Wei Ming", /Critical Illness Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+  assert.doesNotMatch(JSON.stringify(r.figure), /300,000|50,000/);
+});
+for (const [what, covers, quote] of [
+  ["the Basic Sum Assured, beside a whole life basic plan's line", [{ cover: "Whole Life Basic Plan", sum: 100000, line: "Whole Life Basic Plan\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }], "We will pay fifty percent (50%) of the Basic Sum Assured in one (1) lump sum."],
+  ["the Basic Sum Assured, beside a plan line with no basic in its name", [{ cover: "Whole Life Plan", sum: 100000, line: "Whole Life Plan\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }], "We will pay fifty percent (50%) of the Basic Sum Assured in one (1) lump sum."],
+  ["this Basic Benefit, beside a line named basic plan", [{ cover: "Basic Plan Death Benefit", sum: 100000, line: "Basic Plan Death Benefit\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }], PROSE_QUOTE],
+  ["the sum of the Policy, beside a whole life plan's line", [{ cover: "Whole Life Plan", sum: 100000, line: "Whole Life Plan\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }], "We will pay fifty percent (50%) of the Sum Assured of the Policy in one (1) lump sum."],
+  ["the sum of this Policy, beside a whole life plan's line", [{ cover: "Whole Life Plan", sum: 100000, line: "Whole Life Plan\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }], "We will pay fifty percent (50%) of the Sum Assured of this Policy in one (1) lump sum."],
+  ["the sum under the Plan, beside a whole life plan's line", [{ cover: "Whole Life Plan", sum: 100000, line: "Whole Life Plan\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }], "We will pay fifty percent (50%) of the Sum Assured under the Plan in one (1) lump sum."],
+  ["the sum of the Certificate, beside a whole life plan's line", [{ cover: "Whole Life Plan", sum: 100000, line: "Whole Life Plan\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }], "We will pay fifty percent (50%) of the Sum Assured of the Certificate in one (1) lump sum."],
+] as const) test(`C control (Critic S1/S8): a share of ${what} is not worked out on the critical illness line's sum`, () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+    page1: [CCI_PAGE1.replace(/\nCritical Illness Plan\tS\$300,000$/, ""), ...covers.map((c) => c.line)].join("\n"),
+    page2: `3 BENEFITS\n3.1 Critical Illness Benefit\nWhile this policy is in force, if the Life Assured is diagnosed with a covered illness, ${quote}`, link: "Critical Illness Benefit", covers: [...covers],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: quote === PROSE_QUOTE ? 100 : 50, quote }] });
+  const r = rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+  assert.doesNotMatch(JSON.stringify(r.figure), /25,000|50,000|100,000/);
+});
+for (const [what, printed] of [
+  ["on the same line", "We will pay fifty percent (50%) of the Sum Assured of the Policy in one (1) lump sum."],
+  ["wrapped onto the next line", "We will pay fifty percent (50%) of the Sum Assured\nof the Policy in one (1) lump sum."],
+  ["after the plan's name earlier in the sentence", "For the Whole Life Plan, we will pay fifty percent (50%) of the Sum Assured in one (1) lump sum."],
+  ["after the policy's sum named on the line above", "As a share of the sum assured of the Policy,\nwe will pay fifty percent (50%) of the Sum Assured in one (1) lump sum."],
+  ["after a label cell naming the basic plan", "Basic Plan\twe will pay fifty percent (50%) of the Sum Assured in one (1) lump sum."],
+] as const) test(`C control (Critic Q1, P1-P3): a quote that leaves out "of the Policy" ${what} is not worked out on the line's own sum`, () => {
+  const covers = [{ cover: "Whole Life Plan", sum: 100000, line: "Whole Life Plan\tS$100,000" }, { cover: "Critical Illness Benefit", sum: 50000, line: "Critical Illness Benefit\tS$50,000" }];
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+    page1: [CCI_PAGE1.replace(/\nCritical Illness Plan\tS\$300,000$/, ""), ...covers.map((c) => c.line)].join("\n"),
+    page2: `3 BENEFITS\n3.1 Critical Illness Benefit\nIf the Life Assured is diagnosed with a covered illness:\n${printed}`, link: "Critical Illness Benefit", covers,
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 50, quote: printed.includes("we will pay") ? "we will pay fifty percent (50%) of the Sum Assured" : "We will pay fifty percent (50%) of the Sum Assured" }] });
+  const r = rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+  assert.doesNotMatch(JSON.stringify(r.figure), /25,000|50,000/);
+});
+test("C control (TE): a line paid per day is not a sum the name match takes a share of", () => {
+  const covers = [{ cover: "Hospital Income", sum: 200, line: "Hospital Income\tS$200 per day" }, { cover: "Death Benefit", sum: 50000, line: "Death Benefit\tS$50,000" }];
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+    page1: [CCI_PAGE1.replace(/\nCritical Illness Plan\tS\$300,000$/, ""), ...covers.map((c) => c.line)].join("\n"),
+    page2: "3 BENEFITS\n3.2 Hospital Income Benefit\nWe will pay two hundred percent (200%) of the Sum Assured in one (1) lump sum.", link: "Hospital Income", covers,
+    benefits: [{ section: "3 BENEFITS", benefit: "3.2 Hospital Income Benefit", value: 200, quote: "We will pay two hundred percent (200%) of the Sum Assured in one (1) lump sum." }] });
+  const r = rowOf(h, "Lee Wei Ming", /Hospital Income Benefit/)!;
+  assert.ok(r);
+  assert.equal(r.figure.kind, "none", JSON.stringify(r.figure));
+});
+test("C control: the sentence followed by a line that takes earlier payments off stays with no amount", () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9",
+    page1: CCI_PAGE1, page2: `3 BENEFITS\n${PROSE}\nAny amount paid earlier under the Early Stage benefit will be deducted.`, covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
+});
+
+for (const [what, page2] of [
+  ["a deduction on the line above, in the same sentence", "3 BENEFITS\n3.1 Critical Illness Benefit\nSubject to the deduction of any amount previously paid under this Policy,\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum."],
+  ["another life on the line above", "3 BENEFITS\n3.1 Critical Illness Benefit\nIf Life Assured 2 is diagnosed with a covered illness,\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum."],
+  ["a reduction after a blank line", `3 BENEFITS\n${PROSE}\n\nThe Sum Assured will be reduced by any amount paid under the Early Stage Benefit.`],
+  ["a deduction two lines down", `3 BENEFITS\n${PROSE}\nThis benefit is subject to the waiting period.\nAny amount paid under the Early Stage Benefit will be deducted.`],
+  ["a deduction in the clause's own sub-clause", `3 BENEFITS\n${PROSE}\n3.1.1 Any amount paid under the Early Stage Benefit will be deducted.`],
+] as const) test(`C control (Critic on #544): ${what} leaves the share with no amount`, () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
+});
+test("C: a deduction in the next clause (3.2) is another provision's, so the share is still settled", () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1,
+    page2: `3 BENEFITS\n${PROSE}\n3.1.1 This benefit is subject to the waiting period in Clause 8.\n3.2 Death Benefit\nWe will pay the Sum Assured less any amount owing to Us.`,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(amountOf(h, "Lee Wei Ming", /Critical Illness Benefit/), 300000);
+});
+
+const PLAIN_PROSE = "We will pay 100% of the Sum Assured in one (1) lump sum.";
+for (const [what, page2, page3] of [
+  ["a digit share (table rule) with a deduction in a later paragraph", `3 BENEFITS\n3.1 Critical Illness Benefit\n${PLAIN_PROSE}\n\nAny amount paid under the Early Stage Benefit will be deducted.`, null],
+  ["a digit share (table rule) with a deduction on the line above", `3 BENEFITS\n3.1 Critical Illness Benefit\nSubject to the deduction of any amount previously paid,\n${PLAIN_PROSE}`, null],
+  ["a digit share (table rule) with another life above", `3 BENEFITS\n3.1 Critical Illness Benefit\nIf Life Assured 2 is diagnosed with a covered illness,\n${PLAIN_PROSE}`, null],
+  ["a deduction on the next page", `3 BENEFITS\n${PROSE}`, "Any amount paid under the Early Stage Benefit will be deducted from this benefit.\n3.2 Death Benefit"],
+  ["a wrapped line opening with a number before the deduction", `3 BENEFITS\n${PROSE}\nThis benefit is paid if the diagnosis is made within\n12 months of the start. Any amount paid under the Early Stage Benefit will be deducted.`, null],
+  ["a wrapped line opening with a number after the deduction above", `3 BENEFITS\n3.1 Critical Illness Benefit\nAny amount previously paid will be deducted if claimed within\n30 days of the claim.\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.`, null],
+  ["an Early Stage payment counted towards this benefit", `3 BENEFITS\n${PROSE}\nAny Early Stage payment made will be counted towards this benefit.`, null],
+  ["benefits that together pay at most the sum", `3 BENEFITS\n${PROSE}\nThis benefit and the Early Stage Benefit together pay at most the Sum Assured.`, null],
+] as const) test(`C control (Critic re-check on #544): ${what} leaves the share with no amount`, () => {
+  const quote = page2.includes(PLAIN_PROSE) ? PLAIN_PROSE : PROSE_QUOTE;
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1,
+    page2: page3 ? `${page2}\n` : page2, covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote }], ...(page3 ? { page3 } : {}) } as never);
+  assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
+});
+test("C: a digit share in a clean provision is still settled", () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1,
+    page2: `3 BENEFITS\n3.1 Critical Illness Benefit\n${PLAIN_PROSE}\n3.2 Death Benefit\nWe will pay the Sum Assured less any amount owing to Us.`,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PLAIN_PROSE }] });
+  assert.equal(amountOf(h, "Lee Wei Ming", /Critical Illness Benefit/), 300000);
+});
+
+test("A (Critic re-check 2 on #544): a label that says who pays is still a table cell", () => {
+  for (const row of ["Amount we pay\t100% of Sum Insured", "What we pay\t100% of the Sum Assured", "What the plan pays\t100% of Sum Insured",
+    "Death (we pay)\t100% of Sum Insured", "We pay on death\t100% of Sum Assured", "Amount we will pay\t100% of Sum Insured"]) assert.equal(headlineSumShare(row, 100), true, row);
+  assert.equal(headlineSumShare("We will pay 100% of the Sum Assured.", 100), false);
+  for (const cell of ["The Company pays 100% of the Sum Assured.", "It pays 100% of the Sum Assured.", "We pay 100% of the Sum Assured.", "Death\tWe will pay 100% of the Sum Assured."]) assert.equal(proseHeadlineShare(cell, 100), true, cell);
+  assert.equal(proseHeadlineShare("Death\tChild\tWe will pay 100% of the Sum Assured.", 100), false, "two cells before the sentence");
+});
+
+for (const [what, page2] of [
+  ["a numbered list inside the clause with a deduction (TE P7c)", `3 BENEFITS\n${PROSE}\n1. The illness must be diagnosed by a specialist.\n2. Any Early Stage amount paid is deducted.\n3.2 Death Benefit`],
+  ["a payment repeated monthly", `3 BENEFITS\n${PROSE.replace("in one (1) lump sum.", "each month.")}`],
+  ["a payment repeated on the next line", `3 BENEFITS\n${PROSE}\nThis is paid monthly for 24 months.`],
+  ["only what remains of the sum", `3 BENEFITS\n${PROSE}\nAfter an Early Stage claim, only what remains of the Sum Assured is paid.`],
+  ["a long numbered list with the deduction in item 5 (TE R1)", `3 BENEFITS\n${PROSE}\nThe following apply:\n1. The illness is diagnosed after the waiting period.\n2. The Life Assured survives 14 days.\n3. The diagnosis is by a Specialist.\n4. The claim is made within 6 months.\n5. Any Early Stage amount paid is deducted.`],
+  ["a repeated payment two lines down", `3 BENEFITS\n${PROSE}\nThe benefit starts on diagnosis.\nIt is paid monthly for 24 months.`],
+  ["equal instalments", `3 BENEFITS\n${PROSE}\nThis is paid in 10 equal instalments.`],
+  ["only what is left of the sum", `3 BENEFITS\n${PROSE}\nWe pay only what is left of the Sum Assured.`],
+] as const) test(`C control (TE on #544): ${what} leaves the share with no amount`, () => {
+  const quote = page2.includes("each month.") ? PROSE_QUOTE.replace("in one (1) lump sum.", "each month.") : PROSE_QUOTE;
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote }] });
+  const r = rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/);
+  assert.ok(!r || r.figure.kind === "none", JSON.stringify(r?.figure));
+});
+
+test("C (Critic re-check 5 on #544): a deduction above an illness list in the clause is read; a next table row's period is not the share's", () => {
+  const above = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1,
+    page2: "3 BENEFITS\n3.1 Critical Illness Benefit\nAny amount paid under the Early Stage Benefit will be deducted.\n1 Major Cancer\n2 Heart Attack\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.",
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(rowOf(above, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
+  assert.equal(proseHeadlineShare("Death\tWe will pay 100% of the Sum Assured.", 100, "Monthly Hospital Income\tS$100 a day"), true);
+  assert.equal(proseHeadlineShare("We will pay 1% of the Sum Assured.", 1, "This is paid monthly for 24 months."), false);
+});
+
+test("C: a capital heading with one number ends the clause; monthly premiums in the clause do not block the share", () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1,
+    page2: `3 BENEFITS\n${PROSE}\nPremiums are payable monthly.\n4 EXCLUSIONS\nWe will not pay for any illness excluded under this clause.`,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(amountOf(h, "Lee Wei Ming", /Critical Illness Benefit/), 300000);
+});
+
+for (const [what, page2] of [
+  ["a clean clause under \"3.\" with the next clause \"4. Death Benefit\" taking an amount off", "3. Critical Illness Benefit\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.\n\n4. Death Benefit\nWe will pay the Sum Assured less any amount paid under clause 3."],
+  ["a clean 3.1 with the next clause \"4 Death Benefit\" taking an amount off", `3 BENEFITS\n${PROSE}\n\n4 Death Benefit\nWe will pay the Sum Assured less any amount paid under clause 3.1.`],
+  ["a clean 3.1 with the next clause \"4. Income Benefit\" paid monthly", `3 BENEFITS\n${PROSE}\n\n4. Income Benefit\nIt is paid monthly for 24 months.`],
+  ["a claim payable within a month", `3 BENEFITS\n${PROSE}\nClaims are payable within a month of approval.`],
+] as const) test(`C (Critic re-check 7 on #544): ${what} still settles`, () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(amountOf(h, "Lee Wei Ming", /Critical Illness Benefit/), 300000);
+});
+
+for (const [what, page2] of [
+  ["a list with description lines inside a dotted clause, deduction after it (X2b)", "2 BENEFITS\n2.1 Critical Illness Benefit\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum.\nThe covered illnesses are:\n1 Major Cancer\nA malignant tumour.\n2 Heart Attack\nDeath of heart muscle.\n3 Stroke\nA cerebrovascular incident.\nAny amount paid under the Early Stage Benefit will be deducted.\n2.2 Death Benefit"],
+  ["a single list item under an unnumbered heading, deduction above it (U10, X3)", "Critical Illness Benefit\nAny amount paid under the Early Stage Benefit will be deducted.\n1 Major Cancer\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum."],
+  ["a spaced list above the sentence, deduction above it (X1)", "Critical Illness Benefit\nAny amount paid under the Early Stage Benefit will be deducted.\n1 Major Cancer\nA malignant tumour.\n2 Heart Attack\nDeath of heart muscle.\nWe will pay one hundred\npercent (100%) of the Sum Assured of this Basic Benefit in one (1) lump sum."],
+] as const) test(`C control (Critic re-check 8 on #544): ${what} leaves the share with no amount`, () => {
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "BENEFITS", benefit: "Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
+});
+
+test("C control (Critic re-check 9 on #544, Y1): a list whose items have long definitions stays in the clause", () => {
+  const def = "A definition line one.\nA definition line two.\nA definition line three.";
+  const page2 = `3 BENEFITS\n${PROSE}\nThe covered illnesses are:\n1 Major Cancer\n${def}\n2 Heart Attack\n${def}\n3 Stroke\n${def}\n4 Kidney Failure\n${def}\nAny amount paid under the Early Stage Benefit will be deducted.\n3.2 Death Benefit`;
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
+});
+
+test("C control (Critic re-check 10 on #544, Y2): one list item after a colon stays in the clause", () => {
+  const page2 = `3 BENEFITS\n${PROSE}\nThe illness covered is:\n4 Kidney Failure\nA definition line.\nAny amount paid under the Early Stage Benefit will be deducted.\n3.2 Death Benefit`;
+  const h = build({ person: "Lee Wei Ming", product: "Critical Illness Plan", insurer: "Example Life", policyNumber: "CI-9", page1: CCI_PAGE1, page2,
+    covers: [{ cover: "Critical Illness Plan", sum: 300000, line: "Critical Illness Plan\tS$300,000" }],
+    benefits: [{ section: "3 BENEFITS", benefit: "3.1 Critical Illness Benefit", value: 100, quote: PROSE_QUOTE }] });
+  assert.equal(rowOf(h, "Lee Wei Ming", /Critical Illness Benefit/)!.figure.kind, "none");
 });
 
 if (failures.length) {

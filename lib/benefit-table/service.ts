@@ -13,6 +13,7 @@ import type { TableModel, TableReply } from "./model";
 import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePage } from "@/lib/documents/messy";
 import { policyJobLive, scanJobLive, tableReadingJobLive } from "@/lib/rag/live-job";
 import { findFamilyMatchWithKind } from "@/lib/policies/linking";
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { isPolicyQuarantineHeld, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { GUARDS_VERSION, applyGuards, claimsOf, unfinishedCount, type FigureConfirmation, type GuardNote, type GuardRecord } from "./guards";
 import { runGuards, type GuardReader } from "./guard-run";
@@ -365,6 +366,20 @@ export function pagesPrint(pages: { page: number; text: string }[]): string {
 }
 const checkKey = (doc: Omit<SourceDoc, "pages">, print: string, stored: StoredReading) =>
   createHash("sha256").update(JSON.stringify([doc.id, doc.name, doc.readable, doc.people ?? null, print, stored])).digest("base64");
+/** A checked reading whose every source names its document by the name DearPolicy shows for it (document-name.ts
+ * documentCardTitle: the product name, a name a person chose, or insurer and kind), never the upload's file name
+ * ("0b5b92fa-....pdf"): the table's "how", page links, chat and claims all read it from here. The reading is a copy. */
+export function titled(r: CheckedReading, title: string): CheckedReading {
+  const walk = (v: unknown): void => {
+    if (Array.isArray(v)) { for (const x of v) walk(x); return; }
+    if (!v || typeof v !== "object") return;
+    const o = v as Record<string, unknown>;
+    if (o.documentId === r.documentId && typeof o.document === "string") o.document = title;
+    for (const k of Object.keys(o)) walk(o[k]);
+  };
+  walk(r);
+  return r;
+}
 export function checkedOnce(doc: SourceDoc, stored: StoredReading): CheckedReading {
   const hash = checkKey(doc, pagesPrint(doc.pages), stored);
   let hit = checkedCache.get(hash);
@@ -686,7 +701,7 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
   })]);
   const people = await withDocumentLinks(db, accountId, members);
   const stored = await storedOnce;
-  const checked = docs.flatMap((d) => (stored.has(d.id) && d.readable ? [remembered.get(d.id) ?? checkedOnce(d, stored.get(d.id)!)] : []));
+  const checked = docs.flatMap((d) => (stored.has(d.id) && d.readable ? [titled(remembered.get(d.id) ?? checkedOnce(d, stored.get(d.id)!), documentCardTitle(d.file))] : []));
   // The figure guards (switch on only): a figure is used only when five readers agreed on it or the household confirmed it.
   // The page-image check: a reading with no image check of this version (read before the switch was turned on, or checked
   // by an earlier version) uses none of its figures until its check has run (queueStoredImageChecks queues it).

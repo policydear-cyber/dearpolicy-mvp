@@ -40,6 +40,7 @@
  *    universally quoted as a flat lump sum anyway, so this is a narrow gap
  *    in practice, but it is a real one and is never silently widened.
  */
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
@@ -257,7 +258,7 @@ export function resolveTravelEvidence(coverages: OwnedCoverage[], rows: TravelWo
       if (!found.length) continue;
       for (const rule of found) {
         const citation: ClaimEvidence = {
-          chunkId: `page:${first.policy_id}:${rule.page}`, policyId: first.policy_id, policyName: first.product_name ?? first.original_filename,
+          chunkId: `page:${first.policy_id}:${rule.page}`, policyId: first.policy_id, policyName: first.product_name ?? documentCardTitle({ product_name: null, original_filename: first.original_filename, insurer: first.insurer, document_role: first.document_role }),
           insurer: first.insurer ?? undefined, pageStart: rule.page, pageEnd: rule.pageEnd, documentRole: first.document_role,
           personalEvidence: false, evidenceLabel: rule.benefitCode === "travel-medical-expenses" ? "Overseas medical expenses wording" : "Accidental death wording",
         };

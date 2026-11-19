@@ -33,6 +33,8 @@ import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import type { ModelAnswer, ModelStatement } from "./prompt";
 import { nameOnPage, otherLife } from "@/lib/benefit-table/lives";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
+import { HOUSEHOLD_CURRENCY_NOTE, householdCurrencyPages } from "@/lib/documents/household-currency";
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { COVER_NOTE, COVER_NOTE_ID, coverNotePattern, isCoverNote, isOldCoverNote } from "@/lib/chat/cover-note";
 
 export const LEFT_OUT_AMOUNT = "I left out an amount I couldn’t find printed in your documents.";
@@ -328,7 +330,7 @@ type Base = { found: Found; cover: string; asOf: string | null };
 type Stay = { value: number; text: string; currencyResolved: boolean; stay: number; payable: number; rule: string; working: string; yearly: boolean };
 type Bill = { text: string; currencyResolved: boolean; bill: string; within: boolean };
 type Count = { value: number; text: string; currencyResolved: boolean; count: number; payable: number; most: number | null; unit: string; rule: string };
-type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; count?: Count | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null;
+type Checked = { s: ModelStatement; found: Found | null; amount: { value: number; text: string; currencyResolved: boolean; illustration: boolean; fromSettings?: boolean } | null; person: string | null; note: string | null; base?: Base | null; conditions?: string[]; stay?: Stay | null; count?: Count | null; bill?: Bill | null; billed?: Billed | null; uncovered?: string | null; whole?: string | null;
   /** A point about one file, or one person's files, stated from the library's record (libraryFact, libraryList). */
   libraryDoc?: number; libraryPerson?: string;
   /** The library's count of files (libraryCount). */
@@ -1645,11 +1647,71 @@ function percentAmount(st: ModelStatement, found: Found, household: Household, p
 /** A term or a plan word straight before the figure ("Plan 3", "Policy Term 20", "Plan No. 4"), when the figure is printed
  * as a plain whole number (no thousands separator): "Harbour Flexi Plan  100,000.00" is the plan's sum. */
 const TERM_OR_PLAN_BEFORE = /\b(?:term|plans?)(?:\s*\((?:years?|yrs?|months?)\))?(?:\s+(?:no\.?|number|code|#))?\s*[:\-]?\s*$/i;
+/** The household's own currency for a figure on this page of this document, as the document reading decides it
+ * (lib/documents/household-currency householdCurrencyPages): null unless the household chose one and nothing the document
+ * or its other documents of the same policy print names another currency. */
+function householdCurrencyFor(household: Household, doc: HouseholdDocument, page: number, value: number, person: string | null): string | null {
+  // Only on a page where the stored reading already gave a figure the household's currency from the setting: the same
+  // decision Home made at upload, which also weighed the currencies the page image names and the related documents of every
+  // policy number the reading found (Critic #546 HIGH-1: page text alone can lose an "RM" the image check confirmed).
+  // And only for the very figure Home shows that way, for the same person: a bare figure is held to its person by the
+  // document, not the line, so on a page with more than one insured person (named in the household or not, in any
+  // wording) the figure must be the one Home gave this person (TE #546 W1, W1b).
+  if (!household.currency) return null;
+  const same = (doc.settingCurrencyFigures ?? []).filter((f) => f.page === page && sameValue(f.amount, value));
+  const whose = new Set(same.map((f) => baseName(f.person)));
+  if (!same.length || (person ? !whose.has(baseName(person)) : whose.size !== 1)) return null;
+  const key = (n: string | null | undefined) => String(n ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const related = key(doc.policyNumber) ? household.documents.filter((o) => o !== doc && !o.supersededAt && key(o.policyNumber) === key(doc.policyNumber)).flatMap((o) => o.pages.map((p) => p.text)) : [];
+  // A page that could not be read may print another currency: it is not known, so it blocks the fill (unknownPage).
+  const pages = [...doc.pages.map((p) => ({ pageNumber: p.page, text: p.text })), ...(doc.unreadablePages ?? []).map((n) => ({ pageNumber: n, text: "", unreadable: true }))];
+  return householdCurrencyPages(pages, household.currency, related).get(page)?.code ?? null;
+}
 /** A cover's status cell, which stands between its name and its sum on many schedules. */
 const STATUS_CELL = /^(?:in\s*force|active|lapsed|manual\s+lapse|paid[\s-]*up|premium\s+paying|premium\s+holiday|matured|terminated|surrendered|reinstated|current|valid)$/i;
 /** A cell that is a term or a plan number, not a cover's name: "Term", "Premium Term", "Policy Term (Years)", "Plan",
  * "Plan No.", "Plan Type". */
 const TERM_OR_PLAN_CELL = /^(?:(?:premium|policy|benefit|cover(?:age)?|payment|contract|payout)\s+)?(?:term|plans?)(?:\s*\((?:years?|yrs?|months?)\)|\s+in\s+(?:years|months)|\s+(?:no\.?|number|code|type|#))?\.?$/i;
+/** Whether every printing of `value` in `text` is part of a rule for paying a large claim in parts, never an amount of cover
+ * (live 18 Nov, a group policy's TPD terms: "If the sum payable in respect of a valid claim is above S$200,000, the Company
+ * will first pay a lump sum of S$200,000 and pay the balance in three (3) equal annual instalments."). Such a figure is
+ * - the threshold of a condition ("if / where / when ... is above", "claims of more than", "exceeds", "in excess of"), with
+ *   no negation between the condition and the figure: a cap ("shall not at any time exceed S$3,000", "cannot be more
+ *   than") is never one (Critic on #545, NEW-HIGH); or
+ * - the first part paid before the rest ("first pay a lump sum of", "the first S$200,000", "S$200,000 upfront /
+ *   immediately / first / at once / in a lump sum");
+ * and the figure's own sentence, or a next sentence that opens by referring back to the rest ("The balance ...", "Any
+ * amount above that ..."), pays that rest in instalments or yearly / monthly payments or payouts, never the premium's. The figure says how a benefit is paid, not how
+ * much it is, so it is never an amount. */
+const SCHEDULE_CONDITION = /\b(?:if|where|when(?:ever)?|in\s+the\s+event|claims?\s+(?:of|that|which)|any\s+claim\s+(?:of|that|which))\b(?![^.;,:]*\b(?:not|never|no|cannot)\b|[^.;,:]*n't\b)[^.;,:]{0,100}\b(?:above|over|exceeds?|exceeding|more\s+than|greater\s+than|in\s+excess\s+of)\s*$/i;
+const SCHEDULE_FIRST = /\b(?:(?:first|initial(?:ly)?)\b[^.;]{0,40}\blump[\s-]+sum(?:\s+payment)?\s+(?:of\s+)?|the\s+first\s+)$/i;
+const SCHEDULE_FIRST_AFTER = /^\s*(?:(?:will\s+be|shall\s+be|is|are)\s+)?(?:(?:paid|payable)\s+)?(?:first|initially|up\s*front|immediately|at\s+once|(?:as\s+|in\s+)(?:a|one)\s+lump[\s-]+sum)\b/i;
+const SCHEDULE_REST = /\b(?:instal+ments?|(?:annual|monthly|yearly|quarterly|half[\s-]?yearly|equal|regular)\s+(?:payments|payouts|amounts))\b/i;
+const SCHEDULE_BALANCE = /\b(?:balance|remaining\s+(?:amount|sum|benefit)|remainder|rest\s+of\s+the|any\s+(?:amount|sum)\s+(?:above|over|in\s+excess\s+of)\s+(?:that|this|it))\b/i;
+/** A sentence that opens by referring back to what is left: "The balance ...", "Any amount above that ...", "The remainder". */
+const SCHEDULE_BALANCE_START = /^\s*(?:the\s+(?:balance|remainder|remaining\s+(?:amount|sum|benefit))|any\s+(?:amount|sum|balance)\s+(?:above|over|in\s+excess\s+of)\s+(?:that|this|it)|any\s+balance)\b/i;
+export function scheduleFigure(text: string, value: number): boolean {
+  const flat = text.normalize("NFKC").replace(/\s+/g, " ");
+  const at = [...flat.matchAll(/(?<![\d.,])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\d,])|(?<![\d.,])\d+(?:\.\d+)?(?![\d.,]*\d)/g)].filter((m) => Math.abs(Number(m[0].replace(/,/g, "")) - value) < 0.005);
+  if (!at.length) return false;
+  const END = /[.;](?:\s|$)/g;
+  const endFrom = (i: number) => { END.lastIndex = i; const e = END.exec(flat); return e ? e.index + 1 : flat.length; };
+  return at.every((m) => {
+    const start = Math.max(flat.slice(0, m.index).search(/[^.;]*$/), 0);
+    const after = m.index! + m[0].length;
+    const own = flat.slice(start, endFrom(after));
+    const nextStart = start + own.length;
+    const next = flat.slice(nextStart, endFrom(nextStart + 1));
+    // The rest of the payment is named where the figure's own sentence pays it, or in the next sentence only when that
+    // sentence opens by referring back ("The balance will be paid in ... instalments", "Any amount above that is paid in
+    // instalments"). A neighbouring benefit's or the premium's instalments never count (Critic on #545 re-check: a lump
+    // sum death benefit beside an income rider or monthly premiums kept its figure).
+    const rest = (t: string) => SCHEDULE_REST.test(t) && SCHEDULE_BALANCE.test(t) && !/\b(?:premiums?|contributions?)\b/i.test(t);
+    if (!(rest(own) || (SCHEDULE_BALANCE_START.test(next) && rest(next)))) return false;
+    const lead = flat.slice(start, m.index).replace(/(?:[A-Z]{1,3}\$|RM|SGD|USD|MYR|HKD|GBP|EUR|AUD|£|€|\$)\s*$/i, "");
+    return SCHEDULE_CONDITION.test(lead) || SCHEDULE_FIRST.test(lead) || SCHEDULE_FIRST_AFTER.test(flat.slice(after));
+  });
+}
 function plainAmount(st: ModelStatement, found: Found, household: Household): AmountCheck {
   const doc = household.documents[found.docIndex];
   const raw = (st.amount ?? "").trim();
@@ -1659,6 +1721,18 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
   if (figures.length > 1 || plain.length > 1) return { ok: false, why: "an amount must be one figure" };
   const value = figures[0]?.value ?? plain[0];
   if (value == null) return { ok: false, why: "no amount given" };
+  // A figure that only says when or how a large claim is paid in parts (scheduleFigure) is not an amount: read with its whole
+  // sentence on the page, so a quote cut before "the balance in instalments" is caught too.
+  {
+    const pageText = doc.pages.find((p) => p.page === found.page)?.text ?? "";
+    const from = Math.max(0, Math.min(found.offset, pageText.length)), quoteEnd = Math.min(pageText.length, found.end ?? found.offset + found.excerpt.length);
+    const back = pageText.slice(Math.max(0, from - 400), from), after = pageText.slice(quoteEnd, quoteEnd + 800);
+    // The quote's own sentence, back to its start and on through the two sentences after it (scheduleFigure reads that far).
+    const ends = [...after.matchAll(/[.;](?:\s|$)/g)].map((e) => e.index! + 1);
+    const sentences = back.slice(Math.max(0, back.search(/[^.;]*$/))) + pageText.slice(from, quoteEnd) + after.slice(0, ends[2] ?? after.length);
+    if (scheduleFigure(found.excerpt, value) || (moneyFiguresIn(found.excerpt).some((f) => sameValue(f.value, value)) && scheduleFigure(sentences, value)))
+      return { ok: false, why: "the figure is when or how a large claim is paid in parts, not an amount of cover" };
+  }
   // Only a figure printed with its currency sign counts: a percentage, a count, a plan number or a code never does. A page
   // that declares one currency for all its figures (a policy schedule) gives that currency to a figure written as an amount.
   if (!moneyFiguresIn(found.excerpt).some((f) => sameValue(f.value, value))) {
@@ -1685,7 +1759,12 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
     // likely a count or a code.
     const amountShaped = [...found.excerpt.matchAll(AMOUNT_SHAPED)].some((m) => sameValue(Number(m[0].replace(/,/g, "")), value));
     const noCurrencyAnywhere = !declared && amountShaped && printsNoCurrency(doc);
-    if (!(declared || noCurrencyAnywhere) || !(plainAmountsIn(found.excerpt).some((v) => sameValue(v, value)) || cells.some((v) => sameValue(v, value) && inQuote(v))) || (declared && signed && signed !== "$" && signed !== declared)) return { ok: false, why: "the amount is not printed with its currency in the quoted words" };
+    // The household's own currency (Account settings), as the document reading uses it: only for a figure shaped as an
+    // amount, on a page where nothing the document or its related documents print names another currency (a bare "$"
+    // blocks it), and only when the amount given is in that currency. Home and Coverage show the same figure in it (live
+    // f954eb2: PW9 and EJ7 cards said "Currency not stated" in chat while Home showed S$).
+    const ownCurrency = !declared && amountShaped && (!signed || signed === "$" || signed === household.currency) ? householdCurrencyFor(household, doc, found.page, value, st.person ?? null) : null;
+    if (!(declared || ownCurrency || noCurrencyAnywhere) || !(plainAmountsIn(found.excerpt).some((v) => sameValue(v, value)) || cells.some((v) => sameValue(v, value) && inQuote(v))) || (declared && signed && signed !== "$" && signed !== declared)) return { ok: false, why: "the amount is not printed with its currency in the quoted words" };
     const at = [...found.excerpt.matchAll(PLAIN_AMOUNT)].find((m) => sameValue(Number(m[1].replace(/,/g, "")), value)) ?? [...found.excerpt.matchAll(/(?<![\d.,])\d[\d,]*(?:\.\d+)?(?![\d.,]*\d)/g)].find((m) => sameValue(Number(m[0].replace(/,/g, "")), value));
     // A figure whose row names a count or a rate is not money, whatever the page's currency (R59-6).
     const label = at ? found.excerpt.slice(Math.max(0, found.excerpt.lastIndexOf("\n", at.index) + 1), at.index) : "";
@@ -1705,8 +1784,9 @@ function plainAmount(st: ModelStatement, found: Found, household: Household): Am
     // With no currency anywhere, nothing else says the figure is money: a row that names a count, a rate, an age or a term
     // gives no amount, whatever else it names ("Benefit Age  99", "Premium Term (Years)  20"), Critic #460.
     if (!declared && /\b(?:units?|rates?|ages?|years?|yrs?|points?|factors?|percent(?:age)?|days?|months?|weeks?|times|ratio|count|number|sessions?|visits?|claims|stays?|admissions?|nights?|co-?insurance|(?:premium|policy|benefit|cover(?:age)?|payment)\s+(?:term|period))\b|\bno\.(?!\w)/i.test(label)) return { ok: false, why: "the figure's row names a count or a rate, not money" };
-    if (!declared) return { ok: true, amount: { value, text: upTo(found.excerpt, at?.index ?? -1) + formatMoney("", value), currencyResolved: false, illustration: false } };
-    return { ok: true, amount: { value, text: upTo(found.excerpt, at?.index ?? -1) + formatMoney(SIGN[declared] ?? declared + " ", value), currencyResolved: true, illustration: false } };
+    const currency = declared ?? ownCurrency;
+    if (!currency) return { ok: true, amount: { value, text: upTo(found.excerpt, at?.index ?? -1) + formatMoney("", value), currencyResolved: false, illustration: false } };
+    return { ok: true, amount: { value, text: upTo(found.excerpt, at?.index ?? -1) + formatMoney(SIGN[currency] ?? currency + " ", value), currencyResolved: true, illustration: false, ...(declared ? {} : { fromSettings: true }) } };
   }
   // The sign is the one the quoted words print with the figure ("$10,000" stays "$10,000" whatever the model wrote, R-H1).
   const printed = moneyFiguresIn(found.excerpt).find((f) => sameValue(f.value, value))!;
@@ -2861,7 +2941,10 @@ function oneRow(household: Household, found: Found[]): boolean {
 // ------------------------------------------------------------------ the answer
 export type VerifyReport = { dropped: { kind: string; why: string; text: string }[]; sentencesLeftOut: string[]; questionsLeftOut: string[]; conditionsLeftOut: string[]; keptAsFact?: { why: string; text: string }[];
   /** A percentage row the benefit table worked out whose figure the checks did not confirm (serverFigureChecked), with why. */
-  serverFigureRefused?: { why: string; text: string }[] };
+  serverFigureRefused?: { why: string; text: string }[];
+  /** Policy ids of the files the answer's own points about files name, from the library record (libraryFact, libraryGroups):
+   * the cover note does not count them again (post-#539 check, live f954eb2). */
+  filesListed?: string[] };
 
 const asStrings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()) : []);
 const strOrNull = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
@@ -2952,7 +3035,7 @@ export function personalFileName(name: string): string | null {
 const ABOUT_DOCUMENTS = /\b(?:documents?|files|uploads?|uploaded|paperwork)\b|\bfile\b(?!\s+(?:(?:a|an|the|my|your|his|her|their|our|this)\s+)?claims?\b)/i;
 /** A question about claiming ("how do I file a claim", "what documents do I need to claim") is not about the library,
  * unless it also asks what was uploaded or linked (TE #104 L9). */
-const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
+export const aboutLibrary = (q: string) => ABOUT_DOCUMENTS.test(q) && (!/\bclaim/i.test(q) || /\b(?:upload(?:ed)?|linked|library|dearpolicy)\b/i.test(q));
 const ABOUT_FILE = /\b(?:read|readable|unreadable|linked|link|uploaded|upload|scan(?:ned)?|failed)\b/i;
 /** A question about whether files were read ("which documents haven't been fully read?", "could all my files be read?"). */
 const READ_STATUS_WORD = /\b(?:read|readable|unreadable|scanned|failed)\b/i;
@@ -2960,16 +3043,24 @@ const READ_STATUS_WORD = /\b(?:read|readable|unreadable|scanned|failed)\b/i;
  * "did you read my Shield document" (Critic on #521, M2). */
 const READ_STATUS = { test: (q: string) => READ_STATUS_WORD.test(q) && /\b(?:which|what|any|all|every|how\s+many)\b[^.?!]*\b(?:read|readable|unreadable|scanned|failed)\b/i.test(q)
   && !/\b(?:i|we)\s+(?:have\s+)?read\b|\b(?:can|could|did|will|would|please)\s+you\s+(?:please\s+)?read\b|\bread\s+(?:it|this|that|my|the)\b/i.test(q) };
-/** What a document is called in a point about the file: its product, or, when it has none and its file name says nothing
- * ("scan_20260101090000.pdf", a hash), what the app takes it to be ("Example Insurance endorsement, uploaded 1 Jan 2026"), with the
- * file name after it so it can be found on the Documents page (overnight run 23 Oct, N195, N282). A name a person gave the
- * file is kept as it is. */
-// A file that could not be read keeps its file name: nothing read says what it is.
-const labelFor = (household: Household, d: HouseholdDocument) => d.productName?.trim() || (!personalFileName(d.name) && !unreadable(d)) ? docLabel(household, d) : d.name;
+/** A file as its Documents page card titles it (documentCardTitle), so the household can find it there: never a file
+ * name, raw ("0b5b92fa-....pdf") or a person's ("InformationBookletForTheNewlyInsured.pdf"; live f954eb2, post-#539 check). */
+export function fileTitle(household: Household, d: HouseholdDocument): string {
+  const titleOf = (x: HouseholdDocument) => documentCardTitle({ product_name: x.productName, original_filename: x.name, insurer: x.insurer, document_role: x.documentRole, policy_number: x.policyNumber });
+  const flat = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const title = titleOf(d);
+  // Never a file name in an answer (DC, 18 Nov: answers lead with plain names). Two live files the cards title alike are
+  // told apart by upload day (overnight run 23 Oct, N195, N282).
+  const twins = household.documents.filter((o) => !o.supersededAt && flat(titleOf(o)) === flat(title));
+  if (twins.length < 2 || !d.uploadedAt) return title;
+  // Uploaded the same day too: told apart by their order that day, as the Documents page lists them (Critic #546 LOW-4).
+  const day = sgDay(d.uploadedAt), sameDay = twins.filter((o) => o.uploadedAt && sgDay(o.uploadedAt) === day);
+  const nth = sameDay.indexOf(d);
+  return sameDay.length > 1 && nth >= 0 ? `${title} (upload ${nth + 1} of ${sameDay.length} on ${day})` : `${title} (uploaded ${day})`;
+}
 export function libraryFact(household: Household, d: HouseholdDocument): string {
-  // A point about the file itself names the file as it was uploaded, so the household can find it on the Documents page.
-  const label = labelFor(household, d);
-  const named = label === d.name ? d.name : `${label} (${d.name})`;
+  // A point about the file itself names the file as its Documents page card does, so the household can find it there.
+  const named = fileTitle(household, d);
   const read = stillReading(d) ? `${named} is still being read, so nothing in it is used yet; ask again in a minute.`
     : onHold(d) ? `${named} is ${onHoldWords(d)}${d.holdLabel ? ` (${d.holdLabel})` : ""}, so nothing in it is used yet.`
     : unreadable(d) ? `${named} could not be read (status: ${d.processingStatus}), so nothing in it was used.${offersTryAgain(d) ? " It can be tried again on the Documents page." : ""}${failedWhy(d)}`
@@ -3026,7 +3117,7 @@ const readInFull = (d: HouseholdDocument) => !unreadable(d) && !d.uncheckedPages
  * one point per person as a clean list (6809808). Files already in a person's list are not listed again. A file uploaded
  * for someone it is not linked to is said on its own, once. */
 export function libraryGroups(household: Household, docs: HouseholdDocument[], listed: ReadonlySet<string> = new Set()): string[] {
-  const named = (d: HouseholdDocument) => { const label = labelFor(household, d); return label === d.name ? d.name : `${label} (${d.name})`; };
+  const named = (d: HouseholdDocument) => fileTitle(household, d);
   const groups = new Map<string, HouseholdDocument[]>(), out: string[] = [];
   for (const d of docs) {
     // A file a newer upload replaced is not listed, as libraryList leaves it out (TE N2).
@@ -3052,7 +3143,7 @@ export function libraryGroups(household: Household, docs: HouseholdDocument[], l
 function libraryList(household: Household, person: string): string {
   const docs = household.documents.filter((d) => !d.supersededAt && d.linkedPeople.some((p) => baseName(p) === person));
   if (!docs.length) return `No document is linked to ${person} in DearPolicy.`;
-  const named = (d: HouseholdDocument) => { const label = labelFor(household, d); return label === d.name ? d.name : `${label} (${d.name})`; };
+  const named = (d: HouseholdDocument) => fileTitle(household, d);
   return `${person} has ${docs.length} document${docs.length === 1 ? "" : "s"} linked in DearPolicy: ${docs.map(named).join("; ")}.`;
 }
 
@@ -3063,12 +3154,12 @@ function libraryCount(household: Household, told: ReadonlySet<number> = new Set(
   const n = household.documents.length, read = n - reading.length - held.length - bad.length;
   // In the prototype mode (holdLabel null) a held upload is only "on hold", with no scan wording.
   const heldWords = held.every((d) => d.holdLabel === null) ? "on hold" : `on hold for ${held.length === 1 ? "its" : "their"} scan`;
-  const parts = [reading.length ? `${reading.length} ${reading.length === 1 ? "is" : "are"} still being read (${reading.map((d) => d.name).join(", ")})` : null,
-    held.length ? `${held.length} ${held.length === 1 ? "is" : "are"} ${heldWords} (${held.map((d) => d.name).join(", ")})` : null,
-    bad.length ? `${bad.length} could not be read (${bad.map((d) => d.name).join(", ")})` : null].filter(Boolean);
+  const parts = [reading.length ? `${reading.length} ${reading.length === 1 ? "is" : "are"} still being read (${reading.map((d) => fileTitle(household, d)).join(", ")})` : null,
+    held.length ? `${held.length} ${held.length === 1 ? "is" : "are"} ${heldWords} (${held.map((d) => fileTitle(household, d)).join(", ")})` : null,
+    bad.length ? `${bad.length} could not be read (${bad.map((d) => fileTitle(household, d)).join(", ")})` : null].filter(Boolean);
   // Each failed file's reason and next step, said once for the files that share them (the same kind of failure).
   const why = new Map<string, string[]>();
-  for (const d of bad) { const f = told.has(household.documents.indexOf(d)) ? null : failureAdvice(d); if (f) { const key = `${f.why}\u0000${f.step}`; why.set(key, [...(why.get(key) ?? []), d.name]); } }
+  for (const d of bad) { const f = told.has(household.documents.indexOf(d)) ? null : failureAdvice(d); if (f) { const key = `${f.why}\u0000${f.step}`; why.set(key, [...(why.get(key) ?? []), fileTitle(household, d)]); } }
   const reasons = [...why].map(([key, names]) => { const [w, step] = key.split("\u0000");
     return names.length === 1 ? ` ${names[0]}: ${sentence(w)}. ${step}` : ` ${names.slice(0, -1).join(", ")} and ${names.at(-1)}: for each, ${w}. ${step}`; });
   return `Of your ${n} uploaded files, ${read} ${read === 1 ? "was" : "were"} read${parts.length ? `${parts.length > 1 ? `, ${parts.slice(0, -1).join(", ")} and ` : " and "}${parts.at(-1)}` : ""}.${reasons.join("")}`;
@@ -3411,6 +3502,10 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
       checked.push(point); filePoints.push(point); aboutFiles.add(di);
     });
   }
+  report.filesListed = [...new Set(filePoints.map((c) => household.documents[c.libraryDoc!].policyId))];
+  // With every file not read in full listed from the record, the model's own count of them goes from the bottom line: one
+  // answer never gives two counts (post-#539 check, live f954eb2: the lead said "Two", the list below named four).
+  const recordListsAll = aboutLibrary(written[0] ?? "") && READ_STATUS.test(written[0] ?? "") && filePoints.length > 0;
   if (aboutLibrary(written[0] ?? "") && filePoints.length) {
     const listed = new Set(checked.flatMap((c) => (c.libraryPerson ? [c.libraryPerson] : [])));
     const texts = libraryGroups(household, filePoints.map((c) => household.documents[c.libraryDoc!]), listed);
@@ -3520,7 +3615,8 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
     const gid = groupOf.get(c);
     statements.push({
       id: `s${i + 1}`, kind, text, fullText: text, personName: c.person, amount: c.amount ? { text: c.amount.text, currencyResolved: c.amount.currencyResolved, illustration: c.amount.illustration } : null,
-      basis: c.amount?.illustration && c.s.percentOf ? basisOf(household, c) : c.whole ?? null,
+      // A currency taken from the household's settings says so on its card, as Home and Coverage do.
+      basis: c.amount?.illustration && c.s.percentOf ? basisOf(household, c) : c.whole ?? (c.amount?.fromSettings ? HOUSEHOLD_CURRENCY_NOTE : null),
       conditions, asOf: c.base?.asOf ?? null, source, group: gid ? { id: gid, kind: "either_or", note: ALTERNATIVES_NOTE } : null,
     });
     if (c.stay) {
@@ -3597,6 +3693,7 @@ export function verifyAnswer(household: Household, model: ModelAnswer, written: 
   // is not an amount stays in the report only: a line saying a point was left out tells the household nothing they can use.
   if (report.dropped.some((d) => d.kind === "amount")) statements.push({ id: "left-out-amount", kind: "uncertainty", text: LEFT_OUT_AMOUNT, fullText: LEFT_OUT_AMOUNT, conditions: [] });
   let bottomLine = library(withoutMoney(withoutQuestions(model.bottomLine, report.questionsLeftOut), report.sentencesLeftOut, read));
+  if (recordListsAll) bottomLine = withoutFileCounts(bottomLine, report.sentencesLeftOut);
   const labelled = labelledNumbersRead(citations);
   const nextSteps = model.nextSteps.map((x) => withoutMoney(withoutQuestions(x, report.questionsLeftOut), report.sentencesLeftOut, (t) => read(labelled(t)))).filter(Boolean);
   // One question back at most: the first one the model asks; any further question is left out.
@@ -3665,6 +3762,20 @@ function readPastWords(d: HouseholdDocument, tableStates: ReadonlyMap<string, st
 /** A person's documents: linked to them, or uploaded for them (or for no one) and linked to no one. */
 const ownedBy = (d: HouseholdDocument, person: string) =>
   d.linkedPeople.some((p) => baseName(p) === person) || (!d.linkedPeople.length && (!d.uploadedFor || baseName(d.uploadedFor) === person));
+/** A sentence that counts the files not read in full ("Two of his documents are not fully read"). */
+// Any count of files that says anything about reading them: "could not be read", "haven't been fully read", "are
+// unreadable", "are still being read", "Two of Mary's documents…" (Critic #546 MED-2). A count of policies that says
+// nothing about reading ("three policies with death cover") is not one.
+const FILE_COUNT = new RegExp(`\\b(?:${COUNT_WORDS.join("|")}|\\d+|both|all)\\b(?:\\s+[\\w'’-]+){0,4}?\\s+(?:documents?|files?|policies|uploads?)\\b[^.!?]*?\\b(?:read|unread|unreadable|reading|on hold)\\b`, "i");
+/** The bottom line without its sentences counting files not read in full, which are reported. */
+function withoutFileCounts(text: string, dropped: string[]): string {
+  const all = sentences(text);
+  const kept = all.filter((x) => !FILE_COUNT.test(x));
+  if (kept.length === all.length) return text;
+  dropped.push(...all.filter((x) => FILE_COUNT.test(x)));
+  return kept.join(" ");
+}
+
 /** "A", "A and B", "A, B and C". */
 const andList = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 
@@ -3680,7 +3791,7 @@ const andList = (xs: string[]) => xs.length < 2 ? xs.join("") : `${xs.slice(0, -
  * `tableStates`: each document's benefit-table state (policy id to state), when the table is on; `charged`: the premium
  * rows' labels (RowReport.premiumLabels). Returns the sentence added, or null. A note an earlier turn gave, which the model
  * may repeat from the history it is sent, is taken out first (TE #402): this turn's note (or none) is the one that holds. */
-export function noteCoverNotCounted(answer: StructuredAnswer, household: Household, tableStates: ReadonlyMap<string, string> | null = null, charged: ReadonlySet<string> = new Set()): string | null {
+export function noteCoverNotCounted(answer: StructuredAnswer, household: Household, tableStates: ReadonlyMap<string, string> | null = null, charged: ReadonlySet<string> = new Set(), listed: ReadonlySet<string> = new Set()): string | null {
   // A premium is charged, never claimed: an answer whose every amount is a premium row's own card is not about cover.
   const amounts = (answer.statements ?? []).filter((s) => s.amount && !charged.has(s.text));
   // Today's wording is taken out only from an answer this turn's note speaks for (one with amounts): with no amounts it is
@@ -3702,7 +3813,9 @@ export function noteCoverNotCounted(answer: StructuredAnswer, household: Househo
   const sayWho = named.length > 0 && !people.includes(null);
   const docs = sayWho ? candidates.filter((d) => named.some((p) => ownedBy(d, p))) : candidates;
   // Not read in full: not read, still being read, on hold, read only in part, or pages its benefits were read past.
-  const notFull = docs.filter((d) => !!readPastWords(d, tableStates) || !!notCountedWhy(d, tableStates));
+  // A file the answer's own points already name from the record (`listed`, VerifyReport.filesListed) is not counted again:
+  // one answer never gives two counts (post-#539 check, live f954eb2: a list of four, then "Three documents…").
+  const notFull = docs.filter((d) => !listed.has(d.policyId) && (!!readPastWords(d, tableStates) || !!notCountedWhy(d, tableStates)));
   if (!notFull.length) return null;
   const waiting = notFull.every((d) => stillReading(d) || onHold(d) || ["waiting", "held"].includes(tableStates?.get(d.policyId) ?? ""));
   // A document is named only by the product it is: a file name never is. Any without one makes the line a count.

@@ -160,3 +160,26 @@ export function tablesFromPrintedRows(statements: AnswerStatement[], household: 
   }
   return statements.flatMap((s) => replaced.has(s) ? (replaced.get(s) ? [replaced.get(s)!] : []) : [s]);
 }
+
+/** A leftover `<document> prints: “…”` point that is neither a printed row (tabled above, or kept as quoted when it
+ * cannot be placed: TE1 #505 F1) nor a whole sentence: a fragment cut mid-sentence ("…will be the higher of:") or a
+ * bare label ("As of 06/10/2022") says nothing a household can use on its own (live f954eb2, post-#539 check, ask 8).
+ * Its card and source stay wherever another point cites them. Returns the points' texts taken out. In place. */
+export function dropQuoteFragments(answer: { statements?: AnswerStatement[] }): string[] {
+  const removed: string[] = [];
+  if (!answer.statements) return removed;
+  answer.statements = answer.statements.filter((st) => {
+    if (st.amount || st.table || (st.conditions ?? []).length) return true;
+    const m = PRINTS.exec(st.text.trim());
+    if (!m) return true;
+    const quote = m[2].trim();
+    const row = quote.split(/\r?\n/).some((l) => isDataRow(cellsOf(l)));
+    // A whole sentence, however short ("Cosmetic surgery is not covered."), stays: it starts with a capital or runs to six
+    // words, and ends as a sentence does (Critic #546 LOW-3).
+    const sentence = /[.!?][)”"’]?$/.test(quote) && (/^[“"‘(]?\p{Lu}/u.test(quote) || quote.split(/\s+/).length >= 6);
+    if (row || sentence) return true;
+    removed.push(st.text);
+    return false;
+  });
+  return removed;
+}

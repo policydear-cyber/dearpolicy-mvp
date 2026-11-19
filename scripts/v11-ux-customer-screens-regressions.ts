@@ -41,13 +41,13 @@ function walk(dir: string): string[] {
   });
 }
 /** Household-facing UI source: every page and component under app/ except
- * the operator and reviewer areas and API routes, plus the shell. The privacy
+ * the operator, reviewer and admin (app/admin, allow-listed staff only; scripts/admin/console-test.ts) areas and API routes, plus the shell. The privacy
  * notice is left out on purpose: the law asks it to name the services that
  * receive a household's information (the model provider, the database), which
  * this test rightly keeps off every working screen. Its own test is
  * scripts/privacy/notice-test.ts. */
 const CUSTOMER_FILES = [
-  ...walk("app").filter((f) => f.endsWith(".tsx") && !/^app[\\/](operator|reviewer|api)[\\/]/.test(f) && !/^app[\\/]privacy[\\/]page\.tsx$/.test(f)),
+  ...walk("app").filter((f) => f.endsWith(".tsx") && !/^app[\\/](operator|reviewer|admin|api)[\\/]/.test(f) && !/^app[\\/]privacy[\\/]page\.tsx$/.test(f)),
   "components/AppShell.tsx",
 ];
 /** The text a person can read: string literals, template literals and JSX
@@ -183,7 +183,8 @@ test("Plan usage page: allowance only, no infrastructure", () => {
   const usage = read("app/usage/page.tsx");
   const text = visibleText(usage);
   assert.ok(!/model|token|routing|hard stop|cost|\$/i.test(text.replace(/\$\{/g, "")), "no model, token, routing or cost text");
-  assert.match(usage, /includedChatTurns/);
+  // The household's own plan (Free, Plus or Family; lib/plans/catalogue.ts): its question allowance is shown.
+  assert.match(usage, /questionsPerMonth/);
   // Plan usage is reached from the Account settings tabs (Household, People, Plan usage).
   assert.match(read("components/account-tabs.tsx"), /\bhref\s*:\s*(["'`])\/usage\1/);
   assert.match(read("app/household/page.tsx"), /<AccountTabs/);

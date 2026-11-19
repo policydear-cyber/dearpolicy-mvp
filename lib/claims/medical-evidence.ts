@@ -13,6 +13,7 @@
  * as `needs_document` with no amount, exactly like an unresolved CI or
  * death-benefit coverage does.
  */
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { canonicalProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
@@ -269,7 +270,7 @@ export function resolveMedicalEvidence(coverages: OwnedCoverage[], rows: Medical
       const found = findMedicalRules(pages);
       if (!found.cash.length && !found.reimbursement.length) continue;
       const citationFor = (page: number, pageEnd: number, label: string): ClaimEvidence => ({
-        chunkId: `page:${first.policy_id}:${page}`, policyId: first.policy_id, policyName: first.product_name ?? first.original_filename,
+        chunkId: `page:${first.policy_id}:${page}`, policyId: first.policy_id, policyName: first.product_name ?? documentCardTitle({ product_name: null, original_filename: first.original_filename, insurer: first.insurer, document_role: first.document_role }),
         insurer: first.insurer ?? undefined, pageStart: page, pageEnd, documentRole: first.document_role,
         personalEvidence: false, evidenceLabel: label,
       });

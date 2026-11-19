@@ -22,14 +22,16 @@ import { simpleChatModel } from "./flag";
 import { appHelp } from "./app-help";
 import { loadHousehold, renderLibrary, spouseMeant, type Household } from "./library";
 import { LIBRARY_CACHE_WRITE_RATE, ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
-import { answerAsText, NO_ANSWER, NOTHING_SHOWN, noteCoverNotCounted, readModelAnswer, sentences as sentencesOf, verifyAnswer, type VerifyReport } from "./verify";
+import { aboutLibrary, answerAsText, NO_ANSWER, NOTHING_SHOWN, noteCoverNotCounted, readModelAnswer, sentences as sentencesOf, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
 import { randomUUID } from "node:crypto";
 import { SUPERSEDED_NOTICE, supersededAnswerIds } from "@/lib/chat/stale-answers";
 import { resolveSubjects, subjectsNote, supersededBy, unknownPersonAnswer, type Subjects } from "./subjects";
 import { docLabel, matchMember, membersNamedIn } from "./verify";
 import { declutterAnswer } from "./declutter";
-import { tablesFromPrintedRows } from "./printed-table";
+import { dropQuoteFragments, tablesFromPrintedRows } from "./printed-table";
+import { listFromBottomLine } from "./lead-list";
+import { NO_COVER_READING_ROLES } from "@/lib/documents/messy";
 import { contactsHelp, insurerContactsFor } from "./insurer-contacts";
 import { amountsFromRows, withheldRows, asksForNobody, namesSomeone, printedDay, chatRows, dropAgreeingDayRules, dropConditionsOnCards, dropAmountPointers, dropPeopleShutOut, dropQuotePointers, keepLabelledAmounts, noteLeftOutAmounts, noteNarrowedPages, pagesToSend, renderTable, type RowReport } from "@/lib/benefit-table/chat";
 
@@ -418,7 +420,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     // And what the checks built (an owner's label, a card) for anyone the turn is not about goes too.
     report.sentencesLeftOut.push(...keepAnswerToSubjects(answer, subjects, household));
     // Amounts shown while some of that person's documents gave nothing: never read as the person's whole cover.
-    noteCoverNotCounted(answer, household, live?.states ?? null, new Set(fromRows.report?.premiumLabels ?? []));
+    noteCoverNotCounted(answer, household, live?.states ?? null, new Set(fromRows.report?.premiumLabels ?? []), new Set(report.filesListed ?? []));
     // Points were given, none survived the checks, and the bottom line introduces them: the answer says so, never a bare
     // introduction to nothing. A bottom line that answers on its own stands alone (live run 23 Oct, E2).
     if (parsed?.statements.length && !(answer.statements ?? []).length && INTRODUCES.test(answer.bottomLine ?? answer.summary ?? "")) answer.statements = [{ id: "nothing-shown", kind: "uncertainty", text: NOTHING_SHOWN, fullText: NOTHING_SHOWN, conditions: [] }];
@@ -464,7 +466,15 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   // they left out stays in the turn's report).
   // Rows of a printed figures table are shown as a table, not as quoted strings.
   if (answer.statements) answer.statements = tablesFromPrintedRows(answer.statements, household, (d) => docLabel(household, d));
+  const fragments = dropQuoteFragments(answer);
+  report.sentencesLeftOut.push(...fragments);
+  // Every point was a cut-off quote and the bottom line introduces them: the answer says nothing was shown, never a bare
+  // introduction to nothing (Critic #546 LOW-3; the same rule as after the checks).
+  if (fragments.length && !(answer.statements ?? []).length && INTRODUCES.test(answer.bottomLine ?? answer.summary ?? "")) answer.statements = [{ id: "nothing-shown", kind: "uncertainty", text: NOTHING_SHOWN, fullText: NOTHING_SHOWN, conditions: [] }];
   report.sentencesLeftOut.push(...declutterAnswer(answer));
+  // An overview's bottom line that names three or more things becomes its subject and a list (DC, 18 Nov 2026).
+  report.sentencesLeftOut.push(...listFromBottomLine(answer, { names: household.members.map((m) => m.name), aboutDocuments: aboutLibrary(message),
+    products: household.documents.filter((d) => !d.supersededAt && !NO_COVER_READING_ROLES.includes(d.documentRole ?? "")).map((d) => d.productName ?? "") }));
   // How to reach the insurer, as the household's own documents print it, when the answer gives next steps or is about
   // claiming. Read by the server from the stored pages; never the model's words.
   if (reply.model !== "no-documents" && reply.model !== "unknown-person" && contactsHelp(answer, message)) {
