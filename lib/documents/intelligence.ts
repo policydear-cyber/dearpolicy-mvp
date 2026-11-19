@@ -104,23 +104,39 @@ const FORM_FIELD = String.raw`date of birth|nric|fin|passport|nationality|gender
  * A value is a name only when it is the whole cell, holds no colon (a blank field runs into the next label), is no
  * instruction ("please print", "must match") and no stand-in ("John Doe", "sample"). Lower-case text; closed lists. */
 function formNamed(t: string): boolean {
-  for (const line of t.split("\n")) {
+  return formNames(t).length > 0;
+}
+
+/** The names a form prints, line by line (formNamed's rule): each whole name, and each line's family name joined to its
+ * given name. Lower-case. One family and one given name per line, else that line's parts name no one. */
+export function formNames(text: string): string[] {
+  const out: string[] = [];
+  for (const line of text.toLowerCase().split("\n")) {
     const cells = line.split(/\t+| {2,}/).map((c) => c.trim()).filter(Boolean);
-    let family = false, given = false;
+    const family: string[] = [], given: string[] = [];
     for (let i = 0; i < cells.length; i++) {
       const m = /^(.*?)\s*:\s*(.*)$/.exec(cells[i]);
       if (!m) continue;
       // A note on the label ("Full Name (as in passport)") is not part of it.
       const label = m[1].replace(/\s*\([^)]*\)$/, ""), value = m[2] || (cells[i + 1] && !cells[i + 1].includes(":") ? cells[i + 1] : "");
       if (!FORM_NAME_VALUE.test(value) || STAND_IN.test(value)) continue;
-      if (WHOLE_NAME_LABEL.test(label) && value.split(/[\s,]+/).filter(Boolean).length >= 2) return true;
-      if (FAMILY_LABEL.test(label)) family = true;
-      if (GIVEN_LABEL.test(label)) given = true;
+      if (WHOLE_NAME_LABEL.test(label) && value.split(/[\s,]+/).filter(Boolean).length >= 2) out.push(value);
+      if (FAMILY_LABEL.test(label)) family.push(value);
+      if (GIVEN_LABEL.test(label)) given.push(value);
     }
-    if (family && given) return true;
+    if (family.length === 1 && given.length === 1) out.push(`${given[0]} ${family[0]}`);
   }
-  return false;
+  return out;
 }
+
+/** Is this person's name printed as one of the form's names (formNames): the same words, in any order ("Tan Mei Ling"
+ * for "Family Name: Tan  Given Name: Mei Ling"), never words gathered from other fields or other people (TE #561). */
+export function formNamePrinted(text: string, name: string): boolean {
+  const words = (n: string) => n.normalize("NFKC").toLowerCase().split(/[^\p{L}\p{M}\p{N}/]+/u).filter(Boolean).sort().join(" ");
+  const wanted = words(name);
+  return !!wanted && formNames(text).some((n) => words(n) === wanted);
+}
+
 const WHOLE_NAME_LABEL = /^(?:full name|(?:insured|traveller|traveler|applicant|proposer|policy ?holder)(?:'s)? (?:full )?name|name of (?:the )?(?:insured|policy ?holder|policy owner|proposer|applicant|traveller|traveler|life assured))$/;
 const FAMILY_LABEL = /^(?:family name|surname|last name)$/;
 const GIVEN_LABEL = /^(?:given names?|first names?)$/;

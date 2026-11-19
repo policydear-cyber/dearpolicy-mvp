@@ -171,6 +171,11 @@ async function main() {
     assert.equal(ok("Full name: Ana Maria Rivera", "Ana Maria Rivera"), true, "unchanged: the whole name");
     assert.equal(ok("Family Name: Rivera\nGiven Name: Ana Maria", "Ana Maria Rivera"), false, "a name split over two lines is not proof");
     assert.equal(ok("Family Name:\tRivera\tGiven Name:\tAna", "Ana Maria Rivera"), false, "every part of the name must be printed");
+    // Words gathered from other fields or other people never make a name (TE #561 V3, V4, V4b).
+    assert.equal(ok("Family Name: Tan    Given Name: Mei Ling    Emergency contact: Wei", "Wei Tan"), false);
+    assert.equal(ok("Full name: Mei Ling Tan    Full name: Wei Lim", "Wei Tan"), false);
+    assert.equal(ok("Insured persons: Mei Ling Tan, Wei Lim", "Wei Tan"), false);
+    assert.equal(ok("Family Name: Tan    Given Name: Mei Ling    Emergency contact: Wei", "Mei Ling Tan"), true, "the form's own name still verifies");
   });
   await t("3 control: a generic summary with no printed policy number stays reference", () => {
     const generic = doc("Travel insurance summary of benefits\nThe policyholder is the person named in the schedule. Policy number means the number on your schedule.\nTerms and conditions apply. Please read the policy wording.");
