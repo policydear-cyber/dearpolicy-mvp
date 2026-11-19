@@ -266,7 +266,7 @@ test.describe.serial("V1.1 release journey", () => {
       let ownerAction = "none";
       if (!linked && r.p) {
         await owner.goto("/policies");
-        const card = owner.locator(".document-card").filter({ hasText: r.p.product_name ?? r.p.original_filename }).first();
+        const card = owner.locator(`.document-card[data-policy-id="${r.p.id}"]`);
         // PR #77: open the one-line "Covers" picker first ("Choose" when nobody is linked yet). Was: the chips were shown open.
         const opener = card.getByTestId("covers-picker").getByRole("button", { name: /^(?:Change|Choose)$/ });
         // The card renders after the page loads; wait for its picker line before deciding it is already open.
@@ -451,7 +451,7 @@ test.describe.serial("V1.1 release journey", () => {
     await timed("delete AccidentGuard-M", async () => {
       await owner.goto("/policies");
       const p = (await policies(owner)).find((x) => x.id === ids["policy:accidentMarcus"]);
-      const card = owner.locator(".document-card").filter({ hasText: p?.product_name ?? `${PREFIX}-AccidentGuard-M` }).first();
+      const card = owner.locator(`.document-card[data-policy-id="${ids["policy:accidentMarcus"]}"]`);
       await card.getByRole("button", { name: "Delete" }).click();
       await card.getByRole("button", { name: "Confirm delete" }).click();
       await expect(owner.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/, { timeout: 60_000 });

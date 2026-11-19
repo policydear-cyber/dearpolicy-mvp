@@ -32,8 +32,8 @@ for (const width of [375, 1280]) test(`Preview opens the file at ${width}px`, as
   await page.goto("/policies");
   const named = page.locator(".document-card", { hasText: "Shield Summary" });
   await expect(named).toBeVisible();
-  // The file name the person knows it by, under the title DearPolicy read.
-  await expect(named.locator(".document-file")).toHaveText("a8f3c1_20261020_0932.pdf");
+  // The title DearPolicy read, never the upload's file name (DC 18 Nov: no file names).
+  await expect(named).not.toContainText("a8f3c1_20261020_0932");
   const preview = named.getByRole("link", { name: "Preview Shield Summary" });
   await expect(preview).toHaveAttribute("href", "/api/policies/11111111-0000-4000-8000-000000000001/file");
   await expect(preview).toHaveAttribute("target", "_blank");
@@ -41,19 +41,19 @@ for (const width of [375, 1280]) test(`Preview opens the file at ${width}px`, as
   const box = (await preview.boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(32);
 
-  const word = page.locator(".document-card", { hasText: "Benefits table.docx" });
+  const word = page.locator('.document-card[data-policy-id="11111111-0000-4000-8000-000000000002"]');
   await expect(word.getByRole("link", { name: /^Download/ })).toHaveAttribute("href", "/api/policies/11111111-0000-4000-8000-000000000002/file");
-  // A file name a person chose is the title, made readable; the file name itself stays as the small line.
+  // A file name a person chose is the title, made readable; the file name itself is not shown.
   await expect(word.locator(".document-title strong")).toHaveText("Benefits table");
-  await expect(word.locator(".document-file")).toHaveText("Benefits table.docx");
+  await expect(word).not.toContainText("Benefits table.docx");
 
   // A long file name used as the title wraps inside its card instead of widening a phone screen.
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 
-  const scanning = page.locator(".document-card", { hasText: "scan_0007.pdf" });
+  const scanning = page.locator('.document-card[data-policy-id="11111111-0000-4000-8000-000000000003"]');
   await expect(scanning).toBeVisible();
   // A machine-made file name is never the title, even while the file is still being scanned: what it is instead.
   await expect(scanning.locator(".document-title strong")).toHaveText("Certificate");
-  await expect(scanning.locator(".document-file")).toHaveText("scan_0007.pdf");
+  await expect(scanning).not.toContainText("scan_0007");
   await expect(scanning.getByRole("link", { name: /Preview|Download/ })).toHaveCount(0);
 });

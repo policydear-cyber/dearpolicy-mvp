@@ -32,6 +32,11 @@ type Extraction = { id: string; extracted_fields: ExtractedFields; reviewed_fiel
 type EvidenceDoc = { id: string; document_type: string; original_filename: string; status: string; scan_status: string; identity_status: string; processing_error_code: string | null; created_at: string; extraction: Extraction | null;
   /** Server-computed policy-definition review status; never who reviewed or why. */
   reviewStatus?: HouseholdReviewStatus | null };
+/** A claim document as the household knows it: what it is and the day it was uploaded, never its file name (DC 18 Nov). */
+const evidenceName = (doc: Pick<EvidenceDoc, "document_type" | "created_at">) => {
+  const day = maybeSgDate(doc.created_at);
+  return `${documentTypeLabel(doc.document_type)}${day ? ` (uploaded ${day})` : ""}`;
+};
 
 const NON_TERMINAL = new Set(["uploaded", "quarantined", "processing", "extracted"]);
 
@@ -179,7 +184,7 @@ export default function ClaimEvidencePage() {
       const res = await fetch(`/api/claims/evidence/${doc.id}?${query}`, { method: "DELETE", headers: { "Idempotency-Key": `delete:${doc.id}` } });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || "This document couldn't be deleted. Try again.");
-      setNotice(`${doc.original_filename} was deleted. Anything estimated from it has been removed.`);
+      setNotice(`${evidenceName(doc)} was deleted. Anything estimated from it has been removed.`);
       setConfirmDeleteId(null);
       await load();
     } catch (err) {
@@ -208,7 +213,7 @@ export default function ClaimEvidencePage() {
             <strong>Documents to upload <span className="muted">{left ? `${left} of ${items.length} still needed` : "All uploaded"}</span></strong>
             <ul>{items.map(({ text, sent }) => <li key={text} className={sent ? "sent" : ""}>
               <span className="claim-needed-mark" aria-hidden="true">{sent ? "✓" : ""}</span>
-              <span className="claim-needed-text">{text}{sent ? <small>Uploaded: {sent.original_filename}</small> : <small>Still needed</small>}</span>
+              <span className="claim-needed-text">{text}{sent ? <small>Uploaded: {evidenceName(sent)}</small> : <small>Still needed</small>}</span>
               {!sent && <button type="button" className="button secondary compact" onClick={() => startUpload(text)} aria-label={`Upload ${text}`}>Upload</button>}
             </li>)}</ul>
           </div>;
@@ -266,8 +271,7 @@ export default function ClaimEvidencePage() {
               {(() => {
                 const display = evidenceStatusDisplay(doc);
                 return (<>
-                  <strong>{doc.original_filename}</strong> <span className={`status ${doc.status}`}>{display.label}</span>{" "}
-                  <span className="status">{documentTypeLabel(doc.document_type)}</span>{" "}
+                  <strong>{evidenceName(doc)}</strong> <span className={`status ${doc.status}`}>{display.label}</span>{" "}
                   <span className="status">{doc.identity_status === "confirmed" ? "Name matches" : doc.identity_status === "mismatch" ? "Name doesn't match this family member" : doc.identity_status === "needs_review" ? "Name needs checking by a DearPolicy reviewer" : "Name not checked yet"}</span>
                   <p><em>{display.detail}</em></p>
                 </>);
@@ -318,7 +322,7 @@ export default function ClaimEvidencePage() {
                   <button className="button secondary compact" onClick={() => handleReject(doc.id)}>Reject document</button>
                 )}
                 <button className="button secondary compact danger" disabled={!!deletingId} onClick={() => handleDelete(doc)}
-                  aria-label={confirmDeleteId === doc.id ? `Confirm delete ${doc.original_filename}` : `Delete ${doc.original_filename}`}>
+                  aria-label={confirmDeleteId === doc.id ? `Confirm delete ${evidenceName(doc)}` : `Delete ${evidenceName(doc)}`}>
                   {deletingId === doc.id ? "Deleting…" : confirmDeleteId === doc.id ? "Confirm delete" : "Delete document"}
                 </button>
                 {confirmDeleteId === doc.id && !deletingId && (

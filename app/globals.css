@@ -424,7 +424,6 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .document-title strong { font-size: var(--fs-md); overflow-wrap: anywhere; }
 .document-title span { font-size: var(--fs-xs); color: var(--muted); }
 /* The stored file name, under the title DearPolicy read from it: what the person sees in their own files. */
-.document-title .document-file { font-size: var(--fs-xs); color: var(--muted); overflow-wrap: anywhere; }
 .document-for, .document-found, .document-names { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
 .document-for b, .document-found b { color: var(--ink); margin-right: 4px; }
 .document-found.warn { color: var(--warn-text); }

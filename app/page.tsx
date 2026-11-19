@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect,useMemo,useRef,useState } from "react";
 import { customerError } from "@/components/customer-text";
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { HomeAsk, HomeAttention } from "@/components/home-attention";
 import { HomeNotFound, homeGaps } from "@/components/home-not-found";
 import { homeView } from "@/lib/format/home-view";
@@ -107,7 +108,7 @@ export default function DashboardPage(){
    <p className="muted">Covers more than one person, like a group booklet? <Link href="/policies" className="text-link">Choose everyone it covers on the Documents page →</Link></p>
    {claimError&&<div className="alert error" role="alert">{claimError}</div>}
    <div className="unclaimed-list">{data.unclaimed.map(doc=><div className="unclaimed-row" key={doc.id}>
-    <div><strong>{doc.product_name??doc.original_filename}</strong><span>{[doc.insurer,(doc.document_role??"").replaceAll("_"," ")].filter(Boolean).join(" · ")||doc.original_filename}</span></div>
+    <div><strong>{documentCardTitle(doc)}</strong><span>{[doc.insurer,(doc.document_role??"").replaceAll("_"," ")].filter(Boolean).join(" · ")}</span></div>
     <div className="declare-owner">{data.family.map(m=><button key={m.id} type="button" className="button secondary" disabled={claiming===doc.id} onClick={()=>void claim(doc.id,m.id)}>{m.display_name}</button>)}</div>
    </div>)}</div></section>}
   {returning&&<HomeAttention/>}

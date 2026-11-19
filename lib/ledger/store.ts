@@ -533,7 +533,7 @@ export async function ledgerAlternatives(accountId:string,people:ClaimPerson[]):
   const documentIds=[...new Set(inventory.contracts.flatMap(c=>[...c.documents,...c.references].map(d=>d.id)))];
   if(!documentIds.length)return out;
   const catalog=await loadBenefitCatalog(accountId,documentIds).catch(()=>[] as CatalogBenefit[]);
-  const names=new Map(inventory.contracts.flatMap(c=>[...c.documents,...c.references]).map(d=>[d.id,d.product_name??d.original_filename]));
+  const names=new Map(inventory.contracts.flatMap(c=>[...c.documents,...c.references]).map(d=>[d.id,documentName(d)]));
   for(const contract of inventory.contracts){
     const docs=new Set([...contract.documents,...contract.references].map(d=>d.id));
     const groups=amountAlternatives(contract,catalog.filter(b=>docs.has(b.policyId)),id=>names.get(id)??"Your document");
