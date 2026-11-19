@@ -13,6 +13,10 @@ const cases: [string, string | null][] = [
   ["Orchid Life\nRE: POLICY LAPSE\nDear Sir", "Policy Lapse"],
   ["PATIENT TAN AH KOW BILL\nTAX INVOICE", "Tax Invoice"],
   ["UNTITLED DOCUMENT\nSTRICTLY CONFIDENTIAL\nTI-IE GREAT EASTEIRN LIFE\nJURONG WEST STREET", null],
+  ["NOTICE TO MR CHUA BOON HUAT\nDear Sir", null],
+  ["PAYMENT ADVICE FOR CHUA BOON HUAT", "Payment Advice"],
+  ["LEE AH LIAN'S CLAIM\nBill To\nPayment Due Date\nStatement for Lee Ah Lian", null],
+  ["Bill To\nPayment Due Date\nClaim Reference\nYour Claim", null],
   ["CLAIMS DEPARTMENT\nPAYMENT SERVICES UNIT\nCLAIM DECISION\nDear Sir", "Claim Decision"],
 ];
 let failed = 0;

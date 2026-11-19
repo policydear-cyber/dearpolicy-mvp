@@ -15,7 +15,14 @@ export function headingIn(pageText: string, insurer: string | null = null): stri
   for (const raw of lines) {
     // "RE: POLICY LAPSE" is a heading after its "Re:"; a Title Case line ("Confirmation of Reinstatement") is read as capitals.
     const re = raw.replace(/^RE\s*:\s*/i, "");
-    const l = /^(?:[A-Z][a-z'’]*|of|and|the|for|to|in|on|a|an)(?:\s+(?:[A-Z][a-z'’]*|of|and|the|for|to|in|on|a|an))+$/.test(re) ? re.toUpperCase() : re;
+    const titleCase = /^(?:[A-Z][a-z'’]*|of|and|the|for|to|in|on|a|an)(?:\s+(?:[A-Z][a-z'’]*|of|and|the|for|to|in|on|a|an))+$/.test(re);
+    // A heading names the paper only: what follows "to"/"for" is who it is addressed to ("Notice to Mr …"), and a Title
+    // Case line counts only when the paper word ends it, so a field label ("Bill To", "Payment Due Date") is not read as
+    // one (TE #564 L-H1b, L-H3). A possessive ("<name>'s Claim") is a person's, never the paper's kind.
+    const upper = (titleCase ? re.toUpperCase() : re).replace(/\s+(?:TO|FOR)\b.*$/, "").trim();
+    if (titleCase && !new RegExp(DOCUMENT_WORD.source + "$").test(upper)) continue;
+    if (/['’]S\b|^(?:YOUR|OUR|MY)\b/.test(upper)) continue;
+    const l = upper;
     if (!/^[A-Z][A-Z&'’ -]+[A-Z]$/.test(l) || /\d/.test(l)) continue;
     const words = l.split(/\s+/);
     if (words.length < 2 || words.length > 6 || /^DEAR\b/.test(l) || (own && (own.includes(l) || l.includes(own)))) continue;
