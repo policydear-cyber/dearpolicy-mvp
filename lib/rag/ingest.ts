@@ -223,8 +223,8 @@ export function verifyExtractionEvidence(extraction: PolicyExtraction, pages: { 
         const needle = coverage.evidenceText ? normalizeEvidence(coverage.evidenceText) : "";
         const nameNeedle = normalizeEvidence(person.name);
         const evidenceVerified = Boolean(hay && needle.length >= 3 && evidenceMatches(hay, coverage.evidenceText ?? "")
-          // The whole name, or exactly the name a form prints in its own fields ("Family Name: Tan <tab> Given Name: Mei
-          // Ling"): the same words, never a part of a longer printed name or words from other fields or people (TE #561).
+          // The whole name, or exactly the name a form prints in its own fields ("Family Name: <surname> <tab> Given Name:
+          // <given names>"): the same words, never a part of a longer printed name or words from other fields or people (TE #561).
           && (hay.includes(nameNeedle) || formNameExact(rawPages.get(coverage.sourcePage!) ?? "", person.name)));
         return { ...coverage, evidenceVerified };
       }),
@@ -846,7 +846,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // person: that choice is the link (flagged for review below). With
       // several named people nothing is guessed.
       // Never when the printed name may be someone else in the household: every word of it is one of another member's
-      // own ("Mei Ling" uploaded to Arun's profile while Mei Ling Tan is a member; TE #561).
+      // own (a given name alone, uploaded to one member's profile, when another member carries that given name; TE #561).
       if (!match && args.linkUploadMember && extraction.personalCoverageConfirmed && extraction.insuredPeople.length === 1 && !dismissed.has(nameKey(person.name))
         && !family.some((member) => member.id !== args.familyMemberId && onlyTheirWords(person.name, member))) {
         match = family.find((member) => member.id === args.familyMemberId) ?? null;

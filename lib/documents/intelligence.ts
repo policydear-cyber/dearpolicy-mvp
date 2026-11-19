@@ -97,7 +97,7 @@ const ROLE_LABEL = String.raw`policy ?holder|policy owner|insured person|life as
 const FORM_FIELD = String.raw`date of birth|nric|fin|passport|nationality|gender|sex|address|email|e-mail|mobile|phone|contact|occupation|relationship|policy|family name|surname|last name|given names?|first name|full name`;
 
 /** A person named on an application or quote form, for any insurer (#561): a Singlife travel "Quote and Summary of Cover"
- * printed its traveller only as "Family Name: Pang <tab> Given Name: Kiah Pheng, Shaun", so it was taken for generic
+ * printed its traveller only as "Family Name: <surname> <tab> Given Name: <given names>", so it was taken for generic
  * wording and Home showed no travel cover. Counts, read cell by cell (cells split by tabs or wide gaps):
  *  - a whole name after a whole-name label ("Full name", "Traveller's name", "Name of applicant"): two words or more;
  *  - a family name AND a given name, both filled in, on ONE line (a lone given name may be another household member's).
@@ -130,17 +130,17 @@ export function formNames(text: string): string[] {
 }
 
 /** Is this person's name printed in ONE of the form's names (formNames): every word of it in that one name, in any order.
- * A household often keeps a shorter name than the form prints ("Daniel Lim" for "Family Name: Lim  Given Name: Wei Jie,
- * Daniel"), so a part of one printed name counts, as it does on main; words gathered from other fields or other people on
- * the line never do ("Family Name: Tan  Given Name: Mei Ling  Emergency contact: Wei" does not print "Wei Tan"; TE #561).
+ * A household often keeps a shorter name than the form prints (the given name and surname only, for "Family Name:
+ * <surname>  Given Name: <given names>"), so a part of one printed name counts, as it does on main; words gathered from other fields or other people on
+ * the line never do (a surname field, a given-name field and another person's field never make a name from words of each; TE #561).
  * Who the person is stays the household matcher's decision (lib/policies/linking). */
 export function formNamePrinted(text: string, name: string): boolean {
   const wanted = formWords(name);
   return wanted.length > 0 && formNames(text).some((n) => { const w = formWords(n); return wanted.every((x) => w.includes(x)); });
 }
-/** Is this person's name EXACTLY one of the form's names (formNames): the same words, in any order ("Tan Mei Ling" for
- * "Family Name: Tan  Given Name: Mei Ling"). What verifies a figure for a person: a part of a longer printed name never
- * does ("Wei Tan" in "Tan Wei Ling" is another person or a short form; words alone cannot tell, so no figure; TE #561 W1). */
+/** Is this person's name EXACTLY one of the form's names (formNames): the same words, in any order (surname and given
+ * names from one line's two fields). What verifies a figure for a person: a part of a longer printed name never
+ * does (two of three printed words may be another person or a short form; words alone cannot tell, so no figure; TE #561 W1). */
 export function formNameExact(text: string, name: string): boolean {
   const wanted = formWords(name).sort().join(" ");
   return !!wanted && formNames(text).some((n) => formWords(n).sort().join(" ") === wanted);

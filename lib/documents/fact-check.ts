@@ -120,8 +120,8 @@ export function personPrinted(fullText: string, name: string) {
   const wanted = nameKey(name).split(" ").filter((w) => w.length > 1 && !["bin", "binte", "binti", "bte", "s", "o", "d"].includes(w));
   if (!wanted.length || looksLikeInjectedInstruction(name)) return false;
   // On a line of form name fields (lib/documents/intelligence formNames), the words must all come from ONE printed name,
-  // never gathered from other fields or people ("Family Name: Tan  Given Name: Mei Ling  Emergency contact: Wei" never
-  // prints "Wei Tan"; TE #561). The whole name printed anywhere, and lines with no form name field, read as before.
+  // never gathered from other fields or people (a surname field and another person's field on one line never print a
+  // name made of words from each; TE #561). The whole name printed anywhere, and lines with no form name field, read as before.
   if (nameKey(fullText).includes(nameKey(name))) return true;
   return String(fullText ?? "").split("\n").some((line) => {
     if (formNames(line).length) return formNamePrinted(line, name);
