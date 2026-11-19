@@ -75,7 +75,11 @@ export function documentName(doc:{product_name:string|null;original_filename:str
 export function isCodeName(name:string):boolean {const t=name.trim();return !/\s/.test(t)&&/_/.test(t);}
 
 /** A title a PDF tool writes when the author gave none ("(anonymous)", "Untitled", "(no title)"), never a document's name. */
-export function isPlaceholderName(name:string):boolean {return /^[([]?\s*(?:anonymous|untitled(?:\s+document)?|no\s+title|none|null|undefined)\s*[)\]]?$/i.test(name.trim());}
+export function isPlaceholderName(name:string):boolean {
+  // "Microsoft Word - Document1" is Word's own title for an unsaved file; what follows the dash is judged on its own.
+  const t=name.trim().replace(/^microsoft\s+(?:word|excel|powerpoint)\s*-\s*/i,"").replace(/\.(?:pdf|docx?|jpe?g|png)$/i,"").trim();
+  return !/[\p{L}\p{N}]/u.test(t)||/^[([]?\s*(?:anonymous|untitled(?:\s+document)?|no\s+title|none|null|undefined|unknown|n\/?a|document|doc)(?:[\s_-]*\d+)?\s*[)\]]?$/i.test(t);
+}
 
 /** A policy or group number with only its letters and digits, upper-cased, for comparing. */
 export function normalizedIdentifier(value:string|null|undefined){return (value??"").toUpperCase().replace(/[^A-Z0-9]/g,"");}

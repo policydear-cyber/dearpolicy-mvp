@@ -48,11 +48,11 @@ export function battery(): Conversation[] {
     ["What is the deductible after Papa turns 81?", Y(BH, /S\$5,250/)],
     ["Does Papa's rider pay for pro-ration?", Y(BH, /not paid|pro-?ration/i)],
     ["Can Papa use MediSave for the rider premium?", Y(BH, /cash|cannot|can[’']t|not/i)],
-    ["Which upload is Papa's current SilverShield schedule?", Y(BH, [/SilverShield Integrated Plan \(PDF\)|2026/], /\(photo, ending 0417\)”?[^.]{0,40}(?:is|as) (?:the )?current/i)],
-    ["I uploaded Papa's SilverShield schedule twice, a photo and the PDF. Which one do you use?", Y(BH, [/SilverShield Integrated Plan \(PDF\)|PDF/i, /same|duplicate|copy/i])],
+    ["Which upload is Papa's current SilverShield schedule?", Y(BH, [/(?:current one is|answers use) “SilverShield Integrated Plan \(PDF\)”/], /\(photo, ending 0417\)”?[^.]{0,40}(?:is|as) (?:the )?current|_|\.pdf\b|\.png\b|\.jpg\b/i)],
+    ["I uploaded Papa's SilverShield schedule twice, a photo and the PDF. Which one do you use?", Y(BH, [/SilverShield Integrated Plan \(PDF\)|PDF/i, /same|duplicate|copy/i], /_|\.pdf\b|\.png\b|\.jpg\b/)],
     ["Is the photo IMG_20260412_093015.jpg the same as the SilverShield PDF?", Y(BH, /same|duplicate|copy/i)],
-    ["What was Papa's SilverShield premium last year?", Y(BH, [/2025|earlier schedule/], /S\$1,962\.00(?! is unclear)/)],
-    ["What period did the 2025 SilverShield photo cover?", Y(BH, /1 April 2025|31 March 2026/)],
+    ["What was Papa's SilverShield premium last year?", Y(BH, [/“SilverShield Integrated Plan \(photo, ending 0417\)” is an earlier schedule|2025/], /S\$1,962\.00(?! is unclear)|\(PDF\)” is an earlier schedule|_|\.pdf\b|\.png\b|\.jpg\b/)],
+    ["What period did the 2025 SilverShield photo cover?", Y(BH, /1 April 2025|31 March 2026/, /_|\.pdf\b|\.png\b|\.jpg\b/)],
   ]);
   // ---- 2. the insurer's letter: premium increase and rider withdrawn
   qs("letter", KL, [
@@ -193,7 +193,7 @@ export function battery(): Conversation[] {
     ["How many policies did the bundle PDF contain?", Y(null, /three|3/i)],
     ["Which policies were in the Chua_family_policies_bundle.pdf?", Y(null, [/SeniorGuard/, /Heritage Whole Life/, /Wanderer/])],
     ["What were the pages of the CareCash PDF like?", Y(AL, /order/i)],
-    ["Which documents are letters rather than policies?", Y(null, [/\(letter\)|premium/i, /\(claim decision\)|claim/i])],
+    ["Which documents are letters rather than policies?", Y(null, [/\(letter\)|premium/i, /\(claim decision\)|claim/i], /_|\.pdf\b|\.png\b|\.jpg\b/)],
     ["List every document I uploaded for Papa.", Y(BH, [/“SilverShield Integrated Plan \(PDF\)”/, /“SilverShield Integrated Plan \(claim decision\)”/], /_|\.pdf\b|\.png\b|\.jpg\b/)],
     ["Does anyone in the family have critical illness cover?", Y(null, /Golden Years/, /didn[’']t find anything about/)],
     ["Does Papa have critical illness cover?", Y(BH, NOT_FOUND, /Golden Years[^.]{0,40}(?:covers|for) (?:Papa|him|Boon Huat)/i)],
@@ -206,7 +206,7 @@ export function battery(): Conversation[] {
     ["Is Mama's early cancer payout S$12,500?", Y(AL, UNCLEAR)],
     ["Mama's angioplasty cap is S$5,000 right?", Y(AL, UNCLEAR)],
     ["What does the photo of Papa's schedule say the policy year limit is?", Y(BH, /S\$1,000,000|same|duplicate|PDF/i, /S\$1,OOO,OOO|S\$1\b(?![,.\d])/)],
-    ["Was Papa's 2025 premium S$1,962?", Y(BH, /S\$1,962|unclear|2025|\(photo, ending 0417\)/i)],
+    ["Was Papa's 2025 premium S$1,962?", Y(BH, /S\$1,962|unclear|2025|\(photo, ending 0417\)/i, /_|\.pdf\b|\.png\b|\.jpg\b/)],
     ["What's printed on page 2 of Mama's scanned CI policy?", Y(AL, /benefit|critical illness|cancer/i)],
     // Round 10 (integration): rows whose amount the scan prints unclearly are read out too, said to be unclear.
     ["Read me the benefits table on Mama's CI scan", Y(AL, [/cancer|angioplasty|critical illness/i, /Early stage cancer[^\n]{0,80}unclear/i, /Angioplasty[^\n]{0,80}unclear/i])],

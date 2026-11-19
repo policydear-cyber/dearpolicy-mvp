@@ -33,7 +33,11 @@ export function showsFileName(d: FixtureDoc, text: string): boolean {
   if (hasOwnName(asRow(d))) return false;
   const stem = spaced(file.replace(/\.[a-z0-9]{1,5}$/i, "")).trim();
   if (stem.replace(/ /g, "").length < 4 || (!/\d/.test(stem) && stem.split(" ").every((w) => COMMON_STEM.test(w)))) return false;
-  return spaced(text).includes(" " + stem + " ");
+  if (spaced(text).includes(" " + stem + " ")) return true;
+  // With the separators left out ("IMG0042"), or a long digit run taken from the stem ("20241003_153045"): TE #564 L-E.
+  const bare = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  if (bare(stem).length >= 6 && /\d/.test(stem) && bare(text).includes(bare(stem))) return true;
+  return (stem.match(/\d{6,}/g) ?? []).some((run) => text.replace(/[^\d]+/g, " ").split(" ").some((t) => t.length >= 6 && run.includes(t)));
 }
 
 /** The words an answer uses for this document: its product, and its title. Empty for an upload with no name of its own. */
@@ -52,5 +56,16 @@ export function namesDocument(d: FixtureDoc, text: string): boolean {
 /** The sentences of a displayed answer, line by line: a status and the document it is about must be in one sentence, not
  * only on one line (TE #564 L-A: "Photo uploaded 3 Nov 2026 is on file. The letter could not be read." is two). */
 export function sentencesIn(text: string): string[] {
-  return text.split("\n").flatMap((l) => l.split(/(?<=[.!?])\s+(?=[A-Z“"(])/));
+  // Never after an abbreviation or an initial ("Pte. Ltd.", "Dr. Tan", "No. A12", "e.g. The", "J. Lim": TE #564 L-D).
+  const ABBR = /(?:^|[\s(])(?:pte|ltd|co|inc|corp|bhd|sdn|dr|mr|mrs|ms|mdm|st|no|nos|vol|ref|fig|approx|e\.g|i\.e|etc|vs|[A-Za-z])\.$/i;
+  return text.split("\n").flatMap((l) => {
+    const out: string[] = [];
+    let start = 0;
+    for (const m of l.matchAll(/(?<=[.!?])\s+(?=[A-Z“"(])/g)) {
+      if (ABBR.test(l.slice(start, m.index))) continue;
+      out.push(l.slice(start, m.index)); start = m.index! + m[0].length;
+    }
+    out.push(l.slice(start));
+    return out;
+  });
 }

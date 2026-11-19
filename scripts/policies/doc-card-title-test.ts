@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { documentCardTitle, documentLabels } from "@/lib/policies/document-name";
+import { documentCardTitle, documentLabels, isPlaceholderName } from "@/lib/policies/document-name";
 import { documentName } from "@/lib/policies/inventory";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.test(k)) delete process.env[k];
@@ -113,6 +113,8 @@ test("documentLabels: letters and decisions read by kind; placeholder titles are
     d("u", "IMG_0042.pdf", "Untitled", null),
   ], { describeUnnamed: true });
   assert.deepEqual([...m.values()], ["Shield Plan", "Shield Plan (letter)", "Shield Plan (claim decision)", "Novena Final Bill", "PDF uploaded 3 Nov 2026"]);
+  for (const t of ["Untitled-1", "Document1", "Microsoft Word - Document1", "untitled.pdf", "N/A", "-", "Unknown"]) assert.ok(isPlaceholderName(t), t);
+  for (const t of ["Anonymous Benefits Plan", "Untitled Life Plan", "Document Plan", "Shield"]) assert.ok(!isPlaceholderName(t), t);
   assert.equal(documentCardTitle({ product_name: "(anonymous)", original_filename: "IMG_1.pdf", insurer: "Merlion", document_role: "medical_bill" }), "Merlion medical bill");
 });
 

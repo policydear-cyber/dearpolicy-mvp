@@ -80,3 +80,15 @@ Two of these passed on main only because a citation showed the file name `Silver
 earlier schedule and leaves out the unclear amount, and "Was Papa's 2025 premium S$1,962?" leaves out the amount. The
 battery now accepts the 2025 photo's title in place of the file name. Whether that second answer should say more is a
 follow-up, not part of this change.
+
+## TE #564 round on 24e95306
+
+- L-D: the sentence split no longer breaks after an abbreviation or an initial ("Pte. Ltd.", "Dr. Tan", "No. A12",
+  "e.g."), so a correct status line naming an insurer's company form passes C3 and S52C again.
+- L-E: a nameless upload's stem also counts as its file name with its separators left out ("IMG0042"), and a run of 6 or
+  more digits taken from the stem ("20241003") counts too.
+- R1 and R2 (r10 battery): "premium last year" now needs the 2025 photo's own title as the earlier schedule (or 2025) and
+  fails if the PDF is called the earlier schedule; "current schedule" needs the PDF named as the one answers use. Every
+  SilverShield and letters case now also fails if a file name shows.
+- L-F (product): placeholder titles also cover "Untitled-1", "Document1", "Microsoft Word - Document1", "untitled.pdf",
+  "N/A", "-" and "Unknown".
