@@ -4,6 +4,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { loadPolicyInventory } from "@/lib/policies/inventory";
 import { singaporeDay } from "@/lib/benefit-table/dates";
 import { householdPolicyDates, type DatedCover, type PaymentRecord, type PolicyDate } from "@/lib/policies/policy-dates";
+import { normalizedIdentifier } from "@/lib/policies/document-name";
 import type { PersonCover, TableRow } from "@/lib/benefit-table/assemble";
 import { notRenewedKey, notRenewedReady, notRenewedRows } from "@/lib/policies/not-renewed";
 
@@ -15,11 +16,11 @@ export const pageKey = (contractKey: string) => createHash("sha256").update(cont
 type TablePerson = { covers: PersonCover[]; rows: TableRow[] };
 export async function loadPolicyDates(accountId: string, memberId: string | null): Promise<{ memberId: string | null; policies: PolicyDate[]; answersReady: boolean; contractKeys: Map<string, string>;
   /** The person's own benefit-table covers and rows, when the table is live (the Life stages page reads these too). */
-  table: TablePerson | null; name: string | null; dateOfBirth: string | null }> {
+  table: TablePerson | null; name: string | null; displayName: string | null; dateOfBirth: string | null }> {
   const people = (await query<{ id: string; display_name: string; preferred_name: string | null; relationship: string; date_of_birth: string | null }>(
     `SELECT id,display_name,preferred_name,relationship,date_of_birth::text AS date_of_birth FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`, [accountId])).rows;
   const member = people.find((p) => p.id === memberId) ?? (memberId ? undefined : people[0]);
-  if (!member) return { memberId: null, policies: [], answersReady: false, contractKeys: new Map(), table: null, name: null, dateOfBirth: null };
+  if (!member) return { memberId: null, policies: [], answersReady: false, contractKeys: new Map(), table: null, name: null, displayName: null, dateOfBirth: null };
   const inventory = await loadPolicyInventory(accountId, [member]);
   const contracts = inventory.contracts.filter((c) => c.ownerId === member.id);
   // The person's own cover lines and their printed dates, from the benefit table when it is live.
@@ -39,9 +40,17 @@ export async function loadPolicyDates(accountId: string, memberId: string | null
        FROM premium_records pr WHERE pr.account_id=$1 AND (pr.family_member_id IS NULL OR pr.family_member_id=$2)`, [accountId, member.id])).rows;
   const answers = new Set((await notRenewedRows(accountId, [member.id])).map((r) => notRenewedKey(r.contract_key, r.ends_on)));
   const contractKeys = new Map(contracts.map((c) => [pageKey(c.id), c.id]));
-  const policies = householdPolicyDates(contracts, covers, payments, singaporeDay(new Date()), answers).map((p) => ({ ...p, key: pageKey(p.key) }));
+  // A document that prints more than one of the person's policies (a yearly statement, a portfolio summary) can't be
+  // answered for as a whole: "I didn't renew it" would take its other, current policies off Home too (Critic MED-3).
+  const numbersOn = new Map<string, Set<string>>();
+  for (const c of table?.covers ?? []) {
+    const n = normalizedIdentifier(c.policyNumber);
+    if (n) numbersOn.set(c.source.documentId, new Set([...(numbersOn.get(c.source.documentId) ?? []), n]));
+  }
+  const policies = householdPolicyDates(contracts, covers, payments, singaporeDay(new Date()), answers).map((p) => ({ ...p, key: pageKey(p.key),
+    ...(p.documentIds.some((id) => (numbersOn.get(id)?.size ?? 0) > 1) ? { severalPolicies: true } : {}) }));
   return { memberId: member.id, policies, answersReady: await notRenewedReady(), contractKeys, table,
-    name: member.preferred_name?.trim() || member.display_name, dateOfBirth: member.date_of_birth ?? null };
+    name: member.preferred_name?.trim() || member.display_name, displayName: member.display_name, dateOfBirth: member.date_of_birth ?? null };
 }
 
 /** The documents of a person's policies the household said it did not renew (still with no renewal evidence after that

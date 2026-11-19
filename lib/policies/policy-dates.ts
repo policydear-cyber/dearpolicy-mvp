@@ -59,6 +59,8 @@ export type PolicyDate = {
   sooner: { name: string; endsOn: string; endsText: string; ended: boolean }[];
   /** The premium record that shows the policy was renewed after endsOn. `until` only when that record prints a period end. */
   renewal: { paidOn: string | null; paidText: string | null; until: string | null; untilText: string | null; documentId: string | null } | null;
+  /** Set when one of its documents prints more than one of the person's policies: "I didn't renew it" is not offered. */
+  severalPolicies?: boolean;
 };
 
 /** How many days ahead an end date counts as soon (a renewal notice usually comes a month or two before). */
@@ -72,23 +74,31 @@ function sameContract(contract: DatedContract, row: PaymentRecord): boolean {
   if (row.policy_id && ids.has(row.policy_id)) return true;
   const number = normalizedIdentifier(row.policy_number);
   if (!number) return false;
-  const numbers = new Set(contract.documents.flatMap((d) => [normalizedIdentifier(d.policy_number), normalizedIdentifier(d.group_policy_number)]).filter(Boolean));
-  if (!numbers.has(number)) return false;
-  const insurer = canonicalDeathInsurer(contract.insurer);
-  return !insurer || !row.insurer || insurer === canonicalDeathInsurer(row.insurer);
+  const own = new Set(contract.documents.map((d) => normalizedIdentifier(d.policy_number)).filter(Boolean));
+  const group = new Set(contract.documents.map((d) => normalizedIdentifier(d.group_policy_number)).filter(Boolean));
+  // A scheme's group number is shared by every member on it: it counts only for a record that names this person (Critic L2).
+  if (!own.has(number) && !(group.has(number) && row.family_member_id === contract.ownerId)) return false;
+  const insurer = canonicalDeathInsurer(contract.insurer), theirs = canonicalDeathInsurer(row.insurer);
+  if (insurer && theirs) return insurer === theirs;
+  // With an insurer missing on either side, a number alone counts only when it is long enough not to collide (Critic L3).
+  return number.length >= 6;
 }
 
-/** A premium record shows renewal past `endDay` when it pays for or runs into a period after it: its period ends after
- * endDay, its period starts on or after it, or it was paid after it. A payment made shortly before endDay counts only when
- * the household uploaded it after endDay (the receipt they were asked for); an older payment proves nothing about the
- * next term. */
+/** A premium record shows renewal past `endDay` only when it pays for the next term (Critic MED-1, TE F1):
+ *  - a record that prints its period is decided by that period alone: it runs past endDay by more than a week (an old
+ *    term printed "1 Dec 2025 to 1 Dec 2026" against a schedule's "30 Nov 2026" is not a renewal: Critic L1), or it starts
+ *    no more than a week before endDay. When or whether it was paid or uploaded late never matters;
+ *  - a record printing no period counts only when it was paid on or after endDay. A payment before the date, even one
+ *    uploaded after it (a monthly payer's last instalment, a trip's own purchase receipt), proves nothing about the next
+ *    term, so the household is still asked. */
+export const PERIOD_SLACK_DAYS = 7;
 export function renewalAfter(rows: PaymentRecord[], endDay: number): PaymentRecord | null {
   let best: { row: PaymentRecord; day: number } | null = null;
   for (const row of rows) {
     const paid = dayOf(row.payment_date), start = dayOf(row.period_start), end = dayOf(row.period_end);
-    const uploaded = row.created_at ? Math.floor(Date.parse(row.created_at) / 86_400_000) : null;
-    const renews = (end != null && end > endDay) || (start != null && start >= endDay) || (paid != null && paid > endDay)
-      || (paid != null && paid >= endDay - 45 && uploaded != null && uploaded > endDay);
+    const renews = end != null || start != null
+      ? (end != null && end > endDay + PERIOD_SLACK_DAYS && (start == null || start >= endDay - PERIOD_SLACK_DAYS)) || (end == null && start != null && start >= endDay - PERIOD_SLACK_DAYS)
+      : paid != null && paid >= endDay;
     if (!renews) continue;
     const day = end ?? start ?? paid ?? 0;
     if (!best || day > best.day) best = { row, day };

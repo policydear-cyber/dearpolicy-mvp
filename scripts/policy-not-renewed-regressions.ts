@@ -174,11 +174,11 @@ async function main() {
   await test("A6 the library sent to chat marks the policy's document as the household's own statement, and only that one", async () => {
     const h = await loadHousehold(A);
     const said = new Map(h.documents.map((d) => [d.policyId, d.householdSaid ?? null]));
-    assert.equal(said.get(trip), "not renewed after 4 Oct 2026");
+    assert.match(said.get(trip) ?? "", /^not renewed after 4 Oct 2026 for /);
     assert.equal(said.get(life), null); assert.equal(said.get(johnPa), null);
     const { renderDocument } = await import("@/lib/simple-chat/library");
     const i = h.documents.findIndex((d) => d.policyId === trip);
-    assert.match(renderDocument(h.documents[i], i), /household_said="not renewed after 4 Oct 2026, as the household told DearPolicy"/);
+    assert.match(renderDocument(h.documents[i], i), /household_said="not renewed after 4 Oct 2026 for [^"]+, as the household told DearPolicy"/);
   });
   await test("A7 Undo puts it back as current cover", async () => {
     asUser(ownerA);
@@ -206,6 +206,29 @@ async function main() {
     assert.deepEqual(grants.rows.map((r) => r.privilege_type), ["SELECT"]);
   });
 
+  await test("J1 a joint document: the answer for one person is that person's only, in chat and its amounts (TE F2, F3)", async () => {
+    asUser(ownerA);
+    const fam = id("f9900000", 9);
+    await doc(fam, A, jane, "Bluewater Family Trip", "BW-9009", "2026-11-07");
+    await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$4),($1,$3,$4)`, [fam, jane, john, A]);
+    const t = byName((await dates(A, jane)).policies, "Bluewater Family Trip")!;
+    assert.equal(t.state, "renewal_due");
+    assert.equal((await answer(A, { member: jane, key: t.key, endsOn: t.endsOn, notRenewed: true })).status, 200);
+    const h = await loadHousehold(A);
+    const d = h.documents.find((x) => x.policyId === fam)!;
+    assert.deepEqual(d.notRenewedFor?.map((x) => x.person), ["Jane Doe"]);
+    assert.equal(d.householdSaid, "not renewed after 7 Nov 2026 for Jane Doe");
+    const { dropNotRenewedAmounts } = await import("@/lib/simple-chat/hook");
+    const reply = { citations: [{ chunkId: "c1", policyId: fam }], statements: [
+      { id: "s1", kind: "benefit_terms", text: "Death benefit S$100,000", personName: "Jane Doe", amount: { text: "S$100,000" }, source: { citationIds: ["c1"] } },
+      { id: "s2", kind: "benefit_terms", text: "Death benefit S$100,000", personName: "John Doe", amount: { text: "S$100,000" }, source: { citationIds: ["c1"] } },
+      { id: "s3", kind: "benefit_terms", text: "Medical S$150,000", personName: "Jane Doe", amount: { text: "S$150,000" }, source: { citationIds: ["c1"] } }] };
+    const left = dropNotRenewedAmounts(reply, h);
+    assert.deepEqual(left, ["Death benefit S$100,000", "Medical S$150,000"]);
+    assert.deepEqual(reply.statements.map((x) => [x.personName, x.amount ? "amount" : x.kind]), [["Jane Doe", "fact"], ["John Doe", "amount"]]);
+    assert.match(reply.statements[0].text, /not renewed after 7 Nov 2026 for Jane Doe, as the household told DearPolicy/);
+    assert.equal((await answer(A, { member: jane, key: t.key, endsOn: t.endsOn, notRenewed: false })).status, 200);
+  });
   if (failures.length) { console.error(failures.join("\n\n")); console.error(`${failures.length} failed, ${passed} passed`); process.exit(1); }
   console.log(`policy-not-renewed: ${passed} passed`);
   process.exit(0);

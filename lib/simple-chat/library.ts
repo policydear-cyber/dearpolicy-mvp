@@ -31,8 +31,10 @@ export type HouseholdDocument = {
   matchedOnly?: string[];
   supersededAt: string | null;
   /** Set when the household said it did not renew this policy after its printed end date (Home's Policy dates,
-   * lib/policies/not-renewed.ts): "not renewed after 4 Oct 2026". The household's own statement, never an insurer's. */
+   * lib/policies/not-renewed.ts): "not renewed after 4 Oct 2026 for Nora". The household's own statement, never an
+   * insurer's. Said per person: on a document naming several people, it is only for the people in `notRenewedFor`. */
   householdSaid?: string | null;
+  notRenewedFor?: { person: string; after: string }[];
   /** The app's reading status, e.g. "ready" or "failed". */
   processingStatus?: string | null;
   /** The upload's safety-scan status (sql/schema.sql quarantine_status), when read: a rejected upload is never read. */
@@ -214,10 +216,20 @@ export async function loadHousehold(accountId: string): Promise<Household> {
     const members = [...new Set((await notRenewedRows(accountId)).map((r) => r.family_member_id))];
     if (members.length) {
       const { loadPolicyDates } = await import("@/lib/policies/policy-dates-load");
-      const said = new Map<string, string>();
-      for (const member of members) for (const p of (await loadPolicyDates(accountId, member)).policies)
-        if (p.state === "not_renewed" && p.endsText) for (const id of p.documentIds) said.set(id, `not renewed after ${p.endsText}`);
-      for (const d of household.documents) d.householdSaid = said.get(d.policyId) ?? null;
+      // Per person (TE F2): on a joint document only the person whose policy the household answered for.
+      const said = new Map<string, { person: string; after: string }[]>();
+      for (const member of members) {
+        const loaded = await loadPolicyDates(accountId, member);
+        const person = loaded.displayName;
+        if (!person) continue;
+        for (const p of loaded.policies) if (p.state === "not_renewed" && p.endsText)
+          for (const id of p.documentIds) said.set(id, [...(said.get(id) ?? []), { person, after: p.endsText }]);
+      }
+      for (const d of household.documents) {
+        const list = said.get(d.policyId) ?? [];
+        d.notRenewedFor = list.length ? list : undefined;
+        d.householdSaid = list.length ? list.map((x) => `not renewed after ${x.after} for ${x.person}`).join("; ") : null;
+      }
     }
   } catch (error) { console.warn("Not-renewed answers unavailable for the chat:", error instanceof Error ? error.message : error); }
   return household;

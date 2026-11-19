@@ -78,12 +78,27 @@ test("a receipt of the same policy after the date: renewed, with the receipt's o
   assert.equal(paidOnly.state, "renewed"); assert.equal(paidOnly.renewal?.paidText, "3 Nov 2026"); assert.equal(paidOnly.renewal?.until, null, "no period printed: no new end date");
 });
 
-test("a payment made before the date proves nothing, unless it was uploaded after the date (the receipt asked for)", () => {
+test("a payment made before the date proves nothing, even uploaded after it (Critic MED-1, TE F1)", () => {
   const c = contract("k1", [doc("d1")]); const covers = [cover("d1", "Family PA", "31/10/2026")];
-  assert.equal(policyDates(c, covers, [pay({ policy_id: "d1", payment_date: "2026-10-20", created_at: "2026-10-21T02:00:00Z" })], TODAY).state, "renewal_due");
-  assert.equal(policyDates(c, covers, [pay({ policy_id: "d1", payment_date: "2026-10-20", created_at: "2026-11-05T02:00:00Z" })], TODAY).state, "renewed");
-  assert.equal(policyDates(c, covers, [pay({ policy_id: "d1", payment_date: "2026-06-01", created_at: "2026-11-05T02:00:00Z" })], TODAY).state, "renewal_due", "a payment months before is the old term's");
-  assert.equal(policyDates(c, covers, [pay({ policy_id: "d1", period_end: "2026-10-31", created_at: "2026-11-05T02:00:00Z" })], TODAY).state, "renewal_due", "a period ending on the date is the old term");
+  const state = (p: Partial<PaymentRecord>) => policyDates(c, covers, [pay({ policy_id: "d1", ...p })], TODAY).state;
+  assert.equal(state({ payment_date: "2026-10-20", created_at: "2026-10-21T02:00:00Z" }), "renewal_due");
+  assert.equal(state({ payment_date: "2026-10-20", created_at: "2026-11-05T02:00:00Z" }), "renewal_due", "a monthly payer's last instalment, uploaded when asked");
+  assert.equal(state({ payment_date: "2026-06-01", created_at: "2026-11-05T02:00:00Z" }), "renewal_due", "a payment months before is the old term's");
+  assert.equal(state({ payment_date: "2026-10-31" }), "renewed", "paid on the renewal date, no period printed");
+  assert.equal(state({ period_end: "2026-10-31", created_at: "2026-11-05T02:00:00Z" }), "renewal_due", "a period ending on the date is the old term");
+  assert.equal(state({ period_start: "2025-11-01", period_end: "2026-11-01", payment_date: "2026-11-10" }), "renewal_due", "an old term printed one day past the schedule's end (Critic L1), paid late");
+  assert.equal(state({ period_start: "2026-10-01", period_end: "2026-10-31", payment_date: "2026-09-28", created_at: "2026-11-19T02:00:00Z" }), "renewal_due", "a trip's own purchase receipt (TE F1)");
+  assert.equal(state({ period_start: "2026-11-01", period_end: "2027-10-31", payment_date: "2026-10-20" }), "renewed", "next term paid early");
+  assert.equal(state({ period_start: "2026-10-28" }), "renewed", "a next term starting just before the date");
+});
+
+test("a group number counts only for a record naming the person; a short number alone needs both insurers (Critic L2, L3)", () => {
+  const c = contract("k1", [doc("d1", { policy_number: "M-1", group_policy_number: "GRP-778812" })]); const covers = [cover("d1", "Group Term", "31/10/2026")];
+  const after = { payment_date: "2026-11-02" };
+  assert.equal(policyDates(c, covers, [pay({ ...after, policy_number: "GRP-778812", family_member_id: null })], TODAY).state, "renewal_due");
+  assert.equal(policyDates(c, covers, [pay({ ...after, policy_number: "GRP-778812", family_member_id: "p1" })], TODAY).state, "renewed");
+  assert.equal(policyDates(c, covers, [pay({ ...after, policy_number: "M-1", insurer: null })], TODAY).state, "renewal_due");
+  assert.equal(policyDates(c, covers, [pay({ ...after, policy_number: "M-1" })], TODAY).state, "renewed");
 });
 
 test("another person's, another number's or another insurer's receipt never renews this policy", () => {

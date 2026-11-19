@@ -30,7 +30,11 @@ export function HomePolicyDates({ memberId, onChanged }: { memberId?: string | n
       const body = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(typeof body.error === "string" ? body.error : "");
       await load(); onChanged?.();
-    } catch (e) { setError(e instanceof Error && e.message ? e.message : "That didn't save. Please try again in a moment."); }
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "That didn't save. Please try again in a moment.");
+      // A refused answer (another tab answered, or a receipt arrived): show the list as it now stands.
+      await load().catch(() => undefined);
+    }
     finally { setBusy(""); }
   }
   if (!list?.length) return null;
@@ -39,11 +43,11 @@ export function HomePolicyDates({ memberId, onChanged }: { memberId?: string | n
     {error && <p className="home-dates-error" role="alert">{error}</p>}
     <ul>{list.map((p) => <li key={p.key} className={`home-date ${p.state}`} data-state={p.state}>
       <div className="home-date-head"><strong>{p.name}</strong><DateChip p={p} /></div>
-      <DateLine p={p} />
-      {!!p.sooner.length && p.state !== "renewal_due" && p.state !== "not_renewed" && <small>{p.sooner.length === 1 ? "One cover ends sooner" : "Some covers end sooner"}: {p.sooner.map((s) => `${s.name} ${s.ended ? "ended" : "until"} ${s.endsText}`).join("; ")}.</small>}
+      <DateLine p={p} owner={canAnswer} />
+      {!!p.sooner.length && p.state !== "renewal_due" && p.state !== "not_renewed" && <small>{p.sooner.length === 1 ? "One cover ends sooner" : "Some covers end sooner"}: {p.sooner.map((s) => `${s.name} ${s.ended ? "was until" : "until"} ${s.endsText}${s.ended ? ", as printed" : ""}`).join("; ")}.</small>}
       {p.state === "renewal_due" && <div className="home-date-actions">
         <Link href="/policies" className="button secondary">Upload proof of renewal</Link>
-        {canAnswer && <button type="button" className="home-date-link" disabled={busy === p.key} onClick={() => void answer(p, true)}>I didn&rsquo;t renew it</button>}
+        {canAnswer && !p.severalPolicies && <button type="button" className="home-date-link" disabled={busy === p.key} onClick={() => void answer(p, true)}>I didn&rsquo;t renew it</button>}
       </div>}
       {p.state === "not_renewed" && canAnswer && <div className="home-date-actions"><button type="button" className="home-date-link" disabled={busy === p.key} onClick={() => void answer(p, false)}>Undo</button></div>}
     </li>)}</ul>
@@ -58,10 +62,10 @@ function DateChip({ p }: { p: PolicyDate }) {
   return null;
 }
 
-function DateLine({ p }: { p: PolicyDate }) {
+function DateLine({ p, owner }: { p: PolicyDate; owner: boolean }) {
   if (p.state === "no_date") return null;
   if (p.state === "renewal_due") return <p>Cover was until <b>{p.endsText}</b>, as printed. If you renewed it, upload the receipt, renewal notice or new schedule.</p>;
-  if (p.state === "not_renewed") return <p>You said you didn&rsquo;t renew it. Cover was until <b>{p.endsText}</b>, as printed, so it isn&rsquo;t shown as current cover.</p>;
+  if (p.state === "not_renewed") return <p>{owner ? <>You said you didn&rsquo;t renew it.</> : <>The household said it wasn&rsquo;t renewed.</>} Cover was until <b>{p.endsText}</b>, as printed, so it isn&rsquo;t shown as current cover.</p>;
   if (p.state === "renewed") return <p>Cover was until {p.endsText}. Renewed{p.renewal?.paidText ? <>: premium paid <b>{p.renewal.paidText}</b></> : null}{p.renewal?.untilText ? <> · cover until <b>{p.renewal.untilText}</b>, from the receipt</> : null}.</p>;
   const days = p.daysLeft ?? 0;
   return <p>Cover until <b>{p.endsText}</b>{p.state === "ends_soon" ? (days === 0 ? " · ends today" : days === 1 ? " · tomorrow" : ` · in ${days} days`) : null}</p>;
