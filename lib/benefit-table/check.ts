@@ -539,8 +539,10 @@ function printedAsBand(text: string, age: number | null | undefined, year: numbe
   if (age != null && (new RegExp(`\\b(?:before|under|below|up\\s+to|until|till|from|over|above|after|to|between|aged)\\s+(?:the\\s+)?(?:age|ages|anb|alb)\\s+${n(age)}`, "i").test(text)
     || range("(?:age|ages)", age).test(text)
     || new RegExp(`\\b(?:age|ages)\\s+${n(age)}\\s*(?:and|or)\\s+(?:above|over|below|under|older|younger)\\b`, "i").test(text))) return true;
-  if (year != null && (new RegExp(`\\b(?:during|in|from|after|before|until|till|up\\s+to|within)\\s+(?:the\\s+)?(?:first\\s+)?(?:policy\\s+)?years?\\s+${n(year)}`, "i").test(text)
-    || range("(?:policy\\s+)?years?", year).test(text)
+  // "in policy year 10" is a point in time, not a band (Critic L/M-12); a year range ends the phrase, never a column of numbers.
+  const yearEnd = `(?![\\d,.])(?!\\s*(?:[-–|]\\s*)?[\\d$])`;
+  if (year != null && (new RegExp(`\\b(?:during|from|after|before|until|till|up\\s+to|within\\s+the\\s+first)\\s+(?:the\\s+)?(?:policy\\s+)?years?\\s+${n(year)}`, "i").test(text)
+    || new RegExp(`\\b(?:policy\\s+)?years?\\s+(?:\\d{1,3}\\s*(?:-|–|to)\\s*0*${year}|0*${year}\\s*(?:-|–|to)\\s*\\d{1,3})${yearEnd}`, "i").test(text)
     || new RegExp(`\\b(?:policy\\s+)?year\\s+${n(year)}\\s*(?:onwards?|and\\s+(?:after|above|thereafter|beyond)|\\+)`, "i").test(text))) return true;
   return false;
 }

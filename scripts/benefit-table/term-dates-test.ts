@@ -139,6 +139,8 @@ test("policy-year bands are limits, not a table by year: both stay current figur
   assert.deepEqual(kept([r(1, "Death benefit during policy year 1: S$20,000"), r(2, "Death benefit from policy year 2: S$40,000")]), [null, null]);
   assert.deepEqual(kept([r(1, "Policy year 1 to 5 S$20,000"), r(6, "Year 6 onwards S$40,000")]), [null, null]);
   assert.deepEqual(kept([r(10, "10 45 150,000"), r(20, "20 55 250,000")]), [10, 20], "a bare table by year keeps its years");
+  assert.deepEqual(kept([r(10, "Surrender value in policy year 10: S$12,000"), r(20, "Surrender value in policy year 20: S$30,000")]), [10, 20], "'in policy year N' is a point (Critic L/M-12)");
+  assert.deepEqual(kept([r(10, "Year 10 - 45 - 150,000"), r(20, "Year 20 - 55 - 250,000")]), [10, 20], "dash-separated columns are not a range");
 });
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`${failures.length} failed, ${passed} passed`); process.exit(1); }
