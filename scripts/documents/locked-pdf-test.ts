@@ -64,6 +64,37 @@ async function main() {
       await assert.rejects(extractPdfPages(fixture(name), "wrong"), (e: Error) => e.message === PDF_PASSWORD_INCORRECT_MESSAGE);
     });
   }
+  // Read again on a locked PDF without its password (19 Nov: a group certificate's working reading was lost): the route
+  // refuses before anything changes when the stored file needs an open password. An owner-password-only PDF opens.
+  await test("a locked PDF is known as one: no password = needed, a wrong one = incorrect, its own = fine; a plain or owner-only PDF, or not a PDF, never is", async () => {
+    const { pdfPasswordProblem } = await import("@/lib/documents/pdf");
+    for (const name of ["locked-rc4-128.pdf", "locked-aes-128.pdf", "locked-aes-256.pdf", "scan-locked-aes256.pdf", "scan-locked-objstm.pdf"]) {
+      assert.equal(await pdfPasswordProblem(fixture(name)), "needed", name);
+      assert.equal(await pdfPasswordProblem(fixture(name), "harbour-2026"), "incorrect", `${name}: a typo (case) is caught`);
+      assert.equal(await pdfPasswordProblem(fixture(name), PASSWORD), null, `${name}: its own password opens it`);
+    }
+    for (const name of ["scan-plain.pdf", "scan-owner-only.pdf", "scan-owner-only-objstm.pdf"]) assert.equal(await pdfPasswordProblem(fixture(name)), null, name);
+    assert.equal(await pdfPasswordProblem(fixture("scan-plain.pdf"), "anything"), null, "a plain PDF ignores a password typed anyway");
+    // An owner-only PDF given a password it doesn't take: the read itself would fail with it (extractPdfPages), so it is
+    // refused up front too, and the reading stays.
+    for (const name of ["scan-owner-only.pdf", "scan-owner-only-objstm.pdf"]) {
+      assert.equal(await pdfPasswordProblem(fixture(name), "anything"), "incorrect", name);
+      await assert.rejects(extractPdfPages(fixture(name), "anything"), (e: Error) => e.message === PDF_PASSWORD_INCORRECT_MESSAGE);
+    }
+    assert.equal(await pdfPasswordProblem(new Uint8Array(Buffer.from("\xff\xd8\xff\xe0 a photo", "latin1"))), null);
+    assert.equal(await pdfPasswordProblem(new Uint8Array(Buffer.from("%PDF-1.4 broken", "latin1"))), null);
+    assert.equal(await pdfPasswordProblem(new Uint8Array(Buffer.from("%PDF-1.4 /Encrypt broken", "latin1"))), null);
+  });
+  await test("Read again refuses a locked PDF with no password or a wrong one before anything changes, and asks again", async () => {
+    const route = readFileSync(join(__dirname, "../../app/api/policies/reprocess/route.ts"), "utf8");
+    const guard = route.indexOf("pdfPasswordProblem(bytes"), firstWrite = route.indexOf("pool.connect()"), plan = route.indexOf("mayAddDocument(ctx.householdId");
+    assert.ok(guard > 0 && guard < firstWrite && guard < plan, "the check runs before the plan check and the requeue");
+    assert.match(route, /pdfPasswordProblem\(bytes, body\.pdfPassword \|\| undefined\)/, "a typed password is checked too (Critic #565 MED-1)");
+    assert.match(route, /reasonCode: "PDF_PASSWORD_NEEDED"/);
+    assert.match(route, /reasonCode: "PDF_PASSWORD_INCORRECT"/);
+    const page = readFileSync(join(__dirname, "../../app/policies/page.tsx"), "utf8");
+    assert.match(page, /reasonCode === "PDF_PASSWORD_NEEDED"\) \{ setPasswordFor\(policy\.id\)/);
+  });
   await test("an unlocked PDF's title is read as before", async () => {
     const { PDFDocument } = await import("pdf-lib");
     const doc = await PDFDocument.create(); doc.addPage(); doc.setTitle("Harbour Travel Policy Wording");

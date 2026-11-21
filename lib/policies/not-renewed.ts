@@ -1,3 +1,4 @@
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
 
 /** Policies the household says it did not renew (sql/policy-not-renewed.sql; DC 19 Nov 2026). The household's own statement
@@ -34,7 +35,7 @@ export async function setNotRenewed(args: { accountId: string; memberId: string;
   if (!(await notRenewedReady())) throw new NotRenewedUnavailable("not ready");
   if (args.notRenewed)
     await query(`INSERT INTO policy_not_renewed(account_id,family_member_id,contract_key,ends_on,said_by)
-      SELECT $1,f.id,$3,$4::date,$5 FROM family_members f WHERE f.id=$2 AND f.account_id=$1
+      SELECT $1,f.id,$3,$4::date,$5 FROM family_members f WHERE f.id=$2 AND f.account_id=$1 AND ${activePredicate("f")}
       ON CONFLICT (account_id,family_member_id,contract_key,ends_on) DO UPDATE SET said_at=now(),said_by=EXCLUDED.said_by`,
     [args.accountId, args.memberId, args.contractKey, args.endsOn, args.userId]);
   else await query("DELETE FROM policy_not_renewed WHERE account_id=$1 AND family_member_id=$2 AND contract_key=$3 AND ends_on=$4::date",
