@@ -7,9 +7,9 @@
  * (errored, expired, canceled) throws, as a failed live call does. The caller's timeoutMs does not apply: a batch has no
  * per-call time limit.
  *
- * Privacy: the privacy notice says DearPolicy uses only Anthropic's standard API, not its batch service. That stays true
- * only while this path carries made-up or test documents. A household's real document must not go through it unless the
- * owner decides to change the notice first. Opt in with DEARPOLICY_SCRIPT_BATCH=1 through scriptTableModel(). */
+ * Privacy: the privacy notice says background document reading may use Anthropic's batch service (DC, 21 Nov), so a script
+ * may re-read real documents through this path. Live answers never do. The notice test allows the batch API in this file only.
+ */
 import type { ModelChoice } from "@/lib/ai/providers";
 import { API_BASE_URL, apiKeyFromEnv } from "@/lib/simple-chat/model";
 import { anthropicTableModel, tableRequest, type TableCall, type TableModel, type TableReply } from "@/lib/benefit-table/model";
