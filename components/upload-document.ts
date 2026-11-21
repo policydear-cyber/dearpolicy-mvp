@@ -11,6 +11,7 @@
  *      bytes (type sniffing, size, household, duplicates) and queues the scan
  *      and processing.
  */
+import { getTurnstileToken } from "@/lib/security/turnstile-client";
 import { uploadFailureMessage, type UploadStep } from "@/lib/documents/upload-problems";
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -69,9 +70,12 @@ export async function uploadPolicyDocument(file: File, options: {
   if (file.size <= 0) throw new UploadError("That file is empty.");
   if (file.size > MAX_UPLOAD_BYTES) throw new UploadError(`Files must be ${MAX_UPLOAD_LABEL} or smaller. Split the document or export it at a lower resolution, then upload it again.`);
 
+  // Bot check (off unless the site key is set): a fresh single-use token for each document.
+  let turnstileToken: string | null = null;
+  try { turnstileToken = await getTurnstileToken(); } catch { throw new UploadError("We couldn't run the safety check that lets you upload. Refresh the page and try again."); }
   const startResponse = await send("start", "/api/policies/upload/start", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ filename: file.name, mimeType: file.type, byteSize: file.size, familyMemberId: options.familyMemberId || null, supersedesPolicyId: options.supersedesPolicyId || null }),
+    body: JSON.stringify({ filename: file.name, mimeType: file.type, byteSize: file.size, familyMemberId: options.familyMemberId || null, supersedesPolicyId: options.supersedesPolicyId || null, ...(turnstileToken ? { turnstileToken } : {}) }),
   });
   const started = await json(startResponse);
   if (!startResponse.ok) throw failure("start", startResponse.status, started);

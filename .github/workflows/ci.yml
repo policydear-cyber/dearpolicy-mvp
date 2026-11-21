@@ -525,6 +525,9 @@ jobs:
       - name: Sentry reports carry no private detail (allowlist scrubber; off without a DSN)
         run: npm run telemetry:sentry-test
 
+      - name: Turnstile bot check (sign-up and upload only; off without both keys; email-link routes untouched)
+        run: npm run security:turnstile-test
+
       - name: Chat answers without check narration; insurer contacts only from the household's own pages
         run: npm run simple:declutter-contacts-test
 

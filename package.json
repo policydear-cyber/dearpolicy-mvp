@@ -25,6 +25,7 @@
     "benefit-table:figure-guards-test": "node --import tsx scripts/benefit-table/figure-guards-test.ts",
     "benefit-table:batch-test": "node --import tsx scripts/benefit-table/batch-model-test.ts",
     "telemetry:sentry-test": "node --import tsx scripts/telemetry/sentry-scrub-test.ts",
+    "security:turnstile-test": "node --import tsx scripts/security/turnstile-test.ts",
     "benefit-table:image-check-test": "node --import tsx scripts/benefit-table/image-check-test.ts",
     "benefit-table:long-document-test": "node --import tsx scripts/benefit-table/long-document-test.ts",
     "benefit-table:speed-test": "node --import tsx scripts/benefit-table/speed-test.ts",

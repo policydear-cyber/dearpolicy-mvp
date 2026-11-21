@@ -5,7 +5,11 @@
  *
  * Calls made in the same moment (a script reading pages in parallel) go in one batch. A call that does not succeed
  * (errored, expired, canceled) throws, as a failed live call does. The caller's timeoutMs does not apply: a batch has no
- * per-call time limit. Opt in with DEARPOLICY_SCRIPT_BATCH=1 through scriptTableModel(). */
+ * per-call time limit.
+ *
+ * Privacy: the privacy notice says DearPolicy uses only Anthropic's standard API, not its batch service. That stays true
+ * only while this path carries made-up or test documents. A household's real document must not go through it unless the
+ * owner decides to change the notice first. Opt in with DEARPOLICY_SCRIPT_BATCH=1 through scriptTableModel(). */
 import type { ModelChoice } from "@/lib/ai/providers";
 import { API_BASE_URL, apiKeyFromEnv } from "@/lib/simple-chat/model";
 import { anthropicTableModel, tableRequest, type TableCall, type TableModel, type TableReply } from "@/lib/benefit-table/model";
