@@ -59,6 +59,9 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // The Turnstile site key is public by design, but Vercel will not take a variable whose name contains PUBLIC. It is set
+  // as TURNSTILE_SITE_KEY and handed to the browser code here, when the site is built (redeploy after changing it).
+  env: { NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.TURNSTILE_SITE_KEY?.trim() || process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || "" },
   async headers() {
     return [{ source: "/(.*)", headers: SECURITY_HEADERS }];
   },

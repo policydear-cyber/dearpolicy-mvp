@@ -1,5 +1,5 @@
 /** Cloudflare Turnstile: a bot check on sign-up and on starting an upload, so a script cannot create accounts or push
- * documents at the model budget. Off unless BOTH TURNSTILE_SECRET_KEY and NEXT_PUBLIC_TURNSTILE_SITE_KEY are set, so a
+ * documents at the model budget. Off unless BOTH TURNSTILE_SECRET_KEY and TURNSTILE_SITE_KEY are set (NEXT_PUBLIC_TURNSTILE_SITE_KEY still works), so a
  * half-configured deployment never locks everyone out. When on, a missing, invalid, expired or reused token is refused,
  * and so is a check that cannot be reached (the visitor is asked to try again). The emailed confirmation and PKCE
  * sign-in links never pass through here: they are not forms a person fills in. */
@@ -7,7 +7,7 @@ export const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile
 export const TURNSTILE_FAILED_MESSAGE = "We couldn't confirm you are a person. Wait a moment, then try again.";
 
 export function turnstileOn(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean(env.TURNSTILE_SECRET_KEY?.trim()) && Boolean(env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim());
+  return Boolean(env.TURNSTILE_SECRET_KEY?.trim()) && Boolean((env.TURNSTILE_SITE_KEY ?? env.NEXT_PUBLIC_TURNSTILE_SITE_KEY)?.trim());
 }
 
 type Fetch = (url: string, init: RequestInit) => Promise<Response>;

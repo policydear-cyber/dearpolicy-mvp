@@ -8,15 +8,17 @@ import { callerIp, turnstileOn, turnstilePasses, TURNSTILE_VERIFY_URL } from "@/
 let passed = 0;
 const failures: string[] = [];
 async function test(name: string, fn: () => Promise<void> | void) { try { await fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.stack : String(e)}`); } }
-const ON = { TURNSTILE_SECRET_KEY: "s3cret", NEXT_PUBLIC_TURNSTILE_SITE_KEY: "site" } as never;
+const ON = { TURNSTILE_SECRET_KEY: "s3cret", TURNSTILE_SITE_KEY: "site" } as never;
 const reply = (body: unknown, status = 200) => async () => new Response(JSON.stringify(body), { status });
 
 async function main() {
   await test("off unless both keys are set; off passes everything, even no token", async () => {
     assert.equal(turnstileOn({} as never), false);
     assert.equal(turnstileOn({ TURNSTILE_SECRET_KEY: "x" } as never), false);
-    assert.equal(turnstileOn({ NEXT_PUBLIC_TURNSTILE_SITE_KEY: "x" } as never), false);
+    assert.equal(turnstileOn({ TURNSTILE_SITE_KEY: "x" } as never), false);
     assert.equal(turnstileOn(ON), true);
+    assert.equal(turnstileOn({ TURNSTILE_SECRET_KEY: "x", NEXT_PUBLIC_TURNSTILE_SITE_KEY: "x" } as never), true, "older name still works");
+    assert.match(readFileSync("next.config.ts", "utf8"), /NEXT_PUBLIC_TURNSTILE_SITE_KEY: process\.env\.TURNSTILE_SITE_KEY/, "build hands the key to the browser");
     assert.equal(await turnstilePasses(undefined, null, { env: { TURNSTILE_SECRET_KEY: "x" } as never, fetchImpl: async () => { throw new Error("must not call"); } }), true);
   });
   await test("on: a token Cloudflare accepts passes, and the request carries secret, token and address", async () => {
