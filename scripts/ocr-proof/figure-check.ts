@@ -15,7 +15,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { readDocument, checkStored, type Db, type StoredReading } from "@/lib/benefit-table/service";
 import { applyGuards } from "@/lib/benefit-table/guards";
-import { anthropicTableModel, type TableModel, type TableReply } from "@/lib/benefit-table/model";
+import { type TableModel, type TableReply } from "@/lib/benefit-table/model";
+import { scriptTableModel as anthropicTableModel } from "@/lib/benefit-table/batch-model";
 import { benefitTableModel } from "@/lib/benefit-table/flag";
 import { guardRoster, supportsEffort } from "@/lib/benefit-table/guard-flag";
 import { priceFor, type ModelChoice } from "@/lib/ai/providers";
