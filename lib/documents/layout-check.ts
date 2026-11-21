@@ -237,7 +237,7 @@ const FURNITURE = new RegExp(
   String.raw`\b(?:(?:co(?:mpany|\.)?|business|gst|uen)\s*reg(?:istration|\.)?\s*(?:no|number)|reg\.?\s*(?:no|number))\b` + NUMBERED
   + String.raw`|\bcompany\s+(?:no|number)\b` + NUMBERED
   + String.raw`|\bregistered\s+in\s+[A-Za-z ]{2,40}?\s+(?:no|number)\b` + NUMBERED
-  + String.raw`|\bvat\s*(?:reg(?:istration|\.)?\s*)?(?:no|number)\b\.?\s*[:#-]?\s*(?:[A-Z]{2}\s?)?\d[\d ]*\d`
+  + String.raw`|\bvat\s*(?:reg(?:istration|\.)?\s*)?(?:no|number)\b\.?\s*[:#-]?\s*(?:[A-Z]{2}\s?)?(?:\d{9}|\d{3} \d{4} \d{2}(?: \d{3})?)\b`
   + String.raw`|\bpage\s+\d+\s+of\s+\d+\b`
   + String.raw`|\(?\b(?:date\s+printed|printed(?:\s+(?:on|date))?|date\s+of\s+print|generated(?:\s+by\s+[A-Za-z .]{1,40}?)?(?:\s+on)?)\s*[:-]?\s*(?:\d{1,2}[\s/.-]+(?:\d{1,2}|${MONTH})[\s/.-]+\d{2,4}|${MONTH}\s+\d{1,2},?\s+\d{4}|` + DATE + String.raw`)\)?`, "gi");
 /** Judged cell by cell: every cell must be furniture or company words, so a label cell ("Premium due date") beside a

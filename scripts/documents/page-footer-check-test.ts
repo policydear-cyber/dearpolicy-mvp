@@ -74,6 +74,9 @@ async function main() {
       assert.ok(c.held >= 1, f);
     }
   });
+  await t("control: a figure after a VAT number is never swallowed as footer (TE F5)", () => {
+    for (const f of ["VAT No. 123456789 500", "VAT No. 123456789 250000", "VAT No. GB123456789 250"]) assert.ok(checkLines(body + "\n" + f, imageOf(), 3).held >= 1, f);
+  });
   await t("the flag: footer only masks are flagged, a page with no footer is not", () => {
     assert.equal(checkLines(body + "\nReg. No 199002477Z", imageOf(), 3).furnitureOnly, true);
     assert.ok(!checkLines(body, imageOf("\nSurrender value 12,000.00"), 3).furnitureOnly);
