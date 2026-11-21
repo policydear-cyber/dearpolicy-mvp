@@ -22,7 +22,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { readDocument, checkStored, type Db, type StoredReading, type GuardSetup } from "@/lib/benefit-table/service";
-import { anthropicTableModel, type TableModel, type TableCall, type TableReply } from "@/lib/benefit-table/model";
+import { type TableModel, type TableCall, type TableReply } from "@/lib/benefit-table/model";
+import { scriptTableModel as anthropicTableModel } from "@/lib/benefit-table/batch-model";
 import { benefitTableModel } from "@/lib/benefit-table/flag";
 import { imageCheckModels, supportsEffort } from "@/lib/benefit-table/guard-flag";
 import { PAGE_TOKENS } from "@/lib/benefit-table/image-check";

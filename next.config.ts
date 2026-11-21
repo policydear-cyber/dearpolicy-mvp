@@ -24,11 +24,13 @@ const CSP_DIRECTIVES = [
   "frame-ancestors 'none'",
   // React's development build needs eval() for its debugging call stacks;
   // a production build never does, so production keeps the strict policy.
-  process.env.NODE_ENV === "development" ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'",
+  process.env.NODE_ENV === "development" ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com" : "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com",
+  // Cloudflare Turnstile (lib/security/turnstile-client.ts): its script, its check frame and its calls home.
+  "frame-src https://challenges.cloudflare.com",
   "form-action 'self'",
 ].join("; ");
 

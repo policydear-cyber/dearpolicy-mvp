@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { customerMessage } from "@/components/customer-text";
+import { getTurnstileToken } from "@/lib/security/turnstile-client";
 import { safeInviteNext } from "@/lib/auth/invite-return";
 import { HOUSEHOLD_CURRENCIES, HOUSEHOLD_CURRENCY_LABELS, NO_HOUSEHOLD_CURRENCY } from "@/lib/documents/household-currency-options";
 
@@ -39,10 +40,16 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
     setError("");
     setNotice("");
     try {
+      // Bot check (off unless the site key is set): a fresh single-use token, fetched when the form is sent.
+      let turnstileToken: string | null = null;
+      try { turnstileToken = await getTurnstileToken(); } catch {
+        setError("We couldn't run the safety check. Refresh the page and try again.");
+        return;
+      }
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, householdName, currency, ...(inviteNext ? { next: inviteNext } : {}) }),
+        body: JSON.stringify({ email, password, householdName, currency, ...(inviteNext ? { next: inviteNext } : {}), ...(turnstileToken ? { turnstileToken } : {}) }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
