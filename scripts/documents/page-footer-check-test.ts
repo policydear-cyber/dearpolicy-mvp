@@ -1,0 +1,60 @@
+/**
+ * A page's footer (the company's registration number, the date the page was printed) is not an amount. When the image
+ * reading drops or reshapes it, that line is still shown as not checked, but the page is NOT read "in part": before, one
+ * such footer made a four-page schedule say "Some amounts on pages 3 and 4 could not be checked" and "Some amounts not
+ * used" although every benefit figure on them agreed (DC, 21 Nov, PruLink Enhanced Protector).
+ * Made-up insurer; each case has a control. Pure: no database, no model, no network.
+ */
+import assert from "node:assert/strict";
+import { checkLines, crossCheckPages, NOT_CHECKED } from "@/lib/documents/layout-check";
+
+let cases = 0;
+const failed: string[] = [];
+async function t(name: string, fn: () => void | Promise<void>) {
+  try { await fn(); cases++; console.log("  ok  " + name); }
+  catch (error) { failed.push(name); console.error("  FAIL " + name + ": " + (error instanceof Error ? error.message.split("\n")[0] : String(error))); }
+}
+const body = "Benefit Details:\nBasic Plan\tStatus\tSum Assured\nHarbour Shield Plus\tIn Force\t100,000.00\nAccident Assist\tIn Force\t100,000.00\t15.98\nHarbour Assurance (Pte) Limited\tCONFIDENTIAL";
+const imageOf = (extra = "") => body.replace(/\t/g, " ") + extra;
+type P = { pageNumber: number; text: string; partChecked?: boolean; unchecked?: boolean };
+const page = (text: string): P[] => [{ pageNumber: 3, text }];
+const read = (text: string, image: string) => crossCheckPages(page(text), [3], async () => [{ pageNumber: 3, text: image, extractionMethod: "ocr" }]).then((r) => r[0]);
+
+async function main() {
+  const footers = [
+    "Reg. No 199002477Z\t(Date Printed: 19-Nov-2026)",
+    "Co. Reg. No. 200301234K  Printed on 3 March 2026",
+    "Company Registration Number: 53/123456 Date printed 03/03/2026",
+  ];
+  for (const f of footers) {
+    await t(`footer the image drops is masked, not "read in part": ${f.slice(0, 28)}`, async () => {
+      const p = await read(body + "\n" + f, imageOf());
+      assert.ok(!p.partChecked && !p.unchecked, "page must stay fully checked");
+      assert.ok(p.text.split("\n").pop()!.includes(NOT_CHECKED), "footer digits are never used");
+      assert.ok(p.text.includes("100,000.00") && p.text.includes("15.98"), "benefit figures kept");
+    });
+  }
+  await t("control: a benefit amount the image does not print still makes the page read in part", async () => {
+    const text = body + "\nMedical Reimbursement\tIn Force\t2,000.00\nReg. No 199002477Z";
+    const p = await read(text, imageOf());
+    assert.ok(p.partChecked, "partChecked");
+    assert.ok(p.text.includes("Medical Reimbursement") && !p.text.includes("2,000.00"));
+  });
+  await t("control: a footer carrying another figure is judged as before", async () => {
+    const c = checkLines(body + "\nReg. No 199002477Z Annual limit 5,000", imageOf(), 3);
+    assert.ok(c.held >= 1);
+  });
+  await t("control: a footer the image prints the same is kept as printed", async () => {
+    const f = "Reg. No 199002477Z (Date Printed: 19-Nov-2026)";
+    const p = await read(body + "\n" + f, imageOf("\n" + f));
+    assert.ok(!p.partChecked && p.text.endsWith(f));
+  });
+  await t("a page of nothing but its footer figures still has no amount to trust", () => {
+    const c = checkLines(body + "\nReg. No 199002477Z", imageOf(), 3);
+    assert.equal(c.held, 0);
+    assert.ok(c.text!.includes("Reg. No " + NOT_CHECKED));
+  });
+  console.log(`\n${cases} passed, ${failed.length} failed`);
+  if (failed.length) process.exit(1);
+}
+void main();

@@ -18,7 +18,7 @@ globalThis.fetch = (async () => { throw new TypeError("fetch failed"); }) as typ
 import * as errors from "@/lib/documents/processing-errors";
 import { ACCEPTED_FORMATS_MESSAGE, NOT_A_REAL_PDF_MESSAGE, validateDocumentUpload } from "@/lib/documents/formats";
 import { failedDocumentAdvice, unreadablePagesAdvice, notReadPagesAdvice } from "@/lib/documents/failure-advice";
-import { UPLOAD_COPY, documentReadLabel, pageList, readingFinishedSummary, readingWaitCopy, unreadPageNumbers, uploadFailureMessage } from "@/lib/documents/upload-problems";
+import { UPLOAD_COPY, documentReadLabel, isReadingNotice, pageList, readingNotice, readingFinishedSummary, readingWaitCopy, unreadPageNumbers, uploadFailureMessage } from "@/lib/documents/upload-problems";
 import { customerError, customerMessage } from "@/components/customer-text";
 import { UploadError, uploadPolicyDocument } from "@/components/upload-document";
 
@@ -76,6 +76,7 @@ async function uploadError(file: File): Promise<UploadError> {
   throw new Error("the upload was expected to fail");
 }
 
+const page0 = () => readFileSync("app/policies/page.tsx", "utf8");
 test("network error during upload: never the browser's raw 'Failed to fetch', and says the file wasn't saved", async () => {
   mockFetch({});
   const atStart = await uploadError(pdfFile());
@@ -382,6 +383,14 @@ test("partial pages failed: the card and the finished line name pages 4 and 7, a
     { processing_status: "ready", processing_message: "Ready." },
   ], name);
   assert.equal(many.text, "Finished. One document could not be read. 2 documents weren't fully read yet. See below for what to do.");
+  // One document read but with some amounts not used: said as that, not "wasn't fully read" (DC, 21 Nov, PW9 screen).
+  const amounts = readingFinishedSummary([{ processing_status: "ready", processing_message: "Read in part. Some amounts on pages 3 and 4 could not be checked against the page image, so they are shown as not checked and not used; the rest of those pages agreed and is used." }], name);
+  assert.equal(amounts.text, "Finished. Made-up Travel Certificate was read, but some amounts on it aren't used yet. See below for what to do.");
+  // The "Reading … again…" line is the one the page clears when the reading finishes; other notices stay.
+  assert.ok(isReadingNotice(readingNotice("Made-up Plan", "again")) && isReadingNotice(readingNotice("Made-up Plan", "with the password you entered")));
+  assert.ok(!isReadingNotice("Deleted Made-up Plan. It is no longer used in answers, and Home has been updated."));
+  assert.match(page0(), /setLibraryNotice\(\(notice\) => \(isReadingNotice\(notice\) \? "" : notice\)\)/, "cleared when reading finishes");
+  assert.match(page0(), /<details className="warning-next" open><summary>What can I do\?/, "the next step is open, not folded away");
   assert.equal(pageList([2, 5, 7]), "pages 2, 5 and 7");
   // The page offers Read again inside the page note itself, with the same confirming click as the actions row.
   const page = readFileSync("app/policies/page.tsx", "utf8");

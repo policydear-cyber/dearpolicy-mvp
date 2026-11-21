@@ -225,6 +225,17 @@ export const NOT_CHECKED = "[amount not checked]";
 // A figure never ends in a comma: the sentence's own comma after it stays.
 const ANY_FIGURE = new RegExp(String.raw`(?:US\$|S\$|\$)?(?:` + DATE + String.raw`|\d(?:[\d,]*\d)?(?:\.\d+)?%?)`, "gi");
 const notChecked = (line: string) => unglue(line).replace(ANY_FIGURE, NOT_CHECKED);
+/** Page furniture: a line whose only figures are the company's registration number or the date the page was printed
+ * ("Reg. No 199002477Z (Date Printed: 19-Nov-2026)"). Neither is a cover amount, a premium or a policy date, and an image
+ * reader often drops or reshapes a small footer. Such a line is still shown as not checked (its digits are never used),
+ * but it is not an amount that failed its check, so it never makes a page "read in part". Any other figure on the line,
+ * or any other line, is judged as before. */
+const FURNITURE = new RegExp(String.raw`\b(?:co(?:mpany|\.)?\s*)?reg(?:istration|\.)?\s*(?:no|number)\b\.?\s*[:#-]?\s*[A-Za-z0-9][A-Za-z0-9/-]*`
+  + String.raw`|\(?\b(?:date\s+printed|printed(?:\s+(?:on|date))?|date\s+of\s+print|generated(?:\s+on)?)\s*[:-]?\s*(?:\d{1,2}[\s/.-]+(?:\d{1,2}|${MONTH})[\s/.-]+\d{2,4}|${MONTH}\s+\d{1,2},?\s+\d{4}|` + DATE + String.raw`)\)?`, "gi");
+const pageFurniture = (line: string) => {
+  const rest = line.replace(FURNITURE, " ");
+  return rest !== line && !/\d/.test(rest);
+};
 
 /** One figure as the history keeps it: its kind and where it sits on the page, never its digits or the words beside it. */
 type Seen = { key: string; shape: string; where: string };
@@ -876,6 +887,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     return null;
   };
   let figureLines = 0, noLabel = -1, why = "";
+  const furniture = new Set<number>();
   lines.forEach((line, i) => {
     if (skipText.has(i)) return;
     const tokens = lineTokens(line);
@@ -900,6 +912,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     }
     const sentence = labelOf(tokens) ? sentenceGroup(i) : null;
     if (sentence) { for (const j of sentence) sentenced.add(j); return; }
+    if (pageFurniture(line)) { furniture.add(i); return; }
     unconfirmed.push(i);
     if (!labelOf(tokens) && noLabel < 0) noLabel = i;
     why ||= labelOf(tokens) ? `the image reading does not print ${figuresOf(tokens).join(", ")} beside "${labelOf(tokens)}" in that order` : `the text reading prints ${figuresOf(tokens).join(", ")} with no label beside it`;
@@ -969,7 +982,8 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     + `only in text ${described(only(seenText, seenImage))}; only in image ${described(only(seenImage, seenText))}`;
   if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log, held: heldCount, heldLines: spread };
   const handed = lines.map((l, i) => rebuilt.get(i) ?? (lent.has(i) || joinedAway.has(i) ? "" : l));
-  const text = !spread.size ? handed.join("\n") : confirmed ? handed.map((l, i) => (spread.has(i) ? notChecked(l) : l)).join("\n") : null;
+  const shown = (l: string, i: number) => (spread.has(i) || furniture.has(i) ? notChecked(l) : l);
+  const text = !spread.size ? (furniture.size ? handed.map(shown).join("\n") : handed.join("\n")) : confirmed ? handed.map(shown).join("\n") : null;
   return { agree: kind === null, kind, why, text, log, held: heldCount, heldLines: spread };
 }
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
@@ -1017,6 +1031,8 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
     // Every figure line confirmed, and the image prints a line the text does not: nothing on the page is unconfirmed.
     if (check.text === p.text) return withNamed(withCurrency({ ...p, checkLog: check.log }));
     // Some lines confirmed: those are kept word for word, the rest keep their words and lose their figures (Critic plan step 2).
+    // Only page furniture masked, nothing held: the page is as checked as it can be.
+    if (check.text && (check as { held?: number }).held === 0) return withNamed(withCurrency({ ...p, text: check.text, checkLog: check.log }));
     if (check.text) return withNamed(withCurrency({ ...p, text: check.text, partChecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log }));
     return withNamed({ ...p, text: uncheckedText(p.text), unchecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log });
   });
