@@ -49,6 +49,14 @@ async function main() {
     const p = await read(body + "\n" + f, imageOf("\n" + f));
     assert.ok(!p.partChecked && p.text.endsWith(f));
   });
+  for (const f of ["Premium Due Date printed 15 Jan 2026", "Policy Start Date\tPrinted 1 Jan 2026", "Next premium due generated on 5 Dec 2026", "Total Premium generated 10 5 100", "Vehicle Reg. No SGX1234A"]) {
+    await t(`control: a labelled figure beside a "printed" date is still held and read in part: ${f.slice(0, 30)}`, async () => {
+      const c = checkLines(body + "\n" + f, imageOf(), 3);
+      assert.ok(c.held >= 1, "held");
+      const p = await read(body + "\n" + f, imageOf());
+      assert.ok(p.partChecked, "partChecked");
+    });
+  }
   await t("a page of nothing but its footer figures still has no amount to trust", () => {
     const c = checkLines(body + "\nReg. No 199002477Z", imageOf(), 3);
     assert.equal(c.held, 0);

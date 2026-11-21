@@ -234,8 +234,12 @@ const FURNITURE = new RegExp(String.raw`\b(?:co(?:mpany|\.)?\s*)?reg(?:istration
   + String.raw`|\(?\b(?:date\s+printed|printed(?:\s+(?:on|date))?|date\s+of\s+print|generated(?:\s+on)?)\s*[:-]?\s*(?:\d{1,2}[\s/.-]+(?:\d{1,2}|${MONTH})[\s/.-]+\d{2,4}|${MONTH}\s+\d{1,2},?\s+\d{4}|` + DATE + String.raw`)\)?`, "gi");
 const pageFurniture = (line: string) => {
   const rest = line.replace(FURNITURE, " ");
-  return rest !== line && !/\d/.test(rest);
+  // Nothing else on the line but company words: a label such as "Premium due date" or "Total premium" left beside a
+  // "printed" date makes it a figure line like any other (Critic #569 MED-1).
+  const words = rest.toLowerCase().match(/[a-z]+/g) ?? [];
+  return rest !== line && !/\d/.test(rest) && words.every((w) => FOOTER_WORDS.has(w));
 };
+const FOOTER_WORDS = new Set(["co", "company", "pte", "ltd", "limited", "confidential", "page", "of", "gst", "uen", "no", "number", "reg"]);
 
 /** One figure as the history keeps it: its kind and where it sits on the page, never its digits or the words beside it. */
 type Seen = { key: string; shape: string; where: string };
