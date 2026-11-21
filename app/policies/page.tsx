@@ -9,7 +9,7 @@ import { customerError } from "@/components/customer-text";
 import { coverReadingPending, failedDocumentAdvice, notReadPagesAdvice, readInPartAdvice, unreadablePagesAdvice } from "@/lib/documents/failure-advice";
 import { MAX_UPLOAD_LABEL, UploadError, uploadPolicyDocument } from "@/components/upload-document";
 import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
-import { CONFIRM_READ_AGAIN, documentReadLabel, pressReadAgain, readingFinishedSummary, readingWaitCopy } from "@/lib/documents/upload-problems";
+import { CONFIRM_READ_AGAIN, documentReadLabel, isReadingNotice, pressReadAgain, readingFinishedSummary, readingNotice, readingWaitCopy } from "@/lib/documents/upload-problems";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
@@ -277,6 +277,8 @@ export default function PoliciesPage() {
       setStatusIsError(summary.problem);
       setAtDocumentLimit(false);
       setStatus(summary.text);
+      // "Reading … again…" was true while it ran; once it has finished it must not sit beside the result.
+      setLibraryNotice((notice) => (isReadingNotice(notice) ? "" : notice));
       wasActive.current = new Set();
       // A document that couldn't be read stops counting towards the plan.
       if (plan.status?.upgrade) plan.refresh();
@@ -339,7 +341,8 @@ export default function PoliciesPage() {
       // A locked PDF: nothing changed; its password is asked for where the document is (LockedPdf below).
       if (payload.reasonCode === "PDF_PASSWORD_NEEDED") { setPasswordFor(policy.id); return; }
       if (!response.ok) throw new Error(payload.error || "Could not start reading it again.");
-      setLibraryNotice(`Reading ${label} again…`);
+      setStatus(""); setStatusIsError(false);
+      setLibraryNotice(readingNotice(label, "again"));
       await refresh();
     } catch (err) {
       setLibraryNotice(customerError(err, "Could not start reading it again. Please try later."));
@@ -363,7 +366,8 @@ export default function PoliciesPage() {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "Could not read it with that password.");
-    setLibraryNotice(`Reading ${label} with the password you entered…`);
+    setStatus(""); setStatusIsError(false);
+    setLibraryNotice(readingNotice(label, "with the password you entered"));
     setPasswordFor(null);
     await refresh();
   }
@@ -559,7 +563,7 @@ export default function PoliciesPage() {
             return <>
               {missing && <div className="accuracy-warning" data-testid="pages-not-read"><b>{missing.title}</b><span>{missing.what}</span><small>{missing.next}</small>{readAgainButton}</div>}
               {unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>{unread.title}</b><span>{unread.what}</span><small>{unread.next}</small>{!missing && readAgainButton}</div>}
-              {part && <div className="accuracy-warning compact partial" data-testid="read-in-part"><span>{part.what}</span><details className="warning-next"><summary>What can I do?</summary><small>{part.next}</small></details></div>}
+              {part && <div className="accuracy-warning compact partial" data-testid="read-in-part"><span>{part.what}</span><details className="warning-next" open><summary>What can I do?</summary><small>{part.next}</small></details></div>}
               {pending && <div className="accuracy-warning" data-testid="cover-reading-pending"><b>Not fully read yet</b><span>{pending.what}</span><small>{pending.next}</small>{!missing && !unread && /Read again/.test(pending.next) && readAgainButton}</div>}
               {!part && !pending && !processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Some details not used yet</b><span>DearPolicy couldn&rsquo;t find the page some details in this document came from, so it doesn&rsquo;t use those details in answers yet.</span></div>}
             </>;

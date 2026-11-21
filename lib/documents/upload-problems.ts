@@ -85,11 +85,17 @@ export function readingFinishedSummary<T extends { processing_status: string; pr
     const pages = unreadPageNumbers(partly[0].processing_message);
     parts.push(pages.length
       ? `We couldn't read ${pageList(pages)} of ${name(partly[0])} yet. Answers won't use ${pages.length === 1 ? "that page" : "those pages"} until ${pages.length === 1 ? "it's" : "they're"} read.`
+      : readInPartAdvice(partly[0].processing_message) ? `${name(partly[0])} was read, but some amounts on it aren't used yet.`
       : `${name(partly[0])} wasn't fully read yet.`);
   } else if (partly.length > 1) parts.push(`${partly.length} documents weren't fully read yet.`);
   if (!parts.length) return { text: "Your documents are ready. Home has been updated.", problem: false };
   return { text: `Finished. ${parts.join(" ")} See below for what to do.`, problem: true };
 }
+
+/** The line shown while a document is read again, and how it is told apart from the notices that stay (delete, link). It
+ * is cleared when the reading finishes, so "Reading … again…" never sits beside the result of that same reading. */
+export const readingNotice = (label: string, how: "again" | "with the password you entered") => `Reading ${label} ${how}…`;
+export const isReadingNotice = (notice: string) => /^Reading .+ (?:again|with the password you entered)…$/.test(notice);
 
 /** What a document card says while it is still being read, by the stage the reading stored. A reading that is waiting
  * on our side (a retry after a dropped connection, the one later re-read, scanned pages still with the reader) says so
