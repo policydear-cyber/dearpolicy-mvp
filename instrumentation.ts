@@ -4,6 +4,8 @@
 // configuration a hard startup failure instead of a silent, exploitable
 // default: see lib/launch/guards.ts for what "unsafe" means here.
 export async function register() {
+  // Error monitoring (lib/telemetry/sentry.ts): does nothing unless SENTRY_DSN is set in production.
+  await (await import("./lib/telemetry/sentry")).initSentry();
   const { assertProductionSafe, isProduction, telemetryIntentionallyDisabled, TELEMETRY_INTENTIONALLY_DISABLED_WARNING } = await import("./lib/launch/guards");
   assertProductionSafe();
   if (telemetryIntentionallyDisabled()) {
@@ -33,4 +35,12 @@ export async function register() {
   if (malwareScanningIntentionallyDisabled()) {
     console.warn(`\n${"=".repeat(78)}\n${PROTOTYPE_SCANNING_DISABLED_WARNING}\n${"=".repeat(78)}\n`);
   }
+}
+
+/** Next.js calls this for every error thrown while serving a request. With no SENTRY_DSN it is a no-op. The report is
+ * scrubbed before it is sent (lib/telemetry/sentry-scrub.ts). */
+export async function onRequestError(...args: unknown[]) {
+  if (!process.env.SENTRY_DSN?.trim() || process.env.NODE_ENV !== "production") return;
+  const { captureRequestError } = await import("@sentry/nextjs");
+  (captureRequestError as (...a: unknown[]) => void)(...args);
 }

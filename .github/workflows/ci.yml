@@ -522,6 +522,9 @@ jobs:
       - name: Offline batch path for scripts (fake batch client; the app never imports it)
         run: npm run benefit-table:batch-test
 
+      - name: Sentry reports carry no private detail (allowlist scrubber; off without a DSN)
+        run: npm run telemetry:sentry-test
+
       - name: Chat answers without check narration; insurer contacts only from the household's own pages
         run: npm run simple:declutter-contacts-test
 
