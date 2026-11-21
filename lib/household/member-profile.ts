@@ -47,6 +47,18 @@ export function profileGaps(m: { relationship?: string | null; date_of_birth?: s
 /** The id suffix of the Family page field for a gap, so "Add now" can put the cursor in the first one missing. */
 export const PROFILE_GAP_FIELD: Record<string, string> = { "relationship": "relationship", "date of birth": "dob", "sex": "sex", "preferred name": "preferred" };
 
+/** Where the Family page starts a household (DC, 21 Nov 2026: a new user added her husband without adding herself).
+ * - "owner": nobody is on file yet, so the person who signed up is asked about themselves first, as relationship "self",
+ *   and the page does not offer anyone else until that is saved;
+ * - "family": the owner is on file, so other people can be added;
+ * - "family-without-owner": members exist but none is "self" (an account made before this step). Nothing is blocked:
+ *   adding others still works and the owner is offered a way to add themselves. */
+export type FamilyStart = "owner" | "family" | "family-without-owner";
+export function familyStart(family: ReadonlyArray<{ relationship?: string | null }>): FamilyStart {
+  if (!family.length) return "owner";
+  return family.some((m) => (m.relationship ?? "").trim().toLowerCase() === "self") ? "family" : "family-without-owner";
+}
+
 type Queryable = { query: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }> };
 let sexColumnSeen = false;
 let lastChecked = 0;
