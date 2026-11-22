@@ -42,7 +42,7 @@ export const MIGRATION_ORDER = [
   "sql/schema.sql", "sql/benefit-catalog.sql", "sql/cover-conditions.sql", "sql/coverage-ledger.sql", "sql/model-usage.sql",
   "sql/chat-upgrade.sql", "sql/claim-composition.sql", "sql/claim-evidence.sql", "sql/critical-illness.sql", "sql/disability.sql",
   "sql/model-provenance.sql", "sql/rate-limit.sql", "sql/background-jobs.sql", "sql/lifecycle.sql", "sql/claim-reviewers.sql",
-  "sql/processing-failure-diagnostics.sql", "sql/storage-purge.sql", "sql/household-rls.sql", "sql/infrastructure-rls.sql",
+  "sql/processing-failure-diagnostics.sql", "sql/storage-purge.sql", "sql/admin-audit-log.sql", "sql/household-rls.sql", "sql/infrastructure-rls.sql",
   // Optional household tables (each needs household-rls.sql and sets its own RLS, policies and grants).
   "sql/policy-member-exclusions.sql", "sql/detected-name-dismissals.sql", "sql/benefit-table.sql",
   "sql/benefit-figure-confirmations.sql", "sql/policy-folders.sql", "sql/policy-folders-auto.sql", "sql/household-plans.sql", "sql/policy-not-renewed.sql",

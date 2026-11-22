@@ -42,7 +42,7 @@ DECLARE
     'deletion_requests', 'deletion_audit_log',
     'rate_limit_buckets',
     'household_exports', 'household_export_audit_log',
-    'storage_cleanup_locks', 'storage_cleanup_audit_log', 'storage_purge_queue',
+    'storage_cleanup_locks', 'storage_cleanup_audit_log', 'storage_purge_queue', 'admin_audit_log',
     'model_executions', 'model_usage',
     'scan_provider_events', 'processing_failure_diagnostics',
     'claim_reviewers', 'claim_review_assignments', 'claim_reviewer_audit_log',

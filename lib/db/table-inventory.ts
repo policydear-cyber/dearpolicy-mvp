@@ -103,6 +103,7 @@ export const TABLE_INVENTORY: Record<string, TableInventoryEntry> = {
   household_export_audit_log: { class: "service_only", authenticated: [], policies: DENY("household_export_audit_log"), browserGrantsRequired: false, codePath: "lib/household/export-store.ts appendExportAudit" },
   storage_cleanup_locks: { class: "service_only", authenticated: [], policies: DENY("storage_cleanup_locks"), browserGrantsRequired: false, codePath: "lib/storage/cleanup.ts withCleanupLock" },
   storage_cleanup_audit_log: { class: "service_only", authenticated: [], policies: DENY("storage_cleanup_audit_log"), browserGrantsRequired: false, codePath: "lib/storage/cleanup.ts appendCleanupAudit" },
+  admin_audit_log: { class: "service_only", authenticated: [], policies: DENY("admin_audit_log"), browserGrantsRequired: false, codePath: "lib/admin/account-deletion.ts (optional table: sql/admin-audit-log.sql)" },
   storage_purge_queue: { class: "service_only", authenticated: [], policies: DENY("storage_purge_queue"), browserGrantsRequired: false, codePath: "lib/storage/purge.ts (enqueueStoragePurge / drainStoragePurge)" },
   model_executions: { class: "service_only", authenticated: [], policies: DENY("model_executions"), browserGrantsRequired: false, codePath: "lib/ai/provenance.ts recordModelExecution" },
   model_usage: { class: "service_only", authenticated: [], policies: DENY("model_usage"), browserGrantsRequired: false, codePath: "lib/ai/ledger.ts (service; enforces the plan spend cap)" },
