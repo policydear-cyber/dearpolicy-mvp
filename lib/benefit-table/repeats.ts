@@ -12,7 +12,7 @@ type Rowish = {
 };
 
 /** A running total: its own words say it adds up to a date, so it can only stay flat or grow with the years. */
-const RUNNING = /\b(?:(?<!up\s)(?<!due\s)to[- ]date|cumulative|accumulated|running\s+total|total\s+premiums?\s+paid)\b/i;
+const RUNNING = /\b(?:(?<!up[\s-]+)(?<!due[\s-]+)to[- ]date|cumulative|accumulated|running\s+total|total\s+premiums?\s+paid)\b/i;
 
 export const isRunningTotal = (benefit: string, column?: string | null) => RUNNING.test(`${benefit} ${column ?? ""}`);
 
@@ -25,7 +25,17 @@ const dateKey = (r: Rowish) => `${r.valueAt?.policyYear ?? ""}/${r.valueAt?.age 
 /** Everything the household sees about a row except its year: two rows are the same figure only if all of it is equal. */
 const shown = (r: Rowish) => JSON.stringify([{ ...r.figure, asOf: undefined, amount: undefined }, r.qualifier ?? null, r.holding ?? null, r.conditions ?? null, r.fromDay ?? null, r.maxDays ?? null]);
 
-export function collapseRepeats<R extends Rowish>(rows: R[]): (R & { repeatedAt?: number[] })[] {
+/** Dated rows put in year order within their own places in the list, so which amount came last never depends on the order the page was read in. */
+function inYearOrder<R extends Rowish>(rows: R[]): R[] {
+  const slots = rows.flatMap((r, i) => (amountOf(r) != null && yearOf(r) != null ? [i] : []));
+  const sorted = slots.map((i) => rows[i]!).sort((a, b) => yearOf(a)! - yearOf(b)!);
+  const out = [...rows];
+  slots.forEach((i, k) => { out[i] = sorted[k]!; });
+  return out;
+}
+
+export function collapseRepeats<R extends Rowish>(input: R[]): (R & { repeatedAt?: number[] })[] {
+  const rows = inYearOrder(input);
   const out: (R & { repeatedAt?: number[] })[] = [];
   const seen = new Map<string, number>();
   const last = new Map<string, number>();
@@ -34,7 +44,7 @@ export function collapseRepeats<R extends Rowish>(rows: R[]): (R & { repeatedAt?
     const yr = yearOf(r);
     // Only a figure dated by a year is judged: a row with no year or no amount is always kept.
     if (amt == null || yr == null) { out.push(r); continue; }
-    const group = [r.personId, r.coverKey, r.source?.documentId ?? "", norm(r.benefit), norm(r.section), norm(r.column), r.pays ?? "", r.valueAt?.rate ?? "", shown(r)].join("|");
+    const group = [r.personId, r.coverKey, r.source?.documentId ?? "", norm(r.benefit), norm(r.section), norm(r.column), r.pays ?? "", r.valueAt?.rate ?? "", r.valueAt?.policyYear != null ? "y" : "a", shown(r)].join("|");
     const base = `${group}|${amt}`;
     const running = isRunningTotal(r.benefit, r.column);
     // The same figure for the same year (a table printed twice) is one row. A running total at a later year with the same

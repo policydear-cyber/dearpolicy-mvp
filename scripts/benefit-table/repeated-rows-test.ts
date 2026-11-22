@@ -81,6 +81,20 @@ test("control: 'up to date' and 'due to date' are not running totals", () => {
   assert.equal(collapseRepeats([mk("Premium up to date", 5, 800), mk("Premium up to date", 10, 800)]).length, 2);
   assert.equal(collapseRepeats([mk("Premium due to date of payment", 5, 800), mk("Premium due to date of payment", 10, 800)]).length, 2);
 });
+test("a dip is not hidden whatever order the rows were read in", () => {
+  const f = (y: number, a: number) => mk("Total premiums paid to date", y, a);
+  for (const order of [[5, 15, 10], [10, 5, 15], [15, 5, 10], [10, 15, 5]]) {
+    const amt: Record<number, number> = { 5: 1000, 10: 2000, 15: 1000 };
+    assert.equal(collapseRepeats(order.map((y) => f(y, amt[y]!))).length, 3, order.join());
+  }
+});
+test("control: a running total by age and the same by policy year are not merged", () => {
+  const a = (k: "age" | "policyYear", n: number) => ({ ...mk("Total premiums paid to date", 1, 9), valueAt: { [k]: n } });
+  assert.equal(collapseRepeats([a("age", 50), a("age", 60), a("policyYear", 50), a("policyYear", 60)]).length, 2);
+});
+test("control: up-to-date spellings are not running totals", () => {
+  for (const w of ["Premium up-to-date", "Premium Up  to date", "Premium due-to-date"]) assert.equal(collapseRepeats([mk(w, 5, 800), mk(w, 10, 800)]).length, 2, w);
+});
 
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`repeated-rows: ${passed} pass`);
