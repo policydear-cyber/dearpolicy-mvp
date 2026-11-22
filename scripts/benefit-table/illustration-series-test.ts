@@ -156,6 +156,86 @@ test("control: two holders of the plan; an illustration naming only one shows fo
   assert.ok(amounts(0).includes(47909), "Charmaine's own illustration shows for her");
   assert.ok(!amounts(1).includes(47909), "not for Bob");
 });
+// The production shape (READYBUILDER 10, 23 Nov): ONE 58-page pack holds the schedule and the illustration pages; the
+// document's own kind is "other" (the first part's), the cover is read from the schedule page of the same document, and
+// the illustration's rows carry the generic headings the reading chose.
+const PACK = "bbbbbbbb-0000-0000-0000-0000000000aa";
+const packSrc = (): SourceDoc => ({ id: PACK, name: "Policy pack", readable: true, pages: [
+  { page: 3, text: "Ong Pei Lin Charmaine\tREADYBUILDER 10\tS$49,000" }, { page: 38, text: illText }] });
+const packReading = (kind: string, rows: unknown[], plan: string | null = null, product = "READYBUILDER 10") => checkReading(packSrc(), {
+  document: { kind, product, insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan, periodFrom: null, periodTo: null },
+  covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+  benefits: rows.map((r) => ({ ...(r as object), page: 38 })) });
+for (const kind of ["other", "policy_wording", "product_summary"]) {
+  test(`production shape: a pack of kind "${kind}" with the cover and the illustration in one document shows the series`, () => {
+    const rows = illRows("Total Basic Premiums Paid To-Date ($)");
+    const t = assembleTable([packReading(kind, rows)], family, linksFor(PACK, rows as never));
+    const got = shown(t);
+    for (const v of [1195.45, 2372.31, 4651.59, 4791, 23954, 47909]) assert.ok(got.includes(v), `${v} missing for ${kind}: ${JSON.stringify(got)}`);
+  });
+}
+for (const kind of ["personal_proof", "scheme_terms", "letter", "bill_or_receipt"]) {
+  test(`control: a pack of kind "${kind}" keeps the old refusal`, () => {
+    const rows = illRows("Total Basic Premiums Paid To-Date ($)");
+    const t = assembleTable([packReading(kind, rows)], family, linksFor(PACK, rows as never));
+    assert.ok(!shown(t).includes(47909));
+  });
+}
+test("control: a pack whose product is another plan's stays refused", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const t = assembleTable([packReading("other", rows, "Enhanced Max", "SUPERSAVER 20")], family, linksFor(PACK, rows as never));
+  assert.ok(!shown(t).includes(47909));
+});
+test("control: kind other / product_summary that does not hold the person's own cover stays refused", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  for (const kind of ["other", "product_summary", "policy_wording"]) {
+    // a summary document with no cover of its own, the schedule is another document
+    const sum = checkReading({ id: WORD, name: "Summary", readable: true, pages: [{ page: 1, text: illText }] }, reading(kind, [], rows));
+    const t = assembleTable([sched, sum], family, linksFor(WORD, rows as never));
+    assert.ok(!shown(t).includes(47909), kind);
+  }
+});
+test("control: two by-year tables under the same headings are two tables, none is shown", () => {
+  const two = illText + "\n5/33\t55,555\t25,152\n10/38\t99,999\t50,304";
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"), paid("Total Basic Premiums Paid To-Date ($)", 5, 55555, "5/33\t55,555\t25,152"), paid("Total Basic Premiums Paid To-Date ($)", 10, 99999, "10/38\t99,999\t50,304")];
+  const pack: SourceDoc = { id: PACK, name: "Policy pack", readable: true, pages: [{ page: 3, text: "Ong Pei Lin Charmaine\tREADYBUILDER 10\tS$49,000" }, { page: 38, text: two }] };
+  const r = checkReading(pack, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((q) => ({ ...(q as object), page: 38 })) });
+  assert.ok(r.benefits.some((b) => b.value === 55555), "fixture keeps the second table's rows");
+  const t = assembleTable([r], family, linksFor(PACK, rows as never));
+  assert.ok(!shown(t).includes(47909) && !shown(t).includes(99999), JSON.stringify(shown(t)));
+});
+test("control: a pack holding two plans' covers shows no generic table for either", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const r = checkReading(packSrc(), {
+    document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" },
+      { person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "Beta Growth", sumInsured: 1000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((q) => ({ ...(q as object), page: 38 })) });
+  assert.ok(!shown(assembleTable([r], family, linksFor(PACK, rows as never))).includes(47909));
+});
+{
+  const base = { person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" };
+  const withCovers = (extra: object[]) => {
+    const rows = illRows("Total Premiums Paid To-Date ($)");
+    const src2: SourceDoc = { ...packSrc(), pages: [{ page: 3, text: "Ong Pei Lin Charmaine\tREADYBUILDER 10\tS$49,000\nTan Ah Kow\tAlpha Saver\tS$20,000" }, { page: 38, text: illText }] };
+    const r = checkReading(src2, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+      covers: [base, ...extra], benefits: rows.map((q) => ({ ...(q as object), page: 38 })) });
+    return shown(assembleTable([r], [...family, { id: "p3", display_name: "Tan Ah Kow" }], linksFor(PACK, rows as never)));
+  };
+  const riderQuote = { page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000", asOf: null, sumInsured: null };
+  test("a rider cover (riderOf set) with no plan and its own product name does not block the pack", () =>
+    assert.ok(withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "Waiver of Premium Rider", cover: "Waiver of Premium Rider", plan: null, riderOf: "READYBUILDER 10" }]).includes(47909)));
+  test("control: a product-only \"Alpha Saver +\" is not \"Alpha Saver\"; product-only READYBUILDER 10 + is not READYBUILDER 10", () =>
+    assert.ok(!withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10 +", cover: "READYBUILDER 10 +", plan: null }]).includes(47909)));
+  test("control: a product-only cover of another product (no plan, no riderOf) in the pack refuses the series", () =>
+    assert.ok(!withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "Beta Growth", cover: "Beta Growth", plan: null }]).includes(47909)));
+  test("a rider cover with the plan equal does not block the pack", () =>
+    assert.ok(withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "TERMINAL ILLNESS", plan: "READYBUILDER 10" }]).includes(47909)));
+  test("control: a family pack with another person's cover under another plan refuses the series (it prints both plans' tables)", () =>
+    assert.ok(!withCovers([{ ...riderQuote, person: "Tan Ah Kow", product: "Alpha Saver", cover: "Alpha Saver", plan: "Alpha Saver", sumInsured: 20000, quote: "Tan Ah Kow Alpha Saver S$20,000" }]).includes(47909)));
+}
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`illustration-series: ${passed} pass`);
 process.exit(0);
