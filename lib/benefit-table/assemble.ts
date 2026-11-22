@@ -1756,10 +1756,13 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const illustratesCover = (documentId: string, t: CoverType) => {
     const r = illustrationOf.get(documentId);
     if (!r) return true;
-    const names = [r.product, r.plan].map((x) => headingWords(x)).filter(Boolean);
-    if (!names.length) return true;
-    const mine = [t.plan, t.product, t.cover].map((x) => headingWords(x)).filter(Boolean);
-    return names.some((n) => mine.some((m) => within(n, m) || within(m, n)));
+    const ip = headingWords(r.plan), ipr = headingWords(r.product);
+    if (!ip && !ipr) return true;
+    // Like with like, and equal words (a "PLUS" or "Max" added to the same name is another tier). A plan against a plan; only
+    // when either side has no plan, the product (or cover) names.
+    if (ip && t.plan) return ip === headingWords(t.plan);
+    const mine = [t.product, t.cover].map((x) => headingWords(x)).filter(Boolean);
+    return [ip, ipr].filter(Boolean).every((n) => mine.includes(n));
   };
   const linkOf = new Map<string, SectionLink>();
   const ownVersion = ownVersionOf(readings, covers);

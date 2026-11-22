@@ -99,7 +99,7 @@ test("control: an alternative named in the row's own benefit words stays refused
   const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
   assert.ok(!shown(t).includes(47909));
 });
-for (const id of [{ product: "Enhanced Max", plan: "Enhanced Max" }, { product: "SUPERSAVER 20", plan: null }]) {
+for (const id of [{ product: "Enhanced Max", plan: "Enhanced Max" }, { product: "SUPERSAVER 20", plan: null }, { product: "READYBUILDER 10 PLUS", plan: "READYBUILDER 10 PLUS" }, { product: "READYBUILDER 10", plan: "Enhanced Max" }, { product: "READYBUILDER", plan: null }]) {
   test(`control: an illustration of another plan (${id.product}) linked to this cover stays refused`, () => {
     const rows = illRows("Total Premiums Paid To-Date ($)");
     const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows, id));
