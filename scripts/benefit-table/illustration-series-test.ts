@@ -54,6 +54,21 @@ test("control: another plan's column in a document that is not an illustration s
   const t = assembleTable([sched, w], family, linksFor(WORD, rows as never));
   assert.ok(!shown(t).includes(2000));
 });
+for (const heading of ["Standard", "Enhanced", "Cover Term 20 years", "Sum Assured $200,000", "Rider A", "Basic"]) {
+  test(`control: an alternative heading "${heading}" on by-year values stays refused`, () => {
+    const rows = illRows(heading);
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+    assert.ok(!shown(t).includes(47909), `${heading} was shown`);
+    assert.ok(t.refusedLinks.some((x) => x.why.includes(heading)));
+  });
+}
+test("control: two by-year columns Standard and Enhanced side by side are both refused, and so is a series beside them", () => {
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"), paid("Standard", 5, 11111, "5/33\t23,954\t25,152"), paid("Enhanced", 5, 22222, "5/33\t23,954\t25,152")];
+  const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+  const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+  assert.ok(!shown(t).includes(11111) && !shown(t).includes(22222), "alternatives are not shown");
+});
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`illustration-series: ${passed} pass`);
 process.exit(0);

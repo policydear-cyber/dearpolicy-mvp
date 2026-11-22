@@ -604,17 +604,29 @@ export const figureOnlyHeading = (column: string | null, soleColumn: boolean) =>
  * that gave these columns a heading hid every premium frequency and total-premiums-paid row, where a reading that left the
  * heading out showed them). A heading that says "plan" or "option" or names a plan is still refused (columnProblem). */
 const FREQUENCY_WORDS = new Set(["monthly", "quarterly", "semi", "annually", "annual", "yearly", "half", "weekly"]);
+/** Words that only say what a series of figures is. A heading of these (and numbers, such as a rate) alone is a series; any
+ * other word ("Standard", "Enhanced", "Term", "Rider", "Sum assured") may name an alternative, and stays refused. A closed
+ * list of generic figure words: no insurer, product or plan names. */
+const SERIES_WORDS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustrated", "projected", "at", "investment", "return", "returns", "rate", "p", "a",
+  "total", "basic", "premium", "premiums", "paid", "to", "date", "benefit", "benefits", "value", "values", "surrender", "cash", "death", "maturity", "net", "gross"]);
+/** At least one of these must be in the heading, so a lone tier word ("Basic") is not taken for a series. */
+const SERIES_ANCHORS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustrated", "projected", "paid", "premium", "premiums", "total", "return", "returns"]);
+const seriesHeading = (column: string | null) => {
+  const w = headingWords(column).split(" ").filter(Boolean);
+  return w.length > 0 && w.every((t) => SERIES_WORDS.has(t) || /^\d+(?:\.\d+)?$/.test(t)) && w.some((t) => SERIES_ANCHORS.has(t));
+};
 export function illustrationSeries(readings: CheckedReading[]): Set<string> {
   const out = new Set<string>();
   for (const r of readings) {
     if (r.kind !== "illustration") continue;
     const groups = new Map<string, CheckedBenefit[]>();
     for (const b of r.benefits) { const k = sectionKeyOf(r.documentId, b); groups.set(k, [...(groups.get(k) ?? []), b]); }
-    for (const [k, rows] of groups) {
-      const byYear = rows.every((b) => b.pays === "value" && (b.atAge != null || b.atPolicyYear != null));
-      const byFrequency = rows.every((b) => { const w = headingWords(b.column).split(" ").filter(Boolean); return w.length > 0 && w.every((t) => FREQUENCY_WORDS.has(t)); });
-      if (byYear || byFrequency) out.add(k);
-    }
+    const candidates = [...groups].filter(([, rows]) => rows.every((b) => (b.pays === "value" && (b.atAge != null || b.atPolicyYear != null))
+      || (headingWords(b.column).split(" ").filter(Boolean).every((t) => FREQUENCY_WORDS.has(t)) && !!headingWords(b.column))));
+    // Two different headings that are not series words side by side are alternatives (tiers, terms, sums, riders): none of
+    // this document's columns is taken for a series.
+    if (candidates.some(([, rows]) => rows.some((b) => b.column && !seriesHeading(b.column)))) continue;
+    for (const [k, rows] of candidates) if (rows.every((b) => !b.column || seriesHeading(b.column))) out.add(k);
   }
   return out;
 }
