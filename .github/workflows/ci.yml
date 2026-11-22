@@ -173,6 +173,8 @@ jobs:
         run: npm run policies:not-renewed-test
       - name: Premium end dates, maturity dates and illustrated values kept only where printed
         run: npm run benefit-table:term-dates-test
+      - name: A table printed again or a flat running total is one row (negative controls)
+        run: npm run benefit-table:repeated-rows-test
       - name: Policy folders join a wording's "100% of the Sum Assured" to the same person's schedule in the same folder (negative controls)
         run: npm run simple:folder-whole-sum-test
       - name: Scanned pages mark an amount whose first digit may be a misread currency letter ($520,000 for S$20,000; negative controls)

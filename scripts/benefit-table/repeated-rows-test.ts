@@ -1,0 +1,48 @@
+/** A table printed again on other pages, or a running total that stays flat once premiums stop, is one row, never many
+ * figures to add up. Controls: a changing amount, another benefit, another currency and another person stay separate.
+ *   node --import tsx scripts/benefit-table/repeated-rows-test.ts */
+import assert from "node:assert/strict";
+import { collapseRepeats } from "@/lib/benefit-table/repeats";
+
+let passed = 0; const failures: string[] = [];
+function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
+const mk = (benefit: string, year: number, amount: number, extra: Record<string, unknown> = {}) => ({
+  personId: "p1", coverKey: "c1", benefit, section: null, column: null, pays: "value",
+  figure: { kind: "value", amount, currency: "SGD" }, valueAt: { policyYear: year }, source: { documentId: "d1", page: 38 }, ...extra });
+
+test("a running total flat from year 10 to year 40 is one row naming the later years", () => {
+  const rows = [10, 15, 20, 25, 30, 35, 40].map((y) => mk("Total Basic Premiums Paid To-Date", y, 47909));
+  const out = collapseRepeats(rows);
+  assert.equal(out.length, 1);
+  assert.equal(out[0]!.valueAt!.policyYear, 10);
+  assert.deepEqual(out[0]!.repeatedAt, [15, 20, 25, 30, 35, 40]);
+});
+test("the same table printed on two pages is one row per year", () => {
+  const out = collapseRepeats([mk("Surrender value", 5, 1000), mk("Surrender value", 5, 1000, { source: { documentId: "d1", page: 40 } }), mk("Surrender value", 10, 2000)]);
+  assert.equal(out.length, 2);
+});
+test("control: a value that is not a running total and changes with the year is kept for every year", () => {
+  assert.equal(collapseRepeats([mk("Surrender value", 5, 1000), mk("Surrender value", 10, 2000), mk("Surrender value", 15, 3000)]).length, 3);
+});
+test("control: the same flat amount on a non-running benefit in different years is not collapsed", () => {
+  assert.equal(collapseRepeats([mk("Guaranteed cash value", 10, 500), mk("Guaranteed cash value", 20, 500)]).length, 2);
+});
+test("control: a running total that grows keeps each amount", () => {
+  assert.equal(collapseRepeats([mk("Total premiums paid", 5, 100), mk("Total premiums paid", 10, 200), mk("Total premiums paid", 15, 200)]).length, 2);
+});
+test("control: another currency, person or benefit is never merged", () => {
+  const a = mk("Total premiums paid", 10, 100);
+  assert.equal(collapseRepeats([a, { ...a, figure: { kind: "value", amount: 100, currency: "USD" }, valueAt: { policyYear: 15 } }]).length, 2);
+  assert.equal(collapseRepeats([a, { ...a, personId: "p2", valueAt: { policyYear: 15 } }]).length, 2);
+  assert.equal(collapseRepeats([a, { ...a, benefit: "Total distribution cost to-date", valueAt: { policyYear: 15 } }]).length, 2);
+});
+test("control: a row with no year or no amount is always kept", () => {
+  const n = { ...mk("Total premiums paid", 10, 100), valueAt: undefined };
+  assert.equal(collapseRepeats([n, { ...n }]).length, 2);
+});
+test("control: a different rate is a different projection", () => {
+  assert.equal(collapseRepeats([mk("Projected value", 10, 500, { valueAt: { policyYear: 10, rate: "4.25%" } }), mk("Projected value", 10, 500, { valueAt: { policyYear: 10, rate: "3.00%" } })]).length, 2);
+});
+
+if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
+console.log(`repeated-rows: ${passed} pass`);
