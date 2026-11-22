@@ -95,6 +95,14 @@ test("control: a running total by age and the same by policy year are not merged
 test("control: up-to-date spellings are not running totals", () => {
   for (const w of ["Premium up-to-date", "Premium Up  to date", "Premium due-to-date"]) assert.equal(collapseRepeats([mk(w, 5, 800), mk(w, 10, 800)]).length, 2, w);
 });
+test("rows that repeat nothing come out in the order they came in", () => {
+  const rows = [mk("Surrender value", 15, 3), mk("Surrender value", 5, 1), mk("Death benefit", 10, 7), mk("Surrender value", 10, 2)];
+  assert.deepEqual(collapseRepeats(rows).map((r) => r.benefit + r.valueAt!.policyYear), ["Surrender value15", "Surrender value5", "Death benefit10", "Surrender value10"]);
+});
+test("control: the same year at two different ages is not merged", () => {
+  const a = { ...mk("Total premiums paid to date", 10, 9), valueAt: { policyYear: 10, age: 40 } };
+  assert.equal(collapseRepeats([a, { ...a, valueAt: { policyYear: 10, age: 41 } }]).length, 2);
+});
 
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`repeated-rows: ${passed} pass`);
