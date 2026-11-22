@@ -638,6 +638,17 @@ export function illustrationSeries(readings: CheckedReading[]): Set<string> {
     for (const b of r.benefits) { const k = sectionKeyOf(r.documentId, b); groups.set(k, [...(groups.get(k) ?? []), b]); }
     const candidates = [...groups].filter(([, rows]) => rows.every((b) => (b.pays === "value" && (b.atAge != null || b.atPolicyYear != null))
       || (headingWords(b.column).split(" ").filter(Boolean).every((t) => FREQUENCY_WORDS.has(t)) && !!headingWords(b.column))));
+    // Two by-year tables under the same section and heading (the same year with two different amounts) are two tables, not
+    // one series: a pack or summary that prints several plans' tables the same way. None of them is taken for a series.
+    const seen = new Map<string, number | null>();
+    let twoTables = false;
+    for (const [k, rows] of groups) for (const b of rows) {
+      if (b.atAge == null && b.atPolicyYear == null) continue;
+      const id = `${k}|${norm(b.benefit)}|${b.atAge ?? ""}|${b.atPolicyYear ?? ""}|${b.rate ?? ""}`;
+      if (seen.has(id) && seen.get(id) !== b.value) twoTables = true;
+      seen.set(id, b.value);
+    }
+    if (twoTables) continue;
     // Two different headings that are not series words side by side are alternatives (tiers, terms, sums, riders): none of
     // this document's columns is taken for a series.
     if (candidates.some(([, rows]) => rows.some((b) => b.column && !seriesRow(b)))) continue;
@@ -1761,6 +1772,9 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const illustratesCover = (documentId: string, t: CoverType) => {
     const r = illustrationOf.get(documentId);
     if (!r) return true;
+    // Only an illustration is one plan's. A pack, wording or summary of another kind is taken for the person's own plan only
+    // when it holds the person's own cover (its schedule page): then its illustration pages are theirs.
+    if (r.kind !== "illustration" && !covers.some((c) => c.coverKey === t.key && c.source.documentId === documentId)) return false;
     // The illustration must be for one of this cover's holders (a quote for someone else is not the person's figure).
     const named = [...r.namedPeople, ...r.covers.map((c) => c.person)].map((n) => headingWords(n)).filter(Boolean);
     if (named.length && !t.holders.some((h) => { const hw = headingWords(h); return named.some((n) => within(n, hw) || within(hw, n)); })) return false;

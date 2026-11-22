@@ -186,6 +186,26 @@ test("control: a pack whose product is another plan's stays refused", () => {
   const t = assembleTable([packReading("other", rows, "Enhanced Max", "SUPERSAVER 20")], family, linksFor(PACK, rows as never));
   assert.ok(!shown(t).includes(47909));
 });
+test("control: kind other / product_summary that does not hold the person's own cover stays refused", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  for (const kind of ["other", "product_summary", "policy_wording"]) {
+    // a summary document with no cover of its own, the schedule is another document
+    const sum = checkReading({ id: WORD, name: "Summary", readable: true, pages: [{ page: 1, text: illText }] }, reading(kind, [], rows));
+    const t = assembleTable([sched, sum], family, linksFor(WORD, rows as never));
+    assert.ok(!shown(t).includes(47909), kind);
+  }
+});
+test("control: two by-year tables under the same headings are two tables, none is shown", () => {
+  const two = illText + "\n5/33\t55,555\t25,152\n10/38\t99,999\t50,304";
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"), paid("Total Basic Premiums Paid To-Date ($)", 5, 55555, "5/33\t55,555\t25,152"), paid("Total Basic Premiums Paid To-Date ($)", 10, 99999, "10/38\t99,999\t50,304")];
+  const pack: SourceDoc = { id: PACK, name: "Policy pack", readable: true, pages: [{ page: 3, text: "Ong Pei Lin Charmaine\tREADYBUILDER 10\tS$49,000" }, { page: 38, text: two }] };
+  const r = checkReading(pack, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((q) => ({ ...(q as object), page: 38 })) });
+  assert.ok(r.benefits.some((b) => b.value === 55555), "fixture keeps the second table's rows");
+  const t = assembleTable([r], family, linksFor(PACK, rows as never));
+  assert.ok(!shown(t).includes(47909) && !shown(t).includes(99999), JSON.stringify(shown(t)));
+});
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`illustration-series: ${passed} pass`);
 process.exit(0);
