@@ -91,7 +91,6 @@ test("the module adds up nothing: no sum, total or projection of its own", () =>
   assert.ok(!/reduce\(|\btotal\b|\*\s*\(1\s*\+/.test(src));
 });
 
-console.log(`life-stages: ${passed} passed${failures.length ? `, ${failures.length} failed\n${failures.join("\n")}` : ""}`);
 test("a value under a bare $ column takes its own cover's dollar currency; nothing settled, or no $, stays without one", () => {
   const v = { benefit: "Surrender value", column: "Guaranteed ($)", currency: null as string | null, coverCurrency: "SGD" as string | null };
   assert.equal(currencyOfValue(v), "SGD");
@@ -112,4 +111,11 @@ test("control: a renewed policy with no new end, and one with a premium term, ar
   assert.deepEqual(r.noDates, []);
 });
 
+test("a running total printed again at later years is passed through to the page", () => {
+  const r = lifeStages({ dates: [DATES[1]!], covers: COVERS, values: [value("save", { policyYear: 10, repeatedAt: [15, 20] })], dateOfBirth: null, today: TODAY });
+  assert.deepEqual(r.policies[0]!.values[0]!.repeatedAt, [15, 20]);
+  assert.deepEqual(lifeStages({ dates: [DATES[1]!], covers: COVERS, values: [value("save", { policyYear: 10 })], dateOfBirth: null, today: TODAY }).policies[0]!.values[0]!.repeatedAt, []);
+});
+
+console.log(`life-stages: ${passed} passed${failures.length ? `, ${failures.length} failed\n${failures.join("\n")}` : ""}`);
 if (failures.length) process.exit(1);

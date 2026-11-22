@@ -20,11 +20,11 @@ import { currencyOfAmount } from "@/lib/format/currency";
 export type LifeCover = { documentId: string; coverKey: string; name: string; premiumEndDate?: string | null; premiumTerm?: string | null; maturityDate?: string | null; page: number | null };
 /** One printed value of the person's table placed by an age or policy year its page prints. */
 export type LifeValueRow = { coverKey: string; benefit: string; amount: number; currency: string | null;
-  column?: string | null; /** The verified currency of this value's cover, when its schedule settles one. */ coverCurrency?: string | null;
+  column?: string | null; /** Other policy years where the same running total is printed again (benefit table collapseRepeats). */ repeatedAt?: number[]; /** The verified currency of this value's cover, when its schedule settles one. */ coverCurrency?: string | null;
   kind: "value" | "projected"; basis?: "non_guaranteed" | "illustrated"; age?: number; policyYear?: number; rate?: string; documentId: string; document: string; page: number };
 
 export type LifeEvent = { kind: "premiums_end" | "matures" | "cover_ends"; on: string; onText: string; age: number | null; policy: string; cover: string | null; page: number | null };
-export type LifeValue = { benefit: string; amount: number; currency: string | null; projected: boolean; basis: string | null; age: number | null; policyYear: number | null; rate: string | null; document: string; page: number };
+export type LifeValue = { benefit: string; amount: number; currency: string | null; projected: boolean; basis: string | null; age: number | null; policyYear: number | null; rate: string | null; /** Later policy years with the same printed amount. */ repeatedAt: number[]; document: string; page: number };
 export type LifePolicy = {
   key: string; name: string; insurer: string | null; state: PolicyDate["state"];
   /** The last day of cover as printed, or as the renewal receipt prints it; null when no end is printed. */
@@ -90,7 +90,7 @@ export function lifeStages(input: { dates: PolicyDate[]; covers: LifeCover[]; va
     const maturityDay = latest(covers.map((c) => c.maturityDate));
     const values = input.values.filter((v) => docs.has(docOfCover.get(v.coverKey) ?? "") && (v.age != null || v.policyYear != null))
       .map((v): LifeValue => ({ benefit: v.benefit, amount: v.amount, currency: currencyOfValue(v), projected: v.kind === "projected", basis: v.kind === "projected" ? (v.basis ?? "illustrated") : null,
-        age: v.age ?? null, policyYear: v.policyYear ?? null, rate: v.rate ?? null, document: v.document, page: v.page }))
+        age: v.age ?? null, policyYear: v.policyYear ?? null, rate: v.rate ?? null, repeatedAt: v.repeatedAt ?? [], document: v.document, page: v.page }))
       .sort((a, b) => (a.policyYear ?? a.age ?? 0) - (b.policyYear ?? b.age ?? 0) || Number(a.projected) - Number(b.projected));
     return { key: p.key, name: p.name, insurer: p.insurer, state: p.state, endsOn: end != null ? isoOf(end) : null, endsText: end != null ? dayText(end) : null, endAge: end != null ? ageOn(born, end) : null,
       premiumsEnd: premiumDay != null ? at(premiumDay) : null, premiumTerm: premiumDay == null && terms.length === 1 ? terms[0] : null,

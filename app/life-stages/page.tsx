@@ -114,7 +114,7 @@ function PolicyCard({ p }: { p: LifePolicy }) {
     {!!p.values.length && <details className="life-values"><summary>Values the documents print ({p.values.length})</summary><div className="life-table-wrap"><table className="life-table values">
       <thead><tr><th scope="col">At</th><th scope="col">What</th><th scope="col">Amount</th><th scope="col">Source</th></tr></thead>
       <tbody>{p.values.map((v, i) => <tr key={i}><th scope="row">{atWords(v)}</th><td data-label="What">{v.benefit}</td>
-        <td data-label="Amount"><b className="life-money">{formatMoney(v.amount, v.currency)}</b><small>{basisWords(v)}</small></td>
+        <td data-label="Amount"><b className="life-money">{formatMoney(v.amount, v.currency)}</b><small>{basisWords(v)}</small>{v.repeatedAt.length ? <small>Same amount printed again at policy year {listOf(v.repeatedAt.map(String))}</small> : null}</td>
         <td data-label="Source">{v.document}, page {v.page}</td></tr>)}</tbody>
     </table></div></details>}
   </li>;
