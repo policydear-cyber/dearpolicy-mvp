@@ -95,6 +95,8 @@ export type TableRow = {
   /** For a value printed for an age or policy year (a table of values by year): that age and year as printed, and the
    * yearly rate its column is illustrated at (check.ts valueAt). Life stages places the value by these, never by the label. */
   valueAt?: { age?: number; policyYear?: number; rate?: string };
+  /** Other policy years where the same running total is printed again with the same amount (collapseRepeats). */
+  repeatedAt?: number[];
 };
 /** What the household said about one person's cover: that its sum insured is right, or the figure it should be. */
 export type Confirmation = { personId: string; coverKey: string; status: "confirmed" | "corrected"; sumInsured: number | null; updatedAt?: string | null };
@@ -1816,6 +1818,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   for (const p of people) {
     const listed = new Set(p.rows.filter((r) => !r.coverLine).map((r) => r.coverKey));
     if (listed.size) p.rows = p.rows.filter((r) => !r.coverLine || !listed.has(r.coverKey));
+    // The same running total or table printed again on other pages or years is one row (collapseRepeats).
+    p.rows = collapseRepeats(p.rows);
   }
   for (const s of sections) if (notTold.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_TOLD_WHY, source: firstSource.get(s.key) ?? null });
   for (const s of sections) if (notTheirs.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_THEIR_DOCUMENT_WHY, source: firstSource.get(s.key) ?? null });
@@ -1833,6 +1837,7 @@ const NAMES_READ = new WeakMap<BenefitTable, Map<string, string[]>>();
  * any other way. */
 export const benefitNamesRead = (table: BenefitTable, documentId: string): string[] => NAMES_READ.get(table)?.get(documentId) ?? [];
 
+import { collapseRepeats } from "./repeats";
 // In headline.ts, which runs in the browser and must not import this file's database code (main 999048d: no build).
 import { periodWords } from "./headline";
 export { periodWords };
