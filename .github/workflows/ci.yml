@@ -172,6 +172,8 @@ jobs:
         run: npm run documents:locked-pdf-test
       - name: A scan made of several pictures, or inside a form, is put together and read (negative controls)
         run: npm run documents:multi-image-page-test
+      - name: An illustration's columns are series of its one plan, not other plans
+        run: npm run benefit-table:illustration-series-test
       - name: Not fully read note wording
         run: npm run policies:not-fully-read-note-test
       - name: Read again on a locked PDF (refused before anything changes; refused presses don't use the read allowance; PGlite)
