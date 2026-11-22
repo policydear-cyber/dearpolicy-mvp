@@ -116,6 +116,13 @@ test("dated states stay shown, and the end-not-printed list is the same at every
   assert.deepEqual(r.noDates, []);
   assert.ok(r.stages.every((s) => JSON.stringify(s.endNotPrinted) === JSON.stringify(["No end"])));
 });
+test("repeatedAt keeps only later whole years, once each and in order, and names its axis", () => {
+  const r = lifeStages({ dates: [DATES[1]!], covers: COVERS, values: [value("save", { policyYear: 10, repeatedAt: [20, 5, 20, 10, 15, Number.NaN, 2.5] }), value("save", { age: 45, repeatedAt: [50, 55] })], dateOfBirth: null, today: TODAY });
+  const vs = r.policies[0]!.values;
+  assert.deepEqual(vs.find((x) => x.policyYear === 10)!.repeatedAt, [15, 20]);
+  assert.equal(vs.find((x) => x.policyYear === 10)!.repeatedAxis, "policy year");
+  assert.equal(vs.find((x) => x.age === 45)!.repeatedAxis, "age");
+});
 test("a policy that prints no date, term or value is named once and not drawn", () => {
   const r = lifeStages({ dates: [date("w", "Policy wording", ["w1"], { state: "no_date" }), ...DATES.slice(0, 1)], covers: COVERS, values: [], dateOfBirth: null, today: TODAY });
   assert.deepEqual(r.noDates, ["Policy wording"]);

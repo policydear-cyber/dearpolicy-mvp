@@ -50,7 +50,7 @@ function Body({ data }: { data: Payload }) {
     </div>}
     {!!notRenewed.length && <p className="muted">Not shown: {listOf(notRenewed)}, which the household said wasn&rsquo;t renewed.</p>}
     {data.age == null && !!policies.length && <p className="muted">Add {data.member!.name ? `${data.member!.name}’s` : "a"} date of birth in <Link href="/family">Family</Link> to see ages here.</p>}
-    {!!noDates.length && <p className="muted">No dates are printed in {listOf(noDates)}, so {noDates.length === 1 ? "it isn’t" : "they aren’t"} shown below.</p>}
+    {!!noDates.length && <p className="muted">No end, premium or maturity date is printed in {listOf(noDates)}, so {noDates.length === 1 ? "it isn’t" : "they aren’t"} shown below.</p>}
     {!policies.length ? <section className="section"><div className="empty-card">{noDates.length ? <>None of {data.member!.name ? `${data.member!.name}’s` : "these"} policies print a date or value yet.</> : renewalDue.length || notRenewed.length ? <>No other policies to show for {data.member!.name ?? "this person"}.</> : <>No policies on file for {data.member!.name ?? "this person"} yet. <Link href="/policies">Upload a policy schedule</Link> to see its dates here.</>}</div></section> : <>
       <section className="section life-section" aria-labelledby="life-timeline-title">
         <h2 id="life-timeline-title">Timeline</h2>
@@ -114,7 +114,7 @@ function PolicyCard({ p }: { p: LifePolicy }) {
     {!!p.values.length && <details className="life-values"><summary>Values the documents print ({p.values.length})</summary><div className="life-table-wrap"><table className="life-table values">
       <thead><tr><th scope="col">At</th><th scope="col">What</th><th scope="col">Amount</th><th scope="col">Source</th></tr></thead>
       <tbody>{p.values.map((v, i) => <tr key={i}><th scope="row">{atWords(v)}</th><td data-label="What">{v.benefit}</td>
-        <td data-label="Amount"><b className="life-money">{formatMoney(v.amount, v.currency)}</b><small>{basisWords(v)}</small>{v.repeatedAt.length ? <small>Same amount printed again at policy year {listOf(v.repeatedAt.map(String))}</small> : null}</td>
+        <td data-label="Amount"><b className="life-money">{formatMoney(v.amount, v.currency)}</b><small>{basisWords(v)}</small>{v.repeatedAt.length ? <small>Same amount printed again at {v.repeatedAxis} {listOf(v.repeatedAt.slice(0, 6).map(String))}{v.repeatedAt.length > 6 ? ` and ${v.repeatedAt.length - 6} more` : ""}</small> : null}</td>
         <td data-label="Source">{v.document}, page {v.page}</td></tr>)}</tbody>
     </table></div></details>}
   </li>;

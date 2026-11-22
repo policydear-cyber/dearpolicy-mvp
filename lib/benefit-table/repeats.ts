@@ -42,7 +42,7 @@ export function collapseRepeats<R extends Rowish>(input: R[]): (R & { repeatedAt
     const yr = yearOf(r);
     // Only a figure dated by a year is judged: a row with no year or no amount is always kept.
     if (amt == null || yr == null) { out.push(r); pos.push(i); continue; }
-    const group = [r.personId, r.coverKey, r.source?.documentId ?? "", norm(r.benefit), norm(r.section), norm(r.column), r.pays ?? "", r.valueAt?.rate ?? "", r.valueAt?.policyYear != null ? `y${r.valueAt?.age ?? ""}` : "a", shown(r)].join("|");
+    const group = [r.personId, r.coverKey, r.source?.documentId ?? "", norm(r.benefit), norm(r.section), norm(r.column), r.pays ?? "", r.valueAt?.rate ?? "", r.valueAt?.policyYear != null ? "y" : "a", shown(r)].join("|");
     const base = `${group}|${amt}`;
     const running = isRunningTotal(r.benefit, r.column);
     // The same figure for the same year (a table printed twice) is one row. A running total at a later year with the same
@@ -51,7 +51,10 @@ export function collapseRepeats<R extends Rowish>(input: R[]): (R & { repeatedAt
     const key = running ? base : `${base}|${dateKey(r)}`;
     const at = seen.get(key);
     const latest = last.get(group);
-    if (at != null && (!running || latest === at || dateKey(r) === dateKey(out[at]!))) {
+    // Rows that print a policy year and an age on every line are one series by policy year; the same year at a different
+    // age is not the same row (inconsistent source), so it stays.
+    const sameYearOtherAge = at != null && yr === yearOf(out[at]!) && (r.valueAt?.age ?? null) !== (out[at]!.valueAt?.age ?? null);
+    if (at != null && !sameYearOtherAge && (!running || latest === at || dateKey(r) === dateKey(out[at]!))) {
       // The earliest year is the one shown; the others are named. The input rows are never changed.
       const first = out[at]!;
       const years = [...new Set([...(first.repeatedAt ?? []), yearOf(first)!, yr])].sort((x, y) => x - y);
