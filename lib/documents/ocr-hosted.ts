@@ -203,13 +203,15 @@ export function paintedPictures(ops: { fnArray: number[]; argsArray: unknown[][]
     else if (fn === OPS.paintFormXObjectEnd) { formBoxes.pop(); lineWidth = savedWidth.pop() ?? lineWidth; matrix = saved.pop() ?? matrix; invisibleText = savedText.pop() ?? invisibleText; }
     else if (hiding.has(fn)) { if (why) why.reason = "it clips or shades its pictures, so what shows could differ"; return null; }
     else if (fn === OPS.setGState) {
+      const lw = (args[0] as unknown[] | undefined)?.find((kv) => Array.isArray(kv) && kv[0] === "LW") as unknown[] | undefined;
+      if (lw && Number.isFinite(Number(lw[1]))) lineWidth = Number(lw[1]);
       // PDF.js reports /BM /Normal as "source-over" and /SMask /None as false: those, and full opacity, change nothing.
       const plain = (k: unknown, v: unknown) => (k === "BM" && (v === "Normal" || v === "source-over" || v === "Compatible")) || ((k === "ca" || k === "CA") && v === 1)
         || (k === "SMask" && (v === "None" || v === null || v === false));
       const hides = (args[0] as unknown[] | undefined)?.some((kv) => Array.isArray(kv) && ["ca", "CA", "BM", "SMask"].includes(String(kv[0])) && !plain(kv[0], kv[1]));
       if (hides) { if (why) why.reason = "it uses transparency over its pictures"; return null; }
     }
-    else if (out.length && lineWidth > 2 && (strokes.has(fn) || (fn === OPS.constructPath && strokes.has(Number(args[0]))))) { if (why) why.reason = "it draws wide lines over its pictures"; return null; }
+    else if (out.length && lineWidth * Math.sqrt(Math.abs(matrix[0] * matrix[3] - matrix[1] * matrix[2])) > 2 && (strokes.has(fn) || (fn === OPS.constructPath && strokes.has(Number(args[0]))))) { if (why) why.reason = "it draws wide lines over its pictures"; return null; }
     else if (out.length && (fills.has(fn) || (fn === OPS.constructPath && fills.has(Number(args[0]))))) { if (why) why.reason = "it draws shapes over its pictures"; return null; }
     else if (fn === OPS.setTextRenderingMode) invisibleText = Number(args[0]) === 3;
     else if (fn === OPS.paintImageXObject) {
