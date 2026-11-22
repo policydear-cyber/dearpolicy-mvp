@@ -99,6 +99,21 @@ test("a value under a bare $ column takes its own cover's dollar currency; nothi
   assert.equal(currencyOfValue({ ...v, column: "Guaranteed" }), null);
   assert.equal(currencyOfValue({ ...v, currency: "USD" }), "USD");
 });
+test("control: a sign with letters states its own currency; another dollar sign is never relabelled by the cover", () => {
+  const v = (column: string, coverCurrency: string | null, benefit = "Value") => currencyOfValue({ benefit, column, currency: null, coverCurrency });
+  assert.equal(v("Value (US$)", "SGD"), "USD");
+  assert.equal(v("Value (S$)", "USD"), "SGD");
+  assert.equal(v("Value (A$)", "SGD"), "AUD");
+  assert.equal(v("Value (S$ and US$)", "SGD"), null);
+  assert.equal(v("Value", "SGD", "Death benefit ($ per $1,000)"), null);
+  assert.equal(v("Guaranteed ($)", "HKD"), "HKD");
+});
+test("dated states stay shown, and the end-not-printed list is the same at every stage", () => {
+  const r = lifeStages({ dates: [DATES[0]!, date("e", "Ends soon", ["e1"], { state: "ends_soon", endsOn: "2026-12-01" }), date("n", "No end", ["n1"], { state: "no_date" })], covers: [cover("n1", "n", { premiumEndDate: "01/03/2040" }), ...COVERS], values: [], dateOfBirth: null, today: TODAY });
+  assert.deepEqual(r.policies.map((p) => p.name).sort(), ["Ends soon", "No end", "Term Protector"]);
+  assert.deepEqual(r.noDates, []);
+  assert.ok(r.stages.every((s) => JSON.stringify(s.endNotPrinted) === JSON.stringify(["No end"])));
+});
 test("a policy that prints no date, term or value is named once and not drawn", () => {
   const r = lifeStages({ dates: [date("w", "Policy wording", ["w1"], { state: "no_date" }), ...DATES.slice(0, 1)], covers: COVERS, values: [], dateOfBirth: null, today: TODAY });
   assert.deepEqual(r.noDates, ["Policy wording"]);

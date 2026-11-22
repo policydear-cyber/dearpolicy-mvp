@@ -14,7 +14,7 @@
  * Pure: no database, no network.  Test: scripts/policies/life-stages-test.ts */
 
 import { dayOf, dayText, type PolicyDate } from "@/lib/policies/policy-dates";
-import { currencyOfAmount } from "@/lib/format/currency";
+import { currencyOfAmount, statedCurrencyCode } from "@/lib/format/currency";
 
 /** One cover line of the person's benefit table, with its printed term dates. */
 export type LifeCover = { documentId: string; coverKey: string; name: string; premiumEndDate?: string | null; premiumTerm?: string | null; maturityDate?: string | null; page: number | null };
@@ -64,7 +64,15 @@ export function ageOn(born: number | null, day: number): number | null {
  * dollar currency (currencyOfAmount); with nothing settled, or no "$" on the row, it stays without one. Never a default. */
 export function currencyOfValue(v: Pick<LifeValueRow, "benefit" | "column" | "currency" | "coverCurrency">): string | null {
   if (v.currency) return v.currency;
-  return /\$/.test(`${v.benefit} ${v.column ?? ""}`) ? currencyOfAmount("$", v.coverCurrency ?? null) : null;
+  const text = `${v.benefit} ${v.column ?? ""}`;
+  // A "$" beside a figure in the words ("per $1,000 of sum insured") is a unit of the row, not the sign its amount is in.
+  if (/\$\s*\d/.test(text)) return null;
+  const signs = [...text.matchAll(/([A-Za-z]{0,3})\$/g)].map((m) => m[1]!.toUpperCase());
+  if (!signs.length) return null;
+  // A sign with letters before it (S$, US$, A$) states its own currency; two different signs settle nothing.
+  if (new Set(signs).size > 1) return null;
+  const own = signs[0]!;
+  return own ? statedCurrencyCode(`${own}$`) : currencyOfAmount("$", v.coverCurrency ?? null);
 }
 
 /** The latest printed day among some texts, with its text, or null. */

@@ -59,10 +59,10 @@ function Body({ data }: { data: Payload }) {
       <section className="section life-section" aria-labelledby="life-stages-title">
         <h2 id="life-stages-title">At each stage</h2>
         <div className="life-table-wrap"><table className="life-table">
-          <thead><tr><th scope="col">Stage</th><th scope="col">Cover still running</th><th scope="col">Premiums</th><th scope="col">What changes</th></tr></thead>
+          <thead><tr><th scope="col">Stage</th><th scope="col">Printed end is after this point</th><th scope="col">Premiums</th><th scope="col">What changes</th></tr></thead>
           <tbody>{stages.map((s, i) => <tr key={s.from.on}>
             <th scope="row">{stageLabel(s, i)}</th>
-            <td data-label="Cover still running">{s.inPlace.length ? s.inPlace.join(", ") : "None"}{s.renewedNoEnd.length ? <small>Renewed; new end date not printed: {s.renewedNoEnd.join(", ")}</small> : null}</td>
+            <td data-label="Printed end is after this point">{s.inPlace.length ? s.inPlace.join(", ") : "None"}{s.renewedNoEnd.length ? <small>Renewed; new end date not printed: {s.renewedNoEnd.join(", ")}</small> : null}</td>
             <td data-label="Premiums">{s.paying.length ? `Premiums printed until after this point: ${s.paying.join(", ")}` : "No premium end printed after this point"}</td>
             <td data-label="What changes">{s.events.length ? <ul>{s.events.map((e, j) => <li key={j}>{e.policy}: {e.kind === "premiums_end" ? "premiums stop" : e.kind === "matures" ? "matures" : "cover ends, as printed"}</li>)}</ul> : "—"}</td>
           </tr>)}</tbody>
@@ -122,7 +122,7 @@ function PolicyCard({ p }: { p: LifePolicy }) {
 
 /** A term printed as a bare number has no unit on the page: it is said as printed, never as years or an age. */
 function termWords(t: string): string {
-  return /^\d+$/.test(t.trim()) ? `Term printed as “${t.trim()}”, without years or an age` : `Term as printed: ${t}`;
+  return /^\d+$/.test(t.trim()) ? `Term: ${t.trim()} (the document gives no unit)` : `Term as printed: ${t}`;
 }
 function endWords(p: LifePolicy): string {
   if (!p.endsOn) return p.state === "renewed" ? "Renewed; new end date not printed" : "End not printed";
