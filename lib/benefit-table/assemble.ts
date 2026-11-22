@@ -1760,7 +1760,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     if (!ip && !ipr) return true;
     // Like with like, and equal words (a "PLUS" or "Max" added to the same name is another tier). A plan against a plan; only
     // when either side has no plan, the product (or cover) names.
-    if (ip && t.plan) return ip === headingWords(t.plan);
+    if (ip && t.plan) return ip === headingWords(t.plan) && (!ipr || !headingWords(t.product) || ipr === headingWords(t.product));
     const mine = [t.product, t.cover].map((x) => headingWords(x)).filter(Boolean);
     return [ip, ipr].filter(Boolean).every((n) => mine.includes(n));
   };
