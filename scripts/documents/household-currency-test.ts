@@ -76,9 +76,10 @@ async function main() {
     assert.deepEqual(shown([death], [p2("Currency : Singapore Dollar\n" + BARE), { pageNumber: 9, text: "Policy currency may be GBP, SGD or USD." }], "SGD"), ["SGD 100000"]));
   await test("P a page naming two currencies is held", () => assert.deepEqual(shown([death], [p2("Currency : Singapore Dollar\nExample: US$ 1,000\n" + BARE)], "SGD"), ["held"]));
   await test("P a currency outside the list (yen) is held", () => assert.deepEqual(shown([death], [{ pageNumber: 1, text: "Excess ¥10,000" }, p2(BARE)], "SGD"), ["held"]));
-  await test("P a bare $ elsewhere names no currency and holds the bare page (owner rule; TE #526 F3)", () => assert.deepEqual(shown([death], [{ pageNumber: 1, text: "Premium $12.50 monthly" }, p2(BARE)], "SGD"), ["held"]));
-  await test("P ... and not with a ringgit household", () => assert.deepEqual(shown([{ ...death, currency: null }], [{ pageNumber: 1, text: "Premium $12.50 monthly" }, p2(BARE)], "MYR"), ["held"]));
-  await test("P 'dollars' written out names no currency: held", () => assert.deepEqual(shown([death], [p2("All amounts are in dollars\n" + BARE)], "SGD"), ["held"]));
+  await test("P a bare $ elsewhere names no currency: the household's currency fills the bare page (DC 22 Nov)", () => assert.deepEqual(shown([death], [{ pageNumber: 1, text: "Premium $12.50 monthly" }, p2(BARE)], "SGD"), ["SGD 100000"]));
+  await test("P ... and for a ringgit household a bare $ is read in the household's currency too (DC 22 Nov)", () => assert.deepEqual(shown([{ ...death, currency: null }], [{ pageNumber: 1, text: "Premium $12.50 monthly" }, p2(BARE)], "MYR"), ["MYR 100000"]));
+  await test("P a lettered currency beside a bare $ still wins: US$ on the page holds it for an S$ household", () => assert.deepEqual(shown([death], [p2("Premium US$12.50 monthly\n" + BARE)], "SGD"), ["held"]));
+  await test("P 'dollars' written out names no currency: the household's currency fills it (DC 22 Nov)", () => assert.deepEqual(shown([death], [p2("All amounts are in dollars\n" + BARE)], "SGD"), ["SGD 100000"]));
   await test("P 'Canadian Dollar' never agrees", () => assert.deepEqual(shown([death], [p2("Currency: Canadian Dollar\n" + BARE)], "SGD"), ["held"]));
 
   // ---- C: Critic #526 (H1-H3)
@@ -87,8 +88,8 @@ async function main() {
     // The figure itself is still confirmed as money (the bare $), with no currency given to it.
     assert.deepEqual(shown([{ amount: 500000, currency: null, evidence: "Death Benefit $500,000.00" }], [{ pageNumber: 1, text: "Policy Currency: USD" }, p2("Life Assured\tMei Ling Tan\nDeath Benefit $500,000.00")], "SGD"), ["null 500000"]);
   });
-  await test("C H1 ... and the same bare $ page alone keeps no currency either (TE #526 F3)", () =>
-    assert.deepEqual(shown([{ amount: 500000, currency: null, evidence: "Death Benefit $500,000.00" }], [p2("Life Assured\tMei Ling Tan\nDeath Benefit $500,000.00")], "SGD"), ["null 500000"]));
+  await test("C H1 ... and the same bare $ page alone is read in the household's currency (DC 22 Nov)", () =>
+    assert.deepEqual(shown([{ amount: 500000, currency: null, evidence: "Death Benefit $500,000.00" }], [p2("Life Assured\tMei Ling Tan\nDeath Benefit $500,000.00")], "SGD"), ["SGD 500000"]));
   await test("C H2 'Sum Assured (RM)' over a bare figure is ringgit", () => assert.deepEqual(shown([{ ...death, currency: null }], [p2("Sum Assured (RM)\n" + BARE)], "SGD"), ["held"]));
   await test("C H2 'Currency: RM' is ringgit", () => assert.deepEqual(shown([{ ...death, currency: null }], [p2("Currency: RM\n" + BARE)], "SGD"), ["held"]));
   await test("C H2 rupiah 'Rp' is another currency", () => assert.deepEqual(shown([{ ...death, currency: null }], [{ pageNumber: 1, text: "Premi Rp 1.500.000" }, p2(BARE)], "SGD"), ["held"]));
@@ -112,7 +113,7 @@ async function main() {
     await test(`T F1 '${mark}' is never S$`, () => { const { cov, page } = usLine(mark); assert.notDeepEqual(shown([cov], [page], "SGD"), ["SGD 500000"]); });
   }
   await test("T F1 'US $' is US$ for a US$ household", () => { const { cov, page } = usLine("US $"); assert.deepEqual(shown([cov], [page], "USD"), ["USD 500000"]); });
-  for (const head of ["Currency: Myr", "Currency: NTD", "All amounts are in Malaysian currency", "Sum Assured ($)", "Currency: usd"])
+  for (const head of ["Currency: Myr", "Currency: NTD", "All amounts are in Malaysian currency", "Currency: usd"])
     await test(`T F1 a header '${head}' holds the bare lines`, () => assert.deepEqual(shown([{ ...death, currency: null }], [p2(head + "\n" + BARE)], "SGD"), ["held"]));
   await test("T F1 'Policy Currency: SGD' on page 1 never makes page 2's 'US $' lines S$", () => {
     const { cov, page } = usLine("US $");

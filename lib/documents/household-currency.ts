@@ -6,8 +6,8 @@
  *   decides, and the household's choice never relabels it;
  * - the household's currency is used for a page only when nothing that page prints names any OTHER currency (its text
  *   and its image reading), and, for a page that names no currency at all, nothing any page of the document, or any other
- *   document of the same policy, prints does. A bare "$" or "dollars" names no currency (owner rule), so it is never
- *   filled and blocks the fill;
+ *   document of the same policy, prints does. A bare "$" or "dollars" names no currency, so it takes the household's
+ *   (DC 22 Nov) and never blocks the fill; only a lettered currency other than the household's does;
  * - a document that prints two currencies, or one the household did not choose, is held exactly as before.
  * The fact check then confirms a figure in it only as it does an image's currency: a money-shaped figure (thousands
  * separators or two decimals) on the cover's own evidence line (image-currency moneyShapedFigure), never a plain number,
@@ -29,8 +29,11 @@ export function effectiveHouseholdCurrency(stored: unknown): HouseholdCurrency |
   return s;
 }
 
-/** Whether a currency the document names is consistent with the household's: only the same code. A bare "$" or "dollars"
- * names no currency (owner rule; Test engineer #526 F1, F3), so a page or document printing one is never filled. */
+/** What currenciesNamed gives for a bare "$" or "dollars": a dollar of no stated kind. */
+const BARE_DOLLAR = "$";
+/** Whether a currency the document names is consistent with the household's: the same code. A bare "$" or "dollars"
+ * is not a currency named (DC 22 Nov: the household set its currency, so an unlabelled amount is read in it, shown or
+ * not; namedOn leaves it out). A lettered currency ("US$", "S$", "RM", "USD") always wins: any other code holds the page. */
 const agrees = (named: string, household: string) => named === household;
 
 type Page = { pageNumber: number; text: string; imageCurrency?: string; imageCurrencies?: string[]; unreadable?: boolean; notRead?: boolean };
@@ -49,7 +52,7 @@ export type HouseholdPageCurrency = { code: string; stated: boolean };
  * - a page that names a currency (in its text or its image reading) uses the household's only when every currency it
  *   names is the household's: a schedule that says "Currency : Singapore Dollar" once, for a household in S$;
  * - a page that names none uses it only when every page of the document is known and no page, and no page image, names
- *   any currency other than the household's. A bare "$" or "dollars" counts as another currency (Test engineer #526 F3),
+ *   any currency other than the household's. A bare "$" or "dollars" counts as no currency (DC 22 Nov: it is the household's),
  *   and a policy wording that lists the currencies a policy may be written in holds every such page;
  * - `related`: the text of the household's other documents of the same policy (its schedule, an endorsement). When any
  *   of them names a currency other than the household's, nothing is filled (Test engineer #526 F2).
@@ -58,8 +61,9 @@ export function householdCurrencyPages(pages: Page[], household: string | null |
   const out = new Map<number, HouseholdPageCurrency>();
   const code = parseHouseholdCurrencySetting(household);
   if (!code || code === NO_HOUSEHOLD_CURRENCY) return out;
-  if (related.some((t) => currenciesNamed(t).some((c) => !agrees(c, code)))) return out;
-  const namedOn = (p: Page) => [...currenciesNamed(p.text), ...(p.imageCurrency ? [p.imageCurrency] : []), ...(p.imageCurrencies ?? [])];
+  if (related.some((t) => currenciesNamed(t).some((c) => c !== BARE_DOLLAR && !agrees(c, code)))) return out;
+  // A bare "$" names no currency (it is the household's); only a lettered currency counts as named.
+  const namedOn = (p: Page) => [...currenciesNamed(p.text), ...(p.imageCurrency ? [p.imageCurrency] : []), ...(p.imageCurrencies ?? [])].filter((c) => c !== BARE_DOLLAR);
   const documentAgrees = pages.every((p) => !unknownPage(p) && namedOn(p).every((c) => agrees(c, code)));
   for (const p of pages) {
     if (unknownPage(p)) continue;
