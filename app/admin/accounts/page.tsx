@@ -36,14 +36,15 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
           <h2 id="plan-h">{plan.email}</h2>
           <p className="admin-note">Created {when(plan.createdAt)} · last sign-in {when(plan.lastSignInAt)}</p>
           {plan.blockers.map((b) => <p key={b} className="alert error" role="alert">{b}</p>)}
+          {plan.warnings.map((w) => <p key={w} className="alert" role="status">{w}</p>)}
 
           <h3 className="admin-subhead">What will be deleted</h3>
           <ul>
-            <li>The sign-in for {plan.email}</li>
+            <li>The sign-in for {plan.email}, and every record that names it: memberships, invitations it sent or received, exports it made, reviewer records</li>
             {deleting.map((h) => (
               <li key={h.householdId}>
                 Household <strong>{h.name}</strong>: {plural(h.people, "person")}, {plural(h.documents, "document")} ({h.documentsRead} read),
-                {" "}{plural(h.claimDocuments, "claim document")}, {plural(h.conversations, "saved chat")}, {plural(h.storedFiles, "stored file")}, and every reading made from them.
+                {" "}{plural(h.claimDocuments, "claim document")}, {plural(h.conversations, "saved chat")}, {plural(h.storedFiles, "stored file")}, and every reading made from them, plus usage and job records and every stored file.
                 {h.otherMembers.length > 0 && <> <strong className="admin-flag warn">Others belong to it: {h.otherMembers.join(", ")}</strong></>}
               </li>
             ))}
