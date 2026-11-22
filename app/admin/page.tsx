@@ -171,12 +171,12 @@ export default async function AdminOverviewPage() {
       </section>
 
       <section id="accounts" className="section" aria-labelledby="acc-h">
-        <div className="section-heading"><h2 id="acc-h">Newest accounts</h2></div>
+        <div className="section-heading"><h2 id="acc-h">Newest accounts</h2><Link className="admin-row-link" href="/admin/accounts">Delete an account</Link></div>
         <Unavailable s={recent} />
         {recent.ok && !recent.data && <p className="admin-unavailable">Newest accounts aren&rsquo;t available: Supabase Auth&rsquo;s user list can&rsquo;t be read from this database.</p>}
         {recent.ok && recent.data && (
           <div className="admin-panel admin-table-panel"><div className="admin-table-scroll"><table className="admin-table">
-            <thead><tr><th>Email</th><th>Signed up</th><th>Email confirmed</th><th>Last sign-in</th><th>Household</th></tr></thead>
+            <thead><tr><th>Email</th><th>Signed up</th><th>Email confirmed</th><th>Last sign-in</th><th>Household</th><th><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>
               {recent.data.map((u, i) => (
                 <tr key={`${u.email}-${i}`}>
@@ -184,9 +184,10 @@ export default async function AdminOverviewPage() {
                   <td>{u.confirmed ? <span className="admin-flag good">Confirmed</span> : <span className="admin-flag warn">Not yet</span>}</td>
                   <td>{when(u.lastSignInAt)}</td>
                   <td>{u.householdId ? <Link className="admin-row-link" href={`/admin/households/${u.householdId}`}>{shortId(u.householdId)}</Link> : <span className="muted">None</span>}</td>
+                  <td>{u.email ? <Link className="admin-row-link" href={`/admin/accounts?email=${encodeURIComponent(u.email)}`}>Delete…</Link> : null}</td>
                 </tr>
               ))}
-              {!recent.data.length && <tr><td colSpan={5} className="admin-empty-row">No accounts yet.</td></tr>}
+              {!recent.data.length && <tr><td colSpan={6} className="admin-empty-row">No accounts yet.</td></tr>}
             </tbody>
           </table></div></div>
         )}

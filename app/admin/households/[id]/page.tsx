@@ -75,15 +75,16 @@ export default async function AdminHouseholdPage({ params }: { params: Promise<{
         <Unavailable s={members} />
         {members.ok && (
           <div className="admin-panel admin-table-panel"><div className="admin-table-scroll"><table className="admin-table">
-            <thead><tr><th>Email</th><th>Role</th><th>Joined</th><th>Email confirmed</th><th>Last sign-in</th></tr></thead>
+            <thead><tr><th>Email</th><th>Role</th><th>Joined</th><th>Email confirmed</th><th>Last sign-in</th><th><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>
               {members.data.map((m, i) => (
                 <tr key={`${m.email}-${i}`}>
                   <td>{m.email ?? <span className="muted">—</span>}</td><td>{m.role === "owner" ? "Owner" : "Member"}</td><td>{when(m.joinedAt)}</td>
                   <td>{m.confirmed == null ? "—" : m.confirmed ? "Yes" : <span className="admin-flag warn">Not yet</span>}</td><td>{when(m.lastSignInAt)}</td>
+                  <td>{m.email ? <Link className="admin-row-link" href={`/admin/accounts?email=${encodeURIComponent(m.email)}`}>Delete…</Link> : null}</td>
                 </tr>
               ))}
-              {!members.data.length && <tr><td colSpan={5} className="admin-empty-row"><span>No members.</span></td></tr>}
+              {!members.data.length && <tr><td colSpan={6} className="admin-empty-row"><span>No members.</span></td></tr>}
             </tbody>
           </table></div></div>
         )}

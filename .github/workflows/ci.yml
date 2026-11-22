@@ -157,6 +157,9 @@ jobs:
         run: npm run billing:plans-test
       - name: Admin console (allow-list only, every household read-only, no contents, file names or raw errors; PGlite)
         run: npm run admin:console-test
+
+      - name: Admin account deletion (admin only, own and allow-listed accounts refused, no orphans, other households untouched, audit without emails; PGlite)
+        run: npm run admin:account-deletion-test
       - name: Policy folders (owner only, own household's documents and people, add and remove, superseded and deleted documents drop out)
         run: npm run policies:folders-test
       - name: Policy folders on the Documents page (names, suggestions never across people or insurers)
