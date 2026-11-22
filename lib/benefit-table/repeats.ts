@@ -12,13 +12,15 @@ type Rowish = {
 };
 
 /** A running total: its own words say it adds up to a date, so it can only stay flat or grow with the years. */
-const RUNNING = /\b(?:to[- ]date|cumulative|accumulated|running\s+total|total\s+premiums?\s+paid)\b/i;
+const RUNNING = /\b(?:(?<!up\s)(?<!due\s)to[- ]date|cumulative|accumulated|running\s+total|total\s+premiums?\s+paid)\b/i;
 
 export const isRunningTotal = (benefit: string, column?: string | null) => RUNNING.test(`${benefit} ${column ?? ""}`);
 
 const norm = (s?: string | null) => (s ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 const amountOf = (r: Rowish) => (r.figure.amount != null ? `${r.figure.kind}|${r.figure.amount}|${r.figure.currency ?? ""}` : null);
 const yearOf = (r: Rowish) => r.valueAt?.policyYear ?? r.valueAt?.age ?? null;
+/** A policy year and an age are different dates: both are part of a row's identity. */
+const dateKey = (r: Rowish) => `${r.valueAt?.policyYear ?? ""}/${r.valueAt?.age ?? ""}`;
 
 /** Everything the household sees about a row except its year: two rows are the same figure only if all of it is equal. */
 const shown = (r: Rowish) => JSON.stringify([{ ...r.figure, asOf: undefined, amount: undefined }, r.qualifier ?? null, r.holding ?? null, r.conditions ?? null, r.fromDay ?? null, r.maxDays ?? null]);
@@ -38,13 +40,15 @@ export function collapseRepeats<R extends Rowish>(rows: R[]): (R & { repeatedAt?
     // The same figure for the same year (a table printed twice) is one row. A running total at a later year with the same
     // amount (flat after premiums stop) is one row too, but only while it is still the latest amount of its group: a
     // total that went up and came back is not a running total, so that row stays.
-    const key = running ? base : `${base}|${yr}`;
+    const key = running ? base : `${base}|${dateKey(r)}`;
     const at = seen.get(key);
     const latest = last.get(group);
-    if (at != null && (!running || latest === at || yr === yearOf(out[at]!))) {
+    if (at != null && (!running || latest === at || dateKey(r) === dateKey(out[at]!))) {
+      // The earliest year is the one shown; the others are named. The input rows are never changed.
       const first = out[at]!;
-      const list = first.repeatedAt ?? [];
-      if (yr !== yearOf(first) && !list.includes(yr)) first.repeatedAt = [...list, yr].sort((x, y) => x - y);
+      const years = [...new Set([...(first.repeatedAt ?? []), yearOf(first)!, yr])].sort((x, y) => x - y);
+      const shownYear = dateKey(first) === dateKey(r) ? first : years[0] === yr ? r : first;
+      out[at] = { ...shownYear, ...(dateKey(first) === dateKey(r) ? {} : { repeatedAt: years.filter((y) => y !== yearOf(shownYear)) }) };
       continue;
     }
     seen.set(key, out.length); last.set(group, out.length); out.push(r);

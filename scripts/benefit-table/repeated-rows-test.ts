@@ -65,6 +65,22 @@ test("the same flat running total with a different asOf wording is still one row
 test("control: a bare Premiums paid column is a yearly figure, not a running total", () => {
   assert.equal(collapseRepeats([mk("Premiums paid", 1, 50), mk("Premiums paid", 2, 50)]).length, 2);
 });
+test("the earliest year is shown whatever the input order, and the input is not changed", () => {
+  const rows = [mk("Total premiums paid to date", 40, 9), mk("Total premiums paid to date", 10, 9)];
+  const out = collapseRepeats(rows);
+  assert.equal(out.length, 1);
+  assert.equal(out[0]!.valueAt!.policyYear, 10);
+  assert.deepEqual(out[0]!.repeatedAt, [40]);
+  assert.equal((rows[0] as { repeatedAt?: number[] }).repeatedAt, undefined);
+});
+test("control: an age and a policy year with the same number are different dates", () => {
+  const a = mk("Surrender value", 65, 5);
+  assert.equal(collapseRepeats([a, { ...a, valueAt: { age: 65 } }]).length, 2);
+});
+test("control: 'up to date' and 'due to date' are not running totals", () => {
+  assert.equal(collapseRepeats([mk("Premium up to date", 5, 800), mk("Premium up to date", 10, 800)]).length, 2);
+  assert.equal(collapseRepeats([mk("Premium due to date of payment", 5, 800), mk("Premium due to date of payment", 10, 800)]).length, 2);
+});
 
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`repeated-rows: ${passed} pass`);
