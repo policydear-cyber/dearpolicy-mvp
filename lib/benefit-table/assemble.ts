@@ -1780,7 +1780,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     // Any cover of another plan counts, or another product when it names no plan and is no rider (a rider with no plan is a line
     // of the same plan), whoever holds it: a
     // family pack printing Ann's plan and Bob's plan prints both plans' tables under the same headings.
-    if (r.kind !== "illustration" && r.covers.some((c) => c.plan ? planOf({ plan: c.plan, product: c.product }) !== planOf(t) : !c.riderOf && headingWords(c.product) !== headingWords(t.product))) return false;
+    if (r.kind !== "illustration" && r.covers.some((c) => c.plan ? planOf({ plan: c.plan, product: c.product }) !== planOf(t) : !c.riderOf && planOf({ plan: null, product: c.product }) !== planOf({ plan: null, product: t.product }))) return false;
     // The illustration must be for one of this cover's holders (a quote for someone else is not the person's figure).
     const named = [...r.namedPeople, ...r.covers.map((c) => c.person)].map((n) => headingWords(n)).filter(Boolean);
     if (named.length && !t.holders.some((h) => { const hw = headingWords(h); return named.some((n) => within(n, hw) || within(hw, n)); })) return false;

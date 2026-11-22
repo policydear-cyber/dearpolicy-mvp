@@ -227,6 +227,8 @@ test("control: a pack holding two plans' covers shows no generic table for eithe
   const riderQuote = { page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000", asOf: null, sumInsured: null };
   test("a rider cover (riderOf set) with no plan and its own product name does not block the pack", () =>
     assert.ok(withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "Waiver of Premium Rider", cover: "Waiver of Premium Rider", plan: null, riderOf: "READYBUILDER 10" }]).includes(47909)));
+  test("control: a product-only \"Alpha Saver +\" is not \"Alpha Saver\"; product-only READYBUILDER 10 + is not READYBUILDER 10", () =>
+    assert.ok(!withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10 +", cover: "READYBUILDER 10 +", plan: null }]).includes(47909)));
   test("control: a product-only cover of another product (no plan, no riderOf) in the pack refuses the series", () =>
     assert.ok(!withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "Beta Growth", cover: "Beta Growth", plan: null }]).includes(47909)));
   test("a rider cover with the plan equal does not block the pack", () =>
