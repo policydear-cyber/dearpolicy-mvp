@@ -108,7 +108,7 @@ for (const id of [{ product: "Enhanced Max", plan: "Enhanced Max" }, { product: 
   });
 }
 test("an illustration naming no plan, or the cover's own, is shown", () => {
-  for (const id of [{ product: null, plan: null }, { product: "READYBUILDER 10", plan: null }]) {
+  for (const id of [{ product: "READYBUILDER 10", plan: null }]) {
     const rows = illRows("Total Premiums Paid To-Date ($)");
     const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows, id));
     assert.ok(shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909));
@@ -132,6 +132,29 @@ test("control: an illustration naming another person is not shown on this person
   const rows = illRows("Total Premiums Paid To-Date ($)");
   const ill = checkReading(src(ILL, "Illustration", illText), { ...reading("illustration", [], rows), document: { ...reading("illustration", [], rows).document, namedPeople: ["Bob Tan"] } });
   assert.ok(!shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909));
+});
+for (const id of [{ product: null, plan: null }, { product: "Alpha Saver Series", plan: null }]) {
+  test(`control: an illustration printing no plan (${id.product}) is not shown on a cover that prints a plan`, () => {
+    const rows = illRows("Total Premiums Paid To-Date ($)");
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows, id));
+    assert.ok(!shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909));
+  });
+}
+test("control: 'Plan+' is not 'Plan'", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows, { product: "READYBUILDER 10+", plan: "READYBUILDER 10+" }));
+  assert.ok(!shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909));
+});
+test("control: two holders of the plan; an illustration naming only one shows for that one", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const fam2: FamilyMember[] = [...family, { id: "p2", display_name: "Bob Tan" }];
+  const schedBob = checkReading(src("bbbbbbbb-0000-0000-0000-000000000009", "Schedule2", "Bob Tan\tREADYBUILDER 10\tS$49,000"), reading("personal_proof",
+    [{ person: "Bob Tan", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 1, quote: "Bob Tan READYBUILDER 10 S$49,000" }], []));
+  const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+  const t = assembleTable([sched, schedBob, ill], fam2, linksFor(ILL, rows as never));
+  const amounts = (i: number) => t.people[i]!.rows.map((r) => r.figure).filter((f) => f.kind !== "none").map((f) => (f as { amount?: number }).amount);
+  assert.ok(amounts(0).includes(47909), "Charmaine's own illustration shows for her");
+  assert.ok(!amounts(1).includes(47909), "not for Bob");
 });
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`illustration-series: ${passed} pass`);

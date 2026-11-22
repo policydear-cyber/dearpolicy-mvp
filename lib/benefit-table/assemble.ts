@@ -1759,12 +1759,15 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     // The illustration must be for one of this cover's holders (a quote for someone else is not the person's figure).
     const named = [...r.namedPeople, ...r.covers.map((c) => c.person)].map((n) => headingWords(n)).filter(Boolean);
     if (named.length && !t.holders.some((h) => { const hw = headingWords(h); return named.some((n) => within(n, hw) || within(hw, n)); })) return false;
-    const ip = headingWords(r.plan), ipr = headingWords(r.product);
-    if (!ip && !ipr) return true;
+    const planWords = (x: string | null | undefined) => headingWords((x ?? "").replace(/\+/g, " plus "));
+    const ip = planWords(r.plan), ipr = planWords(r.product);
+    // A cover that prints a plan is never matched by an illustration that prints none of its own (it could be another tier).
+    if (!ip && !ipr) return !t.plan;
+    if (!ip && t.plan) return planWords(t.plan) === planWords(t.product) && ipr === planWords(t.plan);
     // Like with like, and equal words (a "PLUS" or "Max" added to the same name is another tier). A plan against a plan; only
     // when either side has no plan, the product (or cover) names.
-    if (ip && t.plan) return ip === headingWords(t.plan) && (!ipr || !headingWords(t.product) || ipr === headingWords(t.product));
-    const mine = [t.product, t.cover].map((x) => headingWords(x)).filter(Boolean);
+    if (ip && t.plan) return ip === planWords(t.plan) && (!ipr || !planWords(t.product) || ipr === planWords(t.product));
+    const mine = [t.product, t.cover].map((x) => planWords(x)).filter(Boolean);
     return [ip, ipr].filter(Boolean).every((n) => mine.includes(n));
   };
   const linkOf = new Map<string, SectionLink>();
@@ -1829,7 +1832,13 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     // A row on a person's own document is only for that document's own lives (documentLives).
     const about = livesOf.get(r.documentId) ?? null;
     const holders = people.filter((x) => (!who || who.has(x.id)) && x.covers.some((c) => c.coverKey === l.cover));
-    const shownFor = people.filter((x) => (!who || who.has(x.id)) && (!about || about.has(x.id)));
+    // An illustration's series rows (illustrationSeries) are for the people the illustration is for: the person its own cover
+    // is printed for, else the people it names.
+    const illFor = r.kind === "illustration" && series.has(sectionKeyOf(r.documentId, b)) ? (() => {
+      const ns = (r.covers.length ? r.covers.map((c) => c.person) : r.namedPeople).map((n) => headingWords(n)).filter(Boolean);
+      return ns.length ? (x: { name: string }) => ns.some((n) => within(n, headingWords(x.name)) || within(headingWords(x.name), n)) : null;
+    })() : null;
+    const shownFor = people.filter((x) => (!who || who.has(x.id)) && (!about || about.has(x.id)) && (!illFor || illFor(x)));
     if (about) {
       for (const p of holders) if (!about.has(p.id)) notForPerson.push({ personId: p.id, benefit: b.benefit, section: b.section, column: b.column, why: OTHER_PERSONS_DOCUMENT_WHY, source: b.source });
       if (holders.length && !holders.some((p) => about.has(p.id))) notTheirs.add(sectionKeyOf(r.documentId, b));
