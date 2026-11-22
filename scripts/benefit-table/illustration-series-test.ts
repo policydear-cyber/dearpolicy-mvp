@@ -215,6 +215,22 @@ test("control: a pack holding two plans' covers shows no generic table for eithe
     benefits: rows.map((q) => ({ ...(q as object), page: 38 })) });
   assert.ok(!shown(assembleTable([r], family, linksFor(PACK, rows as never))).includes(47909));
 });
+{
+  const base = { person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" };
+  const withCovers = (extra: object[]) => {
+    const rows = illRows("Total Premiums Paid To-Date ($)");
+    const r = checkReading(packSrc(), { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+      covers: [base, ...extra], benefits: rows.map((q) => ({ ...(q as object), page: 38 })) });
+    return shown(assembleTable([r], family, linksFor(PACK, rows as never)));
+  };
+  const riderQuote = { page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000", asOf: null, sumInsured: null };
+  test("a rider cover with no plan and its own product name does not block the pack", () =>
+    assert.ok(withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "Waiver of Premium Rider", cover: "Waiver of Premium Rider", plan: null }]).includes(47909)));
+  test("a rider cover with the plan equal does not block the pack", () =>
+    assert.ok(withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "TERMINAL ILLNESS", plan: "READYBUILDER 10" }]).includes(47909)));
+  test("a spouse's cover under another plan does not block the member's own series", () =>
+    assert.ok(withCovers([{ ...riderQuote, person: "Tan Ah Kow", product: "Alpha Saver", cover: "Alpha Saver", plan: "Alpha Saver" }]).includes(47909)));
+}
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`illustration-series: ${passed} pass`);
 process.exit(0);
