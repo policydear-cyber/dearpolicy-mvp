@@ -7,7 +7,7 @@ globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fe
 import assert from "node:assert/strict";
 import sharp from "sharp";
 import { PDFDocument, degrees } from "pdf-lib";
-import { decodedPageImages } from "@/lib/documents/ocr-hosted";
+import { paintedPictures, decodedPageImages } from "@/lib/documents/ocr-hosted";
 
 let passed = 0; const failures: string[] = [];
 async function test(name: string, fn: () => Promise<void>) { try { await fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
@@ -110,6 +110,15 @@ await test("control: printed text beside the pictures is not left off the sheet;
   const got = await decodedPageImages(new Uint8Array(await pdf.save()), [1], undefined, why);
   assert.equal(got.has(1), false);
   assert.match(why.get(1) ?? "", /text beside/);
+});
+
+await test("invisible text inside q/Q does not hide visible text drawn after Q", async () => {
+  const OPS = { save: 1, restore: 2, transform: 3, setTextRenderingMode: 4, showText: 5, paintImageXObject: 6 } as Record<string, number>;
+  const ops = (fns: number[]) => ({ fnArray: fns, argsArray: fns.map((f) => (f === 4 ? [3] : f === 6 ? ["img"] : [])) });
+  const why: { reason?: string } = {};
+  assert.equal(paintedPictures(ops([6, 1, 4, 5, 2, 5]), OPS, why), null);
+  assert.match(why.reason ?? "", /text beside/);
+  assert.ok(paintedPictures(ops([6, 1, 4, 5, 2]), OPS), "invisible text alone is fine");
 });
 
 }

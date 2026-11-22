@@ -171,15 +171,16 @@ export function paintedPictures(ops: { fnArray: number[]; argsArray: unknown[][]
   const other = new Set(PICTURE_OP_NAMES.filter((k) => k !== "paintImageXObject").map((k) => OPS[k]).filter((v) => typeof v === "number"));
   const text = new Set(TEXT_OP_NAMES.map((k) => OPS[k]).filter((v) => typeof v === "number"));
   let invisibleText = false;
+  const savedText: boolean[] = [];
   const saved: Matrix[] = [];
   const out: Painted[] = [];
   for (const [i, fn] of ops.fnArray.entries()) {
     const args = ops.argsArray[i] ?? [];
-    if (fn === OPS.save) saved.push(matrix);
-    else if (fn === OPS.restore) matrix = saved.pop() ?? matrix;
+    if (fn === OPS.save) { saved.push(matrix); savedText.push(invisibleText); }
+    else if (fn === OPS.restore) { matrix = saved.pop() ?? matrix; invisibleText = savedText.pop() ?? invisibleText; }
     else if (fn === OPS.transform) matrix = times((args as unknown[]).map(Number) as Matrix, matrix);
-    else if (fn === OPS.paintFormXObjectBegin) { saved.push(matrix); const m = (args[0] as unknown[] | undefined)?.map(Number) as Matrix | undefined; if (m?.length === 6) matrix = times(m, matrix); }
-    else if (fn === OPS.paintFormXObjectEnd) matrix = saved.pop() ?? matrix;
+    else if (fn === OPS.paintFormXObjectBegin) { saved.push(matrix); savedText.push(invisibleText); const m = (args[0] as unknown[] | undefined)?.map(Number) as Matrix | undefined; if (m?.length === 6) matrix = times(m, matrix); }
+    else if (fn === OPS.paintFormXObjectEnd) { matrix = saved.pop() ?? matrix; invisibleText = savedText.pop() ?? invisibleText; }
     else if (fn === OPS.setTextRenderingMode) invisibleText = Number(args[0]) === 3;
     else if (fn === OPS.paintImageXObject) { out.push({ name: String(args[0]), matrix }); if (out.length > MAX_PICTURES) { if (why) why.reason = "it paints too many pictures"; return null; } }
     else if (other.has(fn)) { if (why) why.reason = "it has a mask, an inline picture or a repeated picture"; return null; }
