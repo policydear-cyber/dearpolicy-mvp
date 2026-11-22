@@ -233,6 +233,15 @@ async function main() {
     assert.match(shell, /!noNav && !reviewerArea && !operatorArea && pathname !== "\/household" && <HouseholdCurrencyPrompt/);
   });
 
+  // Test engineer F1: glued, dotted and header forms name the currency; "Premium $500" stays a bare dollar.
+  const named: Array<[string, string]> = [
+    ["Hong Kong$ 500,000", "HKD"], ["Singapore$ 500,000", "SGD"], ["Australia$ 500,000", "?"], ["U.S.A. $ 500,000", "USD"],
+    ["Aust. $ 500,000", "AUD"], ["Aus $ 500,000", "AUD"], ["Sing. $ 500,000", "SGD"], ["Sum Assured US ($)", "USD"],
+    ["US ($) 100,000.00", "USD"], ["Amounts in Dollars (US)", "USD"], ["S  $ 500,000", "SGD"], ["Venezuela $ 5", "?"], ["Puerto Rico $ 5", "?"],
+  ];
+  for (const [text, code] of named) await test(`F1 '${text}' names ${code}`, () => assert.ok(HC.currenciesNamed(text).includes(code), JSON.stringify(HC.currenciesNamed(text))));
+  for (const text of ["Premium $500", "Accidental Death $100,000", "Total $ 5,000"]) await test(`F1 '${text}' stays a bare dollar`, () => assert.deepEqual([...new Set(HC.currenciesNamed(text))], ["$"]));
+
   console.log(`household-currency-test: ${passed} passed, ${failures.length} failed`);
   if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }
 }

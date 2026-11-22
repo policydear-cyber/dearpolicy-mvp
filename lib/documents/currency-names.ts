@@ -15,7 +15,8 @@ export function currenciesNamed(text: string): string[] {
     return p === "S" || p === "SG" ? "SGD" : p === "US" ? "USD" : p === "HK" ? "HKD" : p === "A" || p === "AU" ? "AUD" : "?";
   };
   let rest = t;
-  for (const re of [/(?<![A-Za-z.])((?:[A-Za-z]\.?){1,3})\$/g, /(?<![A-Za-z.])(S|SG|US|U\.S\.|HK|AU|NZ|NT|C|R)\s\$/g]) {
+  // A currency lettered beside "($)" as a column or sum header ("Sum Assured US ($)", "US ($) 100,000.00") is the named one.
+  for (const re of [/(?<![A-Za-z.])((?:[A-Za-z]\.?){1,3})\$/g, /(?<![A-Za-z.])(S|SG|US|U\.S\.|HK|AU|NZ|NT|C|R)\s{1,3}\$/g, /(?<![A-Za-z.])(S|SG|US|U\.S\.|HK|AU|A|NZ|NT|C)\s?\(\s*\$\s*\)/g]) {
     for (const m of rest.matchAll(re)) out.push(dollarOf(m[1]));
     rest = rest.replace(re, " ");
   }
@@ -56,12 +57,19 @@ export function currenciesNamed(text: string): string[] {
   // A country or kind of dollar written out before a bare "$" ("Hong Kong $500", "Singapore $", "United States $", "Kiwi $"):
   // the named one, or another currency. A bounded list on purpose: any word before "$" would hold "Premium $500" or
   // "Accidental Death $100,000", and the household's currency is meant to fill those (DC 22 Nov).
-  if (/(?<![A-Za-z])(?:singapore(?:an)?|sing)\s+\$/i.test(t)) out.push("SGD");
-  if (/(?<![A-Za-z])(?:united\s+states|u\.?s\.?a?|american?)\s+\$/i.test(t)) out.push("USD");
-  if (/(?<![A-Za-z])(?:hong\s?kong|hk|taiwan(?:ese)?|macau|macao|new\s+zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|bahamian|barbad(?:os|ian)|belize(?:an)?|bermuda(?:n)?|bermudian|cayman|guyana|liberia(?:n)?|namibia(?:n)?|solomon|surinam(?:e|ese)?|trinidad|tobago|zimbabwe(?:an)?|caribbean|ecuador|salvador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|european)\s+\$/i.test(t)) out.push("?");
+  // Glued ("Singapore$"), dotted ("U.S.A. $", "Sing. $", "Aust. $") or spaced all count. "Amounts in Dollars (US)" names it after.
+  if (/(?<![A-Za-z])(?:singapore(?:an)?|sing)\.?\s*\$/i.test(t)) out.push("SGD");
+  if (/(?<![A-Za-z])(?:united\s+states|u\.?s\.?a?|american?)\.?\s*\$/i.test(t)) out.push("USD");
+  for (const m of t.matchAll(/\bdollars?\s*\(\s*(US|USA|USD|S|SG|SGD|HK|HKD|AU|AUD|A|NZ|NZD|NT|C|CAD)\s*\)/gi)) {
+    const c = m[1].toUpperCase();
+    out.push(c === "S" || c === "SG" || c === "SGD" ? "SGD" : c === "US" || c === "USA" || c === "USD" ? "USD" : c === "HK" || c === "HKD" ? "HKD" : c === "AU" || c === "A" || c === "AUD" ? "AUD" : "?");
+  }
+  if (/(?<![A-Za-z])(?:hong\s?kong|hk)\.?\s*\$/i.test(t)) out.push("HKD");
+  if (/(?<![A-Za-z])(?:aust?|aus)\.?\s*\$/i.test(t)) out.push("AUD");
+  if (/(?<![A-Za-z])(?:hong\s?kong|hk|taiwan(?:ese)?|macau|macao|new\s+zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|bahamian|barbad(?:os|ian)|belize(?:an)?|bermuda(?:n)?|bermudian|cayman|guyana|liberia(?:n)?|namibia(?:n)?|solomon|surinam(?:e|ese)?|trinidad|tobago|zimbabwe(?:an)?|caribbean|ecuador|salvador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|european|uruguay(?:an)?|cuba(?:n)?|dominican|nicaragua(?:n)?|venezuela(?:n)?|puerto\s+rico|filipino|straits)\.?\s*\$/i.test(t)) out.push("?");
   if (/(?<![A-Za-z])dollars?\b/i.test(t) && !out.length) out.push("$");
   for (const w of ["yen", "yuan", "renminbi", "rupees?", "rupiah", "baht", "won", "francs?", "dong", "kr(?:ona|one|oner)", "dirhams?", "riyals?", "rials?", "rand", "kyat", "riel", "taka", "patacas?", "dinars?", "lira", "roubles?", "rubles?", "reais", "zloty", "shekels?", "kip", "rufiyaa", "liras?"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
-  return out;
+  return [...new Set(out)];
 }
 
 
