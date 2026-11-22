@@ -107,6 +107,8 @@ test("control: a sign with letters states its own currency; another dollar sign 
   assert.equal(v("Value (S$ and US$)", "SGD"), null);
   assert.equal(v("Value", "SGD", "Death benefit ($ per $1,000)"), null);
   assert.equal(v("Guaranteed ($)", "HKD"), "HKD");
+  assert.equal(v("Value (S $)", "USD"), null);
+  assert.equal(v("Value ($S)", "USD"), null);
 });
 test("dated states stay shown, and the end-not-printed list is the same at every stage", () => {
   const r = lifeStages({ dates: [DATES[0]!, date("e", "Ends soon", ["e1"], { state: "ends_soon", endsOn: "2026-12-01" }), date("n", "No end", ["n1"], { state: "no_date" })], covers: [cover("n1", "n", { premiumEndDate: "01/03/2040" }), ...COVERS], values: [], dateOfBirth: null, today: TODAY });

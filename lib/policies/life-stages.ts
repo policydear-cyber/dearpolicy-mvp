@@ -69,6 +69,8 @@ export function currencyOfValue(v: Pick<LifeValueRow, "benefit" | "column" | "cu
   if (/\$\s*\d/.test(text)) return null;
   const signs = [...text.matchAll(/([A-Za-z]{0,3})\$/g)].map((m) => m[1]!.toUpperCase());
   if (!signs.length) return null;
+  // A spaced or reversed sign ("S $", "$S") is a stated currency written oddly: not a bare $, so never the cover's.
+  if (/\$[A-Za-z]{1,2}\b|\b[A-Za-z]{1,2}\s\$/.test(text)) return null;
   // A sign with letters before it (S$, US$, A$) states its own currency; two different signs settle nothing.
   if (new Set(signs).size > 1) return null;
   const own = signs[0]!;
