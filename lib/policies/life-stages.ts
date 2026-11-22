@@ -64,19 +64,21 @@ export function ageOn(born: number | null, day: number): number | null {
  * dollar currency (currencyOfAmount); with nothing settled, or no "$" on the row, it stays without one. Never a default. */
 export function currencyOfValue(v: Pick<LifeValueRow, "benefit" | "column" | "currency" | "coverCurrency">): string | null {
   if (v.currency) return v.currency;
-  const text = `${v.benefit} ${v.column ?? ""}`;
+  const text = `${v.benefit} ${v.column ?? ""}`.trim();
+  const dollars = [...text.matchAll(/\$/g)].length;
+  if (!dollars) return null;
   // A "$" beside a figure in the words ("per $1,000 of sum insured") is a unit of the row, not the sign its amount is in.
   if (/\$\s*\d/.test(text)) return null;
-  // Any other currency named beside the sign (a code, RM, a symbol, a currency word) settles nothing: unsure means no currency.
-  if (/\b(?:RM|MYR|USD|SGD|HKD|AUD|EUR|GBP|JPY|CNY|RMB|NZD|CAD|THB|IDR|INR|PHP|KRW|CHF|ringgit|euros?|pounds?|dollars?|yen|rupees?|baht)\b|[£€¥₹]/i.test(text.replace(/\b[A-Za-z]{1,2}\$/g, ""))) return null;
-  const signs = [...text.matchAll(/([A-Za-z]{0,3})\$/g)].map((m) => m[1]!.toUpperCase());
-  if (!signs.length) return null;
-  // A spaced or reversed sign ("S $", "$S") is a stated currency written oddly: not a bare $, so never the cover's.
-  if (/\$[A-Za-z]{1,2}\b|\b[A-Za-z]{1,2}\s\$/.test(text)) return null;
-  // A sign with letters before it (S$, US$, A$) states its own currency; two different signs settle nothing.
-  if (new Set(signs).size > 1) return null;
-  const own = signs[0]!;
-  return own ? statedCurrencyCode(`${own}$`) : currencyOfAmount("$", v.coverCurrency ?? null);
+  // Only one sign in the words can be the amount's: two settle nothing.
+  if (dollars > 1) return null;
+  // A sign with letters right before it (S$, US$, A$) states its own currency.
+  const prefixed = text.match(/\b([A-Za-z]{1,3})\$/);
+  if (prefixed) return statedCurrencyCode(`${prefixed[1]!.toUpperCase()}$`);
+  // A bare "$" takes its cover's dollar currency only when it stands alone: "($)" or the last thing in the heading. Anything
+  // else beside it (another currency named, any way it is written) leaves the amount without one: unsure means none.
+  if (!/\(\s*\$\s*\)|\$\s*$/.test(text)) return null;
+  if (/\b(?:RM|MYR|USD|SGD|HKD|AUD|EUR|GBP|JPY|CNY|RMB|NZD|CAD|THB|IDR|INR|PHP|KRW|CHF|ringgit|euros?|pounds?|dollars?|yen|rupees?|baht)\b|[£€¥₹]/i.test(text.replace(/\(\s*\$\s*\)/, ""))) return null;
+  return currencyOfAmount("$", v.coverCurrency ?? null);
 }
 
 /** The latest printed day among some texts, with its text, or null. */

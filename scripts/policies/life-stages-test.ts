@@ -109,6 +109,10 @@ test("control: a sign with letters states its own currency; another dollar sign 
   assert.equal(v("Guaranteed ($)", "HKD"), "HKD");
   for (const c of ["Value RM ($)", "Value £ ($)", "Value € ($)", "Value (MYR) ($)", "Value in RM ($)", "(USD) ($)", "Value (USD $)", "Value (US Dollar $)", "Value (Ringgit $)"]) assert.equal(v(c, "SGD"), null, c);
   assert.equal(v("(SGD) ($)", "USD"), null);
+  for (const c of ["Value (Yuan $)", "Value (TWD $)", "Value (Renminbi $)", "Value (CNH $)"]) assert.equal(v(c, "SGD"), null, c);
+  assert.equal(v("Total premiums paid ($)", "SGD"), "SGD");
+  assert.equal(v("Surrender value ($)", "SGD", "Eurogold Plan value"), "SGD");
+  assert.equal(v("Value (NZ$)", "SGD"), "NZD");
   assert.equal(v("Value (S $)", "USD"), null);
   assert.equal(v("Value ($S)", "USD"), null);
 });
