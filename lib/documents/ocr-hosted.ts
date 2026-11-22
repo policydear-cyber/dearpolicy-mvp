@@ -92,7 +92,7 @@ export async function decodedPageImages(bytes: Uint8Array, pageNumbers: number[]
   let task = null as { destroy(): Promise<void> } | null;
   try {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const loading = pdfjs.getDocument({ data: new Uint8Array(bytes), password: password || undefined, isEvalSupported: false } as Parameters<typeof pdfjs.getDocument>[0]);
+    const loading = pdfjs.getDocument({ data: new Uint8Array(bytes), password: password || undefined, isEvalSupported: false, maxImageSize: 40_000_000 } as Parameters<typeof pdfjs.getDocument>[0]);
     task = loading as unknown as { destroy(): Promise<void> };
     doc = await loading.promise as unknown as Doc;
     const sharp = (await import("sharp")).default;
@@ -163,6 +163,10 @@ const PICTURE_OP_NAMES = ["paintImageXObject", "paintInlineImageXObject", "paint
 /** Operators that draw visible text. */
 const TEXT_OP_NAMES = ["showText", "showSpacedText", "nextLineShowText", "nextLineSetSpacingShowText"];
 const MAX_PICTURES = 60;
+/** Operators that can hide or change a picture the sheet pastes whole: clips, shading, fills over it, transparency. */
+const HIDING_OP_NAMES = ["clip", "eoClip", "shadingFill"];
+const FILL_OP_NAMES = ["fill", "eoFill", "fillStroke", "eoFillStroke", "closePathFillStroke", "closePathEOFillStroke"];
+const MAX_TOTAL_PIXELS = 120_000_000;
 type Painted = { name: string; matrix: Matrix };
 /** Every picture a page paints, with the transformation in force where it is drawn, following the page's own q/Q, cm and
  * forms. Masks and inline pictures are reported as unsupported (null). Pure over the operator list. */
@@ -171,6 +175,8 @@ export function paintedPictures(ops: { fnArray: number[]; argsArray: unknown[][]
   const other = new Set(PICTURE_OP_NAMES.filter((k) => k !== "paintImageXObject").map((k) => OPS[k]).filter((v) => typeof v === "number"));
   const text = new Set(TEXT_OP_NAMES.map((k) => OPS[k]).filter((v) => typeof v === "number"));
   let invisibleText = false;
+  const hiding = new Set(HIDING_OP_NAMES.map((k) => OPS[k]).filter((v) => typeof v === "number"));
+  const fills = new Set(FILL_OP_NAMES.map((k) => OPS[k]).filter((v) => typeof v === "number"));
   const savedText: boolean[] = [];
   const saved: Matrix[] = [];
   const out: Painted[] = [];
@@ -181,6 +187,12 @@ export function paintedPictures(ops: { fnArray: number[]; argsArray: unknown[][]
     else if (fn === OPS.transform) matrix = times((args as unknown[]).map(Number) as Matrix, matrix);
     else if (fn === OPS.paintFormXObjectBegin) { saved.push(matrix); savedText.push(invisibleText); const m = (args[0] as unknown[] | undefined)?.map(Number) as Matrix | undefined; if (m?.length === 6) matrix = times(m, matrix); }
     else if (fn === OPS.paintFormXObjectEnd) { matrix = saved.pop() ?? matrix; invisibleText = savedText.pop() ?? invisibleText; }
+    else if (hiding.has(fn)) { if (why) why.reason = "it clips or shades its pictures, so what shows could differ"; return null; }
+    else if (fn === OPS.setGState) {
+      const hides = (args[0] as unknown[] | undefined)?.some((kv) => Array.isArray(kv) && ["ca", "CA", "BM", "SMask"].includes(String(kv[0])) && !(kv[0] === "BM" && kv[1] === "Normal") && !((kv[0] === "ca" || kv[0] === "CA") && kv[1] === 1) && !(kv[0] === "SMask" && (kv[1] === "None" || kv[1] === null)));
+      if (hides) { if (why) why.reason = "it uses transparency over its pictures"; return null; }
+    }
+    else if (out.length && (fills.has(fn) || (fn === OPS.constructPath && fills.has(Number(args[0]))))) { if (why) why.reason = "it draws shapes over its pictures"; return null; }
     else if (fn === OPS.setTextRenderingMode) invisibleText = Number(args[0]) === 3;
     else if (fn === OPS.paintImageXObject) { out.push({ name: String(args[0]), matrix }); if (out.length > MAX_PICTURES) { if (why) why.reason = "it paints too many pictures"; return null; } }
     else if (other.has(fn)) { if (why) why.reason = "it has a mask, an inline picture or a repeated picture"; return null; }
@@ -202,11 +214,14 @@ async function compositePage(page: { rotate: number; view: number[]; objs: { get
   const [x0, y0, x1, y1] = box, W = x1 - x0, H = y1 - y0;
   type Raw = { buf: Buffer; width: number; height: number; channels: 1 | 3 | 4; m: Matrix };
   const raws: Raw[] = [];
+  let total = 0;
   for (const pic of pictures) {
     const [a, b, c, d, e, f] = pic.matrix;
     if (![a, b, c, d, e, f].every(Number.isFinite) || Math.abs(b) > 1e-3 * Math.abs(a) || Math.abs(c) > 1e-3 * Math.abs(d) || !a || !d) { why.set(n, "a picture on it is turned or sheared"); return null; }
     const img = await new Promise<{ width: number; height: number; kind: number; data?: Uint8Array | Uint8ClampedArray }>((resolve) => page.objs.get(pic.name, resolve as (v: unknown) => void));
     if (!img?.data || !(img.width > 0) || !(img.height > 0)) { why.set(n, "a picture on it has no decodable data"); return null; }
+    total += img.width * img.height;
+    if (total > MAX_TOTAL_PIXELS) { why.set(n, "its pictures are too large together to rebuild"); return null; }
     let buf: Buffer, channels: 1 | 3 | 4;
     if (img.kind === 1) {
       const rowBytes = Math.ceil(img.width / 8);
@@ -221,7 +236,7 @@ async function compositePage(page: { rotate: number; view: number[]; objs: { get
   // As sharp as the picture that covers most of the page (a small high-resolution logo must not set the size for the
   // whole sheet), within a size the reader can be sent.
   const biggest = raws.reduce((best, r) => (Math.abs(r.m[0] * r.m[3]) > Math.abs(best.m[0] * best.m[3]) ? r : best));
-  let scale = biggest.width / Math.abs(biggest.m[0]);
+  let scale = Math.max(biggest.width / Math.abs(biggest.m[0]), biggest.height / Math.abs(biggest.m[3]));
   if (!(scale > 0) || !Number.isFinite(scale)) { why.set(n, "a picture on it has no size"); return null; }
   scale = Math.min(scale, Math.sqrt(MAX_SHEET_PIXELS / (W * H)));
   const sheetW = Math.max(1, Math.round(W * scale)), sheetH = Math.max(1, Math.round(H * scale));

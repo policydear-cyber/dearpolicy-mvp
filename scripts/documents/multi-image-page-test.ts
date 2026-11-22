@@ -6,7 +6,7 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$/i.test(k))
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 import assert from "node:assert/strict";
 import sharp from "sharp";
-import { PDFDocument, degrees } from "pdf-lib";
+import { PDFDocument, degrees, rgb } from "pdf-lib";
 import { paintedPictures, decodedPageImages } from "@/lib/documents/ocr-hosted";
 
 let passed = 0; const failures: string[] = [];
@@ -119,6 +119,47 @@ await test("invisible text inside q/Q does not hide visible text drawn after Q",
   assert.equal(paintedPictures(ops([6, 1, 4, 5, 2, 5]), OPS, why), null);
   assert.match(why.reason ?? "", /text beside/);
   assert.ok(paintedPictures(ops([6, 1, 4, 5, 2]), OPS), "invisible text alone is fine");
+});
+
+await test("a shape drawn over a picture (a redaction), a clip, or transparency is refused with a reason, never shown uncovered", async () => {
+  const build = async (extra: (page: ReturnType<PDFDocument["addPage"]>, img: Awaited<ReturnType<PDFDocument["embedPng"]>>) => void) => {
+    const pdf = await PDFDocument.create();
+    const page = pdf.addPage([200, 300]);
+    const img = await pdf.embedPng(await solid(200, 150, RED));
+    page.drawImage(img, { x: 0, y: 150, width: 200, height: 150 });
+    page.drawImage(await pdf.embedPng(await solid(200, 150, BLUE)), { x: 0, y: 0, width: 200, height: 150 });
+    extra(page, img);
+    const why = new Map<number, string>();
+    const got = await decodedPageImages(new Uint8Array(await pdf.save()), [1], undefined, why);
+    return { got, why };
+  };
+  const over = await build((page) => page.drawRectangle({ x: 0, y: 150, width: 200, height: 75, color: rgb(1, 1, 1) }));
+  assert.equal(over.got.has(1), false); assert.match(over.why.get(1) ?? "", /shapes over/);
+  const faded = await build((page, img) => page.drawImage(img, { x: 0, y: 0, width: 20, height: 20, opacity: 0.5 }));
+  assert.equal(faded.got.has(1), false); assert.match(faded.why.get(1) ?? "", /transparency/);
+});
+await test("a clip or shading over the pictures is refused", async () => {
+  const OPS = { save: 1, restore: 2, clip: 3, shadingFill: 4, paintImageXObject: 6 } as Record<string, number>;
+  const ops = (fns: number[]) => ({ fnArray: fns, argsArray: fns.map((f) => (f === 6 ? ["img"] : [])) });
+  for (const hide of [3, 4]) {
+    const why: { reason?: string } = {};
+    assert.equal(paintedPictures(ops([1, hide, 6, 2]), OPS, why), null);
+    assert.match(why.reason ?? "", /clips or shades/);
+  }
+});
+await test("a tall narrow tile keeps its vertical resolution", async () => {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([200, 200]);
+  page.drawImage(await pdf.embedPng(await solid(200, 4000, RED)), { x: 0, y: 0, width: 200, height: 200 });
+  const got = await decodedPageImages(new Uint8Array(await pdf.save()), [1]);
+  // a single picture takes the one-picture path; add a second so the sheet is composed
+  const pdf2 = await PDFDocument.create();
+  const p2 = pdf2.addPage([200, 200]);
+  p2.drawImage(await pdf2.embedPng(await solid(200, 4000, RED)), { x: 0, y: 0, width: 200, height: 200 });
+  p2.drawImage(await pdf2.embedPng(await solid(10, 10, BLUE)), { x: 0, y: 0, width: 5, height: 5 });
+  const c = (await decodedPageImages(new Uint8Array(await pdf2.save()), [1])).get(1);
+  assert.ok(c && got.get(1));
+  assert.ok(((await sharp(Buffer.from(c.png)).metadata()).height ?? 0) >= 2000, "vertical resolution kept");
 });
 
 }
