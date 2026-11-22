@@ -92,11 +92,15 @@ export async function unownedNotFullyRead(accountId: string, tableDocuments: { i
  * `count`; left out, every counted document is treated as one whose cover may be missing). */
 export function notFullyReadNote(n: Pick<NotFullyRead, "count"> & Partial<Pick<NotFullyRead, "coverUnknown">>, person: string, short = false): string | null {
   if (!n.count) return null;
-  const missing = Math.min(n.coverUnknown ?? n.count, n.count);
+  const unknown = n.coverUnknown;
+  const missing = Number.isInteger(unknown) && unknown! >= 0 ? Math.min(unknown!, n.count) : n.count;
+  const amountsOnly = n.count - missing;
   if (missing === 0) {
     const head = `Some amounts in ${n.count === 1 ? "one" : n.count} of ${person}’s documents could not be checked`;
     return short ? head + "." : `${head}, so they show as not checked. Documents shows which.`;
   }
   const head = `${missing === 1 ? "One" : missing} of ${person}’s documents ${missing === 1 ? "was" : "were"} not fully read`;
-  return short ? head + "." : `${head}, so cover in ${missing === 1 ? "it" : "them"} may be missing here. Documents shows which and what to do.`;
+  if (short) return head + ".";
+  const more = amountsOnly > 0 ? ` Some amounts in ${amountsOnly === 1 ? "one other document" : `${amountsOnly} other documents`} could not be checked.` : "";
+  return `${head}, so cover in ${missing === 1 ? "it" : "them"} may be missing here. Documents shows which and what to do.${more}`;
 }

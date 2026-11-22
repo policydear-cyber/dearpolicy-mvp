@@ -15,5 +15,10 @@ assert.equal(notFullyReadNote({ count: 1, coverUnknown: 0 }, "Ben", true), "Some
 // Mixed: only the documents whose cover may be missing are counted in that sentence.
 assert.match(notFullyReadNote({ count: 3, coverUnknown: 1 }, "Ada") ?? "", /^One of Ada’s documents was not fully read, so cover in it may be missing here\./);
 assert.equal(notFullyReadNote({ count: 3, coverUnknown: 2 }, "Ada", true), "2 of Ada’s documents were not fully read.");
+assert.match(notFullyReadNote({ count: 3, coverUnknown: 1 }, "Ada") ?? "", /Some amounts in 2 other documents could not be checked\.$/);
+assert.match(notFullyReadNote({ count: 2, coverUnknown: 1 }, "Ada") ?? "", /Some amounts in one other document could not be checked\.$/);
+// A count that is not a whole number is not trusted: the safe wording is used.
+assert.equal(notFullyReadNote({ count: 2, coverUnknown: Number.NaN }, "Ada", true), "2 of Ada’s documents were not fully read.");
+assert.equal(notFullyReadNote({ count: 2, coverUnknown: -1 }, "Ada", true), "2 of Ada’s documents were not fully read.");
 console.log("not-fully-read-note: pass");
 process.exit(0);
