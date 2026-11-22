@@ -608,7 +608,8 @@ const FREQUENCY_WORDS = new Set(["monthly", "quarterly", "semi", "annually", "an
  * other word ("Standard", "Enhanced", "Term", "Rider", "Sum assured") may name an alternative, and stays refused. A closed
  * list of generic figure words: no insurer, product or plan names. */
 const SERIES_WORDS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustrated", "projected", "at", "investment", "return", "returns", "rate", "p", "a",
-  "total", "basic", "premium", "premiums", "paid", "to", "date", "benefit", "benefits", "value", "values", "surrender", "cash", "death", "maturity", "net", "gross"]);
+  "total", "basic", "premium", "premiums", "paid", "to", "date", "benefit", "benefits", "value", "values", "surrender", "cash", "death", "maturity", "net", "gross",
+  "distribution", "cost", "costs"]);
 /** At least one of these must be in the heading, so a lone tier word ("Basic") is not taken for a series. */
 const SERIES_ANCHORS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustrated", "projected", "paid", "premium", "premiums", "total", "return", "returns"]);
 /** A number in a heading is a rate only as "4.25%", "4.25" or after "at", "rate" or "return": any other number ("Premium 20",
@@ -649,10 +650,13 @@ export function illustrationSeries(readings: CheckedReading[]): Set<string> {
       seen.set(id, b.value);
     }
     if (twoTables) continue;
-    // Two different headings that are not series words side by side are alternatives (tiers, terms, sums, riders): none of
-    // this document's columns is taken for a series.
-    if (candidates.some(([, rows]) => rows.some((b) => b.column && !seriesRow(b)))) continue;
-    for (const [k, rows] of candidates) if (rows.every((b) => !b.column || seriesRow(b))) out.add(k);
+    // Two different headings that are not series words side by side in one section are alternatives (tiers, terms, sums,
+    // riders): none of that section's columns is taken for a series. Scoped to the section's title, not the whole file: a
+    // pack also prints by-year tables of its own ("Guaranteed Cash Value (GCV)", "Total Cash Value (TCV)") in other sections,
+    // and those must not hide the premium frequencies and totals of the illustration (READYBUILDER 10, 22 Nov, after #576).
+    const sectionOf = (rows: CheckedBenefit[]) => norm(rows[0]?.section);
+    const alternatives = new Set(candidates.filter(([, rows]) => rows.some((b) => b.column && !seriesRow(b))).map(([, rows]) => sectionOf(rows)));
+    for (const [k, rows] of candidates) if (!alternatives.has(sectionOf(rows)) && rows.every((b) => !b.column || seriesRow(b))) out.add(k);
   }
   return out;
 }
