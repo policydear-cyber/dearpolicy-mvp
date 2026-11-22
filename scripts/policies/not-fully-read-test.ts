@@ -103,7 +103,7 @@ test("only a person's failed, partly read or cover-stopped documents count, and 
 
   assert.equal(notFullyReadNote({ count: 0 }, "Ada"), null);
   assert.equal(notFullyReadNote({ count: 1 }, "Ben", true), "One of Ben’s documents was not fully read.");
-  assert.equal(notFullyReadNote(ada, "Ada", true), "5 of Ada’s documents were not fully read.");
-  assert.match(notFullyReadNote(ada, "Ada") ?? "", /^5 of Ada’s documents were not fully read, so cover in them may be missing here\. Documents shows which/);
+  assert.equal(notFullyReadNote(ada, "Ada", true), "4 of Ada’s documents were not fully read.");
+  assert.match(notFullyReadNote(ada, "Ada") ?? "", /^4 of Ada’s documents were not fully read, so cover in them may be missing here\. Documents shows which and what to do\. Some amounts in one other document could not be checked\./);
   await db.close();
 });

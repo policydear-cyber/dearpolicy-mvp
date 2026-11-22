@@ -597,6 +597,49 @@ export const figureOnlyHeading = (column: string | null, soleColumn: boolean) =>
   const words = headingWords(column).split(" ").filter(Boolean);
   return soleColumn && words.length > 0 && words.every((w) => FIGURE_HEADING_WORDS.has(w));
 };
+/** Sections of an illustration (a quotation for one plan) whose columns are series of figures for that one plan, never other
+ * plans side by side: a table of values by policy year or age (guaranteed, illustrated at a rate, total premiums paid), or a
+ * premium printed for each payment frequency (monthly, quarterly, semi-annually, annually). A column of such a section is not
+ * "another plan", whatever its heading, so the plan-column refusal does not apply to it (READYBUILDER 10, 22 Nov: a re-read
+ * that gave these columns a heading hid every premium frequency and total-premiums-paid row, where a reading that left the
+ * heading out showed them). A heading that says "plan" or "option" or names a plan is still refused (columnProblem). */
+const FREQUENCY_WORDS = new Set(["monthly", "quarterly", "semi", "annually", "annual", "yearly", "half", "weekly"]);
+/** Words that only say what a series of figures is. A heading of these (and numbers, such as a rate) alone is a series; any
+ * other word ("Standard", "Enhanced", "Term", "Rider", "Sum assured") may name an alternative, and stays refused. A closed
+ * list of generic figure words: no insurer, product or plan names. */
+const SERIES_WORDS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustrated", "projected", "at", "investment", "return", "returns", "rate", "p", "a",
+  "total", "basic", "premium", "premiums", "paid", "to", "date", "benefit", "benefits", "value", "values", "surrender", "cash", "death", "maturity", "net", "gross"]);
+/** At least one of these must be in the heading, so a lone tier word ("Basic") is not taken for a series. */
+const SERIES_ANCHORS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustrated", "projected", "paid", "premium", "premiums", "total", "return", "returns"]);
+/** A number in a heading is a rate only as "4.25%", "4.25" or after "at", "rate" or "return": any other number ("Premium 20",
+ * "Death Benefit 200000") names a term or a sum, so an alternative. */
+const rateOnly = (raw: string) => !/\d/.test(raw.replace(/(?<![\d.])\d{1,2}(?:\.\d{1,2})?\s*%/g, " ").replace(/\b(?:at|rate|return)\s+\d{1,2}(?:\.\d{1,2})?(?![\d.,]*\d)/gi, " "));
+/** Words of a section's title that only say what is printed (and the series words): "Policy Illustration", "Death Benefit",
+ * "Premium Summary". "Enhanced Illustration", "Spouse Illustration" or "Option A" are not. */
+const SECTION_WORDS = new Set([...SERIES_WORDS, "illustration", "illustrations", "summary", "table", "policy", "page", "of", "the", "deductions", "schedule", "and"]);
+const wordsOf = (text: string | null | undefined) => norm(text).split(" ").filter(Boolean);
+const seriesHeading = (column: string | null) => {
+  const w = headingWords(column).split(" ").filter(Boolean);
+  return w.length > 0 && rateOnly(column ?? "") && w.every((t) => SERIES_WORDS.has(t) || /^\d+(?:\.\d+)?$/.test(t)) && w.some((t) => SERIES_ANCHORS.has(t));
+};
+/** Everything printed with a row says only what the figure is: its column, its section's title, and its own benefit words. */
+const seriesRow = (b: { column: string | null; section: string | null; benefit: string }) =>
+  seriesHeading(b.column) && wordsOf(b.section).every((t) => SECTION_WORDS.has(t)) && wordsOf(b.benefit).every((t) => SECTION_WORDS.has(t));
+export function illustrationSeries(readings: CheckedReading[]): Set<string> {
+  const out = new Set<string>();
+  for (const r of readings) {
+    if (r.kind !== "illustration") continue;
+    const groups = new Map<string, CheckedBenefit[]>();
+    for (const b of r.benefits) { const k = sectionKeyOf(r.documentId, b); groups.set(k, [...(groups.get(k) ?? []), b]); }
+    const candidates = [...groups].filter(([, rows]) => rows.every((b) => (b.pays === "value" && (b.atAge != null || b.atPolicyYear != null))
+      || (headingWords(b.column).split(" ").filter(Boolean).every((t) => FREQUENCY_WORDS.has(t)) && !!headingWords(b.column))));
+    // Two different headings that are not series words side by side are alternatives (tiers, terms, sums, riders): none of
+    // this document's columns is taken for a series.
+    if (candidates.some(([, rows]) => rows.some((b) => b.column && !seriesRow(b)))) continue;
+    for (const [k, rows] of candidates) if (rows.every((b) => !b.column || seriesRow(b))) out.add(k);
+  }
+  return out;
+}
 function columnProblem(column: string | null, cover: CoverType, plans: Set<string>, soleColumn = false): string | null {
   const words = headingWords(column);
   if (!words) return null;
@@ -1707,6 +1750,26 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const ownProof = (documentId: string, coverKey: string) => proofs.has(documentId) && covers.some((c) => c.coverKey === coverKey && c.source.documentId === documentId);
   const perPersonRow = perPersonRows(readings, columnsOn, ownProof, family.flatMap((m) => [m.display_name, m.preferred_name ?? ""]));
   const refusedLinks: BenefitTable["refusedLinks"] = [];
+  const series = illustrationSeries(readings);
+  // The plan an illustration is for must be the cover's: a quote or illustration of another named plan is never the person's.
+  const illustrationOf = new Map(readings.filter((r) => r.kind === "illustration").map((r) => [r.documentId, r] as const));
+  const illustratesCover = (documentId: string, t: CoverType) => {
+    const r = illustrationOf.get(documentId);
+    if (!r) return true;
+    // The illustration must be for one of this cover's holders (a quote for someone else is not the person's figure).
+    const named = [...r.namedPeople, ...r.covers.map((c) => c.person)].map((n) => headingWords(n)).filter(Boolean);
+    if (named.length && !t.holders.some((h) => { const hw = headingWords(h); return named.some((n) => within(n, hw) || within(hw, n)); })) return false;
+    const planWords = (x: string | null | undefined) => headingWords((x ?? "").replace(/\+/g, " plus "));
+    const ip = planWords(r.plan), ipr = planWords(r.product);
+    // A cover that prints a plan is never matched by an illustration that prints none of its own (it could be another tier).
+    if (!ip && !ipr) return !t.plan;
+    if (!ip && t.plan) return planWords(t.plan) === planWords(t.product) && ipr === planWords(t.plan);
+    // Like with like, and equal words (a "PLUS" or "Max" added to the same name is another tier). A plan against a plan; only
+    // when either side has no plan, the product (or cover) names.
+    if (ip && t.plan) return ip === planWords(t.plan) && (!ipr || !planWords(t.product) || ipr === planWords(t.product));
+    const mine = [t.product, t.cover].map((x) => planWords(x)).filter(Boolean);
+    return [ip, ipr].filter(Boolean).every((n) => mine.includes(n));
+  };
   const linkOf = new Map<string, SectionLink>();
   const ownVersion = ownVersionOf(readings, covers);
   for (const linked of links) {
@@ -1720,7 +1783,10 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     if (!section) { refusedLinks.push({ link: l, why: "no such section" }); continue; }
     if (linkOf.has(l.section)) { refusedLinks.push({ link: l, why: "section linked twice" }); continue; }
     if (l.cover && !type) { refusedLinks.push({ link: l, why: "no such cover" }); continue; }
-    const problem = type ? columnProblem(section.column, type, plansOf.get(docOf.get(section.key) ?? "") ?? new Set(), (columnsOn.get(docOf.get(section.key) ?? "")?.size ?? 0) === 1
+    // A series column of an illustration is not another plan (illustrationSeries), unless its heading says or names a plan.
+    const seriesColumn = !!type && series.has(l.section) && illustratesCover(docOf.get(l.section) ?? "", type) && !/\b(?:plans?|options?)\b/i.test(section.column ?? "")
+      && !types.some((t) => t.plan && within(headingWords(t.plan), headingWords(section.column)));
+    const problem = type && !seriesColumn ? columnProblem(section.column, type, plansOf.get(docOf.get(section.key) ?? "") ?? new Set(), (columnsOn.get(docOf.get(section.key) ?? "")?.size ?? 0) === 1
       && ownProof(docOf.get(section.key) ?? "", type.key)) : null;
     if (problem) { refusedLinks.push({ link: l, why: problem }); continue; }
     linkOf.set(l.section, l);
@@ -1766,7 +1832,13 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     // A row on a person's own document is only for that document's own lives (documentLives).
     const about = livesOf.get(r.documentId) ?? null;
     const holders = people.filter((x) => (!who || who.has(x.id)) && x.covers.some((c) => c.coverKey === l.cover));
-    const shownFor = people.filter((x) => (!who || who.has(x.id)) && (!about || about.has(x.id)));
+    // An illustration's series rows (illustrationSeries) are for the people the illustration is for: the person its own cover
+    // is printed for, else the people it names.
+    const illFor = r.kind === "illustration" && series.has(sectionKeyOf(r.documentId, b)) ? (() => {
+      const ns = (r.covers.length ? r.covers.map((c) => c.person) : r.namedPeople).map((n) => headingWords(n)).filter(Boolean);
+      return ns.length ? (x: { name: string }) => ns.some((n) => within(n, headingWords(x.name)) || within(headingWords(x.name), n)) : null;
+    })() : null;
+    const shownFor = people.filter((x) => (!who || who.has(x.id)) && (!about || about.has(x.id)) && (!illFor || illFor(x)));
     if (about) {
       for (const p of holders) if (!about.has(p.id)) notForPerson.push({ personId: p.id, benefit: b.benefit, section: b.section, column: b.column, why: OTHER_PERSONS_DOCUMENT_WHY, source: b.source });
       if (holders.length && !holders.some((p) => about.has(p.id))) notTheirs.add(sectionKeyOf(r.documentId, b));

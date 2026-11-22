@@ -273,7 +273,11 @@ export async function GET(request:NextRequest){
   if(unclaimed.rows.length)reminders.push({kind:"family",title:`Say whose ${unclaimed.rows.length===1?"document this is":"documents these are"}`,
     detail:`${unclaimed.rows.length} uploaded document${unclaimed.rows.length===1?" is":"s are"} not linked to anyone yet, so nothing in ${unclaimed.rows.length===1?"it":"them"} is being used to answer questions.`,href:"/"});
   if(premiums.note&&premiumItems.length)reminders.push({kind:"payment",title:"Some premiums are missing from the total",detail:premiums.note,href:"/records"});
-  if(notReadNote)reminders.push({kind:"coverage",title:notRead.count===1?"A document was not fully read":"Some documents were not fully read",detail:`${notRead.names.slice(0,3).join(", ")}${notRead.count>3?` and ${notRead.count-3} more`:""}: cover in ${notRead.count===1?"it":"them"} may be missing from these tiles. Documents shows which pages and what to do.`,href:"/policies"});
+  if(notReadNote){
+    // Only a document whose cover may be missing says so; one read in part (some amounts not checked) shows its cover.
+    const cover=Math.min(notRead.coverUnknown,notRead.count),shown=cover>0?(notRead.unknownNames??notRead.names):notRead.names,n=cover>0?cover:notRead.count;
+    reminders.push({kind:"coverage",title:cover>0?(n===1?"A document was not fully read":"Some documents were not fully read"):(n===1?"Some amounts in a document are not checked":"Some amounts in documents are not checked"),detail:`${shown.slice(0,3).join(", ")}${shown.length>3?` and ${shown.length-3} more`:""}: ${cover>0?`cover in ${n===1?"it":"them"} may be missing from these tiles. Documents shows which pages and what to do.${notRead.count>cover?` Some amounts in ${notRead.count-cover===1?"one other document":`${notRead.count-cover} other documents`} could not be checked.`:""}`:"some amounts could not be checked against the page, so they show as not checked. Documents shows which."}`,href:"/policies"});
+  }
   if(!selected.length)reminders.push({kind:"coverage",title:"Upload personal proof",detail:"DearPolicy needs at least one certificate or policy schedule before it can say what is covered or not covered.",href:"/policies"});
 
   // ID numbers in document names and notes are masked as chat masks them; ids are left as stored.
