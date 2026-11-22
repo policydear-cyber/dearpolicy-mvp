@@ -32,7 +32,9 @@ type BridgePage = { pageNumber: number; text: string; orientation?: "upright" | 
  * marks those pages as not read, so the document is never left waiting on a copy that can never be made. */
 export class PageCopyUnavailable extends Error {
   readonly pages: number[];
-  constructor(pages: number[]) { super("page copy unavailable"); this.name = "PageCopyUnavailable"; this.pages = pages; }
+  /** Why each page could not be rebuilt (decodedPageImages), for the event log. */
+  readonly reasons: Record<number, string>;
+  constructor(pages: number[], reasons: Record<number, string> = {}) { super("page copy unavailable"); this.name = "PageCopyUnavailable"; this.pages = pages; this.reasons = reasons; }
 }
 export async function subsetPdf(bytes: Uint8Array, pageNumbers: number[], turn: Map<number, number> = new Map(), password?: string) {
   let out = await PDFDocument.create({ updateMetadata: false });
@@ -45,10 +47,14 @@ export async function subsetPdf(bytes: Uint8Array, pageNumbers: number[], turn: 
     source = null; copied = null;
     out = await PDFDocument.create({ updateMetadata: false });
   }
-  const rebuilt = !copied || source?.isEncrypted ? await decodedPageImages(bytes, pageNumbers, password) : new Map<number, DecodedPage>();
+  const copyWhy = new Map<number, string>();
+  const rebuilt = !copied || source?.isEncrypted ? await decodedPageImages(bytes, pageNumbers, password, copyWhy) : new Map<number, DecodedPage>();
   if (!copied) {
     const lost = pageNumbers.filter((n) => !rebuilt.has(n));
-    if (lost.length) throw new PageCopyUnavailable(lost);
+    if (lost.length) {
+      void recordEvent({ name: "documents.ocr_hosted.page_copy_unavailable", correlationId: resolveCorrelationId(undefined), status: "failure", extra: { pages: lost.slice(0, 20), reasons: Object.fromEntries(lost.slice(0, 20).map((n) => [n, copyWhy.get(n) ?? "unknown"])) } });
+      throw new PageCopyUnavailable(lost, Object.fromEntries(lost.map((n) => [n, copyWhy.get(n) ?? "unknown"])));
+    }
   }
   for (const [i, n] of pageNumbers.entries()) {
     const page = copied?.[i];
@@ -74,12 +80,12 @@ export async function subsetPdf(bytes: Uint8Array, pageNumbers: number[], turn: 
 }
 
 type Matrix = [number, number, number, number, number, number];
-type DecodedPage = { png: Uint8Array; box: [number, number, number, number]; matrix: Matrix; rotate: number };
+export type DecodedPage = { png: Uint8Array; box: [number, number, number, number]; matrix: Matrix; rotate: number };
 const times = (m: Matrix, n: Matrix): Matrix => [m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3], m[2] * n[0] + m[3] * n[2],
   m[2] * n[1] + m[3] * n[3], m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5]];
 /** Each requested page of a locked PDF that is exactly one image, decoded by PDF.js, as a PNG with the page's size and
  * rotation. Pages it cannot rebuild are left out (and copied as before); a file PDF.js cannot open gives none. */
-async function decodedPageImages(bytes: Uint8Array, pageNumbers: number[], password?: string): Promise<Map<number, DecodedPage>> {
+export async function decodedPageImages(bytes: Uint8Array, pageNumbers: number[], password?: string, why: Map<number, string> = new Map()): Promise<Map<number, DecodedPage>> {
   const out = new Map<number, DecodedPage>();
   type Doc = { getPage(n: number): Promise<unknown> };
   let doc = null as Doc | null;
@@ -99,7 +105,13 @@ async function decodedPageImages(bytes: Uint8Array, pageNumbers: number[], passw
         };
         const ops = await page.getOperatorList();
         const painted = ops.fnArray.map((fn, i) => (IMAGE_OPS.has(fn) ? { fn, args: ops.argsArray[i] } : null)).filter(Boolean) as { fn: number; args: unknown[] }[];
-        if (painted.length !== 1 || painted[0].fn !== pdfjs.OPS.paintImageXObject) continue;
+        if (painted.length !== 1 || painted[0].fn !== pdfjs.OPS.paintImageXObject) {
+          // A scan that is several pictures (strips, tiles, a scan with a logo) or sits inside a form: put the pictures
+          // together on one page-sized sheet, each where the page draws it, instead of giving the page up.
+          const joined = await compositePage(page, ops, pdfjs, sharp, why, n);
+          if (joined) out.set(n, joined);
+          continue;
+        }
         // The matrix in force where the image is painted (the page's q/Q and cm before it).
         let matrix: Matrix = [1, 0, 0, 1, 0, 0];
         const saved: Matrix[] = [];
@@ -110,10 +122,14 @@ async function decodedPageImages(bytes: Uint8Array, pageNumbers: number[], passw
           else if (fn === pdfjs.OPS.paintImageXObject) break;
           else if (fn === pdfjs.OPS.paintFormXObjectBegin) { matrix = [NaN, 0, 0, 0, 0, 0]; break; } // inside a form: copied as before
         }
-        if (!matrix.every(Number.isFinite)) continue;
+        if (!matrix.every(Number.isFinite)) {
+          const joined = await compositePage(page, ops, pdfjs, sharp, why, n);
+          if (joined) out.set(n, joined);
+          continue;
+        }
         const name = String(painted[0].args[0]);
         const img = await new Promise<{ width: number; height: number; kind: number; data?: Uint8Array | Uint8ClampedArray }>((resolve) => page.objs.get(name, resolve as (v: unknown) => void));
-        if (!img?.data || !(img.width > 0) || !(img.height > 0)) continue;
+        if (!img?.data || !(img.width > 0) || !(img.height > 0)) { why.set(n, "its picture has no decodable data"); continue; }
         // PDF.js image kinds: 1 = 1 bit per pixel grey (rows padded to bytes), 2 = RGB, 3 = RGBA.
         let raw: Buffer, channels: 1 | 3 | 4;
         if (img.kind === 1) {
@@ -125,19 +141,94 @@ async function decodedPageImages(bytes: Uint8Array, pageNumbers: number[], passw
           channels = 1;
         } else if (img.kind === 2 || img.kind === 3) {
           raw = Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength); channels = img.kind === 2 ? 3 : 4;
-        } else continue;
-        if (raw.length !== img.width * img.height * channels) continue;
+        } else { why.set(n, `its picture is in an unsupported form (kind ${img.kind})`); continue; }
+        if (raw.length !== img.width * img.height * channels) { why.set(n, "its picture's size does not match its data"); continue; }
         const png = new Uint8Array(await sharp(raw, { raw: { width: img.width, height: img.height, channels } }).png().toBuffer());
         // The page's own box, unrotated: the page's /Rotate is applied to the new page, as it was on the original.
         const box = page.view.map(Number) as [number, number, number, number];
         if (box.length !== 4 || !box.every(Number.isFinite) || box[2] <= box[0] || box[3] <= box[1]) continue;
         out.set(n, { png, box, matrix, rotate: ((page.rotate % 360) + 360) % 360 });
-      } catch { /* this page is copied as before */ }
+      } catch (e) { why.set(n, `rebuilding it failed: ${e instanceof Error ? e.message.slice(0, 80) : "error"}`); }
     }
-  } catch { /* PDF.js could not open it: every page is copied as before */ } finally {
+  } catch (e) { for (const n of pageNumbers) why.set(n, `the file could not be opened to rebuild it: ${e instanceof Error ? e.message.slice(0, 80) : "error"}`); } finally {
     await task?.destroy().catch(() => undefined);
   }
   return out;
+}
+
+type PdfjsLike = { OPS: Record<string, number> };
+type Painted = { name: string; matrix: Matrix };
+/** Every picture a page paints, with the transformation in force where it is drawn, following the page's own q/Q, cm and
+ * forms. Masks and inline pictures are reported as unsupported (null). Pure over the operator list. */
+export function paintedPictures(ops: { fnArray: number[]; argsArray: unknown[][] }, OPS: PdfjsLike["OPS"]): Painted[] | null {
+  let matrix: Matrix = [1, 0, 0, 1, 0, 0];
+  const saved: Matrix[] = [];
+  const out: Painted[] = [];
+  for (const [i, fn] of ops.fnArray.entries()) {
+    const args = ops.argsArray[i] ?? [];
+    if (fn === OPS.save) saved.push(matrix);
+    else if (fn === OPS.restore) matrix = saved.pop() ?? matrix;
+    else if (fn === OPS.transform) matrix = times((args as unknown[]).map(Number) as Matrix, matrix);
+    else if (fn === OPS.paintFormXObjectBegin) { saved.push(matrix); const m = (args[0] as unknown[] | undefined)?.map(Number) as Matrix | undefined; if (m?.length === 6) matrix = times(m, matrix); }
+    else if (fn === OPS.paintFormXObjectEnd) matrix = saved.pop() ?? matrix;
+    else if (fn === OPS.paintImageXObject) out.push({ name: String(args[0]), matrix });
+    else if (fn === OPS.paintInlineImageXObject || fn === OPS.paintImageMaskXObject) return null;
+  }
+  return out;
+}
+const MAX_SHEET_PIXELS = 36_000_000;
+/** One page-sized sheet from a page that paints several pictures: each picture is placed where the page draws it
+ * (upright, axis-aligned ones only; anything turned or sheared is not guessed at). */
+async function compositePage(page: { rotate: number; view: number[]; objs: { get(name: string, cb: (v: unknown) => void): void } }, ops: { fnArray: number[]; argsArray: unknown[][] },
+  pdfjs: { OPS: Record<string, number> }, sharp: typeof import("sharp").default, why: Map<number, string>, n: number): Promise<DecodedPage | null> {
+  const pictures = paintedPictures(ops, pdfjs.OPS);
+  if (!pictures) { why.set(n, "it has a mask or an inline picture"); return null; }
+  if (!pictures.length) { why.set(n, "it paints no picture"); return null; }
+  const box = page.view.map(Number) as [number, number, number, number];
+  if (box.length !== 4 || !box.every(Number.isFinite) || box[2] <= box[0] || box[3] <= box[1]) { why.set(n, "its page box is not usable"); return null; }
+  const [x0, y0, x1, y1] = box, W = x1 - x0, H = y1 - y0;
+  type Raw = { buf: Buffer; width: number; height: number; channels: 1 | 3 | 4; m: Matrix };
+  const raws: Raw[] = [];
+  for (const pic of pictures) {
+    const [a, b, c, d, e, f] = pic.matrix;
+    if (![a, b, c, d, e, f].every(Number.isFinite) || Math.abs(b) > 1e-3 * Math.abs(a) || Math.abs(c) > 1e-3 * Math.abs(d) || !a || !d) { why.set(n, "a picture on it is turned or sheared"); return null; }
+    const img = await new Promise<{ width: number; height: number; kind: number; data?: Uint8Array | Uint8ClampedArray }>((resolve) => page.objs.get(pic.name, resolve as (v: unknown) => void));
+    if (!img?.data || !(img.width > 0) || !(img.height > 0)) { why.set(n, "a picture on it has no decodable data"); return null; }
+    let buf: Buffer, channels: 1 | 3 | 4;
+    if (img.kind === 1) {
+      const rowBytes = Math.ceil(img.width / 8);
+      buf = Buffer.alloc(img.width * img.height);
+      for (let y = 0; y < img.height; y++) for (let x = 0; x < img.width; x++) buf[y * img.width + x] = (img.data[y * rowBytes + (x >> 3)]! >> (7 - (x & 7))) & 1 ? 255 : 0;
+      channels = 1;
+    } else if (img.kind === 2 || img.kind === 3) { buf = Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength); channels = img.kind === 2 ? 3 : 4; }
+    else { why.set(n, `a picture on it is in an unsupported form (kind ${img.kind})`); return null; }
+    if (buf.length !== img.width * img.height * channels) { why.set(n, "a picture on it does not match its data"); return null; }
+    raws.push({ buf, width: img.width, height: img.height, channels, m: pic.matrix });
+  }
+  // As sharp as the sharpest picture, within a size the reader can be sent.
+  let scale = Math.max(...raws.map((r) => r.width / Math.abs(r.m[0])));
+  if (!(scale > 0)) { why.set(n, "a picture on it has no size"); return null; }
+  scale = Math.min(scale, Math.sqrt(MAX_SHEET_PIXELS / (W * H)));
+  const sheetW = Math.max(1, Math.round(W * scale)), sheetH = Math.max(1, Math.round(H * scale));
+  const layers: { input: Buffer; left: number; top: number }[] = [];
+  for (const r of raws) {
+    const [a, , , d, e, f] = r.m;
+    const w = Math.max(1, Math.round(Math.abs(a) * scale)), h = Math.max(1, Math.round(Math.abs(d) * scale));
+    const left = Math.round((e + (a < 0 ? a : 0) - x0) * scale), top = Math.round((y1 - (f + (d > 0 ? d : 0))) * scale);
+    let img = sharp(r.buf, { raw: { width: r.width, height: r.height, channels: r.channels } }).resize(w, h, { fit: "fill" });
+    // PDF pictures are drawn with their first row at the top when d > 0.
+    if (d < 0) img = img.flip();
+    if (a < 0) img = img.flop();
+    // Only what lies on the sheet is kept.
+    const cutL = Math.max(0, -left), cutT = Math.max(0, -top), keepW = Math.min(w - cutL, sheetW - Math.max(0, left)), keepH = Math.min(h - cutT, sheetH - Math.max(0, top));
+    if (keepW < 1 || keepH < 1) continue;
+    const input = await (cutL || cutT || keepW !== w || keepH !== h ? img.extract({ left: cutL, top: cutT, width: keepW, height: keepH }) : img).png().toBuffer();
+    layers.push({ input, left: Math.max(0, left), top: Math.max(0, top) });
+  }
+  if (!layers.length) { why.set(n, "none of its pictures lies on the page"); return null; }
+  const png = new Uint8Array(await sharp({ create: { width: sheetW, height: sheetH, channels: 3, background: "#ffffff" } }).composite(layers).png().toBuffer());
+  // One picture that fills the page box, drawn like a single-image page.
+  return { png, box, matrix: [W, 0, 0, H, x0, y0], rotate: ((page.rotate % 360) + 360) % 360 };
 }
 
 const SYSTEM = "You transcribe scanned insurance-document pages exactly as printed. Reply with a single JSON object of the form "
