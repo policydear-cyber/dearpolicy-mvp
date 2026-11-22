@@ -104,5 +104,16 @@ test("control: the same year at two different ages is not merged", () => {
   assert.equal(collapseRepeats([a, { ...a, valueAt: { policyYear: 10, age: 41 } }]).length, 2);
 });
 
+test("an illustration printing policy year and age on every row collapses a flat running total by year", () => {
+  const rows = [10, 15, 20, 25, 30, 35, 40].map((y) => ({ ...mk("Total Basic Premiums Paid To-Date", y, 47909), valueAt: { policyYear: y, age: 30 + y } }));
+  const out = collapseRepeats(rows);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0]!.repeatedAt, [15, 20, 25, 30, 35, 40]);
+});
+test("control: the same year at two different ages is not merged, even with both axes", () => {
+  const a = { ...mk("Total premiums paid to date", 10, 9), valueAt: { policyYear: 10, age: 40 } };
+  assert.equal(collapseRepeats([a, { ...a, valueAt: { policyYear: 10, age: 41 } }]).length, 2);
+});
+
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`repeated-rows: ${passed} pass`);

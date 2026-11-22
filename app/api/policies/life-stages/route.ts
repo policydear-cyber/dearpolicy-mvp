@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
     const covers: LifeCover[] = (loaded.table?.covers ?? []).map((c) => ({ documentId: c.source.documentId, coverKey: c.coverKey, name: c.cover || c.product || "",
       premiumEndDate: c.premiumEndDate ?? null, premiumTerm: c.premiumTerm ?? null, maturityDate: c.maturityDate ?? null, page: c.source.page ?? null }));
     const values: LifeValueRow[] = (loaded.table?.rows ?? []).flatMap((r) => r.valueAt && (r.figure.kind === "value" || r.figure.kind === "projected")
-      ? [{ coverKey: r.coverKey, benefit: r.benefit, amount: r.figure.amount, currency: r.figure.currency, kind: r.figure.kind, basis: r.figure.kind === "projected" ? r.figure.basis : undefined,
-          age: r.valueAt.age, policyYear: r.valueAt.policyYear, rate: r.valueAt.rate, documentId: r.source.documentId, document: r.source.document, page: r.source.page }] : []);
+      ? [{ coverKey: r.coverKey, benefit: r.benefit, column: r.column, amount: r.figure.amount, currency: r.figure.currency, kind: r.figure.kind, basis: r.figure.kind === "projected" ? r.figure.basis : undefined,
+          age: r.valueAt.age, policyYear: r.valueAt.policyYear, rate: r.valueAt.rate, repeatedAt: r.repeatedAt, documentId: r.source.documentId, document: r.source.document, page: r.source.page }] : []);
     const stages = lifeStages({ dates: loaded.policies, covers, values, dateOfBirth: loaded.dateOfBirth, today: singaporeDay(new Date()) });
     return NextResponse.json(maskShownText({ member: loaded.memberId ? { id: loaded.memberId, name: loaded.name } : null, ...stages }));
   } catch (error) {

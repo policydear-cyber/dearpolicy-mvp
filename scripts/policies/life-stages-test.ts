@@ -5,7 +5,7 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.te
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ageOn, lifeStages, type LifeCover, type LifeValueRow } from "@/lib/policies/life-stages";
+import { ageOn, currencyOfValue, lifeStages, type LifeCover, type LifeValueRow } from "@/lib/policies/life-stages";
 import type { PolicyDate } from "@/lib/policies/policy-dates";
 
 let passed = 0; const failures: string[] = [];
@@ -89,6 +89,44 @@ test("values are placed on the policy whose schedule holds the cover; only rows 
 test("the module adds up nothing: no sum, total or projection of its own", () => {
   const src = readFileSync("lib/policies/life-stages.ts", "utf8").replace(/\/\*\*[\s\S]*?\*\//g, "");
   assert.ok(!/reduce\(|\btotal\b|\*\s*\(1\s*\+/.test(src));
+});
+
+test("a bare $ never takes its cover's currency; a lettered sign states its own", () => {
+  const v = (column: string, benefit = "Value") => currencyOfValue({ benefit, column, currency: null });
+  for (const c of ["Guaranteed ($)", "Total premiums paid ($)", "Value (Yuan $)", "Value in TWD ($)", "Yuan value ($)", "Value RM ($)", "Value (US Dollar $)", "Value (S $)", "Value ($S)", "Value (S$ and US$)"]) assert.equal(v(c), null, c);
+  assert.equal(v("Value", "Death benefit ($ per $1,000)"), null);
+  assert.equal(v("Value (US$)"), "USD"); assert.equal(v("Value (S$)"), "SGD"); assert.equal(v("Value (A$)"), "AUD"); assert.equal(v("Value (HK$)"), "HKD"); assert.equal(v("Value (NZ$)"), "NZD");
+  assert.equal(currencyOfValue({ benefit: "Value", column: "Guaranteed ($)", currency: "SGD" }), "SGD");
+});
+test("dated states stay shown, and the end-not-printed list is the same at every stage", () => {
+  const r = lifeStages({ dates: [DATES[0]!, date("e", "Ends soon", ["e1"], { state: "ends_soon", endsOn: "2026-12-01" }), date("n", "No end", ["n1"], { state: "no_date" })], covers: [cover("n1", "n", { premiumEndDate: "01/03/2040" }), ...COVERS], values: [], dateOfBirth: null, today: TODAY });
+  assert.deepEqual(r.policies.map((p) => p.name).sort(), ["Ends soon", "No end", "Term Protector"]);
+  assert.deepEqual(r.noDates, []);
+  assert.ok(r.stages.every((s) => JSON.stringify(s.endNotPrinted) === JSON.stringify(["No end"])));
+});
+test("repeatedAt keeps only later whole years, once each and in order, and names its axis", () => {
+  const r = lifeStages({ dates: [DATES[1]!], covers: COVERS, values: [value("save", { policyYear: 10, repeatedAt: [20, 5, 20, 10, 15, Number.NaN, 2.5] }), value("save", { age: 45, repeatedAt: [50, 55] })], dateOfBirth: null, today: TODAY });
+  const vs = r.policies[0]!.values;
+  assert.deepEqual(vs.find((x) => x.policyYear === 10)!.repeatedAt, [15, 20]);
+  assert.equal(vs.find((x) => x.policyYear === 10)!.repeatedAxis, "policy year");
+  assert.equal(vs.find((x) => x.age === 45)!.repeatedAxis, "age");
+});
+test("a policy that prints no date, term or value is named once and not drawn", () => {
+  const r = lifeStages({ dates: [date("w", "Policy wording", ["w1"], { state: "no_date" }), ...DATES.slice(0, 1)], covers: COVERS, values: [], dateOfBirth: null, today: TODAY });
+  assert.deepEqual(r.noDates, ["Policy wording"]);
+  assert.deepEqual(r.policies.map((p) => p.name), ["Term Protector"]);
+  assert.ok(r.stages.every((s) => !s.endNotPrinted.includes("Policy wording")));
+});
+test("control: a renewed policy with no new end, and one with a premium term, are still shown", () => {
+  const r = lifeStages({ dates: [date("r", "Renewed one", ["r1"], { state: "renewed" }), date("t", "Termed", ["t1"], { state: "no_date" })], covers: [cover("t1", "t", { premiumTerm: "72" })], values: [], dateOfBirth: null, today: TODAY });
+  assert.deepEqual(r.policies.map((p) => p.name).sort(), ["Renewed one", "Termed"]);
+  assert.deepEqual(r.noDates, []);
+});
+
+test("a running total printed again at later years is passed through to the page", () => {
+  const r = lifeStages({ dates: [DATES[1]!], covers: COVERS, values: [value("save", { policyYear: 10, repeatedAt: [15, 20] })], dateOfBirth: null, today: TODAY });
+  assert.deepEqual(r.policies[0]!.values[0]!.repeatedAt, [15, 20]);
+  assert.deepEqual(lifeStages({ dates: [DATES[1]!], covers: COVERS, values: [value("save", { policyYear: 10 })], dateOfBirth: null, today: TODAY }).policies[0]!.values[0]!.repeatedAt, []);
 });
 
 console.log(`life-stages: ${passed} passed${failures.length ? `, ${failures.length} failed\n${failures.join("\n")}` : ""}`);
