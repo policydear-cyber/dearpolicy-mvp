@@ -211,7 +211,7 @@ export function paintedPictures(ops: { fnArray: number[]; argsArray: unknown[][]
       const hides = (args[0] as unknown[] | undefined)?.some((kv) => Array.isArray(kv) && ["ca", "CA", "BM", "SMask"].includes(String(kv[0])) && !plain(kv[0], kv[1]));
       if (hides) { if (why) why.reason = "it uses transparency over its pictures"; return null; }
     }
-    else if (out.length && lineWidth * Math.sqrt(Math.abs(matrix[0] * matrix[3] - matrix[1] * matrix[2])) > 2 && (strokes.has(fn) || (fn === OPS.constructPath && strokes.has(Number(args[0]))))) { if (why) why.reason = "it draws wide lines over its pictures"; return null; }
+    else if (out.length && lineWidth * Math.max(Math.hypot(matrix[0], matrix[1]), Math.hypot(matrix[2], matrix[3])) > 2 && (strokes.has(fn) || (fn === OPS.constructPath && strokes.has(Number(args[0]))))) { if (why) why.reason = "it draws wide lines over its pictures"; return null; }
     else if (out.length && (fills.has(fn) || (fn === OPS.constructPath && fills.has(Number(args[0]))))) { if (why) why.reason = "it draws shapes over its pictures"; return null; }
     else if (fn === OPS.setTextRenderingMode) invisibleText = Number(args[0]) === 3;
     else if (fn === OPS.paintImageXObject) {

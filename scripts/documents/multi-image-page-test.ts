@@ -180,6 +180,7 @@ await test("a wide line over a picture and a form box that crops a picture are r
   assert.equal(paintedPictures({ fnArray: [6, 7, 9], argsArray: [["a"], [[["LW", 40]]], [10, [], []]] }, { ...OPS, setGState: 7 }, viaState), null);
   assert.match(viaState.reason ?? "", /wide lines/);
   assert.equal(paintedPictures(mk([[6, ["a"]], [1, []], [3, [20, 0, 0, 20, 0, 0]], [8, [1]], [9, [10, [], []]]]), OPS)?.length ?? 0, 0, "a width of 1 under a 20x scale is a 20 pt line");
+  assert.equal(paintedPictures(mk([[6, ["a"]], [1, []], [3, [20, 0, 0, 0.1, 0, 0]], [8, [1]], [9, [10, [], []]]]), OPS), null, "a line stretched wide in one direction only");
   const crop: { reason?: string } = {};
   assert.equal(paintedPictures(mk([[11, [[1, 0, 0, 1, 0, 0], [0, 0, 50, 50]]], [3, [100, 0, 0, 100, 0, 0]], [6, ["a"]], [12, []]]), OPS, crop), null);
   assert.match(crop.reason ?? "", /form box/);
