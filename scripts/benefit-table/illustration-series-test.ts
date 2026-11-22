@@ -206,6 +206,15 @@ test("control: two by-year tables under the same headings are two tables, none i
   const t = assembleTable([r], family, linksFor(PACK, rows as never));
   assert.ok(!shown(t).includes(47909) && !shown(t).includes(99999), JSON.stringify(shown(t)));
 });
+test("control: a pack holding two plans' covers shows no generic table for either", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const r = checkReading(packSrc(), {
+    document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" },
+      { person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "Beta Growth", sumInsured: 1000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((q) => ({ ...(q as object), page: 38 })) });
+  assert.ok(!shown(assembleTable([r], family, linksFor(PACK, rows as never))).includes(47909));
+});
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`illustration-series: ${passed} pass`);
 process.exit(0);

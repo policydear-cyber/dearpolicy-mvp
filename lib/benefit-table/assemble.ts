@@ -1775,6 +1775,9 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     // Only an illustration is one plan's. A pack, wording or summary of another kind is taken for the person's own plan only
     // when it holds the person's own cover (its schedule page): then its illustration pages are theirs.
     if (r.kind !== "illustration" && !covers.some((c) => c.coverKey === t.key && c.source.documentId === documentId)) return false;
+    // ...and prints no other plan's cover: a pack of several plans has more than one plan's tables under the same headings.
+    const planOf = (x: { plan: string | null; product: string }) => headingWords((x.plan ?? x.product).replace(/\+/g, " plus "));
+    if (r.kind !== "illustration" && r.covers.some((c) => planOf({ plan: c.plan, product: c.product }) !== planOf(t))) return false;
     // The illustration must be for one of this cover's holders (a quote for someone else is not the person's figure).
     const named = [...r.namedPeople, ...r.covers.map((c) => c.person)].map((n) => headingWords(n)).filter(Boolean);
     if (named.length && !t.holders.some((h) => { const hw = headingWords(h); return named.some((n) => within(n, hw) || within(hw, n)); })) return false;
