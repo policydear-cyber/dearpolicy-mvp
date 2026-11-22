@@ -59,7 +59,7 @@ await test("control: a page that is exactly one picture still comes through as b
 });
 await test("control: a page with no picture is not made up, and says why", async () => {
   const pdf = await PDFDocument.create();
-  pdf.addPage([100, 100]).drawText("Text only");
+  pdf.addPage([100, 100]);
   const why = new Map<number, string>();
   const got = await decodedPageImages(new Uint8Array(await pdf.save()), [1], undefined, why);
   assert.equal(got.has(1), false);
@@ -75,6 +75,41 @@ await test("control: a turned picture is not guessed at, and says why", async ()
   const got = await decodedPageImages(new Uint8Array(await pdf.save()), [1], undefined, why);
   assert.equal(got.has(1), false);
   assert.match(why.get(1) ?? "", /turned or sheared/);
+});
+await test("a small high-resolution logo does not set the size of the whole sheet", async () => {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([200, 300]);
+  page.drawImage(await pdf.embedPng(await solid(400, 300, RED)), { x: 0, y: 150, width: 200, height: 150 });   // 2 px per point
+  page.drawImage(await pdf.embedPng(await solid(400, 300, BLUE)), { x: 0, y: 0, width: 200, height: 150 });
+  page.drawImage(await pdf.embedPng(await solid(1000, 1000, GREEN)), { x: 5, y: 5, width: 10, height: 10 });   // 100 px per point
+  const why = new Map<number, string>();
+  const got = await decodedPageImages(new Uint8Array(await pdf.save()), [1], undefined, why);
+  const p = got.get(1); assert.ok(p, `no sheet: ${why.get(1)}`);
+  const info = await sharp(Buffer.from(p.png)).metadata();
+  assert.ok((info.width ?? 0) <= 400 && (info.height ?? 0) <= 600, `sheet is ${info.width}x${info.height}, larger than the scan's own 400x600`);
+});
+await test("a page that draws the same picture twice in a row is placed, or refused with a reason, never half drawn", async () => {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([200, 200]);
+  const img = await pdf.embedPng(await solid(50, 50, RED));
+  page.drawImage(img, { x: 0, y: 0, width: 50, height: 50 });
+  page.drawImage(img, { x: 100, y: 100, width: 50, height: 50 });
+  const why = new Map<number, string>();
+  const got = await decodedPageImages(new Uint8Array(await pdf.save()), [1], undefined, why);
+  const p = got.get(1);
+  if (p) { assert.ok(near(await pixel(p.png, 0.15, 0.85), RED) && near(await pixel(p.png, 0.65, 0.35), RED), "both drawings must be on the sheet"); }
+  else assert.match(why.get(1) ?? "", /repeated|picture/);
+});
+await test("control: printed text beside the pictures is not left off the sheet; the page says why it was not rebuilt", async () => {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([200, 300]);
+  page.drawImage(await pdf.embedPng(await solid(200, 150, RED)), { x: 0, y: 150, width: 200, height: 150 });
+  page.drawImage(await pdf.embedPng(await solid(200, 150, BLUE)), { x: 0, y: 0, width: 200, height: 150 });
+  page.drawText("Stamped total 1,234");
+  const why = new Map<number, string>();
+  const got = await decodedPageImages(new Uint8Array(await pdf.save()), [1], undefined, why);
+  assert.equal(got.has(1), false);
+  assert.match(why.get(1) ?? "", /text beside/);
 });
 
 }

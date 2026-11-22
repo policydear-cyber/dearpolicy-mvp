@@ -96,7 +96,7 @@ export async function decodedPageImages(bytes: Uint8Array, pageNumbers: number[]
     task = loading as unknown as { destroy(): Promise<void> };
     doc = await loading.promise as unknown as Doc;
     const sharp = (await import("sharp")).default;
-    const IMAGE_OPS = new Set([pdfjs.OPS.paintImageXObject, pdfjs.OPS.paintInlineImageXObject, pdfjs.OPS.paintImageMaskXObject]);
+    const IMAGE_OPS = new Set(PICTURE_OP_NAMES.map((k) => (pdfjs.OPS as Record<string, number>)[k]).filter((v): v is number => typeof v === "number"));
     for (const n of pageNumbers) {
       try {
         const page = await doc!.getPage(n) as {
@@ -157,11 +157,20 @@ export async function decodedPageImages(bytes: Uint8Array, pageNumbers: number[]
 }
 
 type PdfjsLike = { OPS: Record<string, number> };
+/** Every operator that paints a picture, including the ones PDF.js uses when the same picture is drawn again and again. */
+const PICTURE_OP_NAMES = ["paintImageXObject", "paintInlineImageXObject", "paintImageMaskXObject", "paintImageXObjectRepeat", "paintImageMaskXObjectRepeat",
+  "paintInlineImageXObjectGroup", "paintImageMaskXObjectGroup", "paintSolidColorImageMask"];
+/** Operators that draw visible text. */
+const TEXT_OP_NAMES = ["showText", "showSpacedText", "nextLineShowText", "nextLineSetSpacingShowText"];
+const MAX_PICTURES = 60;
 type Painted = { name: string; matrix: Matrix };
 /** Every picture a page paints, with the transformation in force where it is drawn, following the page's own q/Q, cm and
  * forms. Masks and inline pictures are reported as unsupported (null). Pure over the operator list. */
-export function paintedPictures(ops: { fnArray: number[]; argsArray: unknown[][] }, OPS: PdfjsLike["OPS"]): Painted[] | null {
+export function paintedPictures(ops: { fnArray: number[]; argsArray: unknown[][] }, OPS: PdfjsLike["OPS"], why?: { reason?: string }): Painted[] | null {
   let matrix: Matrix = [1, 0, 0, 1, 0, 0];
+  const other = new Set(PICTURE_OP_NAMES.filter((k) => k !== "paintImageXObject").map((k) => OPS[k]).filter((v) => typeof v === "number"));
+  const text = new Set(TEXT_OP_NAMES.map((k) => OPS[k]).filter((v) => typeof v === "number"));
+  let invisibleText = false;
   const saved: Matrix[] = [];
   const out: Painted[] = [];
   for (const [i, fn] of ops.fnArray.entries()) {
@@ -171,8 +180,10 @@ export function paintedPictures(ops: { fnArray: number[]; argsArray: unknown[][]
     else if (fn === OPS.transform) matrix = times((args as unknown[]).map(Number) as Matrix, matrix);
     else if (fn === OPS.paintFormXObjectBegin) { saved.push(matrix); const m = (args[0] as unknown[] | undefined)?.map(Number) as Matrix | undefined; if (m?.length === 6) matrix = times(m, matrix); }
     else if (fn === OPS.paintFormXObjectEnd) matrix = saved.pop() ?? matrix;
-    else if (fn === OPS.paintImageXObject) out.push({ name: String(args[0]), matrix });
-    else if (fn === OPS.paintInlineImageXObject || fn === OPS.paintImageMaskXObject) return null;
+    else if (fn === OPS.setTextRenderingMode) invisibleText = Number(args[0]) === 3;
+    else if (fn === OPS.paintImageXObject) { out.push({ name: String(args[0]), matrix }); if (out.length > MAX_PICTURES) { if (why) why.reason = "it paints too many pictures"; return null; } }
+    else if (other.has(fn)) { if (why) why.reason = "it has a mask, an inline picture or a repeated picture"; return null; }
+    else if (text.has(fn) && !invisibleText) { if (why) why.reason = "it has printed text beside the pictures"; return null; }
   }
   return out;
 }
@@ -181,8 +192,9 @@ const MAX_SHEET_PIXELS = 36_000_000;
  * (upright, axis-aligned ones only; anything turned or sheared is not guessed at). */
 async function compositePage(page: { rotate: number; view: number[]; objs: { get(name: string, cb: (v: unknown) => void): void } }, ops: { fnArray: number[]; argsArray: unknown[][] },
   pdfjs: { OPS: Record<string, number> }, sharp: typeof import("sharp").default, why: Map<number, string>, n: number): Promise<DecodedPage | null> {
-  const pictures = paintedPictures(ops, pdfjs.OPS);
-  if (!pictures) { why.set(n, "it has a mask or an inline picture"); return null; }
+  const stop: { reason?: string } = {};
+  const pictures = paintedPictures(ops, pdfjs.OPS, stop);
+  if (!pictures) { why.set(n, stop.reason ?? "it has a mask or an inline picture"); return null; }
   if (!pictures.length) { why.set(n, "it paints no picture"); return null; }
   const box = page.view.map(Number) as [number, number, number, number];
   if (box.length !== 4 || !box.every(Number.isFinite) || box[2] <= box[0] || box[3] <= box[1]) { why.set(n, "its page box is not usable"); return null; }
@@ -205,16 +217,19 @@ async function compositePage(page: { rotate: number; view: number[]; objs: { get
     if (buf.length !== img.width * img.height * channels) { why.set(n, "a picture on it does not match its data"); return null; }
     raws.push({ buf, width: img.width, height: img.height, channels, m: pic.matrix });
   }
-  // As sharp as the sharpest picture, within a size the reader can be sent.
-  let scale = Math.max(...raws.map((r) => r.width / Math.abs(r.m[0])));
-  if (!(scale > 0)) { why.set(n, "a picture on it has no size"); return null; }
+  // As sharp as the picture that covers most of the page (a small high-resolution logo must not set the size for the
+  // whole sheet), within a size the reader can be sent.
+  const biggest = raws.reduce((best, r) => (Math.abs(r.m[0] * r.m[3]) > Math.abs(best.m[0] * best.m[3]) ? r : best));
+  let scale = biggest.width / Math.abs(biggest.m[0]);
+  if (!(scale > 0) || !Number.isFinite(scale)) { why.set(n, "a picture on it has no size"); return null; }
   scale = Math.min(scale, Math.sqrt(MAX_SHEET_PIXELS / (W * H)));
   const sheetW = Math.max(1, Math.round(W * scale)), sheetH = Math.max(1, Math.round(H * scale));
   const layers: { input: Buffer; left: number; top: number }[] = [];
   for (const r of raws) {
     const [a, , , d, e, f] = r.m;
-    const w = Math.max(1, Math.round(Math.abs(a) * scale)), h = Math.max(1, Math.round(Math.abs(d) * scale));
+    // Edges are rounded, and the size taken from them, so neighbouring strips meet without a seam or an overlap.
     const left = Math.round((e + (a < 0 ? a : 0) - x0) * scale), top = Math.round((y1 - (f + (d > 0 ? d : 0))) * scale);
+    const w = Math.max(1, Math.round((e + (a > 0 ? a : 0) - x0) * scale) - left), h = Math.max(1, Math.round((y1 - (f + (d < 0 ? d : 0))) * scale) - top);
     let img = sharp(r.buf, { raw: { width: r.width, height: r.height, channels: r.channels } }).resize(w, h, { fit: "fill" });
     // PDF pictures are drawn with their first row at the top when d > 0.
     if (d < 0) img = img.flip();
