@@ -13,7 +13,7 @@ const SCHED = "bbbbbbbb-0000-0000-0000-000000000001", ILL = "bbbbbbbb-0000-0000-
 const family: FamilyMember[] = [{ id: "p1", display_name: "Ong Pei Lin Charmaine" }];
 const illText = "Basic Premium\nMonthly ($)\tQuarterly ($)\tSemi-Annually ($)\tAnnually ($)\n399.24\t1,195.45\t2,372.31\t4,651.59\nPolicy Illustration\nTotal Basic Premiums Paid To-Date ($)\n1/29\t4,791\t5,030\n5/33\t23,954\t25,152\n10/38\t47,909\t50,304";
 const src = (id: string, name: string, text: string): SourceDoc => ({ id, name, readable: true, pages: [{ page: 1, text }] });
-const reading = (kind: string, covers: unknown[], benefits: unknown[]) => ({ document: { kind, product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: "READYBUILDER 10", periodFrom: null, periodTo: null }, covers, benefits });
+const reading = (kind: string, covers: unknown[], benefits: unknown[], id: { product: string | null; plan: string | null } = { product: "READYBUILDER 10", plan: "READYBUILDER 10" }) => ({ document: { kind, product: id.product, insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: id.plan, periodFrom: null, periodTo: null }, covers, benefits });
 const base = { cap: null, basis: null, period: null, capQuote: null, baseQuote: null, percentOf: null, baseAmount: null, conditions: [], page: 1 };
 const sched = checkReading(src(SCHED, "Schedule", "Ong Pei Lin Charmaine\tREADYBUILDER 10\tS$49,000"), reading("personal_proof",
   [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 1, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }], []));
@@ -98,6 +98,35 @@ test("control: an alternative named in the row's own benefit words stays refused
   const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
   const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
   assert.ok(!shown(t).includes(47909));
+});
+for (const id of [{ product: "Enhanced Max", plan: "Enhanced Max" }, { product: "SUPERSAVER 20", plan: null }]) {
+  test(`control: an illustration of another plan (${id.product}) linked to this cover stays refused`, () => {
+    const rows = illRows("Total Premiums Paid To-Date ($)");
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows, id));
+    const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+    assert.ok(!shown(t).includes(47909), `${id.product} was shown`);
+  });
+}
+test("an illustration naming no plan, or the cover's own, is shown", () => {
+  for (const id of [{ product: null, plan: null }, { product: "READYBUILDER 10", plan: null }]) {
+    const rows = illRows("Total Premiums Paid To-Date ($)");
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows, id));
+    assert.ok(shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909));
+  }
+});
+for (const heading of ["Total Premium at 200000", "Total Premium 200000.00", "Total Premium 20.5"]) {
+  test(`control: a sum or term read as a rate ("${heading}") stays refused`, () => {
+    const rows = illRows(heading);
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    assert.ok(!shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909), `${heading} was shown`);
+  });
+}
+test("a rate with % shows", () => {
+  for (const h of ["Illustrated at 4.25%", "Guaranteed 3.25%"]) {
+    const rows = illRows(h);
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    assert.ok(shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909), h);
+  }
 });
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`illustration-series: ${passed} pass`);

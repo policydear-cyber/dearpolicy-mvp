@@ -613,7 +613,7 @@ const SERIES_WORDS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustra
 const SERIES_ANCHORS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustrated", "projected", "paid", "premium", "premiums", "total", "return", "returns"]);
 /** A number in a heading is a rate only as "4.25%", "4.25" or after "at", "rate" or "return": any other number ("Premium 20",
  * "Death Benefit 200000") names a term or a sum, so an alternative. */
-const rateOnly = (raw: string) => !/\d/.test(raw.replace(/\d+(?:\.\d+)?\s*%/g, " ").replace(/\d+\.\d+/g, " ").replace(/\b(?:at|rate|return)\s+\d+/gi, " "));
+const rateOnly = (raw: string) => !/\d/.test(raw.replace(/(?<![\d.])\d{1,2}(?:\.\d{1,2})?\s*%/g, " ").replace(/\b(?:at|rate|return)\s+\d{1,2}(?:\.\d{1,2})?(?![\d.,]*\d)/gi, " "));
 /** Words of a section's title that only say what is printed (and the series words): "Policy Illustration", "Death Benefit",
  * "Premium Summary". "Enhanced Illustration", "Spouse Illustration" or "Option A" are not. */
 const SECTION_WORDS = new Set([...SERIES_WORDS, "illustration", "illustrations", "summary", "table", "policy", "page", "of", "the", "deductions", "schedule", "and"]);
@@ -1751,6 +1751,16 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const perPersonRow = perPersonRows(readings, columnsOn, ownProof, family.flatMap((m) => [m.display_name, m.preferred_name ?? ""]));
   const refusedLinks: BenefitTable["refusedLinks"] = [];
   const series = illustrationSeries(readings);
+  // The plan an illustration is for must be the cover's: a quote or illustration of another named plan is never the person's.
+  const illustrationOf = new Map(readings.filter((r) => r.kind === "illustration").map((r) => [r.documentId, r] as const));
+  const illustratesCover = (documentId: string, t: CoverType) => {
+    const r = illustrationOf.get(documentId);
+    if (!r) return true;
+    const names = [r.product, r.plan].map((x) => headingWords(x)).filter(Boolean);
+    if (!names.length) return true;
+    const mine = [t.plan, t.product, t.cover].map((x) => headingWords(x)).filter(Boolean);
+    return names.some((n) => mine.some((m) => within(n, m) || within(m, n)));
+  };
   const linkOf = new Map<string, SectionLink>();
   const ownVersion = ownVersionOf(readings, covers);
   for (const linked of links) {
@@ -1765,7 +1775,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     if (linkOf.has(l.section)) { refusedLinks.push({ link: l, why: "section linked twice" }); continue; }
     if (l.cover && !type) { refusedLinks.push({ link: l, why: "no such cover" }); continue; }
     // A series column of an illustration is not another plan (illustrationSeries), unless its heading says or names a plan.
-    const seriesColumn = !!type && series.has(l.section) && !/\b(?:plans?|options?)\b/i.test(section.column ?? "")
+    const seriesColumn = !!type && series.has(l.section) && illustratesCover(docOf.get(l.section) ?? "", type) && !/\b(?:plans?|options?)\b/i.test(section.column ?? "")
       && !types.some((t) => t.plan && within(headingWords(t.plan), headingWords(section.column)));
     const problem = type && !seriesColumn ? columnProblem(section.column, type, plansOf.get(docOf.get(section.key) ?? "") ?? new Set(), (columnsOn.get(docOf.get(section.key) ?? "")?.size ?? 0) === 1
       && ownProof(docOf.get(section.key) ?? "", type.key)) : null;
