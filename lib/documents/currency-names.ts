@@ -53,8 +53,12 @@ export function currenciesNamed(text: string): string[] {
   // dollars", "Singaporean Dollar"): another currency, never the bare dollar the household's currency may stand for.
   const FILLER = /^(?:in|the|of|and|all|any|amount|amounts|sum|premium|premiums|are|is|paid|payable|a|an|your|our|total|as|per|by|to|for|or|shown|stated|expressed|written|quoted|benefit|benefits|value|values|assured|insured|cover|plan|policy|currency|only|these|those|this|that|figure|figures|charges|cash|face|limit|limits|sums|usd|us|singapore|singaporean|sing|u\.?s\.?|states|american|kong|australian)$/i;
   for (const m of t.matchAll(/\b([A-Za-z.]+)\s+dollars?\b/gi)) if (!FILLER.test(m[1])) out.push("?");
-  // A kind of dollar written out before a bare "$" ("Hong Kong $500", "Taiwan $", "Kiwi $").
-  if (/(?<![A-Za-z])(?:hong\s?kong|hk|taiwan(?:ese)?|macau|macao|new\s+zealand|nz|kiwi|aussie|australian|canadian|brunei|fiji|american)\s+\$/i.test(t)) out.push("?");
+  // A country or kind of dollar written out before a bare "$" ("Hong Kong $500", "Singapore $", "United States $", "Kiwi $"):
+  // the named one, or another currency. A bounded list on purpose: any word before "$" would hold "Premium $500" or
+  // "Accidental Death $100,000", and the household's currency is meant to fill those (DC 22 Nov).
+  if (/(?<![A-Za-z])(?:singapore(?:an)?|sing)\s+\$/i.test(t)) out.push("SGD");
+  if (/(?<![A-Za-z])(?:united\s+states|u\.?s\.?a?|american?)\s+\$/i.test(t)) out.push("USD");
+  if (/(?<![A-Za-z])(?:hong\s?kong|hk|taiwan(?:ese)?|macau|macao|new\s+zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|bahamian|barbad(?:os|ian)|belize(?:an)?|bermuda(?:n)?|bermudian|cayman|guyana|liberia(?:n)?|namibia(?:n)?|solomon|surinam(?:e|ese)?|trinidad|tobago|zimbabwe(?:an)?|caribbean|ecuador|salvador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|european)\s+\$/i.test(t)) out.push("?");
   if (/(?<![A-Za-z])dollars?\b/i.test(t) && !out.length) out.push("$");
   for (const w of ["yen", "yuan", "renminbi", "rupees?", "rupiah", "baht", "won", "francs?", "dong", "kr(?:ona|one|oner)", "dirhams?", "riyals?", "rials?", "rand", "kyat", "riel", "taka", "patacas?", "dinars?", "lira", "roubles?", "rubles?", "reais", "zloty", "shekels?", "kip", "rufiyaa", "liras?"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
   return out;
