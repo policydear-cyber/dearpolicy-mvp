@@ -128,6 +128,11 @@ test("a rate with % shows", () => {
     assert.ok(shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909), h);
   }
 });
+test("control: an illustration naming another person is not shown on this person's cover", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const ill = checkReading(src(ILL, "Illustration", illText), { ...reading("illustration", [], rows), document: { ...reading("illustration", [], rows).document, namedPeople: ["Bob Tan"] } });
+  assert.ok(!shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909));
+});
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`illustration-series: ${passed} pass`);
 process.exit(0);

@@ -1756,6 +1756,9 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const illustratesCover = (documentId: string, t: CoverType) => {
     const r = illustrationOf.get(documentId);
     if (!r) return true;
+    // The illustration must be for one of this cover's holders (a quote for someone else is not the person's figure).
+    const named = [...r.namedPeople, ...r.covers.map((c) => c.person)].map((n) => headingWords(n)).filter(Boolean);
+    if (named.length && !t.holders.some((h) => { const hw = headingWords(h); return named.some((n) => within(n, hw) || within(hw, n)); })) return false;
     const ip = headingWords(r.plan), ipr = headingWords(r.product);
     if (!ip && !ipr) return true;
     // Like with like, and equal words (a "PLUS" or "Max" added to the same name is another tier). A plan against a plan; only
