@@ -91,30 +91,12 @@ test("the module adds up nothing: no sum, total or projection of its own", () =>
   assert.ok(!/reduce\(|\btotal\b|\*\s*\(1\s*\+/.test(src));
 });
 
-test("a value under a bare $ column takes its own cover's dollar currency; nothing settled, or no $, stays without one", () => {
-  const v = { benefit: "Surrender value", column: "Guaranteed ($)", currency: null as string | null, coverCurrency: "SGD" as string | null };
-  assert.equal(currencyOfValue(v), "SGD");
-  assert.equal(currencyOfValue({ ...v, coverCurrency: null }), null);
-  assert.equal(currencyOfValue({ ...v, coverCurrency: "EUR" }), null);
-  assert.equal(currencyOfValue({ ...v, column: "Guaranteed" }), null);
-  assert.equal(currencyOfValue({ ...v, currency: "USD" }), "USD");
-});
-test("control: a sign with letters states its own currency; another dollar sign is never relabelled by the cover", () => {
-  const v = (column: string, coverCurrency: string | null, benefit = "Value") => currencyOfValue({ benefit, column, currency: null, coverCurrency });
-  assert.equal(v("Value (US$)", "SGD"), "USD");
-  assert.equal(v("Value (S$)", "USD"), "SGD");
-  assert.equal(v("Value (A$)", "SGD"), "AUD");
-  assert.equal(v("Value (S$ and US$)", "SGD"), null);
-  assert.equal(v("Value", "SGD", "Death benefit ($ per $1,000)"), null);
-  assert.equal(v("Guaranteed ($)", "HKD"), "HKD");
-  for (const c of ["Value RM ($)", "Value £ ($)", "Value € ($)", "Value (MYR) ($)", "Value in RM ($)", "(USD) ($)", "Value (USD $)", "Value (US Dollar $)", "Value (Ringgit $)"]) assert.equal(v(c, "SGD"), null, c);
-  assert.equal(v("(SGD) ($)", "USD"), null);
-  for (const c of ["Value (Yuan $)", "Value (TWD $)", "Value (Renminbi $)", "Value (CNH $)"]) assert.equal(v(c, "SGD"), null, c);
-  assert.equal(v("Total premiums paid ($)", "SGD"), "SGD");
-  assert.equal(v("Surrender value ($)", "SGD", "Eurogold Plan value"), "SGD");
-  assert.equal(v("Value (NZ$)", "SGD"), "NZD");
-  assert.equal(v("Value (S $)", "USD"), null);
-  assert.equal(v("Value ($S)", "USD"), null);
+test("a bare $ never takes its cover's currency; a lettered sign states its own", () => {
+  const v = (column: string, benefit = "Value") => currencyOfValue({ benefit, column, currency: null });
+  for (const c of ["Guaranteed ($)", "Total premiums paid ($)", "Value (Yuan $)", "Value in TWD ($)", "Yuan value ($)", "Value RM ($)", "Value (US Dollar $)", "Value (S $)", "Value ($S)", "Value (S$ and US$)"]) assert.equal(v(c), null, c);
+  assert.equal(v("Value", "Death benefit ($ per $1,000)"), null);
+  assert.equal(v("Value (US$)"), "USD"); assert.equal(v("Value (S$)"), "SGD"); assert.equal(v("Value (A$)"), "AUD"); assert.equal(v("Value (HK$)"), "HKD"); assert.equal(v("Value (NZ$)"), "NZD");
+  assert.equal(currencyOfValue({ benefit: "Value", column: "Guaranteed ($)", currency: "SGD" }), "SGD");
 });
 test("dated states stay shown, and the end-not-printed list is the same at every stage", () => {
   const r = lifeStages({ dates: [DATES[0]!, date("e", "Ends soon", ["e1"], { state: "ends_soon", endsOn: "2026-12-01" }), date("n", "No end", ["n1"], { state: "no_date" })], covers: [cover("n1", "n", { premiumEndDate: "01/03/2040" }), ...COVERS], values: [], dateOfBirth: null, today: TODAY });

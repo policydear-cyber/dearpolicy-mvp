@@ -14,13 +14,13 @@
  * Pure: no database, no network.  Test: scripts/policies/life-stages-test.ts */
 
 import { dayOf, dayText, type PolicyDate } from "@/lib/policies/policy-dates";
-import { currencyOfAmount, statedCurrencyCode } from "@/lib/format/currency";
+import { statedCurrencyCode } from "@/lib/format/currency";
 
 /** One cover line of the person's benefit table, with its printed term dates. */
 export type LifeCover = { documentId: string; coverKey: string; name: string; premiumEndDate?: string | null; premiumTerm?: string | null; maturityDate?: string | null; page: number | null };
 /** One printed value of the person's table placed by an age or policy year its page prints. */
 export type LifeValueRow = { coverKey: string; benefit: string; amount: number; currency: string | null;
-  column?: string | null; /** Other policy years where the same running total is printed again (benefit table collapseRepeats). */ repeatedAt?: number[]; /** The verified currency of this value's cover, when its schedule settles one. */ coverCurrency?: string | null;
+  column?: string | null; /** Other policy years where the same running total is printed again (benefit table collapseRepeats). */ repeatedAt?: number[];
   kind: "value" | "projected"; basis?: "non_guaranteed" | "illustrated"; age?: number; policyYear?: number; rate?: string; documentId: string; document: string; page: number };
 
 export type LifeEvent = { kind: "premiums_end" | "matures" | "cover_ends"; on: string; onText: string; age: number | null; policy: string; cover: string | null; page: number | null };
@@ -60,25 +60,16 @@ export function ageOn(born: number | null, day: number): number | null {
   return years;
 }
 
-/** A value printed in a column headed with a bare "$" is in the currency its own cover's schedule settles, when that is a
- * dollar currency (currencyOfAmount); with nothing settled, or no "$" on the row, it stays without one. Never a default. */
-export function currencyOfValue(v: Pick<LifeValueRow, "benefit" | "column" | "currency" | "coverCurrency">): string | null {
+/** The currency a value's own heading states with a lettered sign ("(S$)", "(US$)", "(A$)"), when the table left it without one.
+ * A bare "$" never names a currency, so it is never given its cover's (DC's standing rule): the amount stays "currency not
+ * stated". Never a default. */
+export function currencyOfValue(v: Pick<LifeValueRow, "benefit" | "column" | "currency">): string | null {
   if (v.currency) return v.currency;
   const text = `${v.benefit} ${v.column ?? ""}`.trim();
-  const dollars = [...text.matchAll(/\$/g)].length;
-  if (!dollars) return null;
-  // A "$" beside a figure in the words ("per $1,000 of sum insured") is a unit of the row, not the sign its amount is in.
-  if (/\$\s*\d/.test(text)) return null;
-  // Only one sign in the words can be the amount's: two settle nothing.
-  if (dollars > 1) return null;
-  // A sign with letters right before it (S$, US$, A$) states its own currency.
+  // One sign only, none beside a figure ("per $1,000"), with letters right before it.
+  if ([...text.matchAll(/\$/g)].length !== 1 || /\$\s*\d/.test(text)) return null;
   const prefixed = text.match(/\b([A-Za-z]{1,3})\$/);
-  if (prefixed) return statedCurrencyCode(`${prefixed[1]!.toUpperCase()}$`);
-  // A bare "$" takes its cover's dollar currency only when it stands alone: "($)" or the last thing in the heading. Anything
-  // else beside it (another currency named, any way it is written) leaves the amount without one: unsure means none.
-  if (!/\(\s*\$\s*\)|\$\s*$/.test(text)) return null;
-  if (/\b(?:RM|MYR|USD|SGD|HKD|AUD|EUR|GBP|JPY|CNY|RMB|NZD|CAD|THB|IDR|INR|PHP|KRW|CHF|ringgit|euros?|pounds?|dollars?|yen|rupees?|baht)\b|[£€¥₹]/i.test(text.replace(/\(\s*\$\s*\)/, ""))) return null;
-  return currencyOfAmount("$", v.coverCurrency ?? null);
+  return prefixed ? statedCurrencyCode(`${prefixed[1]!.toUpperCase()}$`) : null;
 }
 
 /** The latest printed day among some texts, with its text, or null. */
