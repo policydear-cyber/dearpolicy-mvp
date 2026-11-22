@@ -69,6 +69,36 @@ test("control: two by-year columns Standard and Enhanced side by side are both r
   const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
   assert.ok(!shown(t).includes(11111) && !shown(t).includes(22222), "alternatives are not shown");
 });
+for (const section of ["Enhanced Illustration", "Standard Plan Benefit Illustration", "Spouse Illustration", "Option A"]) {
+  test(`control: a perfect series column under the section "${section}" stays refused`, () => {
+    const rows = illRows("Total Premiums Paid To-Date ($)").map((r) => ({ ...r, section }));
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+    assert.ok(!shown(t).includes(47909), `${section} was shown`);
+  });
+}
+for (const heading of ["Total Premium 200000", "Guaranteed Death Benefit 200000", "Premium 20"]) {
+  test(`control: a number that is not a rate ("${heading}") stays refused`, () => {
+    const rows = illRows(heading);
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+    assert.ok(!shown(t).includes(47909), `${heading} was shown`);
+  });
+}
+for (const heading of ["Illustrated at 4.25% investment return Total ($)", "Guaranteed ($)", "Illustrated at 4.25 return"]) {
+  test(`a rate or a plain series heading ("${heading}") is shown`, () => {
+    const rows = illRows(heading);
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+    assert.ok(shown(t).includes(47909), `${heading} was refused`);
+  });
+}
+test("control: an alternative named in the row's own benefit words stays refused", () => {
+  const rows = illRows("Total Basic Premiums Paid To-Date ($)").map((r) => (r.value === 47909 ? { ...r, benefit: "Total premiums paid, Enhanced plan" } : r));
+  const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+  const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+  assert.ok(!shown(t).includes(47909));
+});
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`illustration-series: ${passed} pass`);
 process.exit(0);

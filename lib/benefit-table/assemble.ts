@@ -611,10 +611,20 @@ const SERIES_WORDS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustra
   "total", "basic", "premium", "premiums", "paid", "to", "date", "benefit", "benefits", "value", "values", "surrender", "cash", "death", "maturity", "net", "gross"]);
 /** At least one of these must be in the heading, so a lone tier word ("Basic") is not taken for a series. */
 const SERIES_ANCHORS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustrated", "projected", "paid", "premium", "premiums", "total", "return", "returns"]);
+/** A number in a heading is a rate only as "4.25%", "4.25" or after "at", "rate" or "return": any other number ("Premium 20",
+ * "Death Benefit 200000") names a term or a sum, so an alternative. */
+const rateOnly = (raw: string) => !/\d/.test(raw.replace(/\d+(?:\.\d+)?\s*%/g, " ").replace(/\d+\.\d+/g, " ").replace(/\b(?:at|rate|return)\s+\d+/gi, " "));
+/** Words of a section's title that only say what is printed (and the series words): "Policy Illustration", "Death Benefit",
+ * "Premium Summary". "Enhanced Illustration", "Spouse Illustration" or "Option A" are not. */
+const SECTION_WORDS = new Set([...SERIES_WORDS, "illustration", "illustrations", "summary", "table", "policy", "page", "of", "the", "deductions", "schedule", "and"]);
+const wordsOf = (text: string | null | undefined) => norm(text).split(" ").filter(Boolean);
 const seriesHeading = (column: string | null) => {
   const w = headingWords(column).split(" ").filter(Boolean);
-  return w.length > 0 && w.every((t) => SERIES_WORDS.has(t) || /^\d+(?:\.\d+)?$/.test(t)) && w.some((t) => SERIES_ANCHORS.has(t));
+  return w.length > 0 && rateOnly(column ?? "") && w.every((t) => SERIES_WORDS.has(t) || /^\d+(?:\.\d+)?$/.test(t)) && w.some((t) => SERIES_ANCHORS.has(t));
 };
+/** Everything printed with a row says only what the figure is: its column, its section's title, and its own benefit words. */
+const seriesRow = (b: { column: string | null; section: string | null; benefit: string }) =>
+  seriesHeading(b.column) && wordsOf(b.section).every((t) => SECTION_WORDS.has(t)) && wordsOf(b.benefit).every((t) => SECTION_WORDS.has(t));
 export function illustrationSeries(readings: CheckedReading[]): Set<string> {
   const out = new Set<string>();
   for (const r of readings) {
@@ -625,8 +635,8 @@ export function illustrationSeries(readings: CheckedReading[]): Set<string> {
       || (headingWords(b.column).split(" ").filter(Boolean).every((t) => FREQUENCY_WORDS.has(t)) && !!headingWords(b.column))));
     // Two different headings that are not series words side by side are alternatives (tiers, terms, sums, riders): none of
     // this document's columns is taken for a series.
-    if (candidates.some(([, rows]) => rows.some((b) => b.column && !seriesHeading(b.column)))) continue;
-    for (const [k, rows] of candidates) if (rows.every((b) => !b.column || seriesHeading(b.column))) out.add(k);
+    if (candidates.some(([, rows]) => rows.some((b) => b.column && !seriesRow(b)))) continue;
+    for (const [k, rows] of candidates) if (rows.every((b) => !b.column || seriesRow(b))) out.add(k);
   }
   return out;
 }
