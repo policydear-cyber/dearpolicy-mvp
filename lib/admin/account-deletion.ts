@@ -25,6 +25,9 @@ import { adminEmails, type AdminUser } from "@/lib/admin/access";
 import { pseudonymizeId, recordEvent } from "@/lib/telemetry";
 import { requestHouseholdDeletion } from "@/lib/lifecycle/coordinator";
 import { requireSupabaseServiceEnv } from "@/lib/supabase/env";
+import { ACCOUNT_DATA_RULES, type DeletionContext } from "@/lib/admin/account-data-map";
+import { drainStoragePurge, enqueueStoragePurge, householdStorageKeys, purgeDriverFor } from "@/lib/storage/purge";
+import type { StorageDomain } from "@/lib/storage/cleanup";
 
 export type HouseholdImpact = {
   householdId: string;
@@ -52,6 +55,8 @@ export type AccountPlan = {
   households: HouseholdImpact[];
   /** Reasons this account can't be deleted. Empty means it can. */
   blockers: string[];
+  /** Things to know that the console can't do for you (a paid plan lives at Stripe, not here). */
+  warnings: string[];
   /** True when a household that will be deleted still has other people in it. */
   needsSharedAcknowledgement: boolean;
 };
@@ -111,28 +116,62 @@ export async function planAccountDeletion(emailInput: string, admin: AdminUser, 
   if (u.id === admin.id || norm(u.email) === norm(admin.email)) blockers.push("This is your own admin account. It can't be deleted from the console.");
   else if (adminEmails(env).has(norm(u.email))) blockers.push("This address is on the admin list (ADMIN_EMAILS). Remove it there first if it really should go.");
 
+  const warnings: string[] = [];
+  const paid = await count(
+    `SELECT count(*) AS n FROM household_plans WHERE account_id = ANY($1::uuid[]) AND (stripe_subscription_id IS NOT NULL OR stripe_customer_id IS NOT NULL)`,
+    [households.filter((h) => h.action === "delete_household").map((h) => h.householdId)]);
+  if (paid > 0) warnings.push("A household here has a Stripe customer or subscription. Deleting it here does not cancel billing: cancel it in Stripe too.");
+
   return {
     found: true,
     plan: {
-      userId: u.id, email: u.email, createdAt: u.created_at, lastSignInAt: u.last_sign_in_at, households, blockers,
+      userId: u.id, email: u.email, createdAt: u.created_at, lastSignInAt: u.last_sign_in_at, households, blockers, warnings,
       needsSharedAcknowledgement: households.some((h) => h.action === "delete_household" && h.otherMembers.length > 0),
     },
   };
 }
 
+export type StorageSweep = { verified: boolean; stillQueued: number };
+
 export type DeletionDeps = {
+  /** Removes every stored file of these households and keys, then reports whether any is left. */
+  sweepStorage: (householdIds: string[], keys: string[]) => Promise<StorageSweep>;
   /** Deletes the sign-in from Supabase Auth. */
   deleteAuthUser: (userId: string) => Promise<void>;
   /** Deletes one household whole, as its owner would. */
   deleteHousehold: (ownerUserId: string, householdId: string) => Promise<void>;
 };
 
+const DOMAINS: StorageDomain[] = ["policy", "claim-evidence", "household-export"];
+
+/**
+ * Storage left behind after the households' own deletion: drains the removal queue, then lists each bucket and
+ * removes anything still under a deleted household's id or named by a collected key (a file the queue missed), and
+ * says how many queued removals are still waiting on a retry. Never throws: unverified is reported, not hidden.
+ */
+async function sweepStorage(householdIds: string[], keys: string[]): Promise<StorageSweep> {
+  let verified = true;
+  try { await drainStoragePurge({ limit: 500 }); } catch { verified = false; }
+  const wanted = new Set(keys);
+  for (const domain of DOMAINS) {
+    try {
+      const driver = purgeDriverFor(domain);
+      for (const object of await driver.listObjects()) {
+        if (wanted.has(object.key) || householdIds.some((h) => object.key.startsWith(`${h}/`))) await driver.deleteObject(object.key);
+      }
+    } catch { verified = false; }
+  }
+  const stillQueued = await count(`SELECT count(*) AS n FROM storage_purge_queue WHERE purged_at IS NULL AND (storage_key = ANY($1::text[]) OR left(storage_key, 36) = ANY($2::text[]))`, [keys, householdIds]);
+  return { verified: verified && stillQueued === 0, stillQueued };
+}
+
 export const defaultDeps: DeletionDeps = {
+  sweepStorage,
   async deleteAuthUser(userId) {
     const { url, anonKey: serviceKey } = requireSupabaseServiceEnv();
     const { createClient } = await import("@supabase/supabase-js");
     const client = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { error } = await client.auth.admin.deleteUser(userId);
+    const { error } = await client.auth.admin.deleteUser(userId, false); // a real delete, not Supabase's soft delete
     // An account already gone counts as deleted, so a retry after a half-finished attempt completes.
     if (error && !/not.?found/i.test(error.message) && (error as { status?: number }).status !== 404) throw new Error(`Supabase Auth refused the deletion: ${error.message}`);
   },
@@ -143,7 +182,7 @@ export const defaultDeps: DeletionDeps = {
 
 export type DeleteAccountInput = { userId: string; confirmEmail: string; acknowledgeSharedHouseholds: boolean };
 export type DeleteAccountResult =
-  | { ok: true; householdsDeleted: number; membershipsRemoved: number; remaining: { memberships: number; signIn: boolean } }
+  | { ok: true; householdsDeleted: number; membershipsRemoved: number; remaining: { memberships: number; signIn: boolean }; storage: StorageSweep }
   | { ok: false; reason: string; partial?: { householdsDeleted: number } };
 
 async function audit(admin: AdminUser, targetId: string, outcome: string, detail: Record<string, unknown>) {
@@ -155,6 +194,30 @@ async function audit(admin: AdminUser, targetId: string, outcome: string, detail
   await query(`INSERT INTO admin_audit_log(action, admin_ref, target_ref, outcome, detail) VALUES ('delete_account', $1, $2, $3, $4::jsonb)`,
     [adminRef, targetRef, outcome, JSON.stringify(detail)]).catch(() => undefined); // table not applied yet: telemetry still has it
 }
+
+async function buildContext(plan: AccountPlan, householdIds: string[]): Promise<DeletionContext> {
+  const jobIds = householdIds.length ? (await query<{ id: string }>(`SELECT id::text FROM background_jobs WHERE account_id = ANY($1::uuid[])`, [householdIds]).catch(() => ({ rows: [] }))).rows.map((r) => r.id) : [];
+  const keys: string[] = [];
+  for (const id of householdIds) for (const k of await householdStorageKeys(id).catch(() => [])) keys.push(k.storageKey);
+  return {
+    userId: plan.userId, email: norm(plan.email), householdIds,
+    householdRefs: householdIds.map((id) => pseudonymizeId(id)).filter((r): r is string => !!r),
+    jobIds, storageKeys: keys,
+  };
+}
+
+/** Runs every rule of one scope. A table that isn't set up in this database has nothing to remove; any other error stops the deletion. */
+async function runRules(ctx: DeletionContext, scope: "household" | "user") {
+  for (const rule of ACCOUNT_DATA_RULES.filter((r) => r.scope === scope)) {
+    try { await query(rule.sql, rule.params(ctx)); }
+    catch (error) {
+      if ((error as { code?: string })?.code === "42P01" || (error as { code?: string })?.code === "42703") continue; // table or column not there yet
+      throw error;
+    }
+  }
+}
+
+const countMemberships = (userId: string) => count(`SELECT count(*) AS n FROM household_members WHERE user_id = $1`, [userId]);
 
 /**
  * Deletes the account. Looks everything up again itself: nothing the browser sent about what is safe is trusted,
@@ -174,17 +237,23 @@ export async function deleteAccount(admin: AdminUser, input: DeleteAccountInput,
   }
 
   let householdsDeleted = 0, membershipsRemoved = 0;
+  const owned = plan.households.filter((h) => h.action === "delete_household").map((h) => h.householdId);
+  let sweep: StorageSweep = { verified: true, stillQueued: 0 };
   try {
-    for (const h of plan.households) {
-      if (h.action === "delete_household") { await deps.deleteHousehold(plan.userId, h.householdId); householdsDeleted++; }
-    }
-    // Memberships left (households that stay), and the person's other traces. Each table is optional.
-    const gone = await query(`DELETE FROM household_members WHERE user_id = $1`, [plan.userId]);
-    membershipsRemoved = gone.rowCount ?? 0;
-    await query(`UPDATE household_members SET invited_by = NULL WHERE invited_by = $1`, [plan.userId]).catch(() => undefined);
-    await query(`DELETE FROM household_invitations WHERE invited_by = $1 AND accepted_at IS NULL`, [plan.userId]).catch(() => undefined);
-    await query(`UPDATE household_invitations SET accepted_by = NULL WHERE accepted_by = $1`, [plan.userId]).catch(() => undefined);
-    await query(`DELETE FROM claim_reviewers WHERE user_id = $1`, [plan.userId]).catch(() => undefined);
+    const ctx = await buildContext(plan, owned);
+    // Records with no foreign key to the household go first (they hold only counters and logs), so nothing is left
+    // pointing at it if the household's own deletion is interrupted; they run again afterwards for anything a job
+    // still in flight wrote in between.
+    await runRules(ctx, "household");
+    // An export the person made of a household that stays: its file goes too.
+    const exportKeys = (await query<{ storage_key: string }>(`SELECT storage_key FROM household_exports WHERE requested_by = $1 AND storage_key IS NOT NULL`, [plan.userId]).catch(() => ({ rows: [] }))).rows;
+    if (exportKeys.length) { await enqueueStoragePurge(exportKeys.map((r) => ({ domain: "household-export" as const, storageKey: r.storage_key })), "account_deleted"); ctx.storageKeys.push(...exportKeys.map((r) => r.storage_key)); }
+    for (const id of owned) { await deps.deleteHousehold(plan.userId, id); householdsDeleted++; }
+    await runRules(ctx, "household");
+    membershipsRemoved = await countMemberships(plan.userId);
+    await runRules(ctx, "user");
+    sweep = await deps.sweepStorage(owned, ctx.storageKeys);
+    await runRules(ctx, "household"); // the queue's finished entries, now that the sweep has run
     await deps.deleteAuthUser(plan.userId);
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Unknown error";
@@ -197,6 +266,6 @@ export async function deleteAccount(admin: AdminUser, input: DeleteAccountInput,
   const orphanHouseholds = await count(
     `SELECT count(*) AS n FROM accounts a WHERE ${activePredicate("a")} AND NOT EXISTS (SELECT 1 FROM household_members hm WHERE hm.household_id = a.id) AND a.id = ANY($1::uuid[])`,
     [plan.households.map((h) => h.householdId)]);
-  await audit(admin, plan.userId, "completed", { householdsDeleted, membershipsRemoved, remainingMemberships: left, signInRemains: signIn, householdsLeftWithoutOwner: orphanHouseholds });
-  return { ok: true, householdsDeleted, membershipsRemoved, remaining: { memberships: left, signIn } };
+  await audit(admin, plan.userId, "completed", { householdsDeleted, membershipsRemoved, remainingMemberships: left, signInRemains: signIn, householdsLeftWithoutOwner: orphanHouseholds, storageVerified: sweep.verified, filesStillQueued: sweep.stillQueued });
+  return { ok: true, householdsDeleted, membershipsRemoved, remaining: { memberships: left, signIn }, storage: sweep };
 }

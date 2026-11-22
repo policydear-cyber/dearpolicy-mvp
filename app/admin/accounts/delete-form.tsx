@@ -12,6 +12,7 @@ export function DeleteAccountForm({ userId, email, needsAcknowledgement, sharedW
       <div className="alert success" role="status" data-testid="admin-delete-done">
         <strong>Account deleted.</strong> {done.householdsDeleted} household{done.householdsDeleted === 1 ? "" : "s"} deleted with their documents and files;
         {" "}{done.membershipsRemoved} membership{done.membershipsRemoved === 1 ? "" : "s"} removed; the sign-in is gone.
+        {" "}{done.storage.verified ? "Stored files were checked and none are left." : `Some stored files could not be confirmed removed (${done.storage.stillQueued} still queued); they are retried automatically.`}
       </div>
     );
   }
