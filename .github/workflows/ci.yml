@@ -170,6 +170,8 @@ jobs:
         run: npm run policies:life-stages-test
       - name: Locked PDFs (read with their password; Read again without it is refused before anything changes)
         run: npm run documents:locked-pdf-test
+      - name: A scan made of several pictures, or inside a form, is put together and read (negative controls)
+        run: npm run documents:multi-image-page-test
       - name: Read again on a locked PDF (refused before anything changes; refused presses don't use the read allowance; PGlite)
         run: npm run documents:reread-locked-test
       - name: '"I didn''t renew it" (owner only, own household, refused before the date passes, Home cards and chat follow, Undo; PGlite)'

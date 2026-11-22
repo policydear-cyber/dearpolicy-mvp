@@ -373,6 +373,7 @@
     "documents:dot-grouped-figure-test": "node --import tsx scripts/documents/dot-grouped-figure-test.ts",
     "documents:turned-page-test": "node --import tsx scripts/documents/turned-page-test.ts",
     "documents:locked-pdf-test": "node --import tsx scripts/documents/locked-pdf-test.ts",
+    "documents:multi-image-page-test": "node --import tsx scripts/documents/multi-image-page-test.ts",
     "documents:reread-locked-test": "DATABASE_URL= node --import tsx scripts/documents/reread-locked-test.ts",
     "documents:status-notice-test": "node --import tsx scripts/documents/status-notice-test.ts",
     "policies:not-sure-owner-test": "node --import tsx --test scripts/policies/not-sure-owner-test.ts",
