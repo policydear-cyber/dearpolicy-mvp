@@ -41,7 +41,7 @@ function LifeStagesContent() {
 }
 
 function Body({ data }: { data: Payload }) {
-  const { policies, stages, renewalDue, notRenewed } = data;
+  const { policies, stages, renewalDue, notRenewed, noDates } = data;
   const home = `/?familyMemberId=${encodeURIComponent(data.member!.id)}`;
   const anyDate = policies.some((p) => p.endsOn || p.premiumsEnd || p.matures);
   return <>
@@ -50,7 +50,8 @@ function Body({ data }: { data: Payload }) {
     </div>}
     {!!notRenewed.length && <p className="muted">Not shown: {listOf(notRenewed)}, which the household said wasn&rsquo;t renewed.</p>}
     {data.age == null && !!policies.length && <p className="muted">Add {data.member!.name ? `${data.member!.name}’s` : "a"} date of birth in <Link href="/family">Family</Link> to see ages here.</p>}
-    {!policies.length ? <section className="section"><div className="empty-card">{renewalDue.length || notRenewed.length ? <>No other policies to show for {data.member!.name ?? "this person"}.</> : <>No policies on file for {data.member!.name ?? "this person"} yet. <Link href="/policies">Upload a policy schedule</Link> to see its dates here.</>}</div></section> : <>
+    {!!noDates.length && <p className="muted">No dates are printed in {listOf(noDates)}, so {noDates.length === 1 ? "it isn’t" : "they aren’t"} shown below.</p>}
+    {!policies.length ? <section className="section"><div className="empty-card">{noDates.length ? <>None of {data.member!.name ? `${data.member!.name}’s` : "these"} policies print a date or value yet.</> : renewalDue.length || notRenewed.length ? <>No other policies to show for {data.member!.name ?? "this person"}.</> : <>No policies on file for {data.member!.name ?? "this person"} yet. <Link href="/policies">Upload a policy schedule</Link> to see its dates here.</>}</div></section> : <>
       <section className="section life-section" aria-labelledby="life-timeline-title">
         <h2 id="life-timeline-title">Timeline</h2>
         {anyDate ? <Timeline policies={policies} age={data.age} /> : <p className="muted">None of these policies prints an end, premium end or maturity date yet.</p>}
@@ -58,14 +59,15 @@ function Body({ data }: { data: Payload }) {
       <section className="section life-section" aria-labelledby="life-stages-title">
         <h2 id="life-stages-title">At each stage</h2>
         <div className="life-table-wrap"><table className="life-table">
-          <thead><tr><th scope="col">Stage</th><th scope="col">Printed cover runs past this point</th><th scope="col">Premiums</th><th scope="col">What changes</th></tr></thead>
+          <thead><tr><th scope="col">Stage</th><th scope="col">Cover still running</th><th scope="col">Premiums</th><th scope="col">What changes</th></tr></thead>
           <tbody>{stages.map((s, i) => <tr key={s.from.on}>
             <th scope="row">{stageLabel(s, i)}</th>
-            <td data-label="Printed cover runs past this point">{s.inPlace.length ? s.inPlace.join(", ") : "None"}{s.renewedNoEnd.length ? <small>Renewed; new end date not printed: {s.renewedNoEnd.join(", ")}</small> : null}{s.endNotPrinted.length ? <small>End not printed: {s.endNotPrinted.join(", ")}</small> : null}</td>
+            <td data-label="Cover still running">{s.inPlace.length ? s.inPlace.join(", ") : "None"}{s.renewedNoEnd.length ? <small>Renewed; new end date not printed: {s.renewedNoEnd.join(", ")}</small> : null}</td>
             <td data-label="Premiums">{s.paying.length ? `Premiums printed until after this point: ${s.paying.join(", ")}` : "No premium end printed after this point"}</td>
             <td data-label="What changes">{s.events.length ? <ul>{s.events.map((e, j) => <li key={j}>{e.policy}: {e.kind === "premiums_end" ? "premiums stop" : e.kind === "matures" ? "matures" : "cover ends, as printed"}</li>)}</ul> : "—"}</td>
           </tr>)}</tbody>
         </table></div>
+        {!!stages[0]?.endNotPrinted.length && <p className="muted">End date not printed: {listOf(stages[0].endNotPrinted)}. {stages[0].endNotPrinted.length === 1 ? "It isn’t" : "They aren’t"} counted as ending in any stage.</p>}
       </section>
       <section className="section life-section" aria-labelledby="life-policies-title">
         <h2 id="life-policies-title">Each policy</h2>
@@ -106,19 +108,22 @@ function PolicyCard({ p }: { p: LifePolicy }) {
     <div className="life-policy-head"><strong>{p.name}</strong>{p.insurer ? <span className="muted">{p.insurer}</span> : null}</div>
     <dl>
       <div><dt>Cover</dt><dd>{endWords(p)}</dd></div>
-      <div><dt>Premiums</dt><dd>{p.premiumsEnd ? `Stop ${p.premiumsEnd.onText}${p.premiumsEnd.age != null ? ` (age ${p.premiumsEnd.age})` : ""}` : p.premiumTerm ? `Term as printed: ${p.premiumTerm}` : "End not printed"}</dd></div>
+      <div><dt>Premiums</dt><dd>{p.premiumsEnd ? `Stop ${p.premiumsEnd.onText}${p.premiumsEnd.age != null ? ` (age ${p.premiumsEnd.age})` : ""}` : p.premiumTerm ? termWords(p.premiumTerm) : "End not printed"}</dd></div>
       {p.matures && <div><dt>Matures</dt><dd>{p.matures.onText}{p.matures.age != null ? ` (age ${p.matures.age})` : ""}</dd></div>}
     </dl>
-    {!!p.values.length && <div className="life-table-wrap"><table className="life-table values">
-      <caption>Values the documents print</caption>
+    {!!p.values.length && <details className="life-values"><summary>Values the documents print ({p.values.length})</summary><div className="life-table-wrap"><table className="life-table values">
       <thead><tr><th scope="col">At</th><th scope="col">What</th><th scope="col">Amount</th><th scope="col">Source</th></tr></thead>
       <tbody>{p.values.map((v, i) => <tr key={i}><th scope="row">{atWords(v)}</th><td data-label="What">{v.benefit}</td>
         <td data-label="Amount"><b className="life-money">{formatMoney(v.amount, v.currency)}</b><small>{basisWords(v)}</small></td>
         <td data-label="Source">{v.document}, page {v.page}</td></tr>)}</tbody>
-    </table></div>}
+    </table></div></details>}
   </li>;
 }
 
+/** A term printed as a bare number has no unit on the page: it is said as printed, never as years or an age. */
+function termWords(t: string): string {
+  return /^\d+$/.test(t.trim()) ? `Term printed as “${t.trim()}”, without years or an age` : `Term as printed: ${t}`;
+}
 function endWords(p: LifePolicy): string {
   if (!p.endsOn) return p.state === "renewed" ? "Renewed; new end date not printed" : "End not printed";
   return `Until ${p.endsText}${p.endAge != null ? ` (age ${p.endAge})` : ""}${p.state === "renewed" ? ", from the renewal receipt" : ""}`;

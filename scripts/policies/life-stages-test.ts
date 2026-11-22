@@ -5,7 +5,7 @@ for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.te
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ageOn, lifeStages, type LifeCover, type LifeValueRow } from "@/lib/policies/life-stages";
+import { ageOn, currencyOfValue, lifeStages, type LifeCover, type LifeValueRow } from "@/lib/policies/life-stages";
 import type { PolicyDate } from "@/lib/policies/policy-dates";
 
 let passed = 0; const failures: string[] = [];
@@ -92,4 +92,24 @@ test("the module adds up nothing: no sum, total or projection of its own", () =>
 });
 
 console.log(`life-stages: ${passed} passed${failures.length ? `, ${failures.length} failed\n${failures.join("\n")}` : ""}`);
+test("a value under a bare $ column takes its own cover's dollar currency; nothing settled, or no $, stays without one", () => {
+  const v = { benefit: "Surrender value", column: "Guaranteed ($)", currency: null as string | null, coverCurrency: "SGD" as string | null };
+  assert.equal(currencyOfValue(v), "SGD");
+  assert.equal(currencyOfValue({ ...v, coverCurrency: null }), null);
+  assert.equal(currencyOfValue({ ...v, coverCurrency: "EUR" }), null);
+  assert.equal(currencyOfValue({ ...v, column: "Guaranteed" }), null);
+  assert.equal(currencyOfValue({ ...v, currency: "USD" }), "USD");
+});
+test("a policy that prints no date, term or value is named once and not drawn", () => {
+  const r = lifeStages({ dates: [date("w", "Policy wording", ["w1"], { state: "no_date" }), ...DATES.slice(0, 1)], covers: COVERS, values: [], dateOfBirth: null, today: TODAY });
+  assert.deepEqual(r.noDates, ["Policy wording"]);
+  assert.deepEqual(r.policies.map((p) => p.name), ["Term Protector"]);
+  assert.ok(r.stages.every((s) => !s.endNotPrinted.includes("Policy wording")));
+});
+test("control: a renewed policy with no new end, and one with a premium term, are still shown", () => {
+  const r = lifeStages({ dates: [date("r", "Renewed one", ["r1"], { state: "renewed" }), date("t", "Termed", ["t1"], { state: "no_date" })], covers: [cover("t1", "t", { premiumTerm: "72" })], values: [], dateOfBirth: null, today: TODAY });
+  assert.deepEqual(r.policies.map((p) => p.name).sort(), ["Renewed one", "Termed"]);
+  assert.deepEqual(r.noDates, []);
+});
+
 if (failures.length) process.exit(1);

@@ -14,11 +14,13 @@
  * Pure: no database, no network.  Test: scripts/policies/life-stages-test.ts */
 
 import { dayOf, dayText, type PolicyDate } from "@/lib/policies/policy-dates";
+import { currencyOfAmount } from "@/lib/format/currency";
 
 /** One cover line of the person's benefit table, with its printed term dates. */
 export type LifeCover = { documentId: string; coverKey: string; name: string; premiumEndDate?: string | null; premiumTerm?: string | null; maturityDate?: string | null; page: number | null };
 /** One printed value of the person's table placed by an age or policy year its page prints. */
 export type LifeValueRow = { coverKey: string; benefit: string; amount: number; currency: string | null;
+  column?: string | null; /** The verified currency of this value's cover, when its schedule settles one. */ coverCurrency?: string | null;
   kind: "value" | "projected"; basis?: "non_guaranteed" | "illustrated"; age?: number; policyYear?: number; rate?: string; documentId: string; document: string; page: number };
 
 export type LifeEvent = { kind: "premiums_end" | "matures" | "cover_ends"; on: string; onText: string; age: number | null; policy: string; cover: string | null; page: number | null };
@@ -46,7 +48,7 @@ export type LifeStage = {
   /** What happens at the stage's start, as printed. */
   events: LifeEvent[];
 };
-export type LifeStages = { age: number | null; policies: LifePolicy[]; stages: LifeStage[]; renewalDue: string[]; notRenewed: string[] };
+export type LifeStages = { age: number | null; policies: LifePolicy[]; /** Policies that print no date, term or value at all: named once, never drawn or repeated in every stage. */ noDates: string[]; stages: LifeStage[]; renewalDue: string[]; notRenewed: string[] };
 
 const isoOf = (day: number) => new Date(day * 86_400_000).toISOString().slice(0, 10);
 /** Whole years from a date of birth to a day, or null with no date of birth. */
@@ -56,6 +58,13 @@ export function ageOn(born: number | null, day: number): number | null {
   let years = d.getUTCFullYear() - b.getUTCFullYear();
   if (d.getUTCMonth() < b.getUTCMonth() || (d.getUTCMonth() === b.getUTCMonth() && d.getUTCDate() < b.getUTCDate())) years -= 1;
   return years;
+}
+
+/** A value printed in a column headed with a bare "$" is in the currency its own cover's schedule settles, when that is a
+ * dollar currency (currencyOfAmount); with nothing settled, or no "$" on the row, it stays without one. Never a default. */
+export function currencyOfValue(v: Pick<LifeValueRow, "benefit" | "column" | "currency" | "coverCurrency">): string | null {
+  if (v.currency) return v.currency;
+  return /\$/.test(`${v.benefit} ${v.column ?? ""}`) ? currencyOfAmount("$", v.coverCurrency ?? null) : null;
 }
 
 /** The latest printed day among some texts, with its text, or null. */
@@ -72,7 +81,7 @@ export function lifeStages(input: { dates: PolicyDate[]; covers: LifeCover[]; va
   const at = (day: number) => ({ on: isoOf(day), onText: dayText(day), age: ageOn(born, day) });
   const docOfCover = new Map(input.covers.map((c) => [c.coverKey, c.documentId]));
   const shown = input.dates.filter((p) => p.state !== "not_renewed" && p.state !== "renewal_due");
-  const policies: LifePolicy[] = shown.map((p) => {
+  const all: LifePolicy[] = shown.map((p) => {
     const docs = new Set(p.documentIds);
     const covers = input.covers.filter((c) => docs.has(c.documentId));
     const end = p.state === "renewed" ? dayOf(p.renewal?.until ?? null) : dayOf(p.endsOn);
@@ -80,13 +89,18 @@ export function lifeStages(input: { dates: PolicyDate[]; covers: LifeCover[]; va
     const terms = [...new Set(covers.map((c) => c.premiumTerm?.trim()).filter((t): t is string => !!t))];
     const maturityDay = latest(covers.map((c) => c.maturityDate));
     const values = input.values.filter((v) => docs.has(docOfCover.get(v.coverKey) ?? "") && (v.age != null || v.policyYear != null))
-      .map((v): LifeValue => ({ benefit: v.benefit, amount: v.amount, currency: v.currency, projected: v.kind === "projected", basis: v.kind === "projected" ? (v.basis ?? "illustrated") : null,
+      .map((v): LifeValue => ({ benefit: v.benefit, amount: v.amount, currency: currencyOfValue(v), projected: v.kind === "projected", basis: v.kind === "projected" ? (v.basis ?? "illustrated") : null,
         age: v.age ?? null, policyYear: v.policyYear ?? null, rate: v.rate ?? null, document: v.document, page: v.page }))
       .sort((a, b) => (a.policyYear ?? a.age ?? 0) - (b.policyYear ?? b.age ?? 0) || Number(a.projected) - Number(b.projected));
     return { key: p.key, name: p.name, insurer: p.insurer, state: p.state, endsOn: end != null ? isoOf(end) : null, endsText: end != null ? dayText(end) : null, endAge: end != null ? ageOn(born, end) : null,
       premiumsEnd: premiumDay != null ? at(premiumDay) : null, premiumTerm: premiumDay == null && terms.length === 1 ? terms[0] : null,
       matures: maturityDay != null ? at(maturityDay) : null, values };
   });
+
+  // A policy that prints no date, term or value says nothing about any stage: named once, not in every stage.
+  const undated = (p: LifePolicy) => !p.endsOn && !p.premiumsEnd && !p.matures && !p.premiumTerm && !p.values.length && p.state !== "renewed";
+  const policies = all.filter((p) => !undated(p));
+  const noDates = all.filter(undated).map((p) => p.name);
 
   // Stage boundaries: each printed event still ahead (premiums stop, matures, cover ends).
   const events: (LifeEvent & { day: number })[] = [];
@@ -110,7 +124,7 @@ export function lifeStages(input: { dates: PolicyDate[]; covers: LifeCover[]; va
     return { from: at(from), to: to != null ? at(to) : null, inPlace, renewedNoEnd, endNotPrinted, paying,
       events: i === 0 ? [] : events.filter((e) => e.day === from).map(({ day: _day, ...e }) => e) };
   });
-  return { age: ageOn(born, input.today), policies, stages,
+  return { age: ageOn(born, input.today), policies, noDates, stages,
     renewalDue: input.dates.filter((p) => p.state === "renewal_due").map((p) => p.name),
     notRenewed: input.dates.filter((p) => p.state === "not_renewed").map((p) => p.name) };
 }
