@@ -162,6 +162,26 @@ await test("a tall narrow tile keeps its vertical resolution", async () => {
   assert.ok(((await sharp(Buffer.from(c.png)).metadata()).height ?? 0) >= 2000, "vertical resolution kept");
 });
 
+await test("pdf.js-shaped plain graphics state (source-over, no soft mask, full opacity) does not refuse", async () => {
+  const OPS = { setGState: 7, paintImageXObject: 6 } as Record<string, number>;
+  const ops = { fnArray: [7, 6], argsArray: [[[["AIS", false], ["ca", 1], ["CA", 1], ["BM", "source-over"], ["SMask", false]]], ["img"]] };
+  assert.equal(paintedPictures(ops, OPS)?.length, 1);
+  const hidden = { fnArray: [7, 6], argsArray: [[[["SMask", { type: "Alpha" }]]], ["img"]] };
+  assert.equal(paintedPictures(hidden, OPS), null);
+});
+await test("a wide line over a picture and a form box that crops a picture are refused", async () => {
+  const OPS = { save: 1, restore: 2, transform: 3, setLineWidth: 8, constructPath: 9, stroke: 10, paintFormXObjectBegin: 11, paintFormXObjectEnd: 12, paintImageXObject: 6 } as Record<string, number>;
+  const mk = (rows: [number, unknown[]][]) => ({ fnArray: rows.map((r) => r[0]), argsArray: rows.map((r) => r[1]) });
+  const wide: { reason?: string } = {};
+  assert.equal(paintedPictures(mk([[6, ["a"]], [8, [40]], [9, [10, [], []]]]), OPS, wide), null);
+  assert.match(wide.reason ?? "", /wide lines/);
+  assert.equal(paintedPictures(mk([[6, ["a"]], [8, [0.5]], [9, [10, [], []]]]), OPS)?.length, 1, "a thin border is fine");
+  const crop: { reason?: string } = {};
+  assert.equal(paintedPictures(mk([[11, [[1, 0, 0, 1, 0, 0], [0, 0, 50, 50]]], [3, [100, 0, 0, 100, 0, 0]], [6, ["a"]], [12, []]]), OPS, crop), null);
+  assert.match(crop.reason ?? "", /form box/);
+  assert.equal(paintedPictures(mk([[11, [[1, 0, 0, 1, 0, 0], [0, 0, 200, 200]]], [3, [100, 0, 0, 100, 0, 0]], [6, ["a"]], [12, []]]), OPS)?.length, 1);
+});
+
 }
 main().then(() => {
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }

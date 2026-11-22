@@ -92,7 +92,7 @@ export async function decodedPageImages(bytes: Uint8Array, pageNumbers: number[]
   let task = null as { destroy(): Promise<void> } | null;
   try {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const loading = pdfjs.getDocument({ data: new Uint8Array(bytes), password: password || undefined, isEvalSupported: false, maxImageSize: 40_000_000 } as Parameters<typeof pdfjs.getDocument>[0]);
+    const loading = pdfjs.getDocument({ data: new Uint8Array(bytes), password: password || undefined, isEvalSupported: false, maxImageSize: 25_000_000 } as Parameters<typeof pdfjs.getDocument>[0]);
     task = loading as unknown as { destroy(): Promise<void> };
     doc = await loading.promise as unknown as Doc;
     const sharp = (await import("sharp")).default;
@@ -166,6 +166,7 @@ const MAX_PICTURES = 60;
 /** Operators that can hide or change a picture the sheet pastes whole: clips, shading, fills over it, transparency. */
 const HIDING_OP_NAMES = ["clip", "eoClip", "shadingFill"];
 const FILL_OP_NAMES = ["fill", "eoFill", "fillStroke", "eoFillStroke", "closePathFillStroke", "closePathEOFillStroke"];
+const STROKE_OP_NAMES = ["stroke", "closeStroke"];
 const MAX_TOTAL_PIXELS = 120_000_000;
 type Painted = { name: string; matrix: Matrix };
 /** Every picture a page paints, with the transformation in force where it is drawn, following the page's own q/Q, cm and
@@ -178,23 +179,43 @@ export function paintedPictures(ops: { fnArray: number[]; argsArray: unknown[][]
   const hiding = new Set(HIDING_OP_NAMES.map((k) => OPS[k]).filter((v) => typeof v === "number"));
   const fills = new Set(FILL_OP_NAMES.map((k) => OPS[k]).filter((v) => typeof v === "number"));
   const savedText: boolean[] = [];
+  const strokes = new Set(STROKE_OP_NAMES.map((k) => OPS[k]).filter((v) => typeof v === "number"));
+  let lineWidth = 1; const savedWidth: number[] = [];
+  const formBoxes: (number[] | null)[] = [];
   const saved: Matrix[] = [];
   const out: Painted[] = [];
   for (const [i, fn] of ops.fnArray.entries()) {
     const args = ops.argsArray[i] ?? [];
-    if (fn === OPS.save) { saved.push(matrix); savedText.push(invisibleText); }
-    else if (fn === OPS.restore) { matrix = saved.pop() ?? matrix; invisibleText = savedText.pop() ?? invisibleText; }
+    if (fn === OPS.save) { saved.push(matrix); savedText.push(invisibleText); savedWidth.push(lineWidth); }
+    else if (fn === OPS.restore) { matrix = saved.pop() ?? matrix; invisibleText = savedText.pop() ?? invisibleText; lineWidth = savedWidth.pop() ?? lineWidth; }
+    else if (fn === OPS.setLineWidth) lineWidth = Number(args[0]);
     else if (fn === OPS.transform) matrix = times((args as unknown[]).map(Number) as Matrix, matrix);
-    else if (fn === OPS.paintFormXObjectBegin) { saved.push(matrix); savedText.push(invisibleText); const m = (args[0] as unknown[] | undefined)?.map(Number) as Matrix | undefined; if (m?.length === 6) matrix = times(m, matrix); }
-    else if (fn === OPS.paintFormXObjectEnd) { matrix = saved.pop() ?? matrix; invisibleText = savedText.pop() ?? invisibleText; }
+    else if (fn === OPS.paintFormXObjectBegin) { saved.push(matrix); savedText.push(invisibleText); savedWidth.push(lineWidth); const m = (args[0] as unknown[] | undefined)?.map(Number) as Matrix | undefined; if (m?.length === 6) matrix = times(m, matrix);
+      // The form's own box clips what it paints: kept as a rectangle on the page, to check each picture inside it against.
+      const bb = (args[1] as unknown[] | undefined)?.map(Number);
+      if (bb?.length === 4 && bb.every(Number.isFinite)) {
+        const [a, b, c, d, e, f] = matrix;
+        if (Math.abs(b) > 1e-6 || Math.abs(c) > 1e-6) { if (why) why.reason = "a picture sits in a turned form box"; return null; }
+        const xs = [a * bb[0]! + e, a * bb[2]! + e], ys = [d * bb[1]! + f, d * bb[3]! + f];
+        formBoxes.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]);
+      } else formBoxes.push(null);
+    }
+    else if (fn === OPS.paintFormXObjectEnd) { formBoxes.pop(); lineWidth = savedWidth.pop() ?? lineWidth; matrix = saved.pop() ?? matrix; invisibleText = savedText.pop() ?? invisibleText; }
     else if (hiding.has(fn)) { if (why) why.reason = "it clips or shades its pictures, so what shows could differ"; return null; }
     else if (fn === OPS.setGState) {
-      const hides = (args[0] as unknown[] | undefined)?.some((kv) => Array.isArray(kv) && ["ca", "CA", "BM", "SMask"].includes(String(kv[0])) && !(kv[0] === "BM" && kv[1] === "Normal") && !((kv[0] === "ca" || kv[0] === "CA") && kv[1] === 1) && !(kv[0] === "SMask" && (kv[1] === "None" || kv[1] === null)));
+      // PDF.js reports /BM /Normal as "source-over" and /SMask /None as false: those, and full opacity, change nothing.
+      const plain = (k: unknown, v: unknown) => (k === "BM" && (v === "Normal" || v === "source-over" || v === "Compatible")) || ((k === "ca" || k === "CA") && v === 1)
+        || (k === "SMask" && (v === "None" || v === null || v === false));
+      const hides = (args[0] as unknown[] | undefined)?.some((kv) => Array.isArray(kv) && ["ca", "CA", "BM", "SMask"].includes(String(kv[0])) && !plain(kv[0], kv[1]));
       if (hides) { if (why) why.reason = "it uses transparency over its pictures"; return null; }
     }
+    else if (out.length && lineWidth > 2 && (strokes.has(fn) || (fn === OPS.constructPath && strokes.has(Number(args[0]))))) { if (why) why.reason = "it draws wide lines over its pictures"; return null; }
     else if (out.length && (fills.has(fn) || (fn === OPS.constructPath && fills.has(Number(args[0]))))) { if (why) why.reason = "it draws shapes over its pictures"; return null; }
     else if (fn === OPS.setTextRenderingMode) invisibleText = Number(args[0]) === 3;
-    else if (fn === OPS.paintImageXObject) { out.push({ name: String(args[0]), matrix }); if (out.length > MAX_PICTURES) { if (why) why.reason = "it paints too many pictures"; return null; } }
+    else if (fn === OPS.paintImageXObject) {
+      const [a, , , d, e, f] = matrix;
+      for (const box of formBoxes) if (box && (Math.min(e, e + a) < box[0]! - 1 || Math.max(e, e + a) > box[2]! + 1 || Math.min(f, f + d) < box[1]! - 1 || Math.max(f, f + d) > box[3]! + 1)) { if (why) why.reason = "a form box would crop one of its pictures"; return null; }
+      out.push({ name: String(args[0]), matrix }); if (out.length > MAX_PICTURES) { if (why) why.reason = "it paints too many pictures"; return null; } }
     else if (other.has(fn)) { if (why) why.reason = "it has a mask, an inline picture or a repeated picture"; return null; }
     else if (text.has(fn) && !invisibleText) { if (why) why.reason = "it has printed text beside the pictures"; return null; }
   }
@@ -208,7 +229,7 @@ async function compositePage(page: { rotate: number; view: number[]; objs: { get
   const stop: { reason?: string } = {};
   const pictures = paintedPictures(ops, pdfjs.OPS, stop);
   if (!pictures) { why.set(n, stop.reason ?? "it has a mask or an inline picture"); return null; }
-  if (!pictures.length) { why.set(n, "it paints no picture"); return null; }
+  if (!pictures.length) { why.set(n, "it paints no picture, or only one too large to rebuild"); return null; }
   const box = page.view.map(Number) as [number, number, number, number];
   if (box.length !== 4 || !box.every(Number.isFinite) || box[2] <= box[0] || box[3] <= box[1]) { why.set(n, "its page box is not usable"); return null; }
   const [x0, y0, x1, y1] = box, W = x1 - x0, H = y1 - y0;
