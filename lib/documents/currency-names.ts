@@ -46,11 +46,15 @@ export function currenciesNamed(text: string): string[] {
   if (/\beuros?\b/i.test(t)) out.push("EUR");
   if (/\bpounds?\s+sterling\b/i.test(t)) out.push("GBP");
   if (/\bpesos?\b/i.test(t)) out.push("PHP");
+  if (/\bsing(?:apore(?:an)?)?\s+dollars?\b/i.test(t) && !/\bsingapore\s+dollars?\b/i.test(t)) out.push("SGD");
   // A dollar word naming no listed country ("New Zealand dollars", "Canadian Dollar") is another currency; a bare
   // "dollars" is a dollar of some kind.
-  for (const m of t.matchAll(/\b([A-Za-z.]+)\s+dollars?\b/gi)) {
-    if (!/^(?:singapore|u\.?s\.?|states|american|kong|australian)$/i.test(m[1]) && /^(?:new|zealand|canadian|brunei|taiwan|fiji|jamaican|bahamian|barbados|belize|bermuda|cayman|guyana|liberian|namibian|solomon|surinamese|trinidad|tobago|zimbabwe|eastern|caribbean)$/i.test(m[1])) out.push("?");
-  }
+  // Any word before "dollar(s)" that is not plain filler names a kind of dollar ("HK Dollar", "Taiwanese dollars", "Kiwi
+  // dollars", "Singaporean Dollar"): another currency, never the bare dollar the household's currency may stand for.
+  const FILLER = /^(?:in|the|of|and|all|any|amount|amounts|sum|premium|premiums|are|is|paid|payable|a|an|your|our|total|as|per|by|to|for|or|shown|stated|expressed|written|quoted|benefit|benefits|value|values|assured|insured|cover|plan|policy|currency|only|these|those|this|that|figure|figures|charges|cash|face|limit|limits|sums|usd|us|singapore|singaporean|sing|u\.?s\.?|states|american|kong|australian)$/i;
+  for (const m of t.matchAll(/\b([A-Za-z.]+)\s+dollars?\b/gi)) if (!FILLER.test(m[1])) out.push("?");
+  // A kind of dollar written out before a bare "$" ("Hong Kong $500", "Taiwan $", "Kiwi $").
+  if (/(?<![A-Za-z])(?:hong\s?kong|hk|taiwan(?:ese)?|macau|macao|new\s+zealand|nz|kiwi|aussie|australian|canadian|brunei|fiji|american)\s+\$/i.test(t)) out.push("?");
   if (/(?<![A-Za-z])dollars?\b/i.test(t) && !out.length) out.push("$");
   for (const w of ["yen", "yuan", "renminbi", "rupees?", "rupiah", "baht", "won", "francs?", "dong", "kr(?:ona|one|oner)", "dirhams?", "riyals?", "rials?", "rand", "kyat", "riel", "taka", "patacas?", "dinars?", "lira", "roubles?", "rubles?", "reais", "zloty", "shekels?", "kip", "rufiyaa", "liras?"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
   return out;

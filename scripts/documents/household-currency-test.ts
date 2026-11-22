@@ -80,6 +80,15 @@ async function main() {
   await test("P ... and for a ringgit household a bare $ is read in the household's currency too (DC 22 Nov)", () => assert.deepEqual(shown([{ ...death, currency: null }], [{ pageNumber: 1, text: "Premium $12.50 monthly" }, p2(BARE)], "MYR"), ["MYR 100000"]));
   await test("P a lettered currency beside a bare $ still wins: US$ on the page holds it for an S$ household", () => assert.deepEqual(shown([death], [p2("Premium US$12.50 monthly\n" + BARE)], "SGD"), ["held"]));
   await test("P 'dollars' written out names no currency: the household's currency fills it (DC 22 Nov)", () => assert.deepEqual(shown([death], [p2("All amounts are in dollars\n" + BARE)], "SGD"), ["SGD 100000"]));
+  for (const line of ["Sum assured: HK Dollar 500,000", "All amounts in HK dollars", "Amount in Hongkong Dollars", "Taiwanese Dollar 500,000", "Macau dollars 100", "Kiwi dollars", "Aussie dollars 5,000", "Zimbabwean dollars", "Amounts in Hong Kong $", "Premium Kiwi $120.00"])
+    await test(`P (Critic #576) '${line}' is another dollar: held for an S$ household`, () => assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "SGD"), ["held"]));
+  for (const line of ["Currency: Singaporean Dollar", "Sing Dollar"])
+    await test(`P (Critic #576) '${line}' is S$: held for a US$ household, filled for an S$ one`, () => {
+      assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "USD"), ["held"]);
+      assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "SGD"), ["SGD 100000"]);
+    });
+  for (const line of ["Sum Assured $500,000", "All amounts are in dollars", "Premium in dollars"])
+    await test(`P (Critic #576) '${line}' stays a bare dollar: filled`, () => assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "SGD"), ["SGD 100000"]));
   await test("P 'Canadian Dollar' never agrees", () => assert.deepEqual(shown([death], [p2("Currency: Canadian Dollar\n" + BARE)], "SGD"), ["held"]));
 
   // ---- C: Critic #526 (H1-H3)
