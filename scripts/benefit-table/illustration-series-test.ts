@@ -156,6 +156,36 @@ test("control: two holders of the plan; an illustration naming only one shows fo
   assert.ok(amounts(0).includes(47909), "Charmaine's own illustration shows for her");
   assert.ok(!amounts(1).includes(47909), "not for Bob");
 });
+// The production shape (READYBUILDER 10, 23 Nov): ONE 58-page pack holds the schedule and the illustration pages; the
+// document's own kind is "other" (the first part's), the cover is read from the schedule page of the same document, and
+// the illustration's rows carry the generic headings the reading chose.
+const PACK = "bbbbbbbb-0000-0000-0000-0000000000aa";
+const packSrc = (): SourceDoc => ({ id: PACK, name: "Policy pack", readable: true, pages: [
+  { page: 3, text: "Ong Pei Lin Charmaine\tREADYBUILDER 10\tS$49,000" }, { page: 38, text: illText }] });
+const packReading = (kind: string, rows: unknown[], plan: string | null = null, product = "READYBUILDER 10") => checkReading(packSrc(), {
+  document: { kind, product, insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan, periodFrom: null, periodTo: null },
+  covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+  benefits: rows.map((r) => ({ ...(r as object), page: 38 })) });
+for (const kind of ["other", "policy_wording", "product_summary"]) {
+  test(`production shape: a pack of kind "${kind}" with the cover and the illustration in one document shows the series`, () => {
+    const rows = illRows("Total Basic Premiums Paid To-Date ($)");
+    const t = assembleTable([packReading(kind, rows)], family, linksFor(PACK, rows as never));
+    const got = shown(t);
+    for (const v of [1195.45, 2372.31, 4651.59, 4791, 23954, 47909]) assert.ok(got.includes(v), `${v} missing for ${kind}: ${JSON.stringify(got)}`);
+  });
+}
+for (const kind of ["personal_proof", "scheme_terms", "letter", "bill_or_receipt"]) {
+  test(`control: a pack of kind "${kind}" keeps the old refusal`, () => {
+    const rows = illRows("Total Basic Premiums Paid To-Date ($)");
+    const t = assembleTable([packReading(kind, rows)], family, linksFor(PACK, rows as never));
+    assert.ok(!shown(t).includes(47909));
+  });
+}
+test("control: a pack whose product is another plan's stays refused", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const t = assembleTable([packReading("other", rows, "Enhanced Max", "SUPERSAVER 20")], family, linksFor(PACK, rows as never));
+  assert.ok(!shown(t).includes(47909));
+});
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`illustration-series: ${passed} pass`);
 process.exit(0);

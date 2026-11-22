@@ -625,10 +625,15 @@ const seriesHeading = (column: string | null) => {
 /** Everything printed with a row says only what the figure is: its column, its section's title, and its own benefit words. */
 const seriesRow = (b: { column: string | null; section: string | null; benefit: string }) =>
   seriesHeading(b.column) && wordsOf(b.section).every((t) => SECTION_WORDS.has(t)) && wordsOf(b.benefit).every((t) => SECTION_WORDS.has(t));
+/** The kinds of document whose generic, by-year or per-frequency figure sections are a series of the one plan. A pack (a
+ * policy file with its schedule, wording and illustration pages) is read as one document of kind "other" or by its first
+ * part, so the illustration pages inside it count too (READYBUILDER 10: 58 pages, kind "other", 23 Nov). Not a personal
+ * proof (its own rows are placed by its own lines) nor a group scheme's terms. */
+const SERIES_KINDS = new Set<string>(["illustration", "other", "policy_wording", "product_summary"]);
 export function illustrationSeries(readings: CheckedReading[]): Set<string> {
   const out = new Set<string>();
   for (const r of readings) {
-    if (r.kind !== "illustration") continue;
+    if (!SERIES_KINDS.has(r.kind)) continue;
     const groups = new Map<string, CheckedBenefit[]>();
     for (const b of r.benefits) { const k = sectionKeyOf(r.documentId, b); groups.set(k, [...(groups.get(k) ?? []), b]); }
     const candidates = [...groups].filter(([, rows]) => rows.every((b) => (b.pays === "value" && (b.atAge != null || b.atPolicyYear != null))
@@ -1752,7 +1757,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const refusedLinks: BenefitTable["refusedLinks"] = [];
   const series = illustrationSeries(readings);
   // The plan an illustration is for must be the cover's: a quote or illustration of another named plan is never the person's.
-  const illustrationOf = new Map(readings.filter((r) => r.kind === "illustration").map((r) => [r.documentId, r] as const));
+  const illustrationOf = new Map(readings.filter((r) => SERIES_KINDS.has(r.kind)).map((r) => [r.documentId, r] as const));
   const illustratesCover = (documentId: string, t: CoverType) => {
     const r = illustrationOf.get(documentId);
     if (!r) return true;
@@ -1834,7 +1839,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     const holders = people.filter((x) => (!who || who.has(x.id)) && x.covers.some((c) => c.coverKey === l.cover));
     // An illustration's series rows (illustrationSeries) are for the people the illustration is for: the person its own cover
     // is printed for, else the people it names.
-    const illFor = r.kind === "illustration" && series.has(sectionKeyOf(r.documentId, b)) ? (() => {
+    const illFor = SERIES_KINDS.has(r.kind) && series.has(sectionKeyOf(r.documentId, b)) ? (() => {
       const ns = (r.covers.length ? r.covers.map((c) => c.person) : r.namedPeople).map((n) => headingWords(n)).filter(Boolean);
       return ns.length ? (x: { name: string }) => ns.some((n) => within(n, headingWords(x.name)) || within(headingWords(x.name), n)) : null;
     })() : null;
