@@ -645,9 +645,13 @@ export function illustrationSeries(readings: CheckedReading[]): Set<string> {
     let twoTables = false;
     for (const [k, rows] of groups) for (const b of rows) {
       if (b.atAge == null && b.atPolicyYear == null) continue;
-      const id = `${k}|${norm(b.benefit)}|${b.atAge ?? ""}|${b.atPolicyYear ?? ""}|${b.rate ?? ""}`;
-      if (seen.has(id) && seen.get(id) !== b.value) twoTables = true;
-      seen.set(id, b.value);
+      // Under its own section and, without the section, anywhere in the document: the same heading, benefit, year and rate
+      // printed twice with two amounts is two tables (two plans under two generic titles), never one series (Critic #577).
+      for (const id of [`${k}|${norm(b.benefit)}|${b.atAge ?? ""}|${b.atPolicyYear ?? ""}|${b.rate ?? ""}`,
+        `*|${norm(b.column)}|${norm(b.benefit)}|${b.atAge ?? ""}|${b.atPolicyYear ?? ""}|${b.rate ?? ""}`]) {
+        if (seen.has(id) && seen.get(id) !== b.value) twoTables = true;
+        seen.set(id, b.value);
+      }
     }
     if (twoTables) continue;
     // Two different headings that are not series words side by side in one section are alternatives (tiers, terms, sums,

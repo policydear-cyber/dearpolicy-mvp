@@ -202,6 +202,19 @@ test("control: Standard and Enhanced side by side in the pack still refuse the s
   const t = assembleTable([r], family, linksFor(PACK, rows as never));
   assert.ok(!shown(t).includes(11111) && !shown(t).includes(22222) && !shown(t).includes(47909), JSON.stringify(shown(t)));
 });
+test("control: the same series heading under two generic section titles with different amounts is two tables, none shown", () => {
+  const second = [{ ...paid("Total Basic Premiums Paid To-Date ($)", 1, 5030, "1/29\t5,030\t4,791"), section: "Benefit Illustration" },
+    { ...paid("Total Basic Premiums Paid To-Date ($)", 5, 25152, "5/33\t25,152\t23,954"), section: "Benefit Illustration" }];
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"), ...second];
+  const src2: SourceDoc = { ...packSrc(), pages: [...packSrc().pages, { page: 37, text: "1/29\t5,030\t4,791\n5/33\t25,152\t23,954" }] };
+  const r = checkReading(src2, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((x) => ({ ...(x as object), page: (x as { section: string }).section === "Benefit Illustration" ? 37 : 38 })) });
+  assert.ok(r.benefits.some((b) => b.value === 5030) && r.benefits.some((b) => b.value === 25152), "the second table's rows survive the check");
+  const t = assembleTable([r], family, linksFor(PACK, rows as never));
+  const got = shown(t);
+  assert.ok(!got.includes(5030) && !got.includes(25152) && !got.includes(47909) && !got.includes(4791), JSON.stringify(got));
+});
 for (const kind of ["personal_proof", "scheme_terms", "letter", "bill_or_receipt"]) {
   test(`control: a pack of kind "${kind}" keeps the old refusal`, () => {
     const rows = illRows("Total Basic Premiums Paid To-Date ($)");
