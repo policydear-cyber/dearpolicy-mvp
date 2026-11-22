@@ -62,5 +62,9 @@ test("the same flat running total with a different asOf wording is still one row
   assert.equal(collapseRepeats([f(10), f(20)]).length, 1);
 });
 
+test("control: a bare Premiums paid column is a yearly figure, not a running total", () => {
+  assert.equal(collapseRepeats([mk("Premiums paid", 1, 50), mk("Premiums paid", 2, 50)]).length, 2);
+});
+
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`repeated-rows: ${passed} pass`);

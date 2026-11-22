@@ -12,7 +12,7 @@ type Rowish = {
 };
 
 /** A running total: its own words say it adds up to a date, so it can only stay flat or grow with the years. */
-const RUNNING = /\b(?:to[- ]date|cumulative|accumulated|running\s+total|premiums?\s+paid)\b/i;
+const RUNNING = /\b(?:to[- ]date|cumulative|accumulated|running\s+total|total\s+premiums?\s+paid)\b/i;
 
 export const isRunningTotal = (benefit: string, column?: string | null) => RUNNING.test(`${benefit} ${column ?? ""}`);
 
