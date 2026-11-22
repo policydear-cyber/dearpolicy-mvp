@@ -219,17 +219,18 @@ test("control: a pack holding two plans' covers shows no generic table for eithe
   const base = { person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" };
   const withCovers = (extra: object[]) => {
     const rows = illRows("Total Premiums Paid To-Date ($)");
-    const r = checkReading(packSrc(), { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    const src2: SourceDoc = { ...packSrc(), pages: [{ page: 3, text: "Ong Pei Lin Charmaine\tREADYBUILDER 10\tS$49,000\nTan Ah Kow\tAlpha Saver\tS$20,000" }, { page: 38, text: illText }] };
+    const r = checkReading(src2, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
       covers: [base, ...extra], benefits: rows.map((q) => ({ ...(q as object), page: 38 })) });
-    return shown(assembleTable([r], family, linksFor(PACK, rows as never)));
+    return shown(assembleTable([r], [...family, { id: "p3", display_name: "Tan Ah Kow" }], linksFor(PACK, rows as never)));
   };
   const riderQuote = { page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000", asOf: null, sumInsured: null };
   test("a rider cover with no plan and its own product name does not block the pack", () =>
     assert.ok(withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "Waiver of Premium Rider", cover: "Waiver of Premium Rider", plan: null }]).includes(47909)));
   test("a rider cover with the plan equal does not block the pack", () =>
     assert.ok(withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "TERMINAL ILLNESS", plan: "READYBUILDER 10" }]).includes(47909)));
-  test("a spouse's cover under another plan does not block the member's own series", () =>
-    assert.ok(withCovers([{ ...riderQuote, person: "Tan Ah Kow", product: "Alpha Saver", cover: "Alpha Saver", plan: "Alpha Saver" }]).includes(47909)));
+  test("control: a family pack with another person's cover under another plan refuses the series (it prints both plans' tables)", () =>
+    assert.ok(!withCovers([{ ...riderQuote, person: "Tan Ah Kow", product: "Alpha Saver", cover: "Alpha Saver", plan: "Alpha Saver", sumInsured: 20000, quote: "Tan Ah Kow Alpha Saver S$20,000" }]).includes(47909)));
 }
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
 console.log(`illustration-series: ${passed} pass`);
