@@ -20,6 +20,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { adminEmails, type AdminUser } from "@/lib/admin/access";
 import { pseudonymizeId, recordEvent } from "@/lib/telemetry";
 import { requestHouseholdDeletion } from "@/lib/lifecycle/coordinator";
@@ -81,7 +82,7 @@ export async function planAccountDeletion(emailInput: string, admin: AdminUser, 
 
   const memberships = (await query<{ household_id: string; role: string; name: string | null }>(
     `SELECT hm.household_id::text, hm.role, a.name FROM household_members hm JOIN accounts a ON a.id = hm.household_id
-      WHERE hm.user_id = $1 ORDER BY hm.created_at`, [u.id])).rows;
+      WHERE hm.user_id = $1 AND ${activePredicate("a")} ORDER BY hm.created_at`, [u.id])).rows;
 
   const households: HouseholdImpact[] = [];
   for (const m of memberships) {
@@ -97,12 +98,12 @@ export async function planAccountDeletion(emailInput: string, admin: AdminUser, 
       note: coOwned ? "Another owner remains, so the household stays." : m.role !== "owner" ? "Not the owner, so the household stays." : null,
       otherMembers: others.map((o) => o.email ?? "an account"),
       people: deletes ? await count(`SELECT count(*) AS n FROM family_members WHERE account_id = $1`, [h]) : 0,
-      documents: deletes ? await count(`SELECT count(*) AS n FROM policies WHERE account_id = $1 AND lifecycle_state = 'active'`, [h]) : 0,
+      documents: deletes ? await count(`SELECT count(*) AS n FROM policies WHERE account_id = $1 AND ${activePredicate()}`, [h]) : 0,
       documentsRead: deletes ? await count(`SELECT count(*) AS n FROM policies WHERE account_id = $1 AND lifecycle_state = 'active' AND processing_status = 'ready'`, [h]) : 0,
-      claimDocuments: deletes ? await count(`SELECT count(*) AS n FROM claim_evidence_documents WHERE account_id = $1`, [h]) : 0,
+      claimDocuments: deletes ? await count(`SELECT count(*) AS n FROM claim_evidence_documents WHERE account_id = $1 AND ${activePredicate()}`, [h]) : 0,
       conversations: deletes ? await count(`SELECT count(*) AS n FROM chat_conversations WHERE account_id = $1`, [h]) : 0,
-      storedFiles: deletes ? (await count(`SELECT count(*) AS n FROM policies WHERE account_id = $1 AND storage_key IS NOT NULL`, [h]))
-        + (await count(`SELECT count(*) AS n FROM claim_evidence_documents WHERE account_id = $1 AND storage_key IS NOT NULL`, [h])) : 0,
+      storedFiles: deletes ? (await count(`SELECT count(*) AS n FROM policies WHERE account_id = $1 AND ${activePredicate()} AND storage_key IS NOT NULL`, [h]))
+        + (await count(`SELECT count(*) AS n FROM claim_evidence_documents WHERE account_id = $1 AND ${activePredicate()} AND storage_key IS NOT NULL`, [h])) : 0,
     });
   }
 
@@ -194,7 +195,7 @@ export async function deleteAccount(admin: AdminUser, input: DeleteAccountInput,
   const left = await count(`SELECT count(*) AS n FROM household_members WHERE user_id = $1`, [plan.userId]);
   const signIn = (await count(`SELECT count(*) AS n FROM auth.users WHERE id::text = $1`, [plan.userId])) > 0;
   const orphanHouseholds = await count(
-    `SELECT count(*) AS n FROM accounts a WHERE NOT EXISTS (SELECT 1 FROM household_members hm WHERE hm.household_id = a.id) AND a.id = ANY($1::uuid[])`,
+    `SELECT count(*) AS n FROM accounts a WHERE ${activePredicate("a")} AND NOT EXISTS (SELECT 1 FROM household_members hm WHERE hm.household_id = a.id) AND a.id = ANY($1::uuid[])`,
     [plan.households.map((h) => h.householdId)]);
   await audit(admin, plan.userId, "completed", { householdsDeleted, membershipsRemoved, remainingMemberships: left, signInRemains: signIn, householdsLeftWithoutOwner: orphanHouseholds });
   return { ok: true, householdsDeleted, membershipsRemoved, remaining: { memberships: left, signIn } };
