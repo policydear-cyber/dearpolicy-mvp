@@ -81,5 +81,5 @@ export const ACCOUNT_DATA_KEPT: { key: string; why: string }[] = [
 
 /** Columns that can name a PERSON. They matter in every table, because a household that stays keeps rows a leaving member wrote. */
 export const PERSON_COLUMN = /^(user_id|actor|requested_by|invited_by|accepted_by|created_by|owner_id|.*_user_id)$/;
-/** Columns that name a household, a pseudonym of one, an email or a stored file. They matter in tables that do not cascade from accounts. */
+/** Columns that name a household, a pseudonym of one, an email or a stored file. They matter in tables that are not removed by a household's own deletion. */
 export const HOUSEHOLD_COLUMN = /^(account_id|household_id|household_ref|resource_ref|email|bucket_key|job_id|storage_key)$/;
