@@ -67,6 +67,8 @@ export function currencyOfValue(v: Pick<LifeValueRow, "benefit" | "column" | "cu
   const text = `${v.benefit} ${v.column ?? ""}`;
   // A "$" beside a figure in the words ("per $1,000 of sum insured") is a unit of the row, not the sign its amount is in.
   if (/\$\s*\d/.test(text)) return null;
+  // Any other currency named beside the sign (a code, RM, a symbol, a currency word) settles nothing: unsure means no currency.
+  if (/\b(?:RM|MYR|USD|SGD|HKD|AUD|EUR|GBP|JPY|CNY|RMB|NZD|CAD|THB|IDR|INR|PHP|KRW|CHF|ringgit|euros?|pounds?|dollars?|yen|rupees?|baht)\b|[£€¥₹]/i.test(text.replace(/\b[A-Za-z]{1,2}\$/g, ""))) return null;
   const signs = [...text.matchAll(/([A-Za-z]{0,3})\$/g)].map((m) => m[1]!.toUpperCase());
   if (!signs.length) return null;
   // A spaced or reversed sign ("S $", "$S") is a stated currency written oddly: not a bare $, so never the cover's.
