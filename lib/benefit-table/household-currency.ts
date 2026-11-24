@@ -20,6 +20,15 @@ export { HOUSEHOLD_CURRENCY_NOTE };
 /** Amounts a currency can belong to: not a percentage, a count of days, or words. */
 const MONEY_PAYS = new Set<string>(["amount", "up_to", "per_day", "per_period", "value"]);
 
+/** An insurer's name as its first meaningful word, for matching ("Merlion Mutual", "The Merlion Mutual Assurance (Singapore)
+ * Pte. Ltd.", "Merlion Mutual Insurance Co." all give "merlion"): the name is extracted per document and is rarely spelled the
+ * same twice. Two insurers sharing a first word are held together, which only ever leaves a currency not stated. */
+const GENERIC = new Set(["the", "ltd", "limited", "pte", "pty", "co", "company", "corp", "corporation", "inc", "plc", "bhd", "berhad", "assurance", "insurance", "ins", "singapore", "sg", "of", "and", "group", "holdings"]);
+export function insurerKey(name: string | null | undefined): string {
+  const words = String(name ?? "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w && !GENERIC.has(w));
+  return words[0] ?? "";
+}
+
 const key = (n: string | null | undefined) => String(n ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 /** What the readings alone do not show (service.ts load()):
@@ -61,13 +70,12 @@ export function withHouseholdCurrency(readings: CheckedReading[], household: str
   let wordingNamesAny = false;
   for (const r of readings) {
     if (r.covers.length || !(r.pageCurrencies?.named ?? []).some((c) => c !== household)) continue;
-    const ins = ctx.insurers?.get(r.documentId);
+    const ins = insurerKey(ctx.insurers?.get(r.documentId));
     if (ins) wordingInsurers.add(ins); else wordingNamesAny = true;
   }
   readings.forEach((r, i) => {
-    const mine = ctx.insurers?.get(r.documentId) ?? "";
-    // The insurer is extracted per document and rarely spelled the same ("Merlion Mutual", "Merlion Mutual Assurance Ltd").
-    const sameInsurer = !!mine && [...wordingInsurers].some((w) => w === mine || (Math.min(w.length, mine.length) >= 6 && (w.startsWith(mine) || mine.startsWith(w))));
+    const mine = insurerKey(ctx.insurers?.get(r.documentId));
+    const sameInsurer = !!mine && wordingInsurers.has(mine);
     if (wordingNamesAny || sameInsurer) held.add(find(i));
   });
   readings.forEach((r, i) => {

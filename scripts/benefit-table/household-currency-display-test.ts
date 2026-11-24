@@ -117,13 +117,15 @@ test("D14 a document never read into the table, of the same policy or insurer an
 test("D15 a cover-less wording that letters US$ holds every policy of its insurer, whatever the products are called, and every policy when it names no insurer", () => {
   const schedule = reading("s4", "MPA-8", "$100,000", "$50,000");
   const wording = { ...reading("w4", "MPA-8", "$1", "$1", "All amounts in this policy are in US$."), covers: [] };
-  const same = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "ACME"], ["w4", "ACME"]]) });
+  const same = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "Acme Ltd"], ["w4", "ACME"]]) });
   assert.equal(same[0]!.benefits[0]!.currency, null);
   const noInsurer = withHouseholdCurrency([schedule, wording], "SGD", {});
   assert.equal(noInsurer[0]!.benefits[0]!.currency, null);
-  const spelled = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "MERLIONMUTUALASSURANCELTD"], ["w4", "MERLIONMUTUAL"]]) });
-  assert.equal(spelled[0]!.benefits[0]!.currency, null, "insurer spelled differently");
-  const other = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "OTHER"], ["w4", "ACME"]]) });
+  for (const spelling of ["Merlion Mutual", "The Merlion Mutual Assurance Ltd", "Merlion Mutual Pte. Ltd.", "Merlion Mutual Insurance Co.", "Merlion Mutual Assurance (Singapore) Pte Ltd", "merlion mutual assurance limited", "Merlion Assurance"]) {
+    const spelled = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "Merlion Mutual Assurance Ltd"], ["w4", spelling]]) });
+    assert.equal(spelled[0]!.benefits[0]!.currency, null, `insurer spelled ${spelling}`);
+  }
+  const other = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "Other Insurer"], ["w4", "ACME"]]) });
   assert.equal(other[0]!.benefits[0]!.currency, "SGD");
 });
 test("D16 a count read as an amount (\"Waiting period 14\") takes no currency; money does", () => {

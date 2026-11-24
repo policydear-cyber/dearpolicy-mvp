@@ -696,7 +696,7 @@ async function withSetCurrency(db: Db, accountId: string, readings: CheckedReadi
   const norm = (v: string | null | undefined) => String(v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const keys = new Map<string, string[]>(), insurers = new Map<string, string>();
   for (const d of docs) {
-    if (norm(d.file.insurer)) insurers.set(d.id, norm(d.file.insurer));
+    if (d.file.insurer) insurers.set(d.id, d.file.insurer);
     const out: string[] = [], pn = norm(d.file.policy_number), ip = norm(d.file.insurer) && norm(d.file.product_name) ? `${norm(d.file.insurer)}|${norm(d.file.product_name)}` : "";
     if (pn.length >= 4) out.push(pn);
     if (ip) out.push(ip);
