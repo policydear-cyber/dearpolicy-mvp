@@ -304,6 +304,18 @@ async function main() {
   for (const t of ["Policy currency", "Currency conversion $100", "Foreign currency $100", "Currency $100"])
     await test(`C579d control '${t}' names no currency`, () => assert.ok(HC.currenciesNamed(t).every((c) => c === "$"), JSON.stringify(HC.currenciesNamed(t))));
 
+  // Test engineer #579: known single letters take dot, dash, slash, colon or bracket before the sign; a 2 to 4 letter benefit label
+  // with a colon, dash or slash ("TPD: $500", "ICU - $50", "Ward:") is not a currency; more marks and headers.
+  const roundFive = ["S. $", "S .$", "(S) $", "S-$", "S/$", "S:$", "M $", "Pound 100,000", "STG 100,000", "Sfr 100,000", "Aed 100,000", "RP 100,000", "rs. 100,000", "B 100,000", "E 100,000", "W 100,000", "đ 100,000", "FJD 100,000",
+    "Currency: United Kingdom", "Currency: Great Britain", "Currency: Europe", "Currency: Eurozone", "Currency: JP", "Currency: PRC", "Currency: CH"];
+  for (const t of roundFive) await test(`C579e '${t}' is a named currency`, () => { const r = HC.currenciesNamed(t.includes("$") ? t + "100" : t); assert.ok(r.length > 0 && r.every((c) => c !== "$"), JSON.stringify(r)); });
+  for (const t of ["TPD: $500", "ICU: $200", "OPD - $50", "CI - $50,000", "SA: $100", "TL: $100", "WL: $100", "GP: $30", "ER: $100", "PA: $100", "AD: $100", "Pg: $100", "Qty: $100", "Ref: $100", "Ltd - $100", "Pte - $100", "Ward: $100", "Room: $100", "TPD / $100"])
+    await test(`C579e control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
+  await test("C579e 'S. $' on an SGD document is stated, so the settings note is not shown and an MYR household is not filled", () => {
+    const line = (h: string) => shown([{ ...death, currency: null }], [p2("Life Assured\tMei Ling Tan\nDeath\tIn Force\tS. $100,000.00")], h);
+    assert.ok(!line("MYR").includes("MYR 100000") && !line("USD").includes("USD 100000"));
+  });
+
   console.log(`household-currency-test: ${passed} passed, ${failures.length} failed`);
   if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }
 }

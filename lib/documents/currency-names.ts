@@ -6,7 +6,7 @@
  * engineer #526 F1). The page-image check keeps its own narrow reading (image-currency currenciesIn): there a false match
  * would hide a correct amount (Critic #526, e593f88 H1). */
 /** Countries and kinds of dollar a text may write out beside a dollar sign or after "Currency:". */
-const COUNTRY_WORD = /^(?:singapore|us|usa|united states|american|hong kong|hk|taiwan(?:ese)?|macau|macao|new zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|ca|can|cdn|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|barbad(?:os|ian)|belize|bermuda(?:n)?|cayman|guyana|liberia(?:n)?|namibia(?:n)?|ecuador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|uk|european|euro|eu|au|aus|sg|sgp|pounds?|sterling|gb|gbp|britain|swiss|switzerland|uae|dubai|oz|indo|hongkong)$/;
+const COUNTRY_WORD = /^(?:singapore|us|usa|united states|american|hong kong|hk|taiwan(?:ese)?|macau|macao|new zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|ca|can|cdn|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|barbad(?:os|ian)|belize|bermuda(?:n)?|cayman|guyana|liberia(?:n)?|namibia(?:n)?|ecuador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|uk|european|euro|eu|au|aus|sg|sgp|pounds?|sterling|gb|gbp|britain|united kingdom|great britain|europe|eurozone|jp|th|ph|id|cn|prc|ch|swiss|switzerland|uae|dubai|oz|indo|hongkong)$/;
 const countryCode = (w: string) => /^(?:singapore|sg|sgp|singaporean)$/.test(w) ? "SGD" : /^(?:us|usa|united states|american)$/.test(w) ? "USD" : /^(?:hk|hong kong)$/.test(w) ? "HKD" : /^(?:au|australia|australian)$/.test(w) ? "AUD" : COUNTRY_WORD.test(w) ? "?" : null;
 export function currenciesNamed(text: string): string[] {
   const out: string[] = [];
@@ -22,28 +22,29 @@ export function currenciesNamed(text: string): string[] {
     "sum", "sums", "fee", "fees", "tax", "max", "min", "pay", "paid", "cost", "only", "plus", "less", "each", "net", "age", "cash", "loss", "free", "plan", "part", "over",
     "than", "from", "upto", "not", "any", "all", "now", "our", "your", "was", "has", "may", "via", "etc", "amt", "upon", "also", "then", "that", "this", "with", "rate", "cap", "bal", "day", "days"]);
   const CODE_OF: Record<string, string> = { S: "SGD", SG: "SGD", SGP: "SGD", SIN: "SGD", SING: "SGD", SPORE: "SGD", US: "USD", USA: "USD", HK: "HKD", HKG: "HKD", A: "AUD", AU: "AUD", AUS: "AUD", AUST: "AUD",
-    SGD: "SGD", USD: "USD", HKD: "HKD", AUD: "AUD", NZD: "?", CAD: "?", MYR: "MYR", NZ: "?", NZL: "?", C: "?", CA: "?", CAN: "?", CDN: "?", NT: "?", TW: "?", TWN: "?", MY: "?", MX: "?", MEX: "?", BN: "?", FJ: "?", R: "?", RM: "MYR" };
+    SGD: "SGD", USD: "USD", HKD: "HKD", AUD: "AUD", NZD: "?", CAD: "?", MYR: "MYR", NZ: "?", NZL: "?", C: "?", CA: "?", CAN: "?", CDN: "?", NT: "?", TW: "?", TWN: "?", MY: "?", MX: "?", MEX: "?", BN: "?", FJ: "?", R: "?", RM: "MYR", M: "?" };
   const norm = (prefix: string) => prefix.replace(/[^A-Za-z]/g, "").toUpperCase();
   const known = (prefix: string): string | null => CODE_OF[norm(prefix)] ?? null;
   const LETTERS = String.raw`(?:[A-Za-z](?:[.' ]{1,2}[A-Za-z]){1,3}(?![A-Za-z])|[Ss]'pore|[A-Za-z]{1,4})`;
   // Before the sign: brackets and any dash, colon, slash, semicolon or comma between the letters and the sign are allowed.
   const SEPS = String.raw`[-–—:;,/|•·*^~]`;
-  const before = new RegExp(String.raw`(?<![A-Za-z])([\[({]?)(${LETTERS})\.?([\])}]?)\.?(\s{0,3}${SEPS}?\s{0,2})\$`, "g");
+  const SEP_IN_GAP = /[-–—:;,/|•·*^~]/;
+  const before = new RegExp(String.raw`(?<![A-Za-z])([\[({]?)(${LETTERS})\.?([\])}]?)\.?(\s{0,3}\.?${SEPS}?\s{0,2})\$`, "g");
   // A letter that is the benefit's own label, not a currency: after a word ("Plan A $100", "Class C - $50"), in list markers
   // ("(A) $100", "A) $100"), after a digit ("Option 1A $100"). Glued to the sign ("A$", "C$") it is a currency.
   const labelBefore = (text: string, off: number, open: string, close: string, n: string, gap: string) =>
-    n.length === 1 && gap !== "" && (open !== "" || close !== "" || /[A-Za-z]{2,} *[\[({]?$/.test(text.slice(Math.max(0, off - 14), off)) || /\d$/.test(text.slice(Math.max(0, off - 1), off)));
+    (n === "A" || n === "C" || n === "M" || n === "R") && gap !== "" && (open !== "" || close !== "" || /[A-Za-z]{2,} *[\[({]?$/.test(text.slice(Math.max(0, off - 14), off)) || /\d$/.test(text.slice(Math.max(0, off - 1), off)));
   for (const m of rest.matchAll(before)) {
     const open = m[1]!, word = m[2]!, close = m[3]!, gap = m[4]!, n = norm(word);
     if (!n || NOT_CURRENCY.has(n.toLowerCase())) continue;
     const spaced = gap.length > 0 && gap.trim() === "";
-    if (spaced && !known(word)) continue;
+    if ((spaced || SEP_IN_GAP.test(gap)) && !known(word)) continue;
     if (labelBefore(rest, m.index!, open, close, n, gap)) continue;
     out.push(known(word) ?? "?");
   }
   rest = rest.replace(before, (m, open: string, w: string, close: string, gap: string, off: number) => {
     const n = norm(w), spaced = gap.length > 0 && gap.trim() === "";
-    if (!n || NOT_CURRENCY.has(n.toLowerCase()) || (spaced && !known(w)) || labelBefore(rest, off, open, close, n, gap)) return m;
+    if (!n || NOT_CURRENCY.has(n.toLowerCase()) || ((spaced || SEP_IN_GAP.test(gap)) && !known(w)) || labelBefore(rest, off, open, close, n, gap)) return m;
     return " ";
   });
   // After the sign: glued letters ("$US500", "$HK", "$A", "$NZ 100") are a currency.
@@ -135,7 +136,7 @@ export function currenciesNamed(text: string): string[] {
   if (/(?<![A-Za-z])(?:aust?|aus)\.?\s*\$/i.test(t)) out.push("AUD");
   if (/(?<![A-Za-z])(?:hong\s?kong|hk|taiwan(?:ese)?|macau|macao|new\s*zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|bahamian|barbad(?:os|ian)|belize(?:an)?|bermuda(?:n)?|bermudian|cayman|guyana|liberia(?:n)?|namibia(?:n)?|solomon|surinam(?:e|ese)?|trinidad|tobago|zimbabwe(?:an)?|caribbean|ecuador|salvador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|european|uruguay(?:an)?|cuba(?:n)?|dominican|nicaragua(?:n)?|venezuela(?:n)?|puerto\s+rico|filipino|straits)\.?\s*\$/i.test(t)) out.push("?");
   if (/(?<![A-Za-z])dollars?\b/i.test(t) && !out.length) out.push("$");
-  for (const w of ["yen", "yuan", "renminbi", "rupees?", "rupiah", "baht", "won", "francs?", "dong", "kr(?:ona|one|oner)", "dirhams?", "riyals?", "rials?", "rand", "kyat", "riel", "taka", "patacas?", "dinars?", "lira", "roubles?", "rubles?", "reais", "zloty", "shekels?", "kip", "rufiyaa", "liras?"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
+  for (const w of ["yen", "yuan", "pounds?", "renminbi", "rupees?", "rupiah", "baht", "won", "francs?", "dong", "kr(?:ona|one|oner)", "dirhams?", "riyals?", "rials?", "rand", "kyat", "riel", "taka", "patacas?", "dinars?", "lira", "roubles?", "rubles?", "reais", "zloty", "shekels?", "kip", "rufiyaa", "liras?"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
   // A currency named in words with no sign or code beside the figure ("Currency: Singapore", "Currency - US", "In Singapore
   // currency"): the named one, or another currency (Test engineer #577 F2).
   for (const m of t.matchAll(/\bcurrency\s*[:\-\t ]\s*([A-Za-z.]+(?: [A-Za-z]+)?)/gi)) {
@@ -146,7 +147,7 @@ export function currenciesNamed(text: string): string[] {
   for (const m of t.matchAll(/\bin\s+([A-Za-z]+(?: [A-Za-z]+)?)\s+currency\b/gi)) { const c = countryCode(m[1]!.toLowerCase()); if (c) out.push(c); }
   // More marks beside a figure: "Rm"/"R.M." are ringgit; the others are another currency ("P100,000" peso, "R100,000" rand, "Stg", "Fr.", "SFr", "Dhs", "CNH", "円", "元").
   if (/(?<![A-Za-z])R\.M\.(?![A-Za-z])/i.test(t) || /(?<![A-Za-z])Rm(?![A-Za-z])/i.test(t)) out.push("MYR");
-  if (/(?<![A-Za-z])(?:Stg|Fr\.|SFr|Dhs|DH|SR|CNH|RS|Re)\.?\s?\d/.test(t) || /(?<![A-Za-z])[PR]\s?\d{1,3}[,.]\d{3}/.test(t) || /[円元]/.test(t)) out.push("?");
+  if (/(?<![A-Za-z])(?:stg|fr|sfr|dhs|dh|sr|cnh|rs|rp|aed|fjd)\.?\s?\d/i.test(t) || /(?<![A-Za-z])Re\.?\s?\d/.test(t) || /(?<![A-Za-z])[BEW]\s?\d{1,3}[,.]\d{3}/.test(t) || /(?<![A-Za-z])[PR]\s?\d{1,3}[,.]\d{3}/.test(t) || /[円元đ]/.test(t)) out.push("?");
   return [...new Set(out)];
 }
 
