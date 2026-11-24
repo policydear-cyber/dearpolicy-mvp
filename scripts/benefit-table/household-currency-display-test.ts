@@ -165,5 +165,11 @@ test("D18 a wording with no insurer that shares its product with a schedule hold
   const other = new Map([["s6", ["PRODUCT|ASTERSHIELDPLAN"]], ["w6", ["PRODUCT|SOMETHINGELSE"]]]);
   assert.equal(withHouseholdCurrency([schedule, wording], "SGD", { keys: other })[0]!.benefits[0]!.currency, "SGD");
 });
+test("D19 an insurer's accent does not hide its wording: Mérlion holds Merlion", () => {
+  const schedule = reading("s7", "MPA-7", "$100,000", "$50,000");
+  const wording = { ...reading("w7", "ZZZ-7", "$1", "$1", "All amounts in this policy are in US$."), covers: [] };
+  const held = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s7", "Merlion Mutual Ltd"], ["w7", "Mérlion Mutual Assurance"]]) });
+  assert.equal(held[0]!.benefits[0]!.currency, null);
+});
 console.log(`household-currency-display: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

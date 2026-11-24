@@ -690,6 +690,7 @@ export function figureChecksOf(readings: CheckedReading[]): FigureCheck[] {
 /** The household's set currency, read through the same database as the table (a fake in tests); null when it chose none or the read fails. */
 /** The household's set currency applied to the readings (household-currency.ts), with what the readings alone do not show:
  * the names each document shares with its policy's other documents, and the documents whose pages are not all known. */
+const GENERIC_PRODUCTS = new Set(["POLICYCONDITIONS", "POLICYWORDING", "POLICYDOCUMENT", "POLICYCONTRACT", "PRODUCTSUMMARY", "TERMSANDCONDITIONS", "TERMPLAN", "WHOLELIFE", "ENDOWMENT", "TERMLIFE", "BENEFITILLUSTRATION", "POLICYSCHEDULE", "CERTIFICATEOFINSURANCE", "TRAVELINSURANCE"]);
 async function withSetCurrency(db: Db, accountId: string, readings: CheckedReading[], docs: HouseholdDoc[], stored: Map<string, StoredReading>): Promise<CheckedReading[]> {
   const household = await householdCurrencyFromDb(db, accountId);
   if (!household) return readings;
@@ -701,7 +702,9 @@ async function withSetCurrency(db: Db, accountId: string, readings: CheckedReadi
     if (pn.length >= 4) out.push(pn);
     if (ip) out.push(ip);
     // The product alone ties a wording whose file names no insurer to its schedule (a short or scanned wording often has none).
-    if (norm(d.file.product_name).length >= 6) out.push(`PRODUCT|${norm(d.file.product_name)}`);
+    // A product name every insurer uses ("Policy Conditions", "Whole Life") ties nothing: it would hold unrelated insurers' policies.
+    const product = norm(d.file.product_name);
+    if (product.length >= 6 && !GENERIC_PRODUCTS.has(product)) out.push(`PRODUCT|${product}`);
     keys.set(d.id, out);
   }
   // Pages the table never loads (unreadable, not checked) may print another currency: the document is unknown.

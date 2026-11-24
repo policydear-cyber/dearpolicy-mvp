@@ -25,7 +25,7 @@ const MONEY_PAYS = new Set<string>(["amount", "up_to", "per_day", "per_period", 
  * same twice. Two insurers sharing a first word are held together, which only ever leaves a currency not stated. */
 const GENERIC = new Set(["the", "ltd", "limited", "pte", "pty", "co", "company", "corp", "corporation", "inc", "plc", "bhd", "berhad", "assurance", "insurance", "ins", "singapore", "sg", "of", "and", "group", "holdings"]);
 export function insurerKey(name: string | null | undefined): string {
-  const words = String(name ?? "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w && !GENERIC.has(w));
+  const words = String(name ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w && !GENERIC.has(w));
   return words[0] ?? "";
 }
 
