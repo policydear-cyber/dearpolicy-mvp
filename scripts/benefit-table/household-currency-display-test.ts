@@ -142,5 +142,15 @@ test("D16 a count read as an amount (\"Waiting period 14\") takes no currency; m
   assert.equal(withHouseholdCurrency([small], "SGD")[0]!.benefits[0]!.currency, "SGD");
 });
 
+test("D17 each held document says why, for the server log", () => {
+  const r = reading("d9", "MPA-9", "$100,000", "$50,000", "All premiums are payable in US$ only.");
+  let told: { documentId: string; why: string }[] = [];
+  withHouseholdCurrency([r, bare()], "SGD", { onHold: (h) => { told = h; } });
+  assert.deepEqual(told.map((h) => h.documentId), ["d9"]);
+  assert.match(told[0]!.why, /another currency/);
+  let none: unknown[] = [{}];
+  withHouseholdCurrency([bare()], "SGD", { onHold: (h) => { none = h; } });
+  assert.deepEqual(none, []);
+});
 console.log(`household-currency-display: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

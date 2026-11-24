@@ -707,16 +707,19 @@ async function withSetCurrency(db: Db, accountId: string, readings: CheckedReadi
   try {
     const rows = await db(`SELECT policy_id FROM policy_pages pp WHERE account_id=$1 AND NOT (${CHECKED_PAGE}) GROUP BY policy_id`, [accountId]);
     for (const r of rows) unknown.add(String(r.policy_id));
-  } catch { return readings; }
+  } catch (e) { console.warn(`household currency: the unread-pages query failed, nothing filled: ${e instanceof Error ? e.message.slice(0, 120) : "error"}`); return readings; }
   // A document read into no table (still waiting, or never read), whose role is not a letter or form, is unknown too.
   for (const d of docs) if (!stored.has(d.id) && !NON_COVER_ROLES.has(d.file.document_role ?? "")) unknown.add(d.id);
-  return withHouseholdCurrency(readings, household, { keys, unknownDocuments: unknown, insurers });
+  const out = withHouseholdCurrency(readings, household, { keys, unknownDocuments: unknown, insurers,
+    // Why a document keeps no currency (fixed codes and document ids only): read in the server log when an amount shows "not stated".
+    onHold: (held) => { if (held.length) console.info(`household currency ${household}: ${held.length} of ${readings.length} documents held: ${JSON.stringify(held.map((h) => [h.documentId.slice(0, 8), h.why]))}`); } });
+  return out;
 }
 async function householdCurrencyFromDb(db: Db, accountId: string): Promise<string | null> {
   try {
     const rows = await db(`SELECT to_jsonb(a)->>'currency' AS currency FROM accounts a WHERE a.id=$1 AND ${activePredicate("a")}`, [accountId]);
     return effectiveHouseholdCurrency(rows[0]?.currency);
-  } catch { return null; }
+  } catch (e) { console.warn(`household currency: the setting could not be read, nothing filled: ${e instanceof Error ? e.message.slice(0, 120) : "error"}`); return null; }
 }
 async function load(db: Db, accountId: string): Promise<Loaded> {
   const storedOnce = db("SELECT policy_id, reading FROM benefit_readings WHERE account_id=$1", [accountId])
