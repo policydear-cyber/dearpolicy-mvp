@@ -174,6 +174,47 @@ for (const kind of ["other", "policy_wording", "product_summary"]) {
     for (const v of [1195.45, 2372.31, 4651.59, 4791, 23954, 47909]) assert.ok(got.includes(v), `${v} missing for ${kind}: ${JSON.stringify(got)}`);
   });
 }
+// READYBUILDER 10, 22 Nov, the real stored shape (read back from the database after #576 was live and the table still hid
+// the rows): beside the series the pack holds by-year tables whose headings are not series words ("Guaranteed Cash Value
+// (GCV)", "Total Cash Value (TCV)", "Total Distribution Cost To-Date") and surrender-bonus rows by premium term. One of
+// them must not hide the premium frequencies and totals of the section that holds them.
+const REAL_EXTRA = "Guaranteed Cash Value (GCV) ($)\n1\t2,000\nTotal Cash Value (TCV) ($)\n1\t3,000\nTotal Distribution Cost To-Date ($)\n1/29\t1,234\t5,030";
+test("production shape: other by-year tables in the pack (GCV, TCV, distribution cost) do not hide the series", () => {
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"),
+    { ...base, pays: "value", quote: "1\t2,000", value: 2000, column: "Guaranteed Cash Value (GCV) ($)", benefit: "Guaranteed Cash Value", section: "1. Guaranteed Benefits", atPolicyYear: 1 },
+    { ...base, pays: "value", quote: "1\t3,000", value: 3000, column: "Total Cash Value (TCV) ($)", benefit: "Total Cash Value", section: "3. Illustrated Total Benefits based on Illustrated Investment Rate of Return at 3.25% p.a.", atPolicyYear: 1 },
+    { ...base, pays: "value", quote: "1/29\t1,234\t5,030", value: 1234, column: "Total Distribution Cost To-Date ($)", benefit: "Total Distribution Cost", section: "Policy Illustration", atPolicyYear: 1 }];
+  const src2: SourceDoc = { ...packSrc(), pages: [...packSrc().pages, { page: 36, text: REAL_EXTRA }] };
+  const r = checkReading(src2, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((x) => ({ ...(x as object), page: (x as { section: string }).section === "Policy Illustration" ? 38 : 36 })) });
+  const t = assembleTable([r], family, linksFor(PACK, rows as never));
+  const got = shown(t);
+  for (const v of [1195.45, 2372.31, 4651.59, 4791, 23954, 47909]) assert.ok(got.includes(v), `${v} missing: ${JSON.stringify(got)} refused ${JSON.stringify(t.refusedLinks.map((x) => x.why))}`);
+});
+test("control: Standard and Enhanced side by side in the pack still refuse the series, and are not shown", () => {
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"), paid("Standard", 5, 11111, "5/33\t11,111\t25,152"), paid("Enhanced", 5, 22222, "5/33\t22,222\t25,152")];
+  const src2: SourceDoc = { ...packSrc(), pages: [...packSrc().pages, { page: 37, text: "5/33\t11,111\t25,152\n5/33\t22,222\t25,152" }] };
+  const r = checkReading(src2, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((x) => ({ ...(x as object), page: /^(Standard|Enhanced)$/.test((x as { column: string }).column) ? 37 : 38 })) });
+  assert.ok(r.benefits.some((b) => b.value === 11111) && r.benefits.some((b) => b.value === 22222), "the alternative rows survive the check");
+  const t = assembleTable([r], family, linksFor(PACK, rows as never));
+  assert.ok(!shown(t).includes(11111) && !shown(t).includes(22222) && !shown(t).includes(47909), JSON.stringify(shown(t)));
+});
+test("control: the same series heading under two generic section titles with different amounts is two tables, none shown", () => {
+  const second = [{ ...paid("Total Basic Premiums Paid To-Date ($)", 1, 5030, "1/29\t5,030\t4,791"), section: "Benefit Illustration" },
+    { ...paid("Total Basic Premiums Paid To-Date ($)", 5, 25152, "5/33\t25,152\t23,954"), section: "Benefit Illustration" }];
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"), ...second];
+  const src2: SourceDoc = { ...packSrc(), pages: [...packSrc().pages, { page: 37, text: "1/29\t5,030\t4,791\n5/33\t25,152\t23,954" }] };
+  const r = checkReading(src2, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((x) => ({ ...(x as object), page: (x as { section: string }).section === "Benefit Illustration" ? 37 : 38 })) });
+  assert.ok(r.benefits.some((b) => b.value === 5030) && r.benefits.some((b) => b.value === 25152), "the second table's rows survive the check");
+  const t = assembleTable([r], family, linksFor(PACK, rows as never));
+  const got = shown(t);
+  assert.ok(!got.includes(5030) && !got.includes(25152) && !got.includes(47909) && !got.includes(4791), JSON.stringify(got));
+});
 for (const kind of ["personal_proof", "scheme_terms", "letter", "bill_or_receipt"]) {
   test(`control: a pack of kind "${kind}" keeps the old refusal`, () => {
     const rows = illRows("Total Basic Premiums Paid To-Date ($)");
