@@ -279,6 +279,14 @@ async function main() {
     assert.ok(!line("A $").includes("SGD 100000"));
   });
 
+  // Critic #579 round 2: dotted or spelled-out country after the figure or sign, any dash, colon, semicolon, comma or slash, and a
+  // dash or colon before the sign; and a lone A or C that is a label ("$100 a day", "(A) $100", "Plan A - $100", "Option 1A $100").
+  const moreForms = ["$100,000 U.S.", "$100,000 U.S.A", "$100,000 U S", "$100 (U.S.)", "$ U.S.", "$ U. S.", "$ in U.S.", "$100,000 Hong Kong", "$100,000 Kiwi", "$100,000 Canadian", "$1,000 Taiwan",
+    "$ – US", "$ — US", "$, US", "$, in US", "Amounts in $, US", "(Amounts in $; US)", "Sum $100,000 – US", "$ 100,000 / US", "$ 100,000 — HK", "US–$100", "US—$100", "US:$100", "US: $100"];
+  for (const t of moreForms) await test(`C579b '${t}' is a named currency, not a bare $`, () => { const r = HC.currenciesNamed(t); assert.ok(r.some((c) => c !== "$"), JSON.stringify(r)); });
+  for (const t of ["$100 a day", "$100 A day", "$100 A week", "(A) $100", "A) $100", "(C) $100", "Plan A - $100", "Option 1A $100", "Class C - $50", "$100 per day", "$500 Cancer benefit"])
+    await test(`C579b control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
+
   console.log(`household-currency-test: ${passed} passed, ${failures.length} failed`);
   if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }
 }

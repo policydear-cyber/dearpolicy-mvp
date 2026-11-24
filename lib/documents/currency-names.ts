@@ -26,34 +26,50 @@ export function currenciesNamed(text: string): string[] {
   const norm = (prefix: string) => prefix.replace(/[^A-Za-z]/g, "").toUpperCase();
   const known = (prefix: string): string | null => CODE_OF[norm(prefix)] ?? null;
   const LETTERS = String.raw`(?:[A-Za-z](?:[.' ]{1,2}[A-Za-z]){1,3}(?![A-Za-z])|[Ss]'pore|[A-Za-z]{1,4})`;
-  // Before the sign: ( [US] $ ) allowed in brackets.
-  const before = new RegExp(String.raw`(?<![A-Za-z])[\[({]?(${LETTERS})[\])}]?\.?(\s{0,3}[-/]?\s{0,2})\$`, "g");
+  // Before the sign: brackets and any dash, colon, slash, semicolon or comma between the letters and the sign are allowed.
+  const SEPS = String.raw`[-–—:;,/]`;
+  const before = new RegExp(String.raw`(?<![A-Za-z])([\[({]?)(${LETTERS})([\])}]?)\.?(\s{0,3}${SEPS}?\s{0,2})\$`, "g");
+  // A letter that is the benefit's own label, not a currency: after a word ("Plan A $100", "Class C - $50"), in list markers
+  // ("(A) $100", "A) $100"), after a digit ("Option 1A $100"). Glued to the sign ("A$", "C$") it is a currency.
+  const labelBefore = (text: string, off: number, open: string, close: string, n: string, gap: string) =>
+    n.length === 1 && gap !== "" && (open !== "" || close !== "" || /[A-Za-z]{2,} *[\[({]?$/.test(text.slice(Math.max(0, off - 14), off)) || /\d$/.test(text.slice(Math.max(0, off - 1), off)));
   for (const m of rest.matchAll(before)) {
-    const word = m[1]!, gap = m[2]!, n = norm(word);
+    const open = m[1]!, word = m[2]!, close = m[3]!, gap = m[4]!, n = norm(word);
     if (!n || NOT_CURRENCY.has(n.toLowerCase())) continue;
     const spaced = gap.length > 0 && gap.trim() === "";
     if (spaced && !known(word)) continue;
-    // A lone "A" or "C" after a word is a label ("Plan A $100", "Class C $50"), not Australia or Canada.
-    if (spaced && (n === "A" || n === "C") && /[A-Za-z]{2,} +[\[({]?$/.test(rest.slice(Math.max(0, m.index! - 14), m.index!))) continue;
+    if (labelBefore(rest, m.index!, open, close, n, gap)) continue;
     out.push(known(word) ?? "?");
   }
-  rest = rest.replace(before, (m, w: string, gap: string, off: number) => {
+  rest = rest.replace(before, (m, open: string, w: string, close: string, gap: string, off: number) => {
     const n = norm(w), spaced = gap.length > 0 && gap.trim() === "";
-    if (!n || NOT_CURRENCY.has(n.toLowerCase()) || (spaced && !known(w))) return m;
-    if (spaced && (n === "A" || n === "C") && /[A-Za-z]{2,} +[\[({]?$/.test(rest.slice(Math.max(0, off - 14), off))) return m;
+    if (!n || NOT_CURRENCY.has(n.toLowerCase()) || (spaced && !known(w)) || labelBefore(rest, off, open, close, n, gap)) return m;
     return " ";
   });
-  // After the sign: glued letters ("$US500", "$HK", "$A", "$NZ 100") are a currency; spaced ones, with a dash, colon, slash,
-  // "in" or any bracket, only a known currency's letters ("$ US 5,000", "$ in US", "$ (in US)", "$ [US]", "$ / US").
+  // After the sign: glued letters ("$US500", "$HK", "$A", "$NZ 100") are a currency.
   const afterGlued = /\$([A-Za-z]{1,3})(?![A-Za-z])/g;
   for (const m of rest.matchAll(afterGlued)) { const n = norm(m[1]!); if (!NOT_CURRENCY.has(n.toLowerCase())) out.push(known(n) ?? "?"); }
   rest = rest.replace(afterGlued, (m, w: string) => (NOT_CURRENCY.has(norm(w).toLowerCase()) ? m : " "));
-  const afterSpaced = /\$\s{0,2}[\[({\/:\-]*\s{0,2}(?:in\s+)?[\[({]?\s{0,2}([A-Za-z]{1,4})(?![A-Za-z])/g;
-  for (const m of rest.matchAll(afterSpaced)) { const c = known(m[1]!); if (c) out.push(c); }
-  // A country written out after the sign: "$ - Singapore", "$ in Hong Kong".
-  for (const m of t.matchAll(/\$\s*[\[({\/:\-]?\s*(?:in\s+)?([A-Za-z]{4,}(?: [A-Za-z]+)?)/g)) { const w = m[1]!.toLowerCase(); const c = countryCode(w) ?? countryCode(w.split(" ")[0]!); if (c) out.push(c); }
-  // After a figure: "$100,000 US", "$100 (HK)", "$100HK", "$ 100 A": a known currency's letters straight after a figure the sign precedes.
-  for (const m of t.matchAll(/\$\s?\d[\d,.]*\s*[\[({]?\s*([A-Za-z]{1,4})\s*[\])}]?(?![A-Za-z\d])/g)) { const c = known(m[1]!); if (c) out.push(c); }
+  // After the sign, or after the figure the sign precedes ("$ US", "$ in US", "$ (in US)", "$ [US]", "$ - US", "$, US", "Amounts in $;
+  // US", "$100,000 U.S.A", "$100 (U.S.)", "$100,000 Hong Kong", "$ 100,000 / HK", "$ - Singapore"): the first one or two words, or
+  // single letters with dots ("U. S. A."), when they are a known currency's code or a country written out. A lone letter followed
+  // by a word ("$100 a day", "$100 A week") is not a currency.
+  const AFTER_SEP = String.raw`[\s\-–—:;,/\[\](){}]`;
+  const afterSign = new RegExp(String.raw`\$${AFTER_SEP}*(?:in${AFTER_SEP}+)?(?:\d[\d,.]*${AFTER_SEP}*)?([A-Za-z][A-Za-z.' ]{0,24})`, "g");
+  for (const m of t.matchAll(afterSign)) {
+    const tokens = m[1]!.trim().split(/\s+/).map((x) => x.replace(/\./g, "")).filter(Boolean);
+    const joined: string[] = [];
+    let run = ""; for (const tk of tokens) { if (tk.length === 1) run += tk; else break; } if (run.length >= 2) joined.push(run);
+    joined.push(...[tokens.slice(0, 2).join(" "), tokens[0] ?? ""].filter(Boolean));
+    for (const c of joined) {
+      const w = c.toLowerCase();
+      const code = CODE_OF[w.toUpperCase()] ?? countryCode(w);
+      if (!code) continue;
+      if (c.length === 1 && tokens.length > 1 && tokens[1]!.length > 1) break;   // "$100 a day": a label word follows
+      out.push(code);
+      break;
+    }
+  }
   // Letters, then a figure, then the sign ("HK 100 $").
   for (const m of t.matchAll(/(?<![A-Za-z])([A-Za-z]{1,4})\s\d[\d,.]*\s?\$/g)) { const c = known(m[1]!); if (c) out.push(c); }
   // Letters before "($)" ("Sum Assured US ($)", "Hong Kong ($)").
