@@ -36,7 +36,9 @@ const key = (n: string | null | undefined) => String(n ?? "").toUpperCase().repl
  *   its insurer and product. A wording with no cover is grouped with its schedule by these;
  * - `unknownDocuments`: documents some of whose pages the table never loads (unreadable, not checked), or that were
  *   never read into the table: what they print is not known, so the policy they belong to is held. */
-export type CurrencyContext = { keys?: Map<string, string[]>; unknownDocuments?: Set<string>; insurers?: Map<string, string> };
+export type CurrencyContext = { keys?: Map<string, string[]>; unknownDocuments?: Set<string>; insurers?: Map<string, string>;
+  /** Told, for each document left with no currency, why (a short fixed code): for the server log only, never shown. */
+  onHold?: (held: { documentId: string; why: string }[]) => void };
 
 export function withHouseholdCurrency(readings: CheckedReading[], household: string | null | undefined, ctx: CurrencyContext = {}): CheckedReading[] {
   if (!household) return readings;
@@ -52,17 +54,19 @@ export function withHouseholdCurrency(readings: CheckedReading[], household: str
     }
   });
   const held = new Set<number>();
+  const reasons = new Map<number, string>();
+  const hold = (i: number, why: string) => { const root = find(i); if (!held.has(root)) { held.add(root); reasons.set(root, why); } };
   // A document the table has no reading of, or only part of, holds every reading that shares a name with it.
   const unknownKeys = new Set<string>();
   const byId = new Map(readings.map((r, i) => [r.documentId, i]));
   for (const id of ctx.unknownDocuments ?? []) {
     const ks = ctx.keys?.get(id) ?? [];
-    if (byId.has(id)) held.add(find(byId.get(id)!));
+    if (byId.has(id)) hold(byId.get(id)!, "document with pages the table never loads");
     for (const k of ks) unknownKeys.add(k);
   }
   readings.forEach((r, i) => {
     const ks = [...r.covers.map((c) => key(c.policyNumber)).filter((k) => k.length >= 4), ...(ctx.keys?.get(r.documentId) ?? [])];
-    if (ks.some((k) => unknownKeys.has(k))) held.add(find(i));
+    if (ks.some((k) => unknownKeys.has(k))) hold(i, "same policy as a document that is unknown");
   });
   // A document with no cover of its own (a wording, terms) that names another currency applies to its insurer's policies
   // whatever the products are called, and to every policy when it names no insurer either (nothing ties it to one).
@@ -79,14 +83,17 @@ export function withHouseholdCurrency(readings: CheckedReading[], household: str
   readings.forEach((r, i) => {
     const mine = insurerKey(ctx.insurers?.get(r.documentId));
     const sameInsurer = !!mine && wordingInsurers.has(mine);
-    if (wordingNamesAny || sameInsurer) held.add(find(i));
+    if (wordingNamesAny || sameInsurer) hold(i, wordingNamesAny ? "a wording of no known insurer names another currency" : "a wording of the same insurer names another currency");
   });
   readings.forEach((r, i) => {
     const named = r.pageCurrencies?.named ?? [];
     const other = named.some((c) => c !== household)
       || [...r.covers, ...r.benefits].some((x) => !!x.currency && x.currency !== household);
-    if (other || !r.pageCurrencies || !r.pageCurrencies.allKnown) held.add(find(i));
+    if (other) hold(i, "names or prints another currency");
+    else if (!r.pageCurrencies) hold(i, "no page information");
+    else if (!r.pageCurrencies.allKnown) hold(i, "a page is not known (empty, unreadable or not checked)");
   });
+  ctx.onHold?.(readings.flatMap((r, i) => (held.has(find(i)) ? [{ documentId: r.documentId, why: reasons.get(find(i)) ?? "" }] : [])));
   return readings.map((r, i) => {
     if (held.has(find(i))) return r;
     // A count read as an amount ("Waiting period 14", "Units 2") is not money: the figure is money-shaped or at least 100.
