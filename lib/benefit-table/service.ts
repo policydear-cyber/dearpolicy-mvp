@@ -700,6 +700,8 @@ async function withSetCurrency(db: Db, accountId: string, readings: CheckedReadi
     const out: string[] = [], pn = norm(d.file.policy_number), ip = norm(d.file.insurer) && norm(d.file.product_name) ? `${norm(d.file.insurer)}|${norm(d.file.product_name)}` : "";
     if (pn.length >= 4) out.push(pn);
     if (ip) out.push(ip);
+    // The product alone ties a wording whose file names no insurer to its schedule (a short or scanned wording often has none).
+    if (norm(d.file.product_name).length >= 6) out.push(`PRODUCT|${norm(d.file.product_name)}`);
     keys.set(d.id, out);
   }
   // Pages the table never loads (unreadable, not checked) may print another currency: the document is unknown.

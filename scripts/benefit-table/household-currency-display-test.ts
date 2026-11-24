@@ -157,5 +157,13 @@ test("D17 each held document says why, for the server log", () => {
   withHouseholdCurrency([bare()], "SGD", { onHold: (h) => { none = h; } });
   assert.deepEqual(none, []);
 });
+test("D18 a wording with no insurer that shares its product with a schedule holds that schedule, through the product key", () => {
+  const schedule = reading("s6", "MPA-6", "$100,000", "$50,000");
+  const wording = { ...reading("w6", "ZZZ-6", "$1", "$1", "All amounts in this policy are in US$."), covers: [] };
+  const keys = new Map([["s6", ["PRODUCT|ASTERSHIELDPLAN"]], ["w6", ["PRODUCT|ASTERSHIELDPLAN"]]]);
+  assert.equal(withHouseholdCurrency([schedule, wording], "SGD", { keys })[0]!.benefits[0]!.currency, null);
+  const other = new Map([["s6", ["PRODUCT|ASTERSHIELDPLAN"]], ["w6", ["PRODUCT|SOMETHINGELSE"]]]);
+  assert.equal(withHouseholdCurrency([schedule, wording], "SGD", { keys: other })[0]!.benefits[0]!.currency, "SGD");
+});
 console.log(`household-currency-display: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
