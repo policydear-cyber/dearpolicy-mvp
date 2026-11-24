@@ -330,7 +330,7 @@ async function main() {
   // Live 24 Nov: "you won’t be charged" named another currency ("won") and held READYBUILDER 10. Everyday words name a currency only beside a figure.
   for (const t of ["so you won’t be charged extra", "you won't be", "if we won the claim", "a random sample", "Premium $500 you won’t pay twice", "kipper", "Randolph", "grand", "Pound Road"])
     await test(`C586 '${t}' names no currency`, () => assert.ok(!HC.currenciesNamed(t).includes("?"), JSON.stringify(HC.currenciesNamed(t))));
-  for (const t of ["50,000 won", "Won 5,000", "Korean won", "Sum Assured in Turkish Lira", "Vietnamese dong", "Lao kip", "Bangladeshi taka", "Cambodian riel", "Currency - Won", "Currency (Kip)", "Rand", "KRW 5,000 won", "3,000 rand", "Rand 500", "pounds 500"])
+  for (const t of ["50,000 won", "Won 5,000", "Korean won", "Sum Assured in Turkish Lira", "Vietnamese dong", "Lao kip", "Bangladeshi taka", "Cambodian riel", "British pounds", "UK pounds", "Egyptian pound", "Amounts in Pounds", "Sterling", "Currency - Won", "Currency (Kip)", "Rand", "KRW 5,000 won", "3,000 rand", "Rand 500", "pounds 500"])
     await test(`C586 '${t}' still names another currency`, () => assert.ok(HC.currenciesNamed(t).includes("?"), JSON.stringify(HC.currenciesNamed(t))));
   console.log(`household-currency-test: ${passed} passed, ${failures.length} failed`);
   if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }

@@ -144,6 +144,7 @@ export function currenciesNamed(text: string): string[] {
   for (const w of ["yen", "yuan", "renminbi", "rupees?", "rupiah", "baht", "francs?", "kr(?:ona|one|oner)", "dirhams?", "riyals?", "rials?", "kyat", "patacas?", "dinars?", "roubles?", "rubles?", "reais", "zloty", "shekels?", "rufiyaa"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
   // A word that is also an everyday English word ("you won't", "if we won", "random" is safe by \b, "pounds" of weight, "kip", "lira")
   // names a currency only beside a figure ("50,000 won", "won 5,000"); alone it held every document that said "won't" (live, 24 Nov).
+  if (/\b(?:british|uk|english|egyptian|lebanese|syrian|cypriot|maltese|irish|scottish|falkland|gibraltar)\s+pounds?\b|\b(?:in|currency)\s*[:\-–—(\[]?\s*pounds?\b|\bsterling\b/i.test(t)) out.push("?");
   if (/\b(?:(?:south|north)\s+)?(?:korean|african|turkish|vietnamese|lao|laotian|bangladeshi|cambodian|italian|maltese)\s+(?:new\s+)?(?:won|rand|kip|dong|taka|riel|liras?)\b|\b(?:in|currency)\s*[:\-–—(\[]?\s*(?:won|rand|kip|dong|taka|riel|liras?)\b/i.test(t)
     || /\b(?:Won|Rand|Kip|Dong|Taka|Riel|Lira|Liras)\b(?![’'])/.test(t)) out.push("?");
   for (const w of ["won", "rand", "kip", "dong", "taka", "riel", "liras?", "lira", "pounds?"]) if (new RegExp(`(?:\\d[\\d,.]*\\s?${w}\\b|(?<![\\w’'])${w}\\s?\\d)`, "i").test(t)) out.push("?");
