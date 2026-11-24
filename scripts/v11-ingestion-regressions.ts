@@ -264,7 +264,7 @@ async function partA() {
     assert.equal(await page(text, image).then((p) => p.text), text);
     // The history: counts, shapes and positions only. No figure, no label, no word from the page.
     const log = checkLines(text + "\nForm EX-0425 v3", image.replace("181.44", "181.41"), 3).log;
-    assert.equal(log, "figure lines 5 in text, 4 in image, 3 confirmed; figures 6 in text, 4 in image; only in text 3 (1-2 digit number 1, 3+ digit whole number 1, decimal amount 1; last lines 3); only in image 1 (decimal amount 1; last lines 1)");
+    assert.equal(log, "figure lines 5 in text, 4 in image, 3 confirmed; held 2 (amount rows 1, other lines 1); figures 6 in text, 4 in image; only in text 3 (1-2 digit number 1, 3+ digit whole number 1, decimal amount 1; last lines 3); only in image 1 (decimal amount 1; last lines 1)");
     for (const leak of ["181", "0425", "Premium", "Form", "Example"]) assert.equal(log.includes(leak), false, leak);
     // The document says which pages were read in part, and how.
     assert.equal(uncheckedPagesNote([], [3]), "Read in part. Some amounts on page 3 could not be checked against the page image, so they are shown as not checked and not used; the rest of that page agreed and is used.");
