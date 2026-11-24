@@ -8,6 +8,7 @@
 import { assembleTable, coverKeyOf, coversOf, sectionsOf, type BenefitTable, type Confirmation, type FamilyMember } from "./assemble";
 import { createHash } from "node:crypto";
 import { checkReading, foldChildColumns, type CheckedReading, type PageCurrencies, type SourceDoc } from "./check";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { currenciesNamed } from "@/lib/documents/currency-names";
 import { UNCHECKED_PAGE } from "@/lib/documents/layout-check";
 import { withHouseholdCurrency } from "./household-currency";
@@ -713,7 +714,7 @@ async function withSetCurrency(db: Db, accountId: string, readings: CheckedReadi
 }
 async function householdCurrencyFromDb(db: Db, accountId: string): Promise<string | null> {
   try {
-    const rows = await db("SELECT to_jsonb(a)->>'currency' AS currency FROM accounts a WHERE a.id=$1", [accountId]);
+    const rows = await db(`SELECT to_jsonb(a)->>'currency' AS currency FROM accounts a WHERE a.id=$1 AND ${activePredicate("a")}`, [accountId]);
     return effectiveHouseholdCurrency(rows[0]?.currency);
   } catch { return null; }
 }
