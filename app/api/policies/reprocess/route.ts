@@ -8,11 +8,15 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { enqueuePolicyProcessing,livePolicyJob,makePolicyJobDueNow,restartWaitingPolicyJob,POLICY_PROCESSING_JOB_TYPE,UNCLAIMED_STALL_MINUTES } from "@/lib/rag/processing-queue";
 import { appendJobAudit, recordJobEvent, recoverExpiredLeases, WITHOUT_PASSWORD_SQL, type BackgroundJobRow } from "@/lib/jobs/queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
+import { pdfPasswordProblem } from "@/lib/documents/pdf";
+import { PDF_PASSWORD_DIDNT_OPEN_MESSAGE, PDF_PASSWORD_NEEDED_MESSAGE } from "@/lib/documents/processing-errors";
+import { readPolicyFile } from "@/lib/storage";
 import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
 import { runAfterResponse } from "@/lib/http/background";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 
 import { mayAddDocument, mayAddDocumentUnderLock, PlanCheckUnavailable } from "@/lib/billing/household-plan";
+import { limitForCaller } from "@/lib/billing/limit-for-caller";
 import type { LimitCheck } from "@/lib/plans/catalogue";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -22,21 +26,24 @@ export const maxDuration = 300;
 
 // Each re-read is a full paid reading of the document: a household gets 20 an hour.
 const rereads = createDbRateLimiter({ name: "policy-reprocess", windowMs: 60 * 60 * 1000, max: 20 });
+// Every press, refused or not, fetches and checks the stored file (a locked PDF's password): bounded separately and more
+// loosely, so refused presses never use up the paid-read allowance above (TE #565 F2) yet can't be sent without limit.
+const presses = createDbRateLimiter({ name: "policy-reprocess-press", windowMs: 60 * 60 * 1000, max: 120 });
 
 const Schema = z.object({ policyId: z.string().uuid(), pdfPassword: z.string().optional() });
 
 class AlreadyProcessing extends Error {}
-class PlanLimitRefused extends Error { constructor(readonly check: LimitCheck) { super("plan document limit"); } }
+class PlanLimitRefused extends Error { constructor(readonly check: LimitCheck, readonly caller: { userId: string; householdId: string }) { super("plan document limit"); } }
 class NotClearedForProcessing extends Error {}
 
 export async function POST(request: NextRequest) {
   try {
     const body = Schema.parse(await request.json().catch(() => ({})));
     const ctx = await requireHouseholdOwnerContext(request);
-    const allowance = await rereads.attempt(ctx.householdId);
-    if (!allowance.allowed) {
+    const pressed = await presses.attempt(ctx.householdId);
+    if (!pressed.allowed) {
       return NextResponse.json({ error: "Too many documents read again in the last hour. Please try again later." },
-        { status: 429, headers: { "Retry-After": String(Math.ceil(allowance.retryAfterMs / 1000)) } });
+        { status: 429, headers: { "Retry-After": String(Math.ceil(pressed.retryAfterMs / 1000)) } });
     }
     scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
 
@@ -65,9 +72,26 @@ export async function POST(request: NextRequest) {
 
     if (!policy) return NextResponse.json({ error: "Document not found" }, { status: 404 });
 
+    // A locked PDF is read only with its password, which is never stored. Read again without it, or with a mistyped one,
+    // would fail and take the document's working reading with it (19 Nov: a group certificate's 310 rows), so it is
+    // refused here, before anything changes, and the household is asked for the password (again). A file that can't be
+    // fetched just now goes ahead as before.
+    const bytes = await readPolicyFile(policy.storage_key).catch(() => null);
+    const locked = bytes ? await pdfPasswordProblem(bytes, body.pdfPassword || undefined) : null;
+    if (locked === "needed") return NextResponse.json({ error: PDF_PASSWORD_NEEDED_MESSAGE, reasonCode: "PDF_PASSWORD_NEEDED" }, { status: 409 });
+    if (locked === "incorrect") return NextResponse.json({ error: PDF_PASSWORD_DIDNT_OPEN_MESSAGE, reasonCode: "PDF_PASSWORD_INCORRECT" }, { status: 409 });
+
+    // Counted only once the request can start a read: a refused press (password needed or wrong) reads nothing, and must
+    // not use up the hour's allowance before the right password is typed (TE #565 F2).
+    const allowance = await rereads.attempt(ctx.householdId);
+    if (!allowance.allowed) {
+      return NextResponse.json({ error: "Too many documents read again in the last hour. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(allowance.retryAfterMs / 1000)) } });
+    }
+
     // The household's plan: an unreadable document doesn't count, so reading it again could take it past the limit.
     try {
-      const limit = await mayAddDocument(ctx.householdId, { rereadingPolicyId: body.policyId });
+      const limit = await limitForCaller(await mayAddDocument(ctx.householdId, { rereadingPolicyId: body.policyId }), ctx);
       if (!limit.allowed) return NextResponse.json({ error: limit.message, reasonCode: "PLAN_DOCUMENT_LIMIT", upgradePath: "/usage" }, { status: 403 });
     } catch (error) {
       if (error instanceof PlanCheckUnavailable) return NextResponse.json({ error: error.message }, { status: 503 });
@@ -112,7 +136,7 @@ export async function POST(request: NextRequest) {
       // Checked again under the household's document lock, so Read again on several unreadable documents at once can't
       // all pass the limit (TE F8). Refused: nothing below runs.
       const underLock = await mayAddDocumentUnderLock(tx, ctx.householdId, { rereadingPolicyId: body.policyId });
-      if (!underLock.allowed) throw new PlanLimitRefused(underLock);
+      if (!underLock.allowed) throw new PlanLimitRefused(underLock, ctx);
       const waiting = await tx.query<BackgroundJobRow>(
         `UPDATE background_jobs SET status='cancelled', cancel_requested=true, lease_owner=NULL, lease_expires_at=NULL, updated_at=now(), payload=${WITHOUT_PASSWORD_SQL}
          WHERE job_type=$1 AND idempotency_key=$2
@@ -175,7 +199,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, status: "queued" }, { status: 202 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid request", issues: error.issues }, { status: 400 });
-    if (error instanceof PlanLimitRefused) return NextResponse.json({ error: error.check.allowed ? "" : error.check.message, reasonCode: "PLAN_DOCUMENT_LIMIT", upgradePath: "/usage" }, { status: 403 });
+    if (error instanceof PlanLimitRefused) { const said = await limitForCaller(error.check, error.caller).catch(() => error.check); return NextResponse.json({ error: said.allowed ? "" : said.message, reasonCode: "PLAN_DOCUMENT_LIMIT", upgradePath: "/usage" }, { status: 403 }); }
     if (error instanceof PlanCheckUnavailable) return NextResponse.json({ error: error.message }, { status: 503 });
     if (error instanceof AlreadyProcessing) return NextResponse.json({ error: "This document is already being analysed." }, { status: 409 });
     if (error instanceof NotClearedForProcessing) return NextResponse.json({ error: "This document has not passed malware scanning yet and cannot be re-analysed." }, { status: 409 });

@@ -24,11 +24,13 @@ const CSP_DIRECTIVES = [
   "frame-ancestors 'none'",
   // React's development build needs eval() for its debugging call stacks;
   // a production build never does, so production keeps the strict policy.
-  process.env.NODE_ENV === "development" ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'",
+  process.env.NODE_ENV === "development" ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com" : "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com",
+  // Cloudflare Turnstile (lib/security/turnstile-client.ts): its script, its check frame and its calls home.
+  "frame-src https://challenges.cloudflare.com",
   "form-action 'self'",
 ].join("; ");
 
@@ -57,6 +59,9 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // The Turnstile site key is public by design, but Vercel will not take a variable whose name contains PUBLIC. It is set
+  // as TURNSTILE_SITE_KEY and handed to the browser code here, when the site is built (redeploy after changing it).
+  env: { NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.TURNSTILE_SITE_KEY?.trim() || process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || "" },
   async headers() {
     return [{ source: "/(.*)", headers: SECURITY_HEADERS }];
   },

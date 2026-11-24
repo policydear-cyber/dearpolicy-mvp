@@ -11,7 +11,7 @@ import { isMedicalClaimEligibleDocumentType, type ClaimEvidenceDocumentType } fr
 import { HOUSEHOLD_REVIEW_STATUS_COPY, INDICATIVE_ESTIMATE_NOTICE, type HouseholdReviewStatus } from "@/lib/claims/reviewers/copy";
 import { IndicativeEstimatePanel } from "./indicative-panel";
 import { customerError, customerMessage } from "@/components/customer-text";
-import { maybeSgDate } from "@/components/format-date";
+import { maybeSgDate, singaporeDay } from "@/components/format-date";
 
 /** claimDisplayStatus() output (lib/claims/status.ts), attached by the claims
  * API -- the ONLY source of this page's status line and "what to send" list,
@@ -33,6 +33,16 @@ type Extraction = { id: string; extracted_fields: ExtractedFields; reviewed_fiel
 type EvidenceDoc = { id: string; document_type: string; original_filename: string; status: string; scan_status: string; identity_status: string; processing_error_code: string | null; created_at: string; extraction: Extraction | null;
   /** Server-computed policy-definition review status; never who reviewed or why. */
   reviewStatus?: HouseholdReviewStatus | null };
+/** A claim document as the household knows it: what it is and the day it was uploaded, never its file name (DC 18 Nov). */
+const evidenceName = (doc: Pick<EvidenceDoc, "document_type" | "created_at">) => {
+  // The store sends Postgres's text form ("2026-11-19 04:45:56.472088+00"); read it as a moment, then write the day in
+  // Singapore time, never the raw value (TE #559 M2).
+  const iso = /^\d{4}-\d{2}-\d{2} \d/.test(doc.created_at)
+    ? doc.created_at.replace(" ", "T").replace(/(\.\d{3})\d+/, "$1").replace(/([+-]\d{2})$/, "$1:00") : doc.created_at;
+  // The day is Singapore's whatever the device's time zone (TE #559 L2): an upload at 16:01Z is the next day in Singapore.
+  const day = singaporeDay(iso);
+  return `${documentTypeLabel(doc.document_type)}${day ? ` (uploaded ${day})` : ""}`;
+};
 
 const NON_TERMINAL = new Set(["uploaded", "quarantined", "processing", "extracted"]);
 
@@ -106,6 +116,13 @@ export default function ClaimEvidencePage() {
   const canManage = useCanManageHousehold();
   const [claim, setClaim] = useState<Claim | null>(null);
   const [documents, setDocuments] = useState<EvidenceDoc[]>([]);
+  // Two documents of one kind uploaded the same day read apart as "(2)", "(3)" in upload order (Critic #559 L2).
+  const nameOf = (doc: EvidenceDoc) => {
+    const base = evidenceName(doc), same = documents.filter((d) => evidenceName(d) === base)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+    const n = same.findIndex((d) => d.id === doc.id);
+    return n > 0 ? `${base} (${n + 1})` : base;
+  };
   const [error, setError] = useState("");
   // Starts empty: only a death claim gets a default (see
   // defaultDocumentTypeFor); anything else must be chosen explicitly.
@@ -182,7 +199,7 @@ export default function ClaimEvidencePage() {
       const res = await fetch(`/api/claims/evidence/${doc.id}?${query}`, { method: "DELETE", headers: { "Idempotency-Key": `delete:${doc.id}` } });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error || "This document couldn't be deleted. Try again.");
-      setNotice(`${doc.original_filename} was deleted. Anything estimated from it has been removed.`);
+      setNotice(`${nameOf(doc)} was deleted. Anything estimated from it has been removed.`);
       setConfirmDeleteId(null);
       await load();
     } catch (err) {
@@ -211,7 +228,7 @@ export default function ClaimEvidencePage() {
             <strong>Documents to upload <span className="muted">{left ? `${left} of ${items.length} still needed` : "All uploaded"}</span></strong>
             <ul>{items.map(({ text, sent }) => <li key={text} className={sent ? "sent" : ""}>
               <span className="claim-needed-mark" aria-hidden="true">{sent ? "✓" : ""}</span>
-              <span className="claim-needed-text">{text}{sent ? <small>Uploaded: {sent.original_filename}</small> : <small>Still needed</small>}</span>
+              <span className="claim-needed-text">{text}{sent ? <small>Uploaded: {nameOf(sent)}</small> : <small>Still needed</small>}</span>
               {!sent && canManage && <button type="button" className="button secondary compact" onClick={() => startUpload(text)} aria-label={`Upload ${text}`}>Upload</button>}
             </li>)}</ul>
           </div>;
@@ -270,8 +287,7 @@ export default function ClaimEvidencePage() {
               {(() => {
                 const display = evidenceStatusDisplay(doc);
                 return (<>
-                  <strong>{doc.original_filename}</strong> <span className={`status ${doc.status}`}>{display.label}</span>{" "}
-                  <span className="status">{documentTypeLabel(doc.document_type)}</span>{" "}
+                  <strong>{nameOf(doc)}</strong> <span className={`status ${doc.status}`}>{display.label}</span>{" "}
                   <span className="status">{doc.identity_status === "confirmed" ? "Name matches" : doc.identity_status === "mismatch" ? "Name doesn't match this family member" : doc.identity_status === "needs_review" ? "Name needs checking by a DearPolicy reviewer" : "Name not checked yet"}</span>
                   <p><em>{display.detail}</em></p>
                 </>);
@@ -322,7 +338,7 @@ export default function ClaimEvidencePage() {
                   <button className="button secondary compact" onClick={() => handleReject(doc.id)}>Reject document</button>
                 )}
                 <button className="button secondary compact danger" disabled={!!deletingId} onClick={() => handleDelete(doc)}
-                  aria-label={confirmDeleteId === doc.id ? `Confirm delete ${doc.original_filename}` : `Delete ${doc.original_filename}`}>
+                  aria-label={confirmDeleteId === doc.id ? `Confirm delete ${nameOf(doc)}` : `Delete ${nameOf(doc)}`}>
                   {deletingId === doc.id ? "Deleting…" : confirmDeleteId === doc.id ? "Confirm delete" : "Delete document"}
                 </button>
                 {confirmDeleteId === doc.id && !deletingId && (

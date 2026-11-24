@@ -31,6 +31,16 @@ export function stoppedOutputTokens(reported: number | null | undefined, streame
   return Math.max(reported ?? 0, Math.ceil(streamedChars / 3));
 }
 
+/** The request body of one table call. Shared by the live call below and the batched script path (batch-model.ts), so both
+ * send the same prompt, schema and settings. The prompt is the same for every page of every household's documents, so it is
+ * cached for the calls that follow within the ttl (a document's page re-reads, the next upload); the document itself comes
+ * after it, uncached. */
+export function tableRequest(choice: ModelChoice, c: TableCall, opts: { effort?: boolean; cacheTtl?: "5m" | "1h" } = {}) {
+  const system = [{ type: "text" as const, text: c.system, cache_control: { type: "ephemeral" as const, ttl: opts.cacheTtl ?? "5m" as const } }];
+  return { model: choice.model, max_tokens: c.maxTokens, system, messages: [{ role: "user" as const, content: userContent(c) }],
+    output_config: { ...(opts.effort === false ? {} : { effort: "medium" as const }), format: { type: "json_schema" as const, schema: c.schema } } };
+}
+
 /** opts.effort false: the request carries no effort setting, for a model that refuses one (a figure guard on an older model). */
 export function anthropicTableModel(choice: ModelChoice, client?: Client, opts: { effort?: boolean } = {}): TableModel {
   return {
@@ -42,11 +52,7 @@ export function anthropicTableModel(choice: ModelChoice, client?: Client, opts: 
         api = new Anthropic({ apiKey: apiKeyFromEnv().key, baseURL: API_BASE_URL }) as unknown as Client;
       }
       const started = Date.now();
-      // The prompt is the same for every page of every household's documents, so it is cached for the calls that follow
-      // within 5 minutes (a document's page re-reads, the next upload). The document itself comes after it, uncached.
-      const system = [{ type: "text" as const, text: c.system, cache_control: { type: "ephemeral" as const, ttl: "5m" as const } }];
-      const stream = api.messages.stream({ model: choice.model, max_tokens: c.maxTokens, system, messages: [{ role: "user", content: userContent(c) }],
-        output_config: { ...(opts.effort === false ? {} : { effort: "medium" as const }), format: { type: "json_schema", schema: c.schema } } });
+      const stream = api.messages.stream(tableRequest(choice, c, opts));
       let timedOut = false, streamedChars = 0;
       stream.on?.("text", (delta) => { streamedChars += delta.length; });
       const timer = c.timeoutMs != null && stream.abort ? setTimeout(() => { timedOut = true; stream.abort!(); }, Math.max(0, c.timeoutMs)) : null;

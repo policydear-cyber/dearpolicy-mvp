@@ -25,6 +25,7 @@ import { maskIdentityText } from "@/lib/chat/identity-numbers";
 import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
 import { noteOwnerChosen, noteOwnerUnsure } from "@/lib/policies/upload-owner";
 import { insertWithinDocumentLimit, mayAddDocument, PlanCheckUnavailable } from "@/lib/billing/household-plan";
+import { limitForCaller } from "@/lib/billing/limit-for-caller";
 
 /** The largest document DearPolicy accepts. Direct uploads carry it to
  * storage; the classic multipart route is only for files the platform lets
@@ -141,7 +142,8 @@ export async function acceptPolicyUpload(args: {
   });
   if (!limit.allowed) {
     await discardStored();
-    return NextResponse.json({ error: limit.message, reasonCode: limit.code === "document_limit" ? "PLAN_DOCUMENT_LIMIT" : "PLAN_CHECK_UNAVAILABLE", upgradePath: "/usage" }, { status: limit.code === "document_limit" ? 403 : 503 });
+    const said = limit.code === "document_limit" ? await limitForCaller(limit, ctx).catch(() => limit) : limit;
+    return NextResponse.json({ error: said.allowed ? limit.message : said.message, reasonCode: limit.code === "document_limit" ? "PLAN_DOCUMENT_LIMIT" : "PLAN_CHECK_UNAVAILABLE", upgradePath: "/usage" }, { status: limit.code === "document_limit" ? 403 : 503 });
   }
 
   // Server-generated storage path (household, authorized member, fresh policy id).

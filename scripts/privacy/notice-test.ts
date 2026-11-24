@@ -55,11 +55,14 @@ t("technical facts the notice states are the code's own (encryption, where it ru
   // Where it runs: the website region is the deploy config's; records and files are Supabase's Southeast Asia region.
   assert.match(page, /the website&rsquo;s server runs in Singapore \(Vercel/);
   assert.match(readFileSync("vercel.json", "utf8"), /"regions":\s*\["sin1"\]/);
-  // Anthropic: the standard API only (no file storage or batch services, which keep data longer).
+  // Anthropic: the standard API for answers; the batch service only for background document reading, and only from the one
+  // batch file (lib/benefit-table/batch-model.ts); never its file storage. The notice says so.
   assert.match(page, /within 30 days/);
+  assert.match(page, /background may use Anthropic&rsquo;s batch service/);
+  assert.match(page, /does not use Anthropic&rsquo;s file storage/);
   const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((d) =>
     d.isDirectory() ? sources(`${dir}/${d.name}`) : /\.(?:ts|tsx)$/.test(d.name) ? [`${dir}/${d.name}`] : []);
-  for (const f of [...sources("lib"), ...sources("app")]) assert.doesNotMatch(readFileSync(f, "utf8"), /\/v1\/files|messages\/batches/, f);
+  for (const f of [...sources("lib"), ...sources("app")].filter((x) => x !== "lib/benefit-table/batch-model.ts")) assert.doesNotMatch(readFileSync(f, "utf8"), /\/v1\/files|messages\/batches|messages\.batches/, f);
   // Malware checking is stated as off, and the notice says it changes before it is switched on.
   assert.match(page, /Malware checking is off for the beta today/);
 });

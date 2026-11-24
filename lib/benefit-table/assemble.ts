@@ -59,8 +59,10 @@ export type Figure =
   /** share: a percentage row whose amount is not worked out (its maximum was not captured, or the amount it is a share
    * of is not stated with it) still says the share it pays, in the row's own words ("10% of Prevailing Insured Amount").
    * Never an amount: capWords is the maximum exactly as printed, or null; capMissing says a maximum applies but its
-   * figure was not captured. */
-  | { kind: "none"; why: string; share?: { percent: number; of: string; capWords: string | null; capPage: number | null; capMissing: boolean } };
+   * figure was not captured. held: the sum it is a share of, or its maximum, is printed but the page-image check has not
+   * confirmed it yet ("checking") or could not ("confirm"). */
+  | { kind: "none"; why: string; share?: { percent: number; of: string; capWords: string | null; capPage: number | null; capMissing: boolean; held?: Held } };
+export type Held = { what: "sum_insured" | "cap"; status: "checking" | "confirm" };
 export type TableRow = {
   personId: string; person: string; coverKey: string; product: string; cover: string; plan: string | null;
   benefit: string; section: string | null; column: string | null; pays: CheckedBenefit["pays"]; figure: Figure;
@@ -90,6 +92,11 @@ export type TableRow = {
   childNote?: { adult: boolean; age: number | null; days: number[] };
   /** The row is the cover's own line as the schedule prints it (check.ts coverLine): its policy wording is not on file. */
   coverLine?: boolean;
+  /** For a value printed for an age or policy year (a table of values by year): that age and year as printed, and the
+   * yearly rate its column is illustrated at (check.ts valueAt). Life stages places the value by these, never by the label. */
+  valueAt?: { age?: number; policyYear?: number; rate?: string };
+  /** Other policy years where the same running total is printed again with the same amount (collapseRepeats). */
+  repeatedAt?: number[];
 };
 /** What the household said about one person's cover: that its sum insured is right, or the figure it should be. */
 export type Confirmation = { personId: string; coverKey: string; status: "confirmed" | "corrected"; sumInsured: number | null; updatedAt?: string | null };
@@ -394,8 +401,8 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
   // A figure the page-image check has not confirmed (guards.ts applyGuards: its row is left in words): says so, never an
   // explanation of how the row pays (Live site tester, 19 Nov: every row of a reading still being checked said "paid as a
   // share printed in the row's words").
-  const withheld = (b as { figureCheck?: { status: "confirm" | "checking"; field: string }[] }).figureCheck?.find((n) => n.field === "value");
-  if (withheld) return { kind: "none", why: withheld.status === "checking" ? "still being checked against the document's page" : "not confirmed against the document's page" };
+  const withheld = heldBy(b, "value");
+  if (withheld) return { kind: "none", why: heldWords(withheld) };
   if (b.pays !== "percent") return { kind: "none", why: b.pays === "not_covered" ? "printed as not covered" : b.pays === "as_charged" ? "paid as charged, no limit printed on this row"
     : b.pays === "words" && b.paymentSchedule ? "payment schedule, not a cover amount"
     : b.pays === "words" && /\d\s*%/.test(b.source.excerpt) ? "paid as a share printed in the row's words, with no amount worked out: see the document" : "no figure printed" };
@@ -403,8 +410,13 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
   // worked out: the uncapped figure could be more than it pays.
   if (b.cap == null && (b.capUnread || CAP_WORDS.test(b.ownShareNamed ? withoutOwnShareCap(b.source.excerpt, b.value) : withoutChildLimit(b.source.excerpt, b.childLimit)))) {
     const of = shareWords(b);
-    return { kind: "none", why: `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that was not captured: see the document`,
-      ...(of ? { share: { percent: b.value!, of, capWords: null, capPage: null, capMissing: true } } : {}) };
+    // The maximum was read, but the page-image check has held it back (guards.ts applyGuards): it is printed, only not
+    // confirmed yet (test engineer on #555, F2).
+    const capHeld = heldBy(b, "cap");
+    const held: Held | undefined = capHeld ? { what: "cap", status: capHeld } : undefined;
+    return { kind: "none", why: capHeld ? `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that is ${heldWords(capHeld)}`
+      : `${b.value}% of ${of ?? "a printed amount"}, up to a maximum printed with it on p${b.source.page} that was not captured: see the document`,
+      ...(of ? { share: { percent: b.value!, of, capWords: null, capPage: null, capMissing: true, ...(held ? { held } : {}) } } : {}) };
   }
   // A cap printed in another currency than the amount it limits ("10% of US$100,000, up to S$15,000") cannot be compared
   // with it: no amount, the row keeps its share and its cap as printed (Critic audit of 5c1075d7, A2).
@@ -422,7 +434,14 @@ function baseFigure(b: CheckedBenefit, cover: PersonCover, today: number): Figur
     // A rider's row that is a share of the basic plan's sum ("20% of the Basic Plan Sum Assured") is not a share of the
     // rider's own sum (Critic, #415): no amount, the share stays as printed.
     if (cover.riderOf && BASIC_PLAN_SHARE.test(b.source.excerpt)) return withShare(b, { kind: "none", why: `${b.value}% of the basic plan's sum, which is not this rider's own sum insured` });
-    if (cover.sumInsured == null) return withShare(b, { kind: "none", why: `${b.value}% of the sum insured, but no sum insured is printed for ${cover.cover}` });
+    if (cover.sumInsured == null) {
+      // The sum insured was read, but the page-image check has held it back: it is printed, only not confirmed yet (test
+      // engineer on #555, F1).
+      const sumHeld = heldBy(cover, "sum_insured");
+      if (sumHeld) { const f = withShare(b, { kind: "none", why: `${b.value}% of the sum insured of ${cover.cover}, which is ${heldWords(sumHeld)}` });
+        return f.kind === "none" && f.share ? { ...f, share: { ...f.share, held: { what: "sum_insured", status: sumHeld } } } : f; }
+      return withShare(b, { kind: "none", why: `${b.value}% of the sum insured, but no sum insured is printed for ${cover.cover}` });
+    }
     // A child's share printed in the row's cell ("For an insured child under 18, limited to 25% of the Sum Insured"): the
     // child's share for a person the schedule's own line proves is that child, the row's own share for one it proves is
     // not, and no amount otherwise (never one of the two by guess).
@@ -521,6 +540,11 @@ function shareWords(b: Pick<CheckedBenefit, "value" | "percentOf" | "benefit" | 
   return b.percentOf === "sum_insured" ? "the sum insured" : null;
 }
 /** A row with no amount keeps its share when the row prints what it is a share of, with any maximum exactly as printed. */
+/** A figure of this row or cover that the page-image check holds back (guards.ts applyGuards), and why. */
+function heldBy(x: object, field: "value" | "cap" | "sum_insured"): Held["status"] | null {
+  return (x as { figureCheck?: { status: Held["status"]; field: string }[] }).figureCheck?.find((n) => n.field === field)?.status ?? null;
+}
+const heldWords = (s: Held["status"]) => s === "checking" ? "still being checked against the document's page" : "not confirmed against the document's page";
 function withShare(b: CheckedBenefit, f: Extract<Figure, { kind: "none" }>): Figure {
   const of = shareWords(b);
   if (!of || b.value == null) return f;
@@ -573,6 +597,73 @@ export const figureOnlyHeading = (column: string | null, soleColumn: boolean) =>
   const words = headingWords(column).split(" ").filter(Boolean);
   return soleColumn && words.length > 0 && words.every((w) => FIGURE_HEADING_WORDS.has(w));
 };
+/** Sections of an illustration (a quotation for one plan) whose columns are series of figures for that one plan, never other
+ * plans side by side: a table of values by policy year or age (guaranteed, illustrated at a rate, total premiums paid), or a
+ * premium printed for each payment frequency (monthly, quarterly, semi-annually, annually). A column of such a section is not
+ * "another plan", whatever its heading, so the plan-column refusal does not apply to it (READYBUILDER 10, 22 Nov: a re-read
+ * that gave these columns a heading hid every premium frequency and total-premiums-paid row, where a reading that left the
+ * heading out showed them). A heading that says "plan" or "option" or names a plan is still refused (columnProblem). */
+const FREQUENCY_WORDS = new Set(["monthly", "quarterly", "semi", "annually", "annual", "yearly", "half", "weekly"]);
+/** Words that only say what a series of figures is. A heading of these (and numbers, such as a rate) alone is a series; any
+ * other word ("Standard", "Enhanced", "Term", "Rider", "Sum assured") may name an alternative, and stays refused. A closed
+ * list of generic figure words: no insurer, product or plan names. */
+const SERIES_WORDS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustrated", "projected", "at", "investment", "return", "returns", "rate", "p", "a",
+  "total", "basic", "premium", "premiums", "paid", "to", "date", "benefit", "benefits", "value", "values", "surrender", "cash", "death", "maturity", "net", "gross",
+  "distribution", "cost", "costs"]);
+/** At least one of these must be in the heading, so a lone tier word ("Basic") is not taken for a series. */
+const SERIES_ANCHORS = new Set([...FREQUENCY_WORDS, "guaranteed", "non", "illustrated", "projected", "paid", "premium", "premiums", "total", "return", "returns"]);
+/** A number in a heading is a rate only as "4.25%", "4.25" or after "at", "rate" or "return": any other number ("Premium 20",
+ * "Death Benefit 200000") names a term or a sum, so an alternative. */
+const rateOnly = (raw: string) => !/\d/.test(raw.replace(/(?<![\d.])\d{1,2}(?:\.\d{1,2})?\s*%/g, " ").replace(/\b(?:at|rate|return)\s+\d{1,2}(?:\.\d{1,2})?(?![\d.,]*\d)/gi, " "));
+/** Words of a section's title that only say what is printed (and the series words): "Policy Illustration", "Death Benefit",
+ * "Premium Summary". "Enhanced Illustration", "Spouse Illustration" or "Option A" are not. */
+const SECTION_WORDS = new Set([...SERIES_WORDS, "illustration", "illustrations", "summary", "table", "policy", "page", "of", "the", "deductions", "schedule", "and"]);
+const wordsOf = (text: string | null | undefined) => norm(text).split(" ").filter(Boolean);
+const seriesHeading = (column: string | null) => {
+  const w = headingWords(column).split(" ").filter(Boolean);
+  return w.length > 0 && rateOnly(column ?? "") && w.every((t) => SERIES_WORDS.has(t) || /^\d+(?:\.\d+)?$/.test(t)) && w.some((t) => SERIES_ANCHORS.has(t));
+};
+/** Everything printed with a row says only what the figure is: its column, its section's title, and its own benefit words. */
+const seriesRow = (b: { column: string | null; section: string | null; benefit: string }) =>
+  seriesHeading(b.column) && wordsOf(b.section).every((t) => SECTION_WORDS.has(t)) && wordsOf(b.benefit).every((t) => SECTION_WORDS.has(t));
+/** The kinds of document whose generic, by-year or per-frequency figure sections are a series of the one plan. A pack (a
+ * policy file with its schedule, wording and illustration pages) is read as one document of kind "other" or by its first
+ * part, so the illustration pages inside it count too (READYBUILDER 10: 58 pages, kind "other", 23 Nov). Not a personal
+ * proof (its own rows are placed by its own lines) nor a group scheme's terms. */
+const SERIES_KINDS = new Set<string>(["illustration", "other", "policy_wording", "product_summary"]);
+export function illustrationSeries(readings: CheckedReading[]): Set<string> {
+  const out = new Set<string>();
+  for (const r of readings) {
+    if (!SERIES_KINDS.has(r.kind)) continue;
+    const groups = new Map<string, CheckedBenefit[]>();
+    for (const b of r.benefits) { const k = sectionKeyOf(r.documentId, b); groups.set(k, [...(groups.get(k) ?? []), b]); }
+    const candidates = [...groups].filter(([, rows]) => rows.every((b) => (b.pays === "value" && (b.atAge != null || b.atPolicyYear != null))
+      || (headingWords(b.column).split(" ").filter(Boolean).every((t) => FREQUENCY_WORDS.has(t)) && !!headingWords(b.column))));
+    // Two by-year tables under the same section and heading (the same year with two different amounts) are two tables, not
+    // one series: a pack or summary that prints several plans' tables the same way. None of them is taken for a series.
+    const seen = new Map<string, number | null>();
+    let twoTables = false;
+    for (const [k, rows] of groups) for (const b of rows) {
+      if (b.atAge == null && b.atPolicyYear == null) continue;
+      // Under its own section and, without the section, anywhere in the document: the same heading, benefit, year and rate
+      // printed twice with two amounts is two tables (two plans under two generic titles), never one series (Critic #577).
+      for (const id of [`${k}|${norm(b.benefit)}|${b.atAge ?? ""}|${b.atPolicyYear ?? ""}|${b.rate ?? ""}`,
+        `*|${norm(b.column)}|${norm(b.benefit)}|${b.atAge ?? ""}|${b.atPolicyYear ?? ""}|${b.rate ?? ""}`]) {
+        if (seen.has(id) && seen.get(id) !== b.value) twoTables = true;
+        seen.set(id, b.value);
+      }
+    }
+    if (twoTables) continue;
+    // Two different headings that are not series words side by side in one section are alternatives (tiers, terms, sums,
+    // riders): none of that section's columns is taken for a series. Scoped to the section's title, not the whole file: a
+    // pack also prints by-year tables of its own ("Guaranteed Cash Value (GCV)", "Total Cash Value (TCV)") in other sections,
+    // and those must not hide the premium frequencies and totals of the illustration (READYBUILDER 10, 22 Nov, after #576).
+    const sectionOf = (rows: CheckedBenefit[]) => norm(rows[0]?.section);
+    const alternatives = new Set(candidates.filter(([, rows]) => rows.some((b) => b.column && !seriesRow(b))).map(([, rows]) => sectionOf(rows)));
+    for (const [k, rows] of candidates) if (!alternatives.has(sectionOf(rows)) && rows.every((b) => !b.column || seriesRow(b))) out.add(k);
+  }
+  return out;
+}
 function columnProblem(column: string | null, cover: CoverType, plans: Set<string>, soleColumn = false): string | null {
   const words = headingWords(column);
   if (!words) return null;
@@ -1683,6 +1774,35 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   const ownProof = (documentId: string, coverKey: string) => proofs.has(documentId) && covers.some((c) => c.coverKey === coverKey && c.source.documentId === documentId);
   const perPersonRow = perPersonRows(readings, columnsOn, ownProof, family.flatMap((m) => [m.display_name, m.preferred_name ?? ""]));
   const refusedLinks: BenefitTable["refusedLinks"] = [];
+  const series = illustrationSeries(readings);
+  // The plan an illustration is for must be the cover's: a quote or illustration of another named plan is never the person's.
+  const illustrationOf = new Map(readings.filter((r) => SERIES_KINDS.has(r.kind)).map((r) => [r.documentId, r] as const));
+  const illustratesCover = (documentId: string, t: CoverType) => {
+    const r = illustrationOf.get(documentId);
+    if (!r) return true;
+    // Only an illustration is one plan's. A pack, wording or summary of another kind is taken for the person's own plan only
+    // when it holds the person's own cover (its schedule page): then its illustration pages are theirs.
+    if (r.kind !== "illustration" && !covers.some((c) => c.coverKey === t.key && c.source.documentId === documentId)) return false;
+    // ...and prints no other plan's cover: a pack of several plans has more than one plan's tables under the same headings.
+    const planOf = (x: { plan: string | null; product: string }) => headingWords((x.plan ?? x.product).replace(/\+/g, " plus "));
+    // Any cover of another plan counts, or another product when it names no plan and is no rider (a rider with no plan is a line
+    // of the same plan), whoever holds it: a
+    // family pack printing Ann's plan and Bob's plan prints both plans' tables under the same headings.
+    if (r.kind !== "illustration" && r.covers.some((c) => c.plan ? planOf({ plan: c.plan, product: c.product }) !== planOf(t) : !c.riderOf && planOf({ plan: null, product: c.product }) !== planOf({ plan: null, product: t.product }))) return false;
+    // The illustration must be for one of this cover's holders (a quote for someone else is not the person's figure).
+    const named = [...r.namedPeople, ...r.covers.map((c) => c.person)].map((n) => headingWords(n)).filter(Boolean);
+    if (named.length && !t.holders.some((h) => { const hw = headingWords(h); return named.some((n) => within(n, hw) || within(hw, n)); })) return false;
+    const planWords = (x: string | null | undefined) => headingWords((x ?? "").replace(/\+/g, " plus "));
+    const ip = planWords(r.plan), ipr = planWords(r.product);
+    // A cover that prints a plan is never matched by an illustration that prints none of its own (it could be another tier).
+    if (!ip && !ipr) return !t.plan;
+    if (!ip && t.plan) return planWords(t.plan) === planWords(t.product) && ipr === planWords(t.plan);
+    // Like with like, and equal words (a "PLUS" or "Max" added to the same name is another tier). A plan against a plan; only
+    // when either side has no plan, the product (or cover) names.
+    if (ip && t.plan) return ip === planWords(t.plan) && (!ipr || !planWords(t.product) || ipr === planWords(t.product));
+    const mine = [t.product, t.cover].map((x) => planWords(x)).filter(Boolean);
+    return [ip, ipr].filter(Boolean).every((n) => mine.includes(n));
+  };
   const linkOf = new Map<string, SectionLink>();
   const ownVersion = ownVersionOf(readings, covers);
   for (const linked of links) {
@@ -1696,7 +1816,10 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     if (!section) { refusedLinks.push({ link: l, why: "no such section" }); continue; }
     if (linkOf.has(l.section)) { refusedLinks.push({ link: l, why: "section linked twice" }); continue; }
     if (l.cover && !type) { refusedLinks.push({ link: l, why: "no such cover" }); continue; }
-    const problem = type ? columnProblem(section.column, type, plansOf.get(docOf.get(section.key) ?? "") ?? new Set(), (columnsOn.get(docOf.get(section.key) ?? "")?.size ?? 0) === 1
+    // A series column of an illustration is not another plan (illustrationSeries), unless its heading says or names a plan.
+    const seriesColumn = !!type && series.has(l.section) && illustratesCover(docOf.get(l.section) ?? "", type) && !/\b(?:plans?|options?)\b/i.test(section.column ?? "")
+      && !types.some((t) => t.plan && within(headingWords(t.plan), headingWords(section.column)));
+    const problem = type && !seriesColumn ? columnProblem(section.column, type, plansOf.get(docOf.get(section.key) ?? "") ?? new Set(), (columnsOn.get(docOf.get(section.key) ?? "")?.size ?? 0) === 1
       && ownProof(docOf.get(section.key) ?? "", type.key)) : null;
     if (problem) { refusedLinks.push({ link: l, why: problem }); continue; }
     linkOf.set(l.section, l);
@@ -1742,7 +1865,13 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
     // A row on a person's own document is only for that document's own lives (documentLives).
     const about = livesOf.get(r.documentId) ?? null;
     const holders = people.filter((x) => (!who || who.has(x.id)) && x.covers.some((c) => c.coverKey === l.cover));
-    const shownFor = people.filter((x) => (!who || who.has(x.id)) && (!about || about.has(x.id)));
+    // An illustration's series rows (illustrationSeries) are for the people the illustration is for: the person its own cover
+    // is printed for, else the people it names.
+    const illFor = SERIES_KINDS.has(r.kind) && series.has(sectionKeyOf(r.documentId, b)) ? (() => {
+      const ns = (r.covers.length ? r.covers.map((c) => c.person) : r.namedPeople).map((n) => headingWords(n)).filter(Boolean);
+      return ns.length ? (x: { name: string }) => ns.some((n) => within(n, headingWords(x.name)) || within(headingWords(x.name), n)) : null;
+    })() : null;
+    const shownFor = people.filter((x) => (!who || who.has(x.id)) && (!about || about.has(x.id)) && (!illFor || illFor(x)));
     if (about) {
       for (const p of holders) if (!about.has(p.id)) notForPerson.push({ personId: p.id, benefit: b.benefit, section: b.section, column: b.column, why: OTHER_PERSONS_DOCUMENT_WHY, source: b.source });
       if (holders.length && !holders.some((p) => about.has(p.id))) notTheirs.add(sectionKeyOf(r.documentId, b));
@@ -1766,10 +1895,14 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
       // A cover the person's own schedule prints as not covered shows no amount from another document (a wording's figure
       // for an optional cover they did not buy).
       const headline = named ? null : headlineSumProblem(b, c, p.covers);
-      const figure: Figure = tier ? { kind: "none", why: tier } : headline ? withShare(b, { kind: "none", why: headline })
+      const printedFigure: Figure = tier ? { kind: "none", why: tier } : headline ? withShare(b, { kind: "none", why: headline })
         : r.documentId !== c.source.documentId && b.pays !== "not_covered" && printedNotCovered(b, notCoveredOn(c, readings))
           ? { kind: "none", why: "the person's own schedule prints this cover as not covered" } : named ? figureFor(named.b, named.cover, r.kind === "illustration", singaporeDay(now)) : figureFor(b, c, r.kind === "illustration", singaporeDay(now));
-      p.rows.push({ personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
+      const at = { ...(b.atAge != null ? { age: b.atAge } : {}), ...(b.atPolicyYear != null ? { policyYear: b.atPolicyYear } : {}), ...(b.rate ? { rate: b.rate } : {}) };
+      // A figure printed for an age or a policy year (a table of values by year) is never a current amount (Critic MED-5):
+      // it is a value as of that year whatever the reader called it, so no card, headline or answer takes it as cover now.
+      const figure: Figure = atYearFigure(printedFigure, at);
+      p.rows.push({ ...(Object.keys(at).length ? { valueAt: at } : {}), personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,
         conditions: [...(b.limitsHeading && belowSumInsured(figure, c) && !b.conditions.includes(b.source.excerpt) ? [...b.conditions, b.source.excerpt] : b.conditions), ...capNotes], source: b.source, baseSource: named ? named.cover.source : b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
         percent: b.pays !== "percent" ? null : b.childLimit && figure.kind === "worked_out" && childStatusOf(b, named ? named.cover : c, singaporeDay(now)) === "child" ? b.childLimit.percent : b.value,
@@ -1790,6 +1923,8 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
   for (const p of people) {
     const listed = new Set(p.rows.filter((r) => !r.coverLine).map((r) => r.coverKey));
     if (listed.size) p.rows = p.rows.filter((r) => !r.coverLine || !listed.has(r.coverKey));
+    // The same running total or table printed again on other pages or years is one row (collapseRepeats).
+    p.rows = collapseRepeats(p.rows);
   }
   for (const s of sections) if (notTold.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_TOLD_WHY, source: firstSource.get(s.key) ?? null });
   for (const s of sections) if (notTheirs.has(s.key) && !unlinkedSections.some((u) => u.section.key === s.key)) unlinkedSections.push({ section: s, why: NOT_THEIR_DOCUMENT_WHY, source: firstSource.get(s.key) ?? null });
@@ -1807,13 +1942,24 @@ const NAMES_READ = new WeakMap<BenefitTable, Map<string, string[]>>();
  * any other way. */
 export const benefitNamesRead = (table: BenefitTable, documentId: string): string[] => NAMES_READ.get(table)?.get(documentId) ?? [];
 
+import { collapseRepeats } from "./repeats";
 // In headline.ts, which runs in the browser and must not import this file's database code (main 999048d: no build).
 import { periodWords } from "./headline";
 export { periodWords };
 
+/** A row's figure when its page prints it for an age or policy year (TableRow.valueAt): a printed or worked-out amount
+ * becomes a value as of that year, and a value or projection with no date of its own is dated by it. Unchanged otherwise. */
+export function atYearFigure(f: Figure, at: { age?: number; policyYear?: number }): Figure {
+  if (at.age == null && at.policyYear == null) return f;
+  const words = [at.policyYear != null ? `policy year ${at.policyYear}` : null, at.age != null ? `age ${at.age}` : null].filter(Boolean).join(", ");
+  if (f.kind === "printed" || f.kind === "worked_out") return { kind: "value", amount: f.amount, currency: f.currency, asOf: words };
+  if (f.kind === "value" || f.kind === "projected") return f.asOf ? f : { ...f, asOf: words };
+  return f;
+}
+
 export function figureText(f: Figure): string {
   if (f.kind === "none") return f.share
-    ? `${f.share.percent}% of ${f.share.of}, no amount worked out (${f.share.capMissing ? "a maximum applies, but it was not captured from the page" : f.share.capWords ? `${f.share.capWords}, printed with it on p${f.share.capPage}` : f.why})`
+    ? `${f.share.percent}% of ${f.share.of}, no amount worked out (${f.share.held ? `${f.why}${f.share.held.what === "sum_insured" && f.share.capWords ? `; ${f.share.capWords}, printed with it on p${f.share.capPage}` : ""}` : f.share.capMissing ? "a maximum applies, but it was not captured from the page" : f.share.capWords ? `${f.share.capWords}, printed with it on p${f.share.capPage}` : f.why})`
     : `no amount (${f.why})`;
   const m = money(f.amount, f.currency) + (f.currency ? "" : " (currency not stated)");
   if (f.kind === "value") return `${m} value${f.asOf ? ` as of ${f.asOf}` : " (date not stated)"}`;

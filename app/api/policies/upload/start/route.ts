@@ -5,9 +5,11 @@ import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/req
 import { createPolicyUploadUrl, policyUploadDriver, policyUploadKey } from "@/lib/storage";
 import { ACCEPTED_FORMATS_MESSAGE, FORMAT_EXTENSIONS, SUPPORTED_UPLOAD_FORMATS } from "@/lib/documents/formats";
 import { MAX_DOCUMENT_BYTES, TOO_LARGE_MESSAGE, resolveUploadFamilyMember, uploadErrorResponse } from "../accept";
+import { callerIp, TURNSTILE_FAILED_MESSAGE, turnstilePasses } from "@/lib/security/turnstile";
 import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
 import { signUploadIntent, UPLOAD_INTENT_TTL_MS } from "../intent-token";
 import { mayAddDocument, PlanCheckUnavailable } from "@/lib/billing/household-plan";
+import { limitForCaller } from "@/lib/billing/limit-for-caller";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -19,6 +21,7 @@ const Schema = z.object({
   filename: z.string().trim().min(1).max(255),
   mimeType: z.string().max(200).optional().default(""),
   byteSize: z.number().int().nonnegative(),
+  turnstileToken: z.string().max(2048).optional(),
   familyMemberId: z.string().uuid().optional().nullable(),
   supersedesPolicyId: z.string().uuid().optional().nullable(),
 });
@@ -37,6 +40,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = Schema.parse(await request.json().catch(() => ({})));
     const ctx = await requireHouseholdOwnerContext(request);
+    if (!(await turnstilePasses(body.turnstileToken, callerIp(request)))) return NextResponse.json({ error: TURNSTILE_FAILED_MESSAGE, reasonCode: "TURNSTILE_FAILED" }, { status: 403 });
     if (body.byteSize <= 0) return NextResponse.json({ error: "The uploaded file is empty.", reasonCode: "EMPTY_FILE" }, { status: 400 });
     if (body.byteSize > MAX_DOCUMENT_BYTES) return NextResponse.json({ error: TOO_LARGE_MESSAGE, reasonCode: "FILE_TOO_LARGE" }, { status: 400 });
     const extension = (body.filename.match(/\.([a-z0-9]+)$/i)?.[1] ?? "").toLowerCase();
@@ -45,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     // Over the plan's document limit: say so before the file is sent, not after (finalize checks again).
     try {
-      const limit = await mayAddDocument(ctx.householdId, { replacingPolicyId: body.supersedesPolicyId ?? null });
+      const limit = await limitForCaller(await mayAddDocument(ctx.householdId, { replacingPolicyId: body.supersedesPolicyId ?? null }), ctx);
       if (!limit.allowed) return NextResponse.json({ error: limit.message, reasonCode: "PLAN_DOCUMENT_LIMIT", upgradePath: "/usage" }, { status: 403 });
     } catch (error) {
       if (error instanceof PlanCheckUnavailable) return NextResponse.json({ error: error.message, reasonCode: "PLAN_CHECK_UNAVAILABLE" }, { status: 503 });

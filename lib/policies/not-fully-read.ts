@@ -19,7 +19,7 @@ import { SCAN_GOES_ON } from "@/lib/benefit-table/service";
 /** `coverUnknown`: of those, the documents whose kinds of cover are not known either (every one except a document whose
  * cover was read and only some amounts could not be checked, "Read in part." alone). While any is left, Home names no
  * gap: an unread travel schedule must never read as "no Travel cover found" (design review 2, Critic finding 2). */
-export type NotFullyRead = { count: number; names: string[]; ids: string[]; coverUnknown: number };
+export type NotFullyRead = { count: number; names: string[]; ids: string[]; coverUnknown: number; unknownNames?: string[] };
 /** Benefit-table states that mean the document's cover was not read (lib/benefit-table/service.ts documentState). */
 const UNREAD_STATES = new Set(["stalled", "held", "not_readable", "table_unread", "read_in_part"]);
 /** The person's own documents: linked to them, or uploaded for them and linked to no one. `p` is the policies alias. */
@@ -57,7 +57,7 @@ async function unread(accountId: string, owner: (cache: boolean) => string | nul
   try {
     const cache = await readingCacheReady();
     const who = owner(cache);
-    if (!who) return { count: 0, names: [], ids: [], coverUnknown: 0 };
+    if (!who) return { count: 0, names: [], ids: [], coverUnknown: 0, unknownNames: [] };
     // Waiting for Read again holds cover whatever its stored role (a misfiled pack); the other states follow the role rule.
     const readAgain = tableDocuments.filter((d) => d.state === "table_unread").map((d) => d.id);
     const unreadIds = tableDocuments.filter((d) => UNREAD_STATES.has(d.state)).map((d) => d.id);
@@ -66,11 +66,12 @@ async function unread(accountId: string, owner: (cache: boolean) => string | nul
         WHERE ${activePredicate("p")} AND ${NOT_FULLY_READ(cache)} AND ${who}
         ORDER BY p.created_at`,
       [accountId, member, [...DOCUMENT_READ_IN_PART_MESSAGES], cache ? [...READ_FAILURE_KEYS] : null, [...NO_COVER_READING_ROLES], readAgain, [...SCAN_GOES_ON], unreadIds]);
-    return { count: rows.rows.length, names: rows.rows.map((r) => documentCardTitle(r)), ids: rows.rows.map((r) => r.id), coverUnknown: rows.rows.filter((r) => r.kinds_known !== true).length };
+    return { count: rows.rows.length, names: rows.rows.map((r) => documentCardTitle(r)), ids: rows.rows.map((r) => r.id), coverUnknown: rows.rows.filter((r) => r.kinds_known !== true).length,
+      unknownNames: rows.rows.filter((r) => r.kinds_known !== true).map((r) => documentCardTitle(r)) };
   } catch (error) {
     console.warn("Could not count documents not fully read:", error instanceof Error ? error.message : error);
     // Nothing is known of what was read, so no kind is named a gap (Critic PR 533): Home waits instead.
-    return { count: 0, names: [], ids: [], coverUnknown: 1 };
+    return { count: 0, names: [], ids: [], coverUnknown: 1, unknownNames: [] };
   }
 }
 
@@ -85,9 +86,21 @@ export async function unownedNotFullyRead(accountId: string, tableDocuments: { i
           AND NOT EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id)` : null, null, tableDocuments);
 }
 
-/** The line a "Not found" tile (short) or Coverage answer adds when some of the person's documents were not fully read. */
-export function notFullyReadNote(n: Pick<NotFullyRead, "count">, person: string, short = false): string | null {
+/** The line a "Not found" tile (short) or Coverage answer adds when some of the person's documents were not fully read.
+ * Only a document whose cover may be missing says "cover may be missing"; one read in part, where only some amounts could
+ * not be checked, has its cover shown, so it says only that those amounts show as not checked (`coverUnknown` below
+ * `count`; left out, every counted document is treated as one whose cover may be missing). */
+export function notFullyReadNote(n: Pick<NotFullyRead, "count"> & Partial<Pick<NotFullyRead, "coverUnknown">>, person: string, short = false): string | null {
   if (!n.count) return null;
-  const head = `${n.count === 1 ? "One" : n.count} of ${person}’s documents ${n.count === 1 ? "was" : "were"} not fully read`;
-  return short ? head + "." : `${head}, so cover in ${n.count === 1 ? "it" : "them"} may be missing here. Documents shows which and what to do.`;
+  const unknown = n.coverUnknown;
+  const missing = Number.isInteger(unknown) && unknown! >= 0 ? Math.min(unknown!, n.count) : n.count;
+  const amountsOnly = n.count - missing;
+  if (missing === 0) {
+    const head = `Some amounts in ${n.count === 1 ? "one" : n.count} of ${person}’s documents could not be checked`;
+    return short ? head + "." : `${head}, so they show as not checked. Documents shows which.`;
+  }
+  const head = `${missing === 1 ? "One" : missing} of ${person}’s documents ${missing === 1 ? "was" : "were"} not fully read`;
+  if (short) return head + ".";
+  const more = amountsOnly > 0 ? ` Some amounts in ${amountsOnly === 1 ? "one other document" : `${amountsOnly} other documents`} could not be checked.` : "";
+  return `${head}, so cover in ${missing === 1 ? "it" : "them"} may be missing here. Documents shows which and what to do.${more}`;
 }

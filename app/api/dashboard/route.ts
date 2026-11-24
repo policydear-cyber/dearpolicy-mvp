@@ -26,6 +26,7 @@ import { documentName, isMachineFilename, prettifyFilename } from "@/lib/policie
 import { onFileDocumentName } from "@/lib/coverage/on-file-note";
 import { lineBenefit } from "@/lib/coverage/line-benefit";
 import { homeCardShowsAmount, pickCoverByName, readablePolicyName } from "@/lib/coverage/home-card";
+import { notRenewedDocumentIds } from "@/lib/policies/policy-dates-load";
 /** The document's own naming fields, read beside an on-file line or wording (documentName). */
 type OnFileDoc={doc_product:string|null;original_filename:string;doc_insurer:string|null;document_role:string|null;policy_number:string|null;doc_type:string|null};
 const ON_FILE_DOC_COLUMNS="p.product_name AS doc_product,p.original_filename,p.insurer AS doc_insurer,p.document_role,p.policy_number,p.policy_type AS doc_type";
@@ -69,7 +70,10 @@ export async function GET(request:NextRequest){
   // A line whose own label names a premium, waiver, fund or surrender value or the person's own share of a bill is no
   // tile and no part of a total (a "TPD Premium Waiver" line is stored under TPD); a cover whose figure may be a waived
   // premium or a value keeps its tile with no figure (lib/coverage/benefit-sum-line.ts).
-  coverageRows.rows=coverageRows.rows.flatMap(row=>{const line=asBenefitLine(row,row.evidence_text);return line?[line]:[];});
+  // A policy the household said it did not renew after its printed end date (Home's Policy dates, DC 19 Nov) is not current
+  // cover: its documents give no card here until a renewal receipt or newer schedule is on file, or the household undoes it.
+  const notRenewed=await notRenewedDocumentIds(accountId,active.id).catch(()=>new Set<string>());
+  coverageRows.rows=coverageRows.rows.flatMap(row=>{if(notRenewed.has(row.policy_id))return [];const line=asBenefitLine(row,row.evidence_text);return line?[line]:[];});
   for(const row of coverageRows.rows){
     const category=normalizeCoverageCategory(row.category);
     const key=`${row.policy_key}|${category}`; const list=byPolicyCategory.get(key)??[];
@@ -132,7 +136,11 @@ export async function GET(request:NextRequest){
       // A table cover's own document, for naming what pays.
       // One cover only: where two fit equally, none is named (lib/coverage/home-card.ts pickCoverByName).
       const coverDoc=(name:string|null|undefined)=>{const covers=person?.covers??[];const i=pickCoverByName(name??"",covers.map(c=>[c.cover,c.product,c.cover?partName(c.cover):null,c.product?partName(c.product):null]));return i<0?undefined:covers[i];};
-      const person=loaded.table.people.find(p=>p.id===active.id);
+      const tablePerson=loaded.table.people.find(p=>p.id===active.id);
+      // Covers of a policy the household said it did not renew, and the rows read for those covers alone, are left out.
+      const droppedKeys=new Set((tablePerson?.covers??[]).filter(c=>notRenewed.has(c.source.documentId)).map(c=>c.coverKey));
+      for(const c of tablePerson?.covers??[])if(!notRenewed.has(c.source.documentId))droppedKeys.delete(c.coverKey);
+      const person=tablePerson&&notRenewed.size?{...tablePerson,covers:tablePerson.covers.filter(c=>!notRenewed.has(c.source.documentId)),rows:tablePerson.rows.filter(r=>!droppedKeys.has(r.coverKey)&&!notRenewed.has(r.source.documentId))}:tablePerson;
       tableCovers=person?.covers??[];
       // A page about the product (its wording, summary or guide) is never a second policy (lib/coverage/table-figures twinDocument).
       const referenceDocs=new Set(loaded.documents.filter(d=>REFERENCE_DOCUMENT_ROLES.has(d.file?.document_role??"")).map(d=>d.id));
@@ -218,7 +226,7 @@ export async function GET(request:NextRequest){
   // An unconfirmed line whose own quote and person are printed on its page shows the cover is held, with no amount
   // (lib/coverage/held-line.ts). Any unconfirmed line of a category means its confirmed figures may be only part of the
   // cover, so that category shows no amount at all: a part sum is never shown as the whole (DC 27 Oct, 16 Nov).
-  const benefitUnmatched=unmatchedRows.rows.filter(r=>asBenefitLine(r,r.evidence_text));
+  const benefitUnmatched=unmatchedRows.rows.filter(r=>!notRenewed.has(r.policy_id)&&asBenefitLine(r,r.evidence_text));
   const held=await heldLines(query,accountId,active.id,benefitUnmatched);
   const heldCategories=new Map<string,number>();
   benefitUnmatched.forEach((r,i)=>{const c=normalizeCoverageCategory(r.category);unmatchedLines.set(c,(unmatchedLines.get(c)??0)+1);noteDoc(c,r);if(held[i]){heldCategories.set(c,(heldCategories.get(c)??0)+1);if(!coverageMap.has(c))addSource(c,r.policy_number??r.policy_id,r.doc_product,r.doc_insurer,ownFileName(r.original_filename));}});
@@ -265,7 +273,11 @@ export async function GET(request:NextRequest){
   if(unclaimed.rows.length)reminders.push({kind:"family",title:`Say whose ${unclaimed.rows.length===1?"document this is":"documents these are"}`,
     detail:`${unclaimed.rows.length} uploaded document${unclaimed.rows.length===1?" is":"s are"} not linked to anyone yet, so nothing in ${unclaimed.rows.length===1?"it":"them"} is being used to answer questions.`,href:"/"});
   if(premiums.note&&premiumItems.length)reminders.push({kind:"payment",title:"Some premiums are missing from the total",detail:premiums.note,href:"/records"});
-  if(notReadNote)reminders.push({kind:"coverage",title:notRead.count===1?"A document was not fully read":"Some documents were not fully read",detail:`${notRead.names.slice(0,3).join(", ")}${notRead.count>3?` and ${notRead.count-3} more`:""}: cover in ${notRead.count===1?"it":"them"} may be missing from these tiles. Documents shows which pages and what to do.`,href:"/policies"});
+  if(notReadNote){
+    // Only a document whose cover may be missing says so; one read in part (some amounts not checked) shows its cover.
+    const cover=Math.min(notRead.coverUnknown,notRead.count),shown=cover>0?(notRead.unknownNames??notRead.names):notRead.names,n=cover>0?cover:notRead.count;
+    reminders.push({kind:"coverage",title:cover>0?(n===1?"A document was not fully read":"Some documents were not fully read"):(n===1?"Some amounts in a document are not checked":"Some amounts in documents are not checked"),detail:`${shown.slice(0,3).join(", ")}${shown.length>3?` and ${shown.length-3} more`:""}: ${cover>0?`cover in ${n===1?"it":"them"} may be missing from these tiles. Documents shows which pages and what to do.${notRead.count>cover?` Some amounts in ${notRead.count-cover===1?"one other document":`${notRead.count-cover} other documents`} could not be checked.`:""}`:"some amounts could not be checked against the page, so they show as not checked. Documents shows which."}`,href:"/policies"});
+  }
   if(!selected.length)reminders.push({kind:"coverage",title:"Upload personal proof",detail:"DearPolicy needs at least one certificate or policy schedule before it can say what is covered or not covered.",href:"/policies"});
 
   // ID numbers in document names and notes are masked as chat masks them; ids are left as stored.

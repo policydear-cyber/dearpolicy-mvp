@@ -91,6 +91,46 @@ export function turnsFromMessages(rows: readonly { role: string; content: string
   });
 }
 
+/** An amount from a document the household said it did not renew for that person (Home's Policy dates, "I didn't renew
+ * it") is never shown as that person's cover, whatever the model wrote (TE F3: the prompt rule alone let a not-renewed
+ * trip's death benefit through). Each such statement is replaced, once per document and person, by the household's own
+ * statement. Another person on the same document keeps theirs. Returns the sentences left out. */
+export function dropNotRenewedAmounts(answer: { statements?: { id: string; kind: string; text: string; fullText?: string; personName?: string | null; amount?: unknown; source?: { citationIds?: string[] } | null; conditions?: unknown[] }[]; citations?: { chunkId: string; policyId: string }[]; bottomLine?: string | null; summary?: string }, household: Household, chatPerson: string | null = null): string[] {
+  const docs = new Map(household.documents.filter((d) => d.notRenewedFor?.length).map((d) => [d.policyId, d]));
+  if (!docs.size || !answer.statements?.length) return [];
+  const policyOf = new Map((answer.citations ?? []).map((c) => [c.chunkId, c.policyId]));
+  const left: string[] = [], said = new Set<string>(), out: typeof answer.statements = [];
+  // The statement's person as keepAnswerToSubjects resolves it ("Nora Tan (Nora)" is Nora Tan: Critic MED-7). A name that
+  // resolves to no one fails closed: on a document the household answered for, the amount goes.
+  const members = new Set(household.members.map((m) => m.name.replace(/\s*\([^)]*\)\s*$/, "").trim()));
+  const personOf = (name: string | null | undefined) => !name ? null : members.has(name) ? name : matchMember(household, name);
+  for (const st of answer.statements) {
+    // A statement naming no one is about the person the chat is for, when it is for someone (TE F3c).
+    const named = st.personName?.trim() ? personOf(st.personName) : personOf(chatPerson);
+    const unresolved = !!st.personName?.trim() && !named;
+    const hit = st.amount ? (st.source?.citationIds ?? []).map((id) => docs.get(policyOf.get(id) ?? "")).find((d) => d && (unresolved || d.notRenewedFor!.some((x) =>
+      named ? x.person === named : d.linkedPeople.length > 0 && d.linkedPeople.every((p) => d.notRenewedFor!.some((y) => y.person === p))))) : undefined;
+    if (!hit) { out.push(st); continue; }
+    left.push(st.text);
+    const who = hit.notRenewedFor!.find((x) => !named || x.person === named)!;
+    const key = `${hit.policyId}|${who.person}`;
+    if (said.has(key)) continue;
+    said.add(key);
+    const text = `${docLabel(household, hit)} was not renewed after ${who.after} for ${who.person}, as the household told DearPolicy, so it is not current cover.`;
+    out.push({ id: `${st.id}-not-renewed`, kind: "fact", text, fullText: text, personName: named ?? who.person, amount: null, source: null, conditions: [] });
+  }
+  answer.statements = out;
+  // The bottom line was written for the amounts the model gave: once one is replaced it can promise an amount "shown
+  // below" that is not (TE F3b). It says what is left instead.
+  if (left.length) {
+    const facts = out.filter((st) => st.id.endsWith("-not-renewed")).map((st) => st.text);
+    const line = out.some((st) => st.amount) ? `Here is what your documents say. ${facts.join(" ")}` : facts.join(" ");
+    if (answer.bottomLine != null) answer.bottomLine = line;
+    if (typeof answer.summary === "string") answer.summary = line;
+  }
+  return left;
+}
+
 /** Who the chat was opened for, said to the model so "my" and "his" read the same way the household meant them. */
 /** Today's date in Singapore, so a waiting period or a policy's start can be set against an event the household describes now. */
 const dated = (d: Date) => `(Today is ${new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 10)}.) `; // Singapore time (UTC+8)
@@ -105,6 +145,7 @@ function chatFor(context: ChatContext): string {
 export function periodsNote(household: Household, _now: Date): string {
   const said: string[] = [];
   for (const d of household.documents) {
+    if (d.householdSaid) continue;
     const seen = new Set<string>();
     for (const p of d.pages) for (const m of p.text.matchAll(/\b(\d{1,2}\/\d{1,2}\/\d{4})\s*(?:to|until|-|–|—)\s*(\d{1,2}\/\d{1,2}\/\d{4})\b/gi)) {
       const from = printedDay(m[1]), to = printedDay(m[2]);
@@ -419,6 +460,9 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     }
     // And what the checks built (an owner's label, a card) for anyone the turn is not about goes too.
     report.sentencesLeftOut.push(...keepAnswerToSubjects(answer, subjects, household));
+    // An amount from a policy the household said it did not renew for that person never stands as their cover.
+    report.sentencesLeftOut.push(...dropNotRenewedAmounts(answer as Parameters<typeof dropNotRenewedAmounts>[0], household,
+      context.family.find((f) => f.id === context.conversation.family_member_id)?.display_name ?? null));
     // Amounts shown while some of that person's documents gave nothing: never read as the person's whole cover.
     noteCoverNotCounted(answer, household, live?.states ?? null, new Set(fromRows.report?.premiumLabels ?? []), new Set(report.filesListed ?? []));
     // Points were given, none survived the checks, and the bottom line introduces them: the answer says so, never a bare

@@ -15,7 +15,7 @@ import { OWN_FIGURE_CHECKS, amountOnlyInContext, figureContextWords, namePrinted
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { NOTIONAL_SUM_NOTE, RIDER_NAME, printsNotionalSum } from "@/lib/documents/notional-sum";
 import { WAIVER_RIDER_NOTE, namesWaiverRider } from "@/lib/documents/waiver-rider";
-import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
+import { PERSONAL_AUTHORITY_ROLES, formNamePrinted, formNames } from "@/lib/documents/intelligence";
 import { NOT_CHECKED } from "@/lib/documents/layout-check";
 import { amountAppears, documentDateFrom, locatePassage, looksLikeInjectedInstruction, nameAppears, parsePrintedDate, printedDateMatches, printedDates } from "@/lib/documents/evidence";
 
@@ -119,8 +119,14 @@ export function looksLikeName(value: string | null | undefined) {
 export function personPrinted(fullText: string, name: string) {
   const wanted = nameKey(name).split(" ").filter((w) => w.length > 1 && !["bin", "binte", "binti", "bte", "s", "o", "d"].includes(w));
   if (!wanted.length || looksLikeInjectedInstruction(name)) return false;
+  // On a line of form name fields (lib/documents/intelligence formNames), the words must all come from ONE printed name,
+  // never gathered from other fields or people (a surname field and another person's field on one line never print a
+  // name made of words from each; TE #561). The whole name printed anywhere, and lines with no form name field, read as before.
   if (nameKey(fullText).includes(nameKey(name))) return true;
-  return String(fullText ?? "").split("\n").some((line) => { const words = new Set(nameKey(line).split(" ")); return wanted.every((w) => words.has(w)); });
+  return String(fullText ?? "").split("\n").some((line) => {
+    if (formNames(line).length) return formNamePrinted(line, name);
+    const words = new Set(nameKey(line).split(" ")); return wanted.every((w) => words.has(w));
+  });
 }
 const GROUP_LABEL = /group\s+(?:policy|scheme|contract|master)\s*(?:no\.?|number|#)?\s*[:#-]?\s*$/i;
 /** Is this number only ever printed as a GROUP policy number? */

@@ -7,9 +7,10 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { customerError } from "@/components/customer-text";
 import { coverReadingPending, failedDocumentAdvice, notReadPagesAdvice, readInPartAdvice, unreadablePagesAdvice } from "@/lib/documents/failure-advice";
-import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
+import { MAX_UPLOAD_LABEL, UploadError, uploadPolicyDocument } from "@/components/upload-document";
 import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-role";
-import { CONFIRM_READ_AGAIN, documentReadLabel, pressReadAgain, readingFinishedSummary, readingWaitCopy } from "@/lib/documents/upload-problems";
+import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
+import { CONFIRM_READ_AGAIN, documentReadLabel, isReadingNotice, pressReadAgain, readingFinishedSummary, readingNotice, readingWaitCopy } from "@/lib/documents/upload-problems";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
@@ -113,10 +114,15 @@ export default function PoliciesPage() {
   const [memberId, setMemberId] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [pdfPassword, setPdfPassword] = useState("");
+  /** A ready, locked PDF whose Read again asked for its password (the reading stays until it is given). */
+  const [passwordFor, setPasswordFor] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   // An upload that failed or was refused is shown as an error, never in the
   // same box (and colour) as a successful one.
   const [statusIsError, setStatusIsError] = useState(false);
+  // The upload was refused at the plan's document limit: the owner is offered the way to upgrade under the message.
+  const [atDocumentLimit, setAtDocumentLimit] = useState(false);
+  const plan = usePlanStatus();
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -275,8 +281,13 @@ export default function PoliciesPage() {
       const finished = policies.filter((p) => wasActive.current.has(p.id));
       const summary = readingFinishedSummary(finished.length ? finished : policies, documentName);
       setStatusIsError(summary.problem);
+      setAtDocumentLimit(false);
       setStatus(summary.text);
+      // "Reading … again…" was true while it ran; once it has finished it must not sit beside the result.
+      setLibraryNotice((notice) => (isReadingNotice(notice) ? "" : notice));
       wasActive.current = new Set();
+      // A document that couldn't be read stops counting towards the plan.
+      if (plan.status?.upgrade) plan.refresh();
     }
     for (const p of policies) if (isProcessing(p)) wasActive.current.add(p.id);
     previousActiveCount.current = activeCount;
@@ -293,6 +304,7 @@ export default function PoliciesPage() {
     if (!file) return;
     setBusy(true);
     setStatusIsError(false);
+    setAtDocumentLimit(false);
     setStatus("Uploading document…");
     try {
       // Straight to secure storage (components/upload-document.ts): large
@@ -307,8 +319,10 @@ export default function PoliciesPage() {
       setPdfPassword("");
       if (fileInput.current) fileInput.current.value = "";
       await refresh();
+      if (plan.status?.upgrade) plan.refresh();
     } catch (err) {
       setStatusIsError(true);
+      setAtDocumentLimit(err instanceof UploadError && err.reasonCode === "PLAN_DOCUMENT_LIMIT");
       setStatus(customerError(err, "The upload did not go through. Please try again.").replace(/\s--\s/g, " — "));
     } finally {
       setBusy(false);
@@ -330,8 +344,11 @@ export default function PoliciesPage() {
         body: JSON.stringify({ policyId: policy.id }),
       });
       const payload = await response.json().catch(() => ({}));
+      // A locked PDF: nothing changed; its password is asked for where the document is (LockedPdf below).
+      if (payload.reasonCode === "PDF_PASSWORD_NEEDED") { setPasswordFor(policy.id); return; }
       if (!response.ok) throw new Error(payload.error || "Could not start reading it again.");
-      setLibraryNotice(`Reading ${label} again…`);
+      setStatus(""); setStatusIsError(false);
+      setLibraryNotice(readingNotice(label, "again"));
       await refresh();
     } catch (err) {
       setLibraryNotice(customerError(err, "Could not start reading it again. Please try later."));
@@ -355,7 +372,9 @@ export default function PoliciesPage() {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || "Could not read it with that password.");
-    setLibraryNotice(`Reading ${label} with the password you entered…`);
+    setStatus(""); setStatusIsError(false);
+    setLibraryNotice(readingNotice(label, "with the password you entered"));
+    setPasswordFor(null);
     await refresh();
   }
 
@@ -418,6 +437,7 @@ export default function PoliciesPage() {
       if (!response.ok) throw new Error(payload.error || "Could not delete document");
       setLibraryNotice(`Deleted ${label}. It is no longer used in answers, and Home has been updated.`);
       await refresh();
+      if (plan.status?.upgrade) plan.refresh();
     } catch (error) {
       setLibraryNotice(customerError(error, "Could not delete that document. Please try again in a moment."));
     } finally {
@@ -438,6 +458,8 @@ export default function PoliciesPage() {
 
   return <div className="page">
     <header className="page-header compact"><div><h1><span className="title-icon"><Icon name="documents"/></span>Your documents</h1><p className="lead">Any policy, certificate, schedule, renewal notice or receipt your insurer sent you.</p></div></header>
+    {/* An owner on Free sees how many of the plan's documents are kept, with one link to upgrade (components/plan-status.tsx). */}
+    <UpgradePrompt place="documents"/>
 
 
     {pollingPaused && <div className="processing-banner"><div><strong>Still reading in the background.</strong><small> This page stopped checking on its own after ten minutes. <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
@@ -469,7 +491,7 @@ export default function PoliciesPage() {
         <div className="field"><label htmlFor="up-profile">Who is this for? <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure: DearPolicy checks names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
         {file && isPdf(file) ? <div className="field"><label htmlFor="up-password">PDF password <span>(only if it asks for one)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required" aria-describedby="up-password-note"/><small id="up-password-note" className="field-note">Used only to read this file, and not stored.</small></div> : null}
         <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : <><Icon name="upload"/>Upload and read</>}</button>
-        {status && <div ref={statusBox} className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}</div>}
+        {status && <div ref={statusBox} className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}{statusIsError && atDocumentLimit && <> <UpgradeLink/></>}</div>}
       </form>}
     </section>
 
@@ -500,8 +522,8 @@ export default function PoliciesPage() {
           {/* One document per row: what it is, whose it is and what was found on the left; its actions on the right (phone: underneath). */}
           <div className="document-main">
           <div className="document-head">
-            <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong>{documentName(policy) !== policy.original_filename?.trim() && <small className="document-file">{policy.original_filename}</small>}{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage).eta : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
+            <div className="policy-logo">{(policy.insurer ?? documentName(policy)).slice(0, 2).toUpperCase()}</div>
+            <div className="document-title"><strong>{documentName(policy)}</strong>{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage).eta : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
               {/* Its numbers sit with what it is, so the actions stand alone. */}
               {!!numbers.length && (processing || policy.processing_status === "failed") && <small className="document-numbers">{numbers.join(" · ")}</small>}</div>
               {!processing && !quarantineHeld && !scanRejected && (() => {
@@ -549,7 +571,7 @@ export default function PoliciesPage() {
             return <>
               {missing && <div className="accuracy-warning" data-testid="pages-not-read"><b>{missing.title}</b><span>{missing.what}</span><small>{canManage ? missing.next : OWNER_NEXT}</small>{readAgainButton}</div>}
               {unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>{unread.title}</b><span>{unread.what}</span><small>{canManage ? unread.next : OWNER_NEXT}</small>{!missing && readAgainButton}</div>}
-              {part && <div className="accuracy-warning compact partial" data-testid="read-in-part"><span>{part.what}</span><details className="warning-next"><summary>What can I do?</summary><small>{canManage ? part.next : OWNER_NEXT}</small></details></div>}
+              {part && <div className="accuracy-warning compact partial" data-testid="read-in-part"><span>{part.what}</span><details className="warning-next" open><summary>What can I do?</summary><small>{canManage ? part.next : OWNER_NEXT}</small></details></div>}
               {pending && <div className="accuracy-warning" data-testid="cover-reading-pending"><b>Not fully read yet</b><span>{pending.what}</span><small>{canManage ? pending.next : OWNER_NEXT}</small>{!missing && !unread && /Read again/.test(pending.next) && readAgainButton}</div>}
               {!part && !pending && !processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Some details not used yet</b><span>DearPolicy couldn&rsquo;t find the page some details in this document came from, so it doesn&rsquo;t use those details in answers yet.</span></div>}
             </>;
@@ -579,6 +601,7 @@ export default function PoliciesPage() {
             if (labels.length) return <p className="document-found" data-testid="document-found"><b>Found</b> {foundLine(labels)}. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
             return null;
           })()}
+          {!processing && !policy.processing_error && passwordFor === policy.id && <LockedPdf policy={policy} wrong={false} rereading onUnlock={(password) => unlock(policy, password)} />}
           {/* Why, and the one next step that can work for this kind of failure (lib/documents/failure-advice.ts). */}
           {!processing && policy.processing_error && (() => {
             const advice = failedDocumentAdvice(policy.processing_error, { hasPages: !!policy.page_count });
@@ -657,7 +680,7 @@ function MatchedNames({ policy, family, onMove, readOnly = false }: { policy: Po
   </div>;
 }
 
-function LockedPdf({ policy, wrong, onUnlock }: { policy: Policy; wrong: boolean; onUnlock: (password: string) => Promise<void> }) {
+function LockedPdf({ policy, wrong, rereading = false, onUnlock }: { policy: Policy; wrong: boolean; rereading?: boolean; onUnlock: (password: string) => Promise<void> }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -672,7 +695,9 @@ function LockedPdf({ policy, wrong, onUnlock }: { policy: Policy; wrong: boolean
   }
   return <div className="row-error processing-error locked-pdf" data-testid="document-locked">
     <strong>{wrong ? "The password didn’t work" : "This PDF is password-protected"}</strong>
-    <span>{wrong ? "DearPolicy tried the password you gave, but the PDF did not open. Check it (passwords are case-sensitive) and try again." : "Enter the password your insurer gave you for this PDF and DearPolicy will read it."}</span>
+    <span>{wrong ? "DearPolicy tried the password you gave, but the PDF did not open. Check it (passwords are case-sensitive) and try again."
+      : rereading ? "To read it again, enter the password your insurer gave you for this PDF. Until then, it stays as it is."
+      : "Enter the password your insurer gave you for this PDF and DearPolicy will read it."}</span>
     <form onSubmit={submit} className="unlock-form">
       <label htmlFor={id}>PDF password</label>
       <input id={id} type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />

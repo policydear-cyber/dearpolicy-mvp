@@ -36,7 +36,7 @@ async function waitForPolicy(page: Page, file: string, done: (p: Policy) => bool
     await page.waitForTimeout(1000);
   }
 }
-const card = (page: Page, p: Policy) => page.locator(".document-card").filter({ hasText: p.product_name ?? p.original_filename });
+const card = (page: Page, p: Policy) => page.locator(`.document-card[data-policy-id="${p.id}"]`);
 
 test.describe.serial("synthetic household journey", () => {
   let page: Page;

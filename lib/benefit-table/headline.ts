@@ -16,7 +16,7 @@ export function periodWords(period: string | null | undefined): string {
   return /\s/.test(p) ? `for every ${p}` : `a ${p.replace("_", " ")}`;
 }
 
-export type SummaryRow = Pick<TableRow, "benefit" | "section" | "pays" | "figure" | "qualifier" | "fromDay" | "maxDays" | "conditions"> &
+export type SummaryRow = Pick<TableRow, "benefit" | "section" | "pays" | "figure" | "qualifier" | "fromDay" | "maxDays" | "conditions"> & Partial<Pick<TableRow, "valueAt">> &
   Partial<Pick<TableRow, "percent" | "base" | "combinedLimit" | "coverEnded">>;
 
 export const MAX_KEY = 8;
@@ -37,7 +37,8 @@ export function shortFigure(r: SummaryRow): { text: string; note: string | null 
     if (r.pays === "not_covered") return { text: "Not covered", note: null };
     // The share it pays, in the row's own words, never an amount: "10% of Prevailing Insured Amount".
     if (f.share) return { text: `${f.share.percent}% of ${f.share.of}`,
-      note: f.share.capMissing ? "a maximum applies, but it was not captured from the page: see the document"
+      note: f.share.held ? `no amount is worked out yet: ${f.share.held.what === "cap" ? "its maximum" : "the sum insured"} is ${f.share.held.status === "checking" ? "still being checked" : "not confirmed"} against the document's page${f.share.held.what === "sum_insured" && f.share.capWords ? `; ${f.share.capWords} (printed with it on p${f.share.capPage})` : ""}`
+        : f.share.capMissing ? "a maximum applies, but it was not captured from the page: see the document"
         : f.share.capWords ? `${f.share.capWords} (printed with it on p${f.share.capPage})`
         : "no amount is worked out: the amount it is a share of is not stated with it" };
     return { text: "See the page", note: f.why };
@@ -85,7 +86,7 @@ const amountOf = (f: Figure) => (f.kind === "printed" || f.kind === "worked_out"
  * benefit name are never chosen. */
 export function keyBenefits(rows: SummaryRow[]): number[] {
   const usable = rows.map((r, i) => ({ r, i })).filter(({ r }) =>
-    r.figure.kind !== "projected" && r.pays !== "not_covered" && (r.figure.kind !== "none" || r.pays === "as_charged"));
+    r.figure.kind !== "projected" && !r.valueAt && r.pays !== "not_covered" && (r.figure.kind !== "none" || r.pays === "as_charged"));
   const tier = (r: SummaryRow) => (LIFE.test(r.benefit) ? 0 : HOSPITAL.test(r.benefit) ? 1 : OWN_SHARE.test(r.benefit) ? 2 : 3);
   const ordered = usable.sort((a, b) => tier(a.r) - tier(b.r) || (tier(a.r) === 3 ? amountOf(b.r.figure) - amountOf(a.r.figure) : 0) || a.i - b.i);
   const asCharged = rows.filter((r) => r.pays === "as_charged").length * 2 > rows.length;

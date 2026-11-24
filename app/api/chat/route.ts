@@ -13,6 +13,7 @@ import { enqueueChat } from "@/lib/chat/jobs";
 import { ChatConflict } from "@/lib/chat/store";
 import { overSpendCap, SPEND_LIMIT_TEXT, SpendCheckUnavailable, SPEND_CHECK_UNAVAILABLE_TEXT } from "@/lib/ai/ledger";
 import { takeQuestion, PlanCheckUnavailable } from "@/lib/billing/household-plan";
+import { limitForCaller } from "@/lib/billing/limit-for-caller";
 
 const NO_FAMILY_MESSAGE="Add a family member first. Under Account settings > People, add yourself (and anyone else your policies cover), then ask again.";
 export const runtime="nodejs";
@@ -57,7 +58,7 @@ export async function POST(request:NextRequest){
     let plan;
     try{plan=await takeQuestion(accountId);}
     catch(error){if(error instanceof PlanCheckUnavailable)return NextResponse.json({error:error.message,code:"plan_check_unavailable"},{status:503});throw error;}
-    if(!plan.allowed)return NextResponse.json({error:plan.message,code:plan.code,upgradePath:"/usage"},{status:429});
+    if(!plan.allowed){plan=await limitForCaller(plan,ctx);if(!plan.allowed)return NextResponse.json({error:plan.message,code:plan.code,upgradePath:"/usage"},{status:429});}
     const args={...body,accountId};
     if(body.asynchronous)return NextResponse.json(await enqueueChat(args),{status:202});
     return NextResponse.json(await askDearPolicy(args));

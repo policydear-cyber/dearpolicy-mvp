@@ -4,6 +4,7 @@
  * number or documents already together. Made-up documents; no database.
  *   npm run -s policies:folder-view-test */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { folderSuggestions, folderTitle, policyStarters, slotForRole, type FolderDoc, type FolderView } from "@/lib/policies/folder-view";
 
 let passed = 0;
@@ -133,5 +134,10 @@ test("P7 slots from what was read: schedule, wording, rider, else other", () => 
   assert.deepEqual(["certificate", "policy_wording", "endorsement", "premium_receipt", null].map(slotForRole), ["schedule", "wording", "rider", "other", "other"]);
 });
 
+test("F1 a folder never shows a document's file name (DC: no file names in what a household reads)", () => {
+  const src = readFileSync("components/policy-folders.tsx", "utf8");
+  const uses = src.split("\n").filter((l) => l.includes("original_filename") && !/^\s*original_filename: string;/.test(l));
+  assert.deepEqual(uses, []);
+});
 if (failures.length) { console.error(failures.join("\n")); console.error(`${passed} passed, ${failures.length} failed`); process.exit(1); }
 console.log(`folder-view: ${passed} passed, 0 failed`);

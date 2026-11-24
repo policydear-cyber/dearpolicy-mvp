@@ -8,8 +8,7 @@ import { useSearchParams } from "next/navigation";
 import type { ChatAnswer,ClaimItem } from "@/types";
 import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESSMENT_NOTICE } from "@/lib/chat/monetary-boundary";
 import { formatMoney } from "@/lib/format/currency";
-import { documentCardTitle,isMachineFilename } from "@/lib/policies/document-name";
-import { maskIdentityText } from "@/lib/chat/identity-numbers";
+import { documentCardTitle } from "@/lib/policies/document-name";
 import { customerAnswerText,customerError,customerMessage } from "@/components/customer-text";
 import { answerText,codeWords } from "@/components/answer-text";
 import { uniqueSteps } from "@/components/next-steps";
@@ -25,6 +24,7 @@ import { LearnLinks } from "@/components/learn-links";
 import { sendFailure } from "@/components/chat-send-failure";
 import { applyReplaced,type ReplacedAnswer } from "@/lib/chat/replaced-live";
 import { COVER_NOTE } from "@/lib/chat/cover-note";
+import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
  * uncertainty, and one next question or action. Internal working -- what the
@@ -89,19 +89,13 @@ class StoppedWaiting extends Error{}
 
 /** What the household's library is like right now, so an empty chat says what a first question will be answered from:
  * nothing uploaded yet, documents still being read, or documents that could not be read. */
-type Library={total:number;reading:number;failed:{id:string;name:string;file:string|null}[]};
+type Library={total:number;reading:number;failed:{id:string;name:string;plain:boolean}[]};
 const READING_STATUSES=new Set(["queued","uploaded","extracting","indexing"]);
 type LibraryPolicy={id:string;original_filename?:string|null;product_name?:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null;processing_status?:string;quarantine_status?:string};
 function libraryOf(policies:LibraryPolicy[]):Library{
   return {total:policies.length,
     reading:policies.filter(p=>READING_STATUSES.has(p.processing_status??"")&&(p.quarantine_status??"clean")!=="rejected").length,
-    failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:documentCardTitle({product_name:p.product_name??null,original_filename:p.original_filename??null,insurer:p.insurer,document_role:p.document_role,policy_number:p.policy_number}),file:uploadedName(p)}))};
-}
-/** A document that could not be read and that nothing names (no product, no insurer, a file name a phone made up) is
- * called by the file name the household uploaded ("IMG_0042.jpg"), as Home does, never a bare "Document". */
-function uploadedName(p:LibraryPolicy):string|null{
-  const file=p.original_filename?.trim();
-  return file&&!p.product_name?.trim()&&!p.insurer?.trim()&&isMachineFilename(file)?maskIdentityText(file):null;
+    failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:documentCardTitle({product_name:p.product_name??null,original_filename:p.original_filename??null,insurer:p.insurer,document_role:p.document_role,policy_number:p.policy_number}),plain:!p.product_name?.trim()&&!p.insurer?.trim()}))};
 }
 
 /** The empty chat: an open invitation to ask anything in your own words (no fixed list of questions), plus what the
@@ -114,13 +108,15 @@ function ChatWelcome({library}:{library:Library|null}){
     </>:<>
       <p><strong>Ask anything about your policies, in your own words.</strong> If something happened, say who and what.</p>
       {library&&library.reading>0?<p className="chat-library-note" role="status">{library.reading===1?"One document is":`${library.reading} documents are`} still being read. You can ask now; answers use {library.reading===1?"it":"them"} once {library.reading===1?"it is":"they are"} ready.</p>:null}
-      {library&&library.failed.length?<p className="chat-library-note">{library.failed.length===1?<>&ldquo;{library.failed[0].file??library.failed[0].name}&rdquo; couldn&rsquo;t be read, so answers can&rsquo;t use it.</>:<>{library.failed.length} documents couldn&rsquo;t be read, so answers can&rsquo;t use them.</>} <Link className="text-link" href={library.failed.length===1?`/policies#doc-${library.failed[0].id}`:"/policies"}>See Documents →</Link></p>:null}
+      {library&&library.failed.length?<p className="chat-library-note">{library.failed.length===1?<>{library.failed[0].plain?"One document":<>&ldquo;{library.failed[0].name}&rdquo;</>} couldn&rsquo;t be read, so answers can&rsquo;t use it.</>:<>{library.failed.length} documents couldn&rsquo;t be read, so answers can&rsquo;t use them.</>} <Link className="text-link" href={library.failed.length===1?`/policies#doc-${library.failed[0].id}`:"/policies"}>See Documents →</Link></p>:null}
     </>}
   </div>;
 }
 
 function ChatContent(){
   const params=useSearchParams();
+  // The month's question count for Ask's upgrade line (owner on Free only), read again after each question.
+  const planStatus=usePlanStatus();
   const [family,setFamily]=useState<Member[]>([]);
   const [memberId,setMemberId]=useState(params.get("member")??"");
   // The home page's ask box opens a new chat with its question in the box, ready to send (not sent for them).
@@ -156,13 +152,11 @@ function ChatContent(){
   // the text, and Send would stay greyed out (browser-e2e, 13 Nov).
   useEffect(()=>{const typed=composer.current?.value??"";if(typed)setQuestion(typed.slice(0,MAX_QUESTION_LENGTH));},[]);
   /** Document id -> file name, so each source row says which file it is. */
-  const [documentFiles,setDocumentFiles]=useState<Record<string,string>>({});
   const [library,setLibrary]=useState<Library|null>(null);
   const loadLibrary=useCallback(async()=>{
     const data=await fetch("/api/policies",{cache:"no-store"}).then(r=>r.ok?r.json():null).catch(()=>null);
     if(!data?.policies)return null;
     const policies=data.policies as LibraryPolicy[];
-    setDocumentFiles(Object.fromEntries(policies.filter(p=>p.original_filename).map(p=>[p.id,p.original_filename as string])));
     const next=libraryOf(policies);setLibrary(next);return next;
   },[]);
   // While documents are being read, the welcome checks again now and then (for up to ten minutes), so it never says
@@ -314,7 +308,7 @@ function ChatContent(){
         setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message,conflict,noFamily,planLimit,stopped,restored}:m));
       }
     }
-    finally{if(version===requestVersion.current){jobId.current=null;setBusy(false);controller.current=null;}}
+    finally{if(version===requestVersion.current){jobId.current=null;setBusy(false);controller.current=null;}if(planStatus.status?.upgrade)planStatus.refresh();}
   }
   async function removeChat(id:string){
     // Inline arm-then-confirm avoids window.confirm()'s tab-freezing blocking
@@ -385,6 +379,9 @@ function ChatContent(){
       {/* Who the chat is about shows once someone is chosen; until then the welcome says to name who. */}
       <div className="chat-head-actions">{active?<div className="auto-context"><strong><Icon name="person"/> Asking about {active.display_name}</strong><span>Mention someone else to switch.</span></div>:null}<button className="button secondary compact" onClick={reset}><Icon name="plus"/>New chat</button></div>
     </header>
+    {/* From 8 of the month's questions, an owner on Free sees one upgrade line here, above the chat, where the sticky
+        box never covers it (components/plan-status.tsx). */}
+    <UpgradePrompt place="ask"/>
     {/* A first-time user has no previous chats: the empty panel is left out rather than shown as "Previous chats · 0". */}
     {history.length||historyCursor?<details className="chat-history"><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
       {canManage?<div className="history-actions"><button className={`mini-button${confirmClearHistory?" danger armed":""}`} disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm delete all":"Delete all chats"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>:<p className="muted owner-only-note" data-testid="owner-only-note">Only the household owner can delete saved chats.</p>}
@@ -404,7 +401,7 @@ function ChatContent(){
           {/* An answer that arrives with checked statements is shown as cards (bottom line, one card per amount, sources one tap
               away); the same text otherwise, as before. A claim assessment keeps its own layout. */}
           {(()=>{const cards=message.role==="assistant"&&showsCards(message.answer);return <>
-          {cards?<AnswerCards answer={message.answer as Parameters<typeof AnswerCards>[0]["answer"]} render={text=>readableDates(customerAnswerText(shown(text)))} prose={[message.content??"",...(message.answer!.details??[])]} sources={<SourceList citations={message.answer!.citations} files={documentFiles}/>} after={nextStepsAfter(message.answer)}/>:null}
+          {cards?<AnswerCards answer={message.answer as Parameters<typeof AnswerCards>[0]["answer"]} render={text=>readableDates(customerAnswerText(shown(text)))} prose={[message.content??"",...(message.answer!.details??[])]} sources={<SourceList citations={message.answer!.citations}/>} after={nextStepsAfter(message.answer)}/>:null}
           {/* A turn that stopped before answering is drawn as a stop, with one tap to a narrower question. */}
           {cards?null:message.role==="assistant"&&isStopped(message.answer,message.content)?<StoppedNotice text={readableDates(customerAnswerText(message.content))} question={all.slice(0,index).reverse().find(m=>m.role==="user")?.content} people={family.map(m=>({id:m.id,name:m.display_name}))} onAsk={(text,id)=>{setQuestion(text.slice(0,MAX_QUESTION_LENGTH));if(id)setMemberId(id);composer.current?.focus();}}/>
           :message.role==="assistant"?(message.content?<p>{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
@@ -488,7 +485,7 @@ function ChatContent(){
           {/* V1.5: every saved next step, in order, each once (a repeated step is shown once) -- never only the first. While a
               question is waiting for an answer they are drawn above it. */}
           {message.role==="assistant"&&showsCards(message.answer)?null:nextStepsAfter(message.answer)}
-          {message.answer?.citations.length&&!(message.role==="assistant"&&showsCards(message.answer))?<details className="citations"><summary>Sources</summary><SourceList citations={message.answer.citations} files={documentFiles}/></details>:null}
+          {message.answer?.citations.length&&!(message.role==="assistant"&&showsCards(message.answer))?<details className="citations"><summary>Sources</summary><SourceList citations={message.answer.citations}/></details>:null}
           </>;return detail;})()}
           {/* Only a notice about this answer itself (an estimate is not a payout); the general note is said once, under the box. */}
           {message.answer?.disclaimer&&message.answer.disclaimer.trim()!==GENERIC_DISCLAIMER&&!isStopped(message.answer,message.content)?<div className="answer-disclaimer">{message.answer.disclaimer}</div>:null}
@@ -496,7 +493,7 @@ function ChatContent(){
           {message.role==="assistant"&&message.answer&&!isStopped(message.answer,message.content)?<LearnLinks texts={[message.content.replace(COVER_NOTE," "),...(message.answer.details??[]),...(message.answer.claimItems??[]).flatMap(item=>[item.reason,...(item.conditions??[])])]}/>:null}
         </div>
         {message.error?(message.planLimit
-          ?<div className="alert message-inline-error" role="alert" data-testid="chat-plan-limit"><strong>Not sent.</strong><span> {message.error}</span><Link className="mini-button" href="/usage">See plans</Link></div>
+          ?<div className="alert message-inline-error" role="alert" data-testid="chat-plan-limit"><strong>Not sent.</strong><span> {message.error}</span><UpgradeLink/></div>
           :message.noFamily
           ?<div className="alert error message-inline-error" role="alert" data-testid="chat-no-family"><strong>Not sent.</strong><span> {message.error}</span><Link className="mini-button" href="/family">Add family members</Link></div>
           :message.conflict

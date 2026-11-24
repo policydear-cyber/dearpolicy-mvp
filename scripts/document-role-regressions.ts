@@ -24,7 +24,8 @@ async function t(name: string, fn: () => unknown | Promise<unknown>) {
 }
 
 async function main() {
-  const { deterministicDocumentRole, sanitizePolicyExtraction } = await import("@/lib/documents/intelligence");
+  const intelligence = await import("@/lib/documents/intelligence");
+  const { deterministicDocumentRole, sanitizePolicyExtraction } = intelligence;
   const { correspondenceRole, schedulePage } = await import("@/lib/documents/messy");
   const { detectHighConfidenceReferenceRole, buildCodeOnlyExtraction, compactSample } = await import("@/lib/ai/extract-policy");
   const doc = (...texts: string[]): PdfPage[] => texts.map((text, i) => ({ pageNumber: i + 1, text } as PdfPage));
@@ -111,6 +112,92 @@ async function main() {
     assert.equal(deterministicDocumentRole(summary, null), "personal_schedule");
     assert.equal(deterministicDocumentRole(summary, "policy_wording"), "personal_schedule");
     assert.equal(detectHighConfidenceReferenceRole(summary), null, "not short-circuited as generic wording");
+  });
+  // 3b. A quote-and-summary form naming its traveller by "Family Name / Given Name" and printing its own terms and
+  // conditions (a real household's travel cover filed as policy wording, so Home showed no travel cover; invented here).
+  const formSummary = doc(
+    "Policy No.: 70012345\nDate of Creation: 08/08/2026\nQUOTE AND SUMMARY OF COVER\nTravel Insurance Premium is:\nSGD 52.10\nYour Agent's Details\nAgent Name:\tDIRECT (GEN-INS)\nCompany Name:\tDIRECT (GEN-INS)\nAbout You\nFamily Name:\tRivera\tGiven Name:\tAna Maria\nDate of Birth:\t03-Mar-1990\nSummary of Cover\nPlan Type:\t\tTravel Basic\nTrip Type:\t\tSingle Trip\nCover start date:\t\t11-Jan-2027\nCover end date:\t\t21-Jan-2027",
+    "Declaration\nYou agree to the terms and conditions.\nTerms and Conditions\nGeneral\n1. The Policy is underwritten by Example Insurance Ltd.",
+  );
+  await t("3b: a quote and summary of cover naming its traveller by family and given name is a personal schedule", () => {
+    assert.equal(detectHighConfidenceReferenceRole(formSummary), null, "not short-circuited as generic wording");
+    assert.equal(deterministicDocumentRole(formSummary, null), "personal_schedule");
+    assert.equal(deterministicDocumentRole(formSummary, "policy_wording"), "personal_schedule");
+  });
+  await t("3b control: the same form with blank name fields, or only an agent's and company's name, stays reference", () => {
+    const blank = doc(formSummary[0].text.replace("Family Name:\tRivera\tGiven Name:\tAna Maria", "Family Name:\nGiven Name:"), formSummary[1].text);
+    assert.equal(detectHighConfidenceReferenceRole(blank), "policy_wording");
+    assert.notEqual(deterministicDocumentRole(blank, null), "personal_schedule");
+    const agentOnly = doc(formSummary[0].text.replace("Family Name:\tRivera\tGiven Name:\tAna Maria\n", ""), formSummary[1].text);
+    assert.equal(detectHighConfidenceReferenceRole(agentOnly), "policy_wording");
+    const groupNumber = doc(formSummary[0].text.replace("Policy No.: 70012345", "Group Policy No.: G700123"), formSummary[1].text);
+    assert.equal(detectHighConfidenceReferenceRole(groupNumber), "policy_wording", "a group scheme's number is not the person's own policy");
+  });
+  await t("3b control (Critic #561): a blank form whose name fields run into the next label, and a specimen, are not personal", () => {
+    const { personalDocumentTitle } = intelligence;
+    assert.equal(personalDocumentTitle("Travel insurance summary\nPolicy Number: 2024-00012345\nFamily Name: Given Name:\nNRIC:"), null);
+    assert.equal(personalDocumentTitle("Policy summary\nPolicy No: TR12345678\nSurname:\tFirst name:\nDate of birth:"), null);
+    assert.equal(personalDocumentTitle("Summary of cover\nPolicy No: TR12345678\nSurname: Date of Birth:"), null);
+    assert.equal(personalDocumentTitle("SPECIMEN\nTravel insurance summary\nPolicy Number: 12345678\nFull Name: Tan Ah Kow"), null);
+    assert.equal(personalDocumentTitle("Travel insurance summary\nPolicy Number: 12345678\nFull name: means the name in your passport"), null);
+    // Still personal: a filled form with family and given name on one line, or a whole name.
+    assert.equal(personalDocumentTitle("Summary of cover\nPolicy No.: 70012345\nSurname:\tTan\tFirst name:\tWei Jie"), "personal_schedule");
+    assert.equal(personalDocumentTitle("Summary of cover\nPolicy No.: 70012345\nFull name:\tTan Wei Jie"), "personal_schedule");
+    assert.equal(personalDocumentTitle("Summary of cover\nPolicy No.: 70012345\nTraveller's name: Ana Rivera"), "personal_schedule");
+  });
+  await t("3b control (TE #561): a lone given name, names split over lines, instructions, stand-ins and blank fields are not personal", () => {
+    const { personalDocumentTitle } = intelligence;
+    const head = "Summary of cover\nPolicy No.: 70012345\n";
+    // A given name alone may be another household member's (TE: "Mei Ling" uploaded to Arun's profile).
+    assert.equal(personalDocumentTitle(head + "Given Name:\tMei Ling"), null);
+    // Family and given name on separate lines: the person check needs the name on one line, so it stays as before.
+    assert.equal(personalDocumentTitle(head + "Family Name: Tan\nGiven Name: Wei Jie"), null);
+    for (const blank of ["Family Name:\tPlan Type:\tTravel Basic", "Full name:\tTrip Type:\tSingle Trip", "Full name:\tCover start date:\t11-Jan-2027", "Full name: Agent Name: Lim Ah Beng", "Surname:\tCountry of residence:\tSingapore\tGiven Name:\tWei Jie"])
+      assert.equal(personalDocumentTitle(head + blank), null, blank);
+    for (const words of ["Surname: please write as in passport\tGiven name: please write as in passport", "Full name: must match your passport", "Full name: please print in block letters", "Full name: John Doe", "Full name: Jane Doe", "Full name: Sample Name", "Surname:\tDoe\tGiven name:\tJohn (sample)"])
+      assert.equal(personalDocumentTitle(head + words), null, words);
+    for (const words of ["Full name: Insured Person", "Full name: Not applicable", "Full name: Example Traveller"])
+      assert.equal(personalDocumentTitle(head + words), null, words);
+    assert.equal(personalDocumentTitle(head + "Full Name (as in passport):\tRaj Kumar s/o Muthu"), "personal_schedule", "a note on the label, s/o in the name");
+    // The schedule labels that counted before #561 still count.
+    assert.equal(personalDocumentTitle(head + "Policyholder: Lim Wei Jie"), "personal_schedule");
+  });
+  await t("3b: the traveller's cover is verified when the form prints family and given name on one line (TE #561)", async () => {
+    const { verifyExtractionEvidence } = await import("@/lib/rag/ingest");
+    const page = (name: string) => [{ pageNumber: 1, text: "Policy No.: 70012345\nAbout You\n" + name + "\nSummary of Cover\nMedical expenses overseas\tSGD 150,000" }];
+    const extraction = (who: string) => ({ insuredPeople: [{ name: who, relationshipHint: null, coverages: [{ category: "Travel", productName: "Travel Basic", policyNumber: "70012345", amount: 150000, currency: "SGD", notes: null, sourcePage: 1, evidenceText: "Medical expenses overseas SGD 150,000", evidenceVerified: false }] }] }) as never;
+    const ok = (text: string, who: string) => (verifyExtractionEvidence(extraction(who), page(text)) as { insuredPeople: { coverages: { evidenceVerified: boolean }[] }[] }).insuredPeople[0].coverages[0].evidenceVerified;
+    assert.equal(ok("Family Name:\tRivera\tGiven Name:\tAna Maria", "Ana Maria Rivera"), true);
+    assert.equal(ok("Full name: Ana Maria Rivera", "Ana Maria Rivera"), true, "unchanged: the whole name");
+    assert.equal(ok("Family Name: Rivera\nGiven Name: Ana Maria", "Ana Maria Rivera"), false, "a name split over two lines is not proof");
+    assert.equal(ok("Family Name:\tRivera\tGiven Name:\tAna", "Ana Maria Rivera"), false, "every part of the name must be printed");
+    // Words gathered from other fields or other people never make a name (TE #561 V3, V4, V4b).
+    assert.equal(ok("Family Name: Tan    Given Name: Mei Ling    Emergency contact: Wei", "Wei Tan"), false);
+    assert.equal(ok("Full name: Mei Ling Tan    Full name: Wei Lim", "Wei Tan"), false);
+    assert.equal(ok("Insured persons: Mei Ling Tan, Wei Lim", "Wei Tan"), false);
+    assert.equal(ok("Family Name: Tan    Given Name: Mei Ling    Emergency contact: Wei", "Mei Ling Tan"), true, "the form's own name still verifies");
+    // A shorter name the household keeps is part of the one name the form prints: the same person, as on main (Critic #561).
+    assert.equal(ok("Full name:\tWei Tan Ah Kow", "Wei Tan Ah Kow"), true);
+    // A part of a longer printed name verifies no figure: "Wei Tan" in "Tan Wei Ling" may be someone else (TE #561 W1, W1b,
+    // L4). A short form gets no figure here, as on main.
+    assert.equal(ok("Family Name:\tTan\tGiven Name:\tWei Ling", "Wei Tan"), false);
+    assert.equal(ok("Insured person: Tan Wei Ling", "Wei Tan"), false);
+    assert.equal(ok("Policyholder: Tan Wei Ling", "Wei Tan"), false);
+    assert.equal(ok("Family Name:\tLim\tGiven Name:\tWei Jie, Daniel", "Daniel Lim"), false);
+    assert.equal(ok("Family Name:\tLim\tGiven Name:\tWei Jie, Daniel", "Lim Wei Jie Daniel"), true);
+    const { personPrinted } = await import("@/lib/documents/fact-check");
+    assert.equal(personPrinted("Family Name: Tan    Given Name: Mei Ling    Emergency contact: Wei", "Wei Tan"), false, "TE #561 V3: words from two fields");
+    assert.equal(personPrinted("Full name: Mei Ling Tan    Full name: Wei Lim", "Wei Tan"), false, "TE #561 V4: words from two people");
+    assert.equal(personPrinted("Family Name: Tan    Given Name: Mei Ling", "Mei Ling Tan"), true);
+    // Short forms of the printed name stay printed, as on main (Critic #561 HIGH-1).
+    assert.equal(personPrinted("Name of Insured: Jessica Tan Mei Ling\tNRIC: S1234567A", "Jessica Tan"), true);
+    assert.equal(personPrinted("Family Name: Lim\tGiven Name: Wei Jie, Daniel", "Daniel Lim"), true);
+    assert.equal(personPrinted("Full name: Ahmad bin Ismail", "Ahmad Ismail"), true);
+    assert.equal(personPrinted("Policyholder: Daniel Lim\nFamily Name: Lim\tGiven Name: Wei Jie, Daniel", "Daniel Lim"), true);
+    assert.equal(personPrinted("Full name: Tan Ah Kow\nLife Assured: Tan Ah Kow", "Tan Ah Kow"), true);
+    assert.equal(personPrinted("Full name: Mei Ling Tan\tLife Assured: Lim Daniel", "Daniel Lim"), true, "another role field on a form line (Critic #561 LOW)");
+    assert.equal(personPrinted("Insured: Lim Wei Jie  Sum assured 100,000", "Lim Wei Jie"), true, "a page with no form name field reads as before");
+    assert.equal(personPrinted("Lim, Wei Jie   Plan A", "Wei Jie Lim"), true, "a line with no form name field reads as before");
   });
   await t("3 control: a generic summary with no printed policy number stays reference", () => {
     const generic = doc("Travel insurance summary of benefits\nThe policyholder is the person named in the schedule. Policy number means the number on your schedule.\nTerms and conditions apply. Please read the policy wording.");

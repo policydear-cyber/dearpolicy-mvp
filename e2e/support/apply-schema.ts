@@ -15,7 +15,7 @@ const FILES = [
   "sql/processing-failure-diagnostics.sql",
   "sql/storage-purge.sql",
   "sql/infrastructure-rls.sql", "sql/v11-ingestion-evidence.sql",
-  "sql/member-profile.sql", "sql/household-currency.sql", "sql/policy-folders.sql", "sql/policy-folders-auto.sql",
+  "sql/member-profile.sql", "sql/household-currency.sql", "sql/policy-folders.sql", "sql/policy-folders-auto.sql", "sql/policy-not-renewed.sql",
 ];
 
 async function main() {

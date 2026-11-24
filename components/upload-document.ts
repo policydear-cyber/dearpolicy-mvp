@@ -11,6 +11,7 @@
  *      bytes (type sniffing, size, household, duplicates) and queues the scan
  *      and processing.
  */
+import { getTurnstileToken } from "@/lib/security/turnstile-client";
 import { uploadFailureMessage, type UploadStep } from "@/lib/documents/upload-problems";
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -23,7 +24,8 @@ export const MAX_UPLOAD_LABEL = "50 MB";
 const STORAGE_CONTENT_TYPE = "application/pdf";
 
 export class UploadError extends Error {
-  constructor(message: string, public status = 0) { super(message); }
+  /** The server's reason, when it gave one (for example PLAN_DOCUMENT_LIMIT), so the page can offer the way forward. */
+  constructor(message: string, public status = 0, public reasonCode: string | null = null) { super(message); }
 }
 
 type StartResponse =
@@ -37,7 +39,7 @@ async function json(response: Response): Promise<Record<string, unknown>> {
  * side's fixed copy for a server error or an answer that isn't ours (a gateway page), never a raw code
  * (lib/documents/upload-problems.ts). */
 function failure(step: UploadStep, status: number, body: Record<string, unknown> = {}) {
-  return new UploadError(uploadFailureMessage(step, { status, serverMessage: typeof body.error === "string" ? body.error : null }), status);
+  return new UploadError(uploadFailureMessage(step, { status, serverMessage: typeof body.error === "string" ? body.error : null }), status, typeof body.reasonCode === "string" ? body.reasonCode : null);
 }
 /** fetch, with a dropped connection (the browser's own "Failed to fetch", "Load failed", "NetworkError…") said plainly. */
 async function send(step: UploadStep, url: string, init: RequestInit): Promise<Response> {
@@ -68,9 +70,12 @@ export async function uploadPolicyDocument(file: File, options: {
   if (file.size <= 0) throw new UploadError("That file is empty.");
   if (file.size > MAX_UPLOAD_BYTES) throw new UploadError(`Files must be ${MAX_UPLOAD_LABEL} or smaller. Split the document or export it at a lower resolution, then upload it again.`);
 
+  // Bot check (off unless the site key is set): a fresh single-use token for each document.
+  let turnstileToken: string | null = null;
+  try { turnstileToken = await getTurnstileToken(); } catch { throw new UploadError("We couldn't run the safety check that lets you upload. Refresh the page and try again."); }
   const startResponse = await send("start", "/api/policies/upload/start", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ filename: file.name, mimeType: file.type, byteSize: file.size, familyMemberId: options.familyMemberId || null, supersedesPolicyId: options.supersedesPolicyId || null }),
+    body: JSON.stringify({ filename: file.name, mimeType: file.type, byteSize: file.size, familyMemberId: options.familyMemberId || null, supersedesPolicyId: options.supersedesPolicyId || null, ...(turnstileToken ? { turnstileToken } : {}) }),
   });
   const started = await json(startResponse);
   if (!startResponse.ok) throw failure("start", startResponse.status, started);

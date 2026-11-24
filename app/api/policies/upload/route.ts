@@ -7,6 +7,7 @@ import { recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { UPLOAD_COPY } from "@/lib/documents/upload-problems";
 import { acceptPolicyUpload, MULTIPART_MAX_BYTES, resolveUploadFamilyMember, uploadErrorResponse } from "./accept";
+import { callerIp, TURNSTILE_FAILED_MESSAGE, turnstilePasses } from "@/lib/security/turnstile";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "This file is too large to send this way. Upload it from the Documents page, which sends large files directly to secure storage.", reasonCode: "USE_DIRECT_UPLOAD" }, { status: 413 });
     }
     const form = await request.formData();
+    if (!(await turnstilePasses(form.get("turnstileToken"), callerIp(request)))) return NextResponse.json({ error: TURNSTILE_FAILED_MESSAGE, reasonCode: "TURNSTILE_FAILED" }, { status: 403 });
     const file = form.get("file");
     const requestedMember = String(form.get("familyMemberId") ?? "");
     const pdfPassword = String(form.get("pdfPassword") ?? "");
