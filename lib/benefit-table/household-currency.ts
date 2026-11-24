@@ -68,22 +68,22 @@ export function withHouseholdCurrency(readings: CheckedReading[], household: str
     const ks = [...r.covers.map((c) => key(c.policyNumber)).filter((k) => k.length >= 4), ...(ctx.keys?.get(r.documentId) ?? [])];
     if (ks.some((k) => unknownKeys.has(k))) hold(i, "same policy as a document that is unknown");
   });
-  // A document with no cover of its own (a wording, terms) that names another currency applies to its insurer's policies
-  // whatever the products are called, and to every policy when it names no insurer either (nothing ties it to one).
-  const wordingInsurers = new Set<string>();
-  let wordingNamesAny = false;
+  // A document with no cover of its own (a wording, terms) that names another currency holds its insurer's policies, whatever
+  // the products are called. A wording that names no insurer, or one no policy of the household is filed under, ties itself to
+  // no policy: it holds only itself (and the documents sharing a name with it, above). It never holds the whole household:
+  // a generic wording naming a currency list or a foreign-exchange clause said nothing about the other policies, and the
+  // household's own currency is meant to fill them (DC 24 Nov). An insurer spelled so differently that it matches nothing is
+  // the accepted limit: its policies print their own currency, which always wins.
+  const wordingInsurers = new Map<string, string>();
   for (const r of readings) {
-    if (r.covers.length || !(r.pageCurrencies?.named ?? []).some((c) => c !== household)) continue;
+    const other = (r.pageCurrencies?.named ?? []).filter((c) => c !== household);
+    if (r.covers.length || !other.length) continue;
     const ins = insurerKey(ctx.insurers?.get(r.documentId));
-    // An insurer that no policy of the household is filed under may be one of them under another name ("American
-    // International Assurance" for "AIA"): nothing ties it to a policy, so every policy is held.
-    const filedUnder = readings.some((o) => o.covers.length && insurerKey(ctx.insurers?.get(o.documentId)) === ins);
-    if (ins && filedUnder) wordingInsurers.add(ins); else wordingNamesAny = true;
+    if (ins && !wordingInsurers.has(ins)) wordingInsurers.set(ins, `${r.documentId.slice(0, 8)}: ${other.join(",")}`);
   }
   readings.forEach((r, i) => {
-    const mine = insurerKey(ctx.insurers?.get(r.documentId));
-    const sameInsurer = !!mine && wordingInsurers.has(mine);
-    if (wordingNamesAny || sameInsurer) hold(i, wordingNamesAny ? "a wording of no known insurer names another currency" : "a wording of the same insurer names another currency");
+    const why = wordingInsurers.get(insurerKey(ctx.insurers?.get(r.documentId)));
+    if (why) hold(i, `a wording of the same insurer names another currency (${why})`);
   });
   readings.forEach((r, i) => {
     const named = r.pageCurrencies?.named ?? [];
