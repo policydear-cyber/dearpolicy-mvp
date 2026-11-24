@@ -41,7 +41,7 @@ export function HomeNotFound({missing,onFile=[],memberId,name,note,pending=false
       {!!onFile.length&&<><p>{`Found only in a booklet or wording, not yet shown on ${own}:`}</p>{chips(onFile)}</>}
       {!!missing.length&&<small>A policy that is not uploaded may still cover these.</small>}
     </>}
-    {note&&<small>{note}</small>}
+    {note&&<small className="home-gaps-note">{note}</small>}
     <p className="home-gaps-foot"><Link className="text-link" href="/learn/types-of-cover">What each type of cover is for</Link>{!pending&&<><span aria-hidden="true"> · </span>{canManage?<Link className="text-link" href="/policies">Have one of these? Upload it</Link>:<span>Have one of these? The household owner can upload it.</span>}</>}</p>
   </section>;
 }

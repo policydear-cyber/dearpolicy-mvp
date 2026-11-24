@@ -689,7 +689,8 @@ export function figureChecksOf(readings: CheckedReading[]): FigureCheck[] {
 
 /** The household's set currency, read through the same database as the table (a fake in tests); null when it chose none or the read fails. */
 /** The household's set currency applied to the readings (household-currency.ts), with what the readings alone do not show:
- * the names each document shares with its policy's other documents, and the documents whose pages are not all known. */
+ * the names each document shares with its policy's other documents. A page the table cannot read does not hold a document (DC 24 Nov). */
+const GENERIC_PRODUCTS = new Set(["POLICYCONDITIONS", "POLICYWORDING", "POLICYDOCUMENT", "POLICYCONTRACT", "PRODUCTSUMMARY", "TERMSANDCONDITIONS", "TERMPLAN", "WHOLELIFE", "ENDOWMENT", "TERMLIFE", "BENEFITILLUSTRATION", "POLICYSCHEDULE", "CERTIFICATEOFINSURANCE", "TRAVELINSURANCE"]);
 async function withSetCurrency(db: Db, accountId: string, readings: CheckedReading[], docs: HouseholdDoc[], stored: Map<string, StoredReading>): Promise<CheckedReading[]> {
   const household = await householdCurrencyFromDb(db, accountId);
   if (!household) return readings;
@@ -700,17 +701,13 @@ async function withSetCurrency(db: Db, accountId: string, readings: CheckedReadi
     const out: string[] = [], pn = norm(d.file.policy_number), ip = norm(d.file.insurer) && norm(d.file.product_name) ? `${norm(d.file.insurer)}|${norm(d.file.product_name)}` : "";
     if (pn.length >= 4) out.push(pn);
     if (ip) out.push(ip);
+    // The product alone ties a wording whose file names no insurer to its schedule (a short or scanned wording often has none).
+    // A product name every insurer uses ("Policy Conditions", "Whole Life") ties nothing: it would hold unrelated insurers' policies.
+    const product = norm(d.file.product_name);
+    if (product.length >= 6 && !GENERIC_PRODUCTS.has(product)) out.push(`PRODUCT|${product}`);
     keys.set(d.id, out);
   }
-  // Pages the table never loads (unreadable, not checked) may print another currency: the document is unknown.
-  const unknown = new Set<string>();
-  try {
-    const rows = await db(`SELECT policy_id FROM policy_pages pp WHERE account_id=$1 AND NOT (${CHECKED_PAGE}) GROUP BY policy_id`, [accountId]);
-    for (const r of rows) unknown.add(String(r.policy_id));
-  } catch (e) { console.warn(`household currency: the unread-pages query failed, nothing filled: ${e instanceof Error ? e.message.slice(0, 120) : "error"}`); return readings; }
-  // A document read into no table (still waiting, or never read), whose role is not a letter or form, is unknown too.
-  for (const d of docs) if (!stored.has(d.id) && !NON_COVER_ROLES.has(d.file.document_role ?? "")) unknown.add(d.id);
-  const out = withHouseholdCurrency(readings, household, { keys, unknownDocuments: unknown, insurers,
+  const out = withHouseholdCurrency(readings, household, { keys, insurers,
     // Why a document keeps no currency (fixed codes and document ids only): read in the server log when an amount shows "not stated".
     onHold: (held) => { if (held.length) console.info(`household currency ${household}: ${held.length} of ${readings.length} documents held: ${JSON.stringify(held.map((h) => [h.documentId.slice(0, 8), h.why]))}`); } });
   return out;

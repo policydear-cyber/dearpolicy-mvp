@@ -79,10 +79,12 @@ test("D8 an unrelated document in another currency does not hold this one", () =
   assert.equal(out[0]!.benefits[0]!.currency, "SGD");
   assert.equal(out[1]!.benefits[0]!.currency, "USD");
 });
-test("D9 a page whose text is not known holds the document", () => {
+test("D9 a page whose text is not known no longer holds the document (DC 24 Nov): its bare amounts take the setting", () => {
   const r = bare();
   const unknown = { ...r, pageCurrencies: { named: [], allKnown: false } };
-  assert.equal(withHouseholdCurrency([unknown], "SGD")[0]!.benefits[0]!.currency, null);
+  const out = withHouseholdCurrency([unknown], "SGD")[0]!;
+  assert.equal(out.benefits[0]!.currency, "SGD");
+  assert.equal(out.covers[0]!.currency, "SGD");
 });
 test("D10 a percentage or a day count never takes a currency", () => {
   const r = bare();
@@ -93,10 +95,16 @@ test("D11 a reading with no page facts (not checked here) is left as it is", () 
   const r = { ...bare(), pageCurrencies: undefined };
   assert.equal(withHouseholdCurrency([r], "SGD")[0]!.benefits[0]!.currency, null);
 });
-test("D12 a document with pages the table never loads (unreadable, not checked) is held", () => {
-  const r = bare();
-  const out = withHouseholdCurrency([r], "SGD", { unknownDocuments: new Set([r.documentId]) });
-  assert.equal(out[0]!.benefits[0]!.currency, null);
+test("D12 an unreadable page does not hold, but a currency lettered on a readable line of the same document still does", () => {
+  const unreadable = { ...bare(), pageCurrencies: { named: [], allKnown: false } };
+  assert.equal(withHouseholdCurrency([unreadable], "SGD")[0]!.benefits[0]!.currency, "SGD");
+  const us = reading("d12", "MPA-12", "$100,000", "$50,000", "All amounts are in US$.");
+  const withUnreadable = { ...us, pageCurrencies: { named: us.pageCurrencies!.named, allKnown: false } };
+  assert.ok(withUnreadable.pageCurrencies.named.includes("USD"));
+  assert.equal(withHouseholdCurrency([withUnreadable], "SGD")[0]!.benefits[0]!.currency, null);
+  const lettered = reading("d13", "MPA-13", "US$100,000", "US$50,000");
+  const letteredUnreadable = { ...lettered, pageCurrencies: { named: lettered.pageCurrencies!.named, allKnown: false } };
+  assert.equal(withHouseholdCurrency([letteredUnreadable], "SGD")[0]!.benefits[0]!.currency, "USD", "a lettered amount is never replaced");
 });
 test("D13 a wording with no cover that letters US$ holds the schedule of the same policy, grouped by the file's policy number", () => {
   const schedule = reading("s2", "MPA-20417-S", "$100,000", "$50,000");
@@ -107,27 +115,30 @@ test("D13 a wording with no cover that letters US$ holds the schedule of the sam
   const alone = withHouseholdCurrency([schedule], "SGD", { keys });
   assert.equal(alone[0]!.benefits[0]!.currency, "SGD", "alone it is filled");
 });
-test("D14 a document never read into the table, of the same policy or insurer and product, holds the policy", () => {
+test("D14 a document never read into the table holds nothing: the policy's bare amounts take the setting", () => {
   const schedule = reading("s3", "MPA-7", "$100,000", "$50,000");
   const keys = new Map([["s3", ["ACME|SHIELD"]], ["u1", ["ACME|SHIELD"]]]);
-  assert.equal(withHouseholdCurrency([schedule], "SGD", { keys, unknownDocuments: new Set(["u1"]) })[0]!.benefits[0]!.currency, null);
-  const unrelated = new Map([["s3", ["ACME|SHIELD"]], ["u1", ["OTHER|PLAN"]]]);
-  assert.equal(withHouseholdCurrency([schedule], "SGD", { keys: unrelated, unknownDocuments: new Set(["u1"]) })[0]!.benefits[0]!.currency, "SGD");
+  assert.equal(withHouseholdCurrency([schedule], "SGD", { keys })[0]!.benefits[0]!.currency, "SGD");
 });
-test("D15 a cover-less wording that letters US$ holds every policy of its insurer, whatever the products are called, and every policy when it names no insurer", () => {
+test("D15 a cover-less wording that letters US$ holds every policy of its insurer, whatever the products are called, and never the whole household", () => {
   const schedule = reading("s4", "MPA-8", "$100,000", "$50,000");
   const wording = { ...reading("w4", "MPA-8", "$1", "$1", "All amounts in this policy are in US$."), covers: [] };
   const same = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "Acme Ltd"], ["w4", "ACME"]]) });
   assert.equal(same[0]!.benefits[0]!.currency, null);
+  // A wording tied to no insurer holds only itself: another policy of the household is filled (DC 24 Nov).
   const noInsurer = withHouseholdCurrency([schedule, wording], "SGD", {});
-  assert.equal(noInsurer[0]!.benefits[0]!.currency, null);
+  assert.equal(noInsurer[0]!.benefits[0]!.currency, "SGD");
+  let told: string[] = [];
+  withHouseholdCurrency([schedule, wording], "SGD", { onHold: (h) => { told = h.map((x) => x.documentId); } });
+  assert.deepEqual(told, ["w4"], "the wording itself, and nothing else, is held");
   for (const spelling of ["Merlion Mutual", "The Merlion Mutual Assurance Ltd", "Merlion Mutual Pte. Ltd.", "Merlion Mutual Insurance Co.", "Merlion Mutual Assurance (Singapore) Pte Ltd", "merlion mutual assurance limited", "Merlion Assurance"]) {
     const spelled = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "Merlion Mutual Assurance Ltd"], ["w4", spelling]]) });
     assert.equal(spelled[0]!.benefits[0]!.currency, null, `insurer spelled ${spelling}`);
   }
-  // The wording's insurer is filed under no policy (it may be the same insurer under another name): every policy is held.
+  // The accepted limit: an insurer under another name matches nothing, so its wording holds only itself; the schedule's own
+  // printed currency wins whenever it prints one.
   const alias = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "AIA Singapore"], ["w4", "American International Assurance Company, Ltd."]]) });
-  assert.equal(alias[0]!.benefits[0]!.currency, null, "AIA under its legal name");
+  assert.equal(alias[0]!.benefits[0]!.currency, "SGD", "AIA under its legal name");
   // Another insurer's policy of the household is filled when the wording's insurer is filed under a policy of its own.
   const own = reading("s5", "ZZZ-9", "$100,000", "$50,000");
   const other = withHouseholdCurrency([schedule, own, wording], "SGD", { insurers: new Map([["s4", "Other Insurer"], ["s5", "Acme Ltd"], ["w4", "ACME"]]) });
@@ -151,6 +162,20 @@ test("D17 each held document says why, for the server log", () => {
   let none: unknown[] = [{}];
   withHouseholdCurrency([bare()], "SGD", { onHold: (h) => { none = h; } });
   assert.deepEqual(none, []);
+});
+test("D18 a wording with no insurer that shares its product with a schedule holds that schedule, through the product key", () => {
+  const schedule = reading("s6", "MPA-6", "$100,000", "$50,000");
+  const wording = { ...reading("w6", "ZZZ-6", "$1", "$1", "All amounts in this policy are in US$."), covers: [] };
+  const keys = new Map([["s6", ["PRODUCT|ASTERSHIELDPLAN"]], ["w6", ["PRODUCT|ASTERSHIELDPLAN"]]]);
+  assert.equal(withHouseholdCurrency([schedule, wording], "SGD", { keys })[0]!.benefits[0]!.currency, null);
+  const other = new Map([["s6", ["PRODUCT|ASTERSHIELDPLAN"]], ["w6", ["PRODUCT|SOMETHINGELSE"]]]);
+  assert.equal(withHouseholdCurrency([schedule, wording], "SGD", { keys: other })[0]!.benefits[0]!.currency, "SGD");
+});
+test("D19 an insurer's accent does not hide its wording: Mérlion holds Merlion", () => {
+  const schedule = reading("s7", "MPA-7", "$100,000", "$50,000");
+  const wording = { ...reading("w7", "ZZZ-7", "$1", "$1", "All amounts in this policy are in US$."), covers: [] };
+  const held = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s7", "Merlion Mutual Ltd"], ["w7", "Mérlion Mutual Assurance"]]) });
+  assert.equal(held[0]!.benefits[0]!.currency, null);
 });
 console.log(`household-currency-display: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

@@ -6,9 +6,10 @@
  *
  * A currency the document letters ("S$", "US$", "HK$", "RM", "Currency: US Dollar") always wins and is never replaced.
  * A document is left as it is, its bare amounts with no currency, when it (or another document of the same policy):
- * - names a lettered currency other than the household's anywhere in its pages (it may be that currency's amount), or
- * - has a page whose text is not known (unreadable, not checked, empty), or
+ * - names a lettered currency other than the household's anywhere in the pages the table can read, or
  * - has an amount or cover already in another currency.
+ * A page whose text is not known (unreadable, not checked, empty) does NOT hold a document (DC 24 Nov: "yes", fill it): the
+ * household's currency is meant to fill every unmarked amount, and a currency printed on an amount's own line always wins.
  * A bare "$" or "dollars" names no currency (lib/documents/household-currency.currenciesNamed leaves it as "$").
  * Pure function over the checked readings; the caller reads the setting.
  */
@@ -25,7 +26,7 @@ const MONEY_PAYS = new Set<string>(["amount", "up_to", "per_day", "per_period", 
  * same twice. Two insurers sharing a first word are held together, which only ever leaves a currency not stated. */
 const GENERIC = new Set(["the", "ltd", "limited", "pte", "pty", "co", "company", "corp", "corporation", "inc", "plc", "bhd", "berhad", "assurance", "insurance", "ins", "singapore", "sg", "of", "and", "group", "holdings"]);
 export function insurerKey(name: string | null | undefined): string {
-  const words = String(name ?? "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w && !GENERIC.has(w));
+  const words = String(name ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w && !GENERIC.has(w));
   return words[0] ?? "";
 }
 
@@ -34,9 +35,8 @@ const key = (n: string | null | undefined) => String(n ?? "").toUpperCase().repl
 /** What the readings alone do not show (service.ts load()):
  * - `keys`: for a document, the names it shares with the documents of its policy: the policy number its file records and
  *   its insurer and product. A wording with no cover is grouped with its schedule by these;
- * - `unknownDocuments`: documents some of whose pages the table never loads (unreadable, not checked), or that were
- *   never read into the table: what they print is not known, so the policy they belong to is held. */
-export type CurrencyContext = { keys?: Map<string, string[]>; unknownDocuments?: Set<string>; insurers?: Map<string, string>;
+ */
+export type CurrencyContext = { keys?: Map<string, string[]>; insurers?: Map<string, string>;
   /** Told, for each document left with no currency, why (a short fixed code): for the server log only, never shown. */
   onHold?: (held: { documentId: string; why: string }[]) => void };
 
@@ -56,34 +56,22 @@ export function withHouseholdCurrency(readings: CheckedReading[], household: str
   const held = new Set<number>();
   const reasons = new Map<number, string>();
   const hold = (i: number, why: string) => { const root = find(i); if (!held.has(root)) { held.add(root); reasons.set(root, why); } };
-  // A document the table has no reading of, or only part of, holds every reading that shares a name with it.
-  const unknownKeys = new Set<string>();
-  const byId = new Map(readings.map((r, i) => [r.documentId, i]));
-  for (const id of ctx.unknownDocuments ?? []) {
-    const ks = ctx.keys?.get(id) ?? [];
-    if (byId.has(id)) hold(byId.get(id)!, "document with pages the table never loads");
-    for (const k of ks) unknownKeys.add(k);
-  }
-  readings.forEach((r, i) => {
-    const ks = [...r.covers.map((c) => key(c.policyNumber)).filter((k) => k.length >= 4), ...(ctx.keys?.get(r.documentId) ?? [])];
-    if (ks.some((k) => unknownKeys.has(k))) hold(i, "same policy as a document that is unknown");
-  });
-  // A document with no cover of its own (a wording, terms) that names another currency applies to its insurer's policies
-  // whatever the products are called, and to every policy when it names no insurer either (nothing ties it to one).
-  const wordingInsurers = new Set<string>();
-  let wordingNamesAny = false;
+  // A document with no cover of its own (a wording, terms) that names another currency holds its insurer's policies, whatever
+  // the products are called. A wording that names no insurer, or one no policy of the household is filed under, ties itself to
+  // no policy: it holds only itself (and the documents sharing a name with it, above). It never holds the whole household:
+  // a generic wording naming a currency list or a foreign-exchange clause said nothing about the other policies, and the
+  // household's own currency is meant to fill them (DC 24 Nov). An insurer spelled so differently that it matches nothing is
+  // the accepted limit: its policies print their own currency, which always wins.
+  const wordingInsurers = new Map<string, string>();
   for (const r of readings) {
-    if (r.covers.length || !(r.pageCurrencies?.named ?? []).some((c) => c !== household)) continue;
+    const other = (r.pageCurrencies?.named ?? []).filter((c) => c !== household);
+    if (r.covers.length || !other.length) continue;
     const ins = insurerKey(ctx.insurers?.get(r.documentId));
-    // An insurer that no policy of the household is filed under may be one of them under another name ("American
-    // International Assurance" for "AIA"): nothing ties it to a policy, so every policy is held.
-    const filedUnder = readings.some((o) => o.covers.length && insurerKey(ctx.insurers?.get(o.documentId)) === ins);
-    if (ins && filedUnder) wordingInsurers.add(ins); else wordingNamesAny = true;
+    if (ins && !wordingInsurers.has(ins)) wordingInsurers.set(ins, `${r.documentId.slice(0, 8)}: ${other.join(",")}`);
   }
   readings.forEach((r, i) => {
-    const mine = insurerKey(ctx.insurers?.get(r.documentId));
-    const sameInsurer = !!mine && wordingInsurers.has(mine);
-    if (wordingNamesAny || sameInsurer) hold(i, wordingNamesAny ? "a wording of no known insurer names another currency" : "a wording of the same insurer names another currency");
+    const why = wordingInsurers.get(insurerKey(ctx.insurers?.get(r.documentId)));
+    if (why) hold(i, `a wording of the same insurer names another currency (${why})`);
   });
   readings.forEach((r, i) => {
     const named = r.pageCurrencies?.named ?? [];
@@ -91,7 +79,6 @@ export function withHouseholdCurrency(readings: CheckedReading[], household: str
       || [...r.covers, ...r.benefits].some((x) => !!x.currency && x.currency !== household);
     if (other) hold(i, "names or prints another currency");
     else if (!r.pageCurrencies) hold(i, "no page information");
-    else if (!r.pageCurrencies.allKnown) hold(i, "a page is not known (empty, unreadable or not checked)");
   });
   ctx.onHold?.(readings.flatMap((r, i) => (held.has(find(i)) ? [{ documentId: r.documentId, why: reasons.get(find(i)) ?? "" }] : [])));
   return readings.map((r, i) => {
