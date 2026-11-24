@@ -7,37 +7,63 @@
  * would hide a correct amount (Critic #526, e593f88 H1). */
 /** Countries and kinds of dollar a text may write out beside a dollar sign or after "Currency:". */
 const COUNTRY_WORD = /^(?:singapore|us|usa|united states|american|hong kong|hk|taiwan(?:ese)?|macau|macao|new zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|ca|can|cdn|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|barbad(?:os|ian)|belize|bermuda(?:n)?|cayman|guyana|liberia(?:n)?|namibia(?:n)?|ecuador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|uk|european|euro|eu|au|aus|sg|sgp)$/;
+const countryCode = (w: string) => /^(?:singapore|sg|sgp|singaporean)$/.test(w) ? "SGD" : /^(?:us|usa|united states|american)$/.test(w) ? "USD" : /^(?:hk|hong kong)$/.test(w) ? "HKD" : /^(?:au|australia|australian)$/.test(w) ? "AUD" : COUNTRY_WORD.test(w) ? "?" : null;
 export function currenciesNamed(text: string): string[] {
   const out: string[] = [];
   const t = String(text ?? "");
   let rest = t;
-  // A dollar sign with letters against it names a currency, whichever way the letters are written. Any 1 to 4 letters (dots,
-  // an apostrophe or a space between them) before the sign, glued or up to three spaces away or with a dash or slash between
-  // ("US $", "U. S. $", "HKG $", "S'pore $", "US-$", "US/$"); letters straight after it ("$US", "$ US 5,000", "($ US)", "$ (US)",
-  // "($ - US)"); and letters before "($)" ("Sum Assured US ($)"). A known one maps to its code, any other to "?" (another
-  // currency): an unread lettered form is only ever held, never filled with the household's currency (Test engineer #577 F1,
-  // Critic #577). Ordinary short words ("Sum $", "Fee $", "to $") are not letters of a currency.
+  // A dollar sign with letters against it names a currency. Glued or dotted letters before the sign ("NT$", "U.S.$", "ICU$") are
+  // a currency, a known one by its code and any other as "another currency". Spaced letters before it ("US $", "HKG $",
+  // "U. S. $") only when they are a known currency's letters (CODE_OF): "ICU $200", "OPD $50", "Per day $100" and "Plan A $100"
+  // are the benefit's own label and stay a bare dollar, which takes the household's currency (Critic #579). After the sign or the
+  // figure ("$US", "$ in US", "$ (US)", "$100,000 US", "$100 HK", "HK 100 $"), the same known letters. Anything unread here is
+  // only ever held, never filled with the household's currency (Test engineer and Critic #577, #579).
   const NOT_CURRENCY = new Set(["in", "of", "to", "is", "at", "up", "on", "by", "as", "no", "or", "be", "if", "it", "an", "and", "the", "for", "per", "are", "add", "get",
     "sum", "sums", "fee", "fees", "tax", "max", "min", "pay", "paid", "cost", "only", "plus", "less", "each", "net", "age", "cash", "loss", "free", "plan", "part", "over",
-    "than", "from", "upto", "not", "any", "all", "now", "our", "your", "was", "has", "may", "per", "via", "etc", "amt", "upon", "also", "then", "that", "this", "with", "rate", "cap", "bal"]);
-  const CODE_OF: Record<string, string> = { S: "SGD", SG: "SGD", SGP: "SGD", SIN: "SGD", SING: "SGD", US: "USD", USA: "USD", HK: "HKD", HKG: "HKD", A: "AUD", AU: "AUD", AUS: "AUD", AUST: "AUD" };
-  const dollarOf = (prefix: string): string | null => {
-    const p = prefix.replace(/[^A-Za-z]/g, "").toUpperCase();
-    if (!p || NOT_CURRENCY.has(p.toLowerCase())) return null;
-    return CODE_OF[p] ?? "?";
-  };
-  const LETTERS = String.raw`(?:[A-Za-z](?:[.' ]{1,2}[A-Za-z]){1,3}(?![A-Za-z])|[A-Za-z]{1,4})`;
-  for (const re of [new RegExp(String.raw`(?<![A-Za-z])(${LETTERS})\.?\s{0,3}[-/]?\s{0,2}\$`, "g"),
-    new RegExp(String.raw`\$\s{0,2}[(-]?\s{0,2}(${LETTERS})(?![A-Za-z])`, "g"),
-    new RegExp(String.raw`(?<![A-Za-z])(${LETTERS})\.?\s?\(\s*\$\s*\)`, "g")]) {
-    for (const m of rest.matchAll(re)) { const c = dollarOf(m[1]!); if (c) out.push(c); }
-    rest = rest.replace(re, (m, g: string) => (dollarOf(g) ? " " : m));
+    "than", "from", "upto", "not", "any", "all", "now", "our", "your", "was", "has", "may", "via", "etc", "amt", "upon", "also", "then", "that", "this", "with", "rate", "cap", "bal", "day", "days"]);
+  const CODE_OF: Record<string, string> = { S: "SGD", SG: "SGD", SGP: "SGD", SIN: "SGD", SING: "SGD", SPORE: "SGD", US: "USD", USA: "USD", HK: "HKD", HKG: "HKD", A: "AUD", AU: "AUD", AUS: "AUD", AUST: "AUD",
+    NZ: "?", NZL: "?", C: "?", CA: "?", CAN: "?", CDN: "?", NT: "?", TW: "?", TWN: "?", MY: "?", MX: "?", MEX: "?", BN: "?", FJ: "?", R: "?", RM: "MYR" };
+  const norm = (prefix: string) => prefix.replace(/[^A-Za-z]/g, "").toUpperCase();
+  const known = (prefix: string): string | null => CODE_OF[norm(prefix)] ?? null;
+  const LETTERS = String.raw`(?:[A-Za-z](?:[.' ]{1,2}[A-Za-z]){1,3}(?![A-Za-z])|[Ss]'pore|[A-Za-z]{1,4})`;
+  // Before the sign: ( [US] $ ) allowed in brackets.
+  const before = new RegExp(String.raw`(?<![A-Za-z])[\[({]?(${LETTERS})[\])}]?\.?(\s{0,3}[-/]?\s{0,2})\$`, "g");
+  for (const m of rest.matchAll(before)) {
+    const word = m[1]!, gap = m[2]!, n = norm(word);
+    if (!n || NOT_CURRENCY.has(n.toLowerCase())) continue;
+    const spaced = gap.length > 0 && gap.trim() === "";
+    if (spaced && !known(word)) continue;
+    // A lone "A" or "C" after a word is a label ("Plan A $100", "Class C $50"), not Australia or Canada.
+    if (spaced && (n === "A" || n === "C") && /[A-Za-z]{2,} +[\[({]?$/.test(rest.slice(Math.max(0, m.index! - 14), m.index!))) continue;
+    out.push(known(word) ?? "?");
   }
+  rest = rest.replace(before, (m, w: string, gap: string, off: number) => {
+    const n = norm(w), spaced = gap.length > 0 && gap.trim() === "";
+    if (!n || NOT_CURRENCY.has(n.toLowerCase()) || (spaced && !known(w))) return m;
+    if (spaced && (n === "A" || n === "C") && /[A-Za-z]{2,} +[\[({]?$/.test(rest.slice(Math.max(0, off - 14), off))) return m;
+    return " ";
+  });
+  // After the sign: glued letters ("$US500", "$HK", "$A", "$NZ 100") are a currency; spaced ones, with a dash, colon, slash,
+  // "in" or any bracket, only a known currency's letters ("$ US 5,000", "$ in US", "$ (in US)", "$ [US]", "$ / US").
+  const afterGlued = /\$([A-Za-z]{1,3})(?![A-Za-z])/g;
+  for (const m of rest.matchAll(afterGlued)) { const n = norm(m[1]!); if (!NOT_CURRENCY.has(n.toLowerCase())) out.push(known(n) ?? "?"); }
+  rest = rest.replace(afterGlued, (m, w: string) => (NOT_CURRENCY.has(norm(w).toLowerCase()) ? m : " "));
+  const afterSpaced = /\$\s{0,2}[\[({\/:\-]*\s{0,2}(?:in\s+)?[\[({]?\s{0,2}([A-Za-z]{1,4})(?![A-Za-z])/g;
+  for (const m of rest.matchAll(afterSpaced)) { const c = known(m[1]!); if (c) out.push(c); }
+  // A country written out after the sign: "$ - Singapore", "$ in Hong Kong".
+  for (const m of t.matchAll(/\$\s*[\[({\/:\-]?\s*(?:in\s+)?([A-Za-z]{4,}(?: [A-Za-z]+)?)/g)) { const w = m[1]!.toLowerCase(); const c = countryCode(w) ?? countryCode(w.split(" ")[0]!); if (c) out.push(c); }
+  // After a figure: "$100,000 US", "$100 (HK)", "$100HK", "$ 100 A": a known currency's letters straight after a figure the sign precedes.
+  for (const m of t.matchAll(/\$\s?\d[\d,.]*\s*[\[({]?\s*([A-Za-z]{1,4})\s*[\])}]?(?![A-Za-z\d])/g)) { const c = known(m[1]!); if (c) out.push(c); }
+  // Letters, then a figure, then the sign ("HK 100 $").
+  for (const m of t.matchAll(/(?<![A-Za-z])([A-Za-z]{1,4})\s\d[\d,.]*\s?\$/g)) { const c = known(m[1]!); if (c) out.push(c); }
+  // Letters before "($)" ("Sum Assured US ($)", "Hong Kong ($)").
+  for (const m of t.matchAll(new RegExp(String.raw`(?<![A-Za-z])(${LETTERS})\.?\s?\(\s*\$\s*\)`, "g"))) { const c = known(m[1]!); if (c) out.push(c); else if (!NOT_CURRENCY.has(norm(m[1]!).toLowerCase()) && norm(m[1]!).length <= 2) out.push("?"); }
   // "Dollars (US)", "$ (Singapore)", "Hong Kong ($)": a country or code in brackets beside the dollar word or sign.
-  for (const m of t.matchAll(/(?:\bdollars?|\$)\s*\(\s*([A-Za-z.' ]{1,16}?)\s*\)/gi)) {
-    const w = m[1]!.toLowerCase().replace(/[.']/g, "").replace(/\s+/g, " ");
-    out.push(/^(?:singapore|sg|sgp|sgd|sing|singaporean)$/.test(w) ? "SGD" : /^(?:us|usa|usd|united states|american)$/.test(w) ? "USD" : /^(?:hk|hkg|hkd|hong kong)$/.test(w) ? "HKD" : /^(?:au|aus|aud|australia|australian|a)$/.test(w) ? "AUD" : COUNTRY_WORD.test(w) ? "?" : "$");
-  }
+  const named = (raw: string) => { const w = raw.toLowerCase().replace(/[.']/g, "").replace(/\s+/g, " ").trim(); return countryCode(w) ?? (w === "a" ? "AUD" : null); };
+  for (const m of t.matchAll(/(?:\bdollars?|\$)\s*\(\s*([A-Za-z.' ]{1,16}?)\s*\)/gi)) out.push(named(m[1]!) ?? "$");
+  for (const m of t.matchAll(/\bdollars?\s*(?:[-:\/]|\bin\b)\s*\(?\s*([A-Za-z]+(?: [A-Za-z]+)?)/gi)) { const c = named(m[1]!) ?? named(m[1]!.split(" ")[0]!); if (c) out.push(c); }
+  // A country written out before "($)": "Hong Kong ($)", "All amounts in Singapore ($)".
+  for (const m of t.matchAll(/\b(singapore|hong\s?kong|australia|new\s?zealand|canada|united\s?states|taiwan|malaysia)\s*\(\s*\$\s*\)/gi)) out.push(countryCode(m[1]!.toLowerCase().replace(/\s+/g, " ")) ?? countryCode(m[1]!.toLowerCase().replace(/\s?/g, " ").trim()) ?? "?");
   for (const _ of rest.matchAll(/\$/g)) out.push("$");
   // Any other sign ("€", "£", "₱" are on the list; "¥", "₹", "฿" ... are not).
   for (const m of t.matchAll(/\p{Sc}/gu)) {
@@ -89,7 +115,6 @@ export function currenciesNamed(text: string): string[] {
   for (const w of ["yen", "yuan", "renminbi", "rupees?", "rupiah", "baht", "won", "francs?", "dong", "kr(?:ona|one|oner)", "dirhams?", "riyals?", "rials?", "rand", "kyat", "riel", "taka", "patacas?", "dinars?", "lira", "roubles?", "rubles?", "reais", "zloty", "shekels?", "kip", "rufiyaa", "liras?"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
   // A currency named in words with no sign or code beside the figure ("Currency: Singapore", "Currency - US", "In Singapore
   // currency"): the named one, or another currency (Test engineer #577 F2).
-  const countryCode = (w: string) => /^(?:singapore|sg|sgp|singaporean)$/.test(w) ? "SGD" : /^(?:us|usa|united states|american)$/.test(w) ? "USD" : /^(?:hk|hong kong)$/.test(w) ? "HKD" : /^(?:au|australia|australian)$/.test(w) ? "AUD" : COUNTRY_WORD.test(w) ? "?" : null;
   for (const m of t.matchAll(/\bcurrency\s*[:\-\t ]\s*([A-Za-z.]+(?: [A-Za-z]+)?)/gi)) {
     const w = m[1]!.toLowerCase().replace(/\./g, "").trim();
     const c = countryCode(w) ?? countryCode(w.split(" ")[0]!);

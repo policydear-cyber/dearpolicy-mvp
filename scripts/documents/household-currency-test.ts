@@ -265,6 +265,20 @@ async function main() {
     for (const house of ["USD", "MYR"]) assert.ok(!shown([{ ...death, currency: null }], [p2("Currency: Singapore\n" + BARE)], house).some((x) => x === `${house} 100000`));
   });
 
+  // Critic #579: letters after the figure, after the sign with a linking word or bracket, "Dollars - US"; and the benefit's
+  // own label before the sign ("ICU $200", "Plan A $100") is NOT a currency: it fills with the household's currency.
+  const afterForms = ["Sum insured $100,000 US", "$100,000 (US)", "$100 HK", "($100 HK)", "$100HK", "$ 100 A", "$100 S", "$ in US", "$ (in US)", "$ [US]", "$ {US}", "$ / US", "[US] $", "HK 100 $",
+    "Dollars - US", "Dollars: US", "Dollars in US", "Dollars (US)", "$ - US", "$: US", "$ in HK", "$ - Singapore"];
+  for (const t of afterForms) await test(`C579 '${t}' is a named currency, not a bare $`, () => { const r = HC.currenciesNamed(t); assert.ok(r.some((c) => c !== "$"), JSON.stringify(r)); });
+  for (const t of ["ICU $200", "OPD $50", "GP $30", "IP $100", "ER $100", "CI $100,000", "TPD $100", "ADB $100", "Per day $100", "Option B $100", "Plan A $100", "Class A $100", "Section A $100", "Rider A $100", "Plan A $100 per day"])
+    await test(`C579 control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
+  await test("C579 'Plan A $100' on a schedule fills the household currency; 'A $100' in a cell does not", () => {
+    const line = (m: string) => shown([{ ...death, currency: null }], [p2(`Life Assured\tMei Ling Tan\nDeath\tIn Force\t${m}100,000.00`)], "SGD");
+    assert.deepEqual(line("Plan A $"), ["SGD 100000"]);
+    assert.deepEqual(line("ICU $"), ["SGD 100000"]);
+    assert.ok(!line("A $").includes("SGD 100000"));
+  });
+
   console.log(`household-currency-test: ${passed} passed, ${failures.length} failed`);
   if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }
 }
