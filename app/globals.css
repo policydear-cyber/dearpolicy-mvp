@@ -2157,3 +2157,14 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
 @media (prefers-reduced-motion: no-preference) and (hover: hover) {
   a.coverage-card:hover, a.action-card:hover, a.claim-session-card:hover { transform: translateY(-2px); }
 }
+
+/* Home polish. The upload link is the main action for a new or partly filled household, so it reads as a button. */
+.home-cards-head .text-link { min-height: 44px; padding: 0 16px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); gap: 8px; }
+.home-cards-head .text-link:hover { border-color: var(--brand-ink); text-decoration: none; }
+/* "Not fully read" is the household's key trust note: slate (unresolved, not a fault), a dashed edge, readable ink. */
+.home-gaps .home-gaps-note { padding: 8px 0 8px 12px; border-left: 2px dashed var(--unresolved-line); color: var(--unresolved-text); font-size: var(--fs-sm); line-height: 1.5; }
+/* Loading: quiet placeholder sheets under the word, so the page never shows a verdict before its data has arrived. */
+.home-loading { display: grid; gap: 12px; align-content: start; min-height: 440px; }
+.home-loading::after { content: ""; height: 220px; border-radius: var(--r-sheet); background: linear-gradient(90deg, var(--surface-2) 0%, var(--bg-2) 50%, var(--surface-2) 100%); background-size: 200% 100%; animation: dp-shimmer 1.4s linear infinite; }
+@keyframes dp-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .home-loading::after { animation: none; background: var(--surface-2); } }
