@@ -183,7 +183,9 @@ async function main() {
 
       asUser("d0000000-0000-4000-8000-000000000005");
       const res = await revokeRoute(requestFor(`http://localhost/api/household/invitations/${id}`, { household: householdId, method: "DELETE" }), { params: Promise.resolve({ id }) } as any);
-      assert.equal(res.status, 404, "RLS's household_invitations_update policy (owner-only) must refuse a non-owner revocation");
+      // One owner per household: the route checks for the owner first (403); RLS's owner-only
+      // household_invitations_update still stands underneath. Before, the filtered UPDATE surfaced as 404.
+      assert.equal(res.status, 403, "a non-owner revocation must be refused by the owner check");
 
       const row = await pool.query<{ revoked_at: string | null }>(`SELECT revoked_at FROM household_invitations WHERE id=$1`, [id]);
       assert.equal(row.rows[0].revoked_at, null);

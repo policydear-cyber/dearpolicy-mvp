@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { backfillSemanticIndex, semanticIndexState } from "@/lib/rag/backfill";
 
 export const runtime = "nodejs";
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   let householdId: string;
   try {
-    householdId = (await requireHouseholdContext(request)).householdId;
+    householdId = (await requireHouseholdOwnerContext(request)).householdId;
   } catch (error) {
     return routeErrorResponse(error);
   }

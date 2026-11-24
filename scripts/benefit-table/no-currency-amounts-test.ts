@@ -132,9 +132,11 @@ test("H1 household chose S$, no currency anywhere: S$, resolved, and the card sa
   assert.deepEqual(r.basis, ["Currency from your account settings."]);
   assert.deepEqual(ask(build(LINES, { currency: "SGD" }), /^Accelerated Disability/).cards.map((c) => c.text), ["S$13,500"]);
 });
-test("H2 household chose S$ but the document prints USD, a bare $ or ringgit: never filled", () => {
+test("H2 household chose S$ but the document prints USD or ringgit: never filled; a bare $ is read as S$ (DC 22 Nov)", () => {
   assert.deepEqual(ask(build(LINES, { currency: "SGD", extra: "Premium Paid:\tUSD 150.00" }), /^Total and Permanent Disability/).cards, []);
-  assert.deepEqual(ask(build(LINES, { currency: "SGD", extra: "Premium Amount:\t$181.44" }), /^Total and Permanent Disability/).cards, []);
+  const bare = ask(build(LINES, { currency: "SGD", extra: "Premium Amount:\t$181.44" }), /^Total and Permanent Disability/);
+  assert.deepEqual(bare.cards.map((c) => [c.text, c.currencyResolved]), [["S$100,000", true]]);
+  assert.deepEqual(bare.basis, ["Currency from your account settings."]);
   const myr = ask(build(LINES, { currency: "SGD", head: "Currency : Ringgit Malaysia\nComponent\tStatus\tSum Assured\tComponent Premium\tCover Start Date\tCover Expiry Date" }), /^Total and Permanent Disability/);
   assert.ok(myr.cards.every((c) => !c.text.startsWith("S$")), JSON.stringify(myr.cards));
 });

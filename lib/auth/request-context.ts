@@ -41,7 +41,7 @@ import { requireCurrentUser, UnauthenticatedError, StaleAuthenticationError, typ
 import { recordErrorEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { classifyError } from "@/lib/telemetry/errors";
-import { resolveActiveHouseholdId, ForbiddenError, NotFoundError, ConflictError, NotHouseholdOwnerError } from "@/lib/household/repo";
+import { resolveActiveHouseholdId, requireHouseholdOwner, ForbiddenError, NotFoundError, ConflictError, NotHouseholdOwnerError } from "@/lib/household/repo";
 
 /** The active-household cookie set by POST /api/household/switch. Plain
  * (non-httpOnly) is fine -- it names which household the UI is currently
@@ -75,6 +75,23 @@ export async function requireHouseholdContext(request: NextRequest): Promise<Hou
     throw new NoHouseholdError("This account has no household yet.");
   }
   return { userId: user.id, householdId, user };
+}
+
+/** requireHouseholdContext() plus "the caller is this household's owner".
+ * A household has exactly one owner, who alone can change anything:
+ * upload, delete, re-read or link documents, add/edit/remove people, edit
+ * benefits, change settings, invite, remove, export and delete. Members can
+ * view and use Ask, and can leave. Every route handler that changes
+ * household data calls this instead of requireHouseholdContext();
+ * scripts/route-inventory-regressions.ts lists the few member-allowed
+ * changes (Ask, cancelling an Ask, reporting a wrong figure, switching
+ * household, accepting an invitation, leaving) and fails on any other
+ * mutating handler that skips it. A member gets 403 "Only the household
+ * owner can do this." */
+export async function requireHouseholdOwnerContext(request: NextRequest): Promise<HouseholdContext> {
+  const ctx = await requireHouseholdContext(request);
+  await requireHouseholdOwner(ctx.userId, ctx.householdId);
+  return ctx;
 }
 
 /** Maps every error class the authorization/household layer can throw to

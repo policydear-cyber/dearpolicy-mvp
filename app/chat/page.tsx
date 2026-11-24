@@ -1,6 +1,7 @@
 "use client";
 
 import { Icon } from "@/components/icons";
+import { useCanManageHousehold } from "@/components/household-role";
 import Link from "next/link";
 import { FormEvent,Suspense,useCallback,useEffect,useRef,useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -139,6 +140,8 @@ function ChatContent(){
   const [historyError,setHistoryError]=useState("");
   const [confirmDeleteChatId,setConfirmDeleteChatId]=useState<string|null>(null);
   const [confirmClearHistory,setConfirmClearHistory]=useState(false);
+  // Saved chats belong to the household: only its owner deletes them (components/household-role). Everyone can ask.
+  const canManage=useCanManageHousehold();
   const requestVersion=useRef(0);
   const controller=useRef<AbortController|null>(null);
   const jobId=useRef<string|null>(null);
@@ -381,10 +384,10 @@ function ChatContent(){
     <UpgradePrompt place="ask"/>
     {/* A first-time user has no previous chats: the empty panel is left out rather than shown as "Previous chats · 0". */}
     {history.length||historyCursor?<details className="chat-history"><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
-      <div className="history-actions"><button className={`mini-button${confirmClearHistory?" danger armed":""}`} disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm delete all":"Delete all chats"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>
+      {canManage?<div className="history-actions"><button className={`mini-button${confirmClearHistory?" danger armed":""}`} disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm delete all":"Delete all chats"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>:<p className="muted owner-only-note" data-testid="owner-only-note">Only the household owner can delete saved chats.</p>}
       {!history.length?<p>No previous chats yet.</p>:<ul>{history.map(chat=><li key={chat.id}>
         <button className="history-open" disabled={busy} onClick={()=>void restore(chat.id)} aria-current={conversationId===chat.id?"true":undefined}>{chat.title}<small>{family.find(p=>p.id===chat.family_member_id)?.display_name??"Whole family"} · {sgDate(chat.updated_at)}</small></button>
-        <button className={`mini-button${confirmDeleteChatId===chat.id?" danger armed":""}`} onClick={()=>void removeChat(chat.id)} aria-label={"Delete chat: "+chat.title}>{confirmDeleteChatId===chat.id?"Confirm delete":"Delete"}</button>
+        {canManage&&<button className={`mini-button${confirmDeleteChatId===chat.id?" danger armed":""}`} onClick={()=>void removeChat(chat.id)} aria-label={"Delete chat: "+chat.title}>{confirmDeleteChatId===chat.id?"Confirm delete":"Delete"}</button>}
         {confirmDeleteChatId===chat.id&&<button className="mini-button" onClick={()=>setConfirmDeleteChatId(null)}>Cancel</button>}
       </li>)}</ul>}
       {historyCursor?<button className="mini-button" onClick={()=>void refreshHistory(historyCursor).catch(()=>setHistoryError("Could not load more chats."))}>Load more chats</button>:null}

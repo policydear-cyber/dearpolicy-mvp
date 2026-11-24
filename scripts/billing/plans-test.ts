@@ -393,7 +393,7 @@ test("landing page: pricing before sign-up, every card starts free; Plan usage u
   const usage = readFileSync("app/usage/page.tsx", "utf8");
   assert.match(usage, /!sub\.isOwner\)return <small>The household&rsquo;s owner can upgrade/);
   assert.match(usage, /!sub\.billingEnabled\)return <small>Upgrades open soon/);
-  for (const r of ["checkout", "portal"]) assert.match(readFileSync(`app/api/billing/${r}/route.ts`, "utf8"), /requireHouseholdOwner\(ctx\.userId, ctx\.householdId\)/);
+  for (const r of ["checkout", "portal"]) assert.match(readFileSync(`app/api/billing/${r}/route.ts`, "utf8"), /requireHouseholdOwnerContext\(request\)/);
 });
 
 test("plan badge and upgrade prompts: owner on Free with payments on only; every number from the plans table (DC, 19 Nov)", async () => {

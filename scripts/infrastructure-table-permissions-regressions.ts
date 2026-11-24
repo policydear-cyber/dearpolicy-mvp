@@ -42,7 +42,7 @@ export const MIGRATION_ORDER = [
   "sql/schema.sql", "sql/benefit-catalog.sql", "sql/cover-conditions.sql", "sql/coverage-ledger.sql", "sql/model-usage.sql",
   "sql/chat-upgrade.sql", "sql/claim-composition.sql", "sql/claim-evidence.sql", "sql/critical-illness.sql", "sql/disability.sql",
   "sql/model-provenance.sql", "sql/rate-limit.sql", "sql/background-jobs.sql", "sql/lifecycle.sql", "sql/claim-reviewers.sql",
-  "sql/processing-failure-diagnostics.sql", "sql/storage-purge.sql", "sql/household-rls.sql", "sql/infrastructure-rls.sql",
+  "sql/processing-failure-diagnostics.sql", "sql/storage-purge.sql", "sql/admin-audit-log.sql", "sql/household-rls.sql", "sql/infrastructure-rls.sql",
   // Optional household tables (each needs household-rls.sql and sets its own RLS, policies and grants).
   "sql/policy-member-exclusions.sql", "sql/detected-name-dismissals.sql", "sql/benefit-table.sql",
   "sql/benefit-figure-confirmations.sql", "sql/policy-folders.sql", "sql/policy-folders-auto.sql", "sql/household-plans.sql", "sql/policy-not-renewed.sql",
@@ -320,8 +320,11 @@ async function main() {
       record(removed.ok && removed.rows === 0, `another household can delete ${t} rows of household A`);
       const own = await attempt({ role: "authenticated", userId: memberA }, `SELECT 1 FROM public.${t} WHERE account_id=$1`, [householdA]);
       record(own.ok && own.rows === 1, `control: a member of household A cannot read its own ${t} row (${own.error})`);
-      const ownWrite = await attempt({ role: "authenticated", userId: memberA }, insert, [...params]);
-      record(ownWrite.ok, `control: a member of household A cannot add a ${t} row (${ownWrite.error})`);
+      // One owner per household: a plain member reads these rows but can't write them; the owner can.
+      const ownWrite = await attempt({ role: "authenticated", userId: memberA }, insert, [...params]); matrix++;
+      record(!ownWrite.ok && /row-level security/i.test(ownWrite.error), `a plain member (not the owner) of household A can add a ${t} row`);
+      const ownerWrite = await attempt({ role: "authenticated", userId: ownerA }, insert, [...params]);
+      record(ownerWrite.ok, `control: the owner of household A cannot add a ${t} row (${ownerWrite.error})`);
     }
 
     // Lifecycle specifics named in the requirements.

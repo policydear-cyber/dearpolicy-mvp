@@ -134,7 +134,7 @@ export default function HouseholdPage() {
               <div className="field"><label htmlFor="hh-name">Name</label><input id="hh-name" value={nameInput} onChange={(e) => setNameInput(e.target.value)} maxLength={200} required disabled={!isOwner} /></div>
               {isOwner && <button className="button primary" type="submit" disabled={!nameInput.trim() || nameInput.trim() === householdName}>Save name</button>}
             </form>
-            {!isOwner && <p className="lead" style={{ marginTop: 8 }}>Only an owner of this household can change its name.</p>}
+            {!isOwner && <p className="lead" style={{ marginTop: 8 }}>Only the household owner can change its name.</p>}
             {status && <div className="upload-status">{status}</div>}
           </section>
 
@@ -150,7 +150,7 @@ export default function HouseholdPage() {
               </div>
               {isOwner && <button className="button primary" type="submit" disabled={!currencyInput || currencyInput === currencySaved}>Save currency</button>}
             </form>
-            {!isOwner && <p className="lead" style={{ marginTop: 8 }}>Only an owner of this household can change its currency.</p>}
+            {!isOwner && <p className="lead" style={{ marginTop: 8 }}>Only the household owner can change its currency.</p>}
             {currencyStatus && <div className="upload-status">{currencyStatus}</div>}
           </section>
 

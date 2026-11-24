@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
 import { Icon } from "@/components/icons";
+import { useCanManageHousehold } from "@/components/household-role";
 import { documentCardTitle } from "@/lib/policies/document-name";
 
 
@@ -53,6 +54,7 @@ export function HomeAsk({ memberId, name }: { memberId?: string; name?: string |
  * on them. Nothing when nothing needs them (DC 16 Nov: Home only shows what matters). Built only from GET /api/policies and
  * GET /api/claims, the same data the Documents and Claims pages show. */
 export function HomeAttention() {
+  const canManage = useCanManageHousehold();
   const [policies, setPolicies] = useState<Policy[] | null>(null);
   const [claims, setClaims] = useState<Claim[] | null>(null);
   const [notFamily, setNotFamily] = useState<string[]>([]);
@@ -68,10 +70,13 @@ export function HomeAttention() {
   const failed = all.filter((p) => p.processing_status === "failed");
   if (failed.length) items.push({ key: "failed", tone: "warn", href: failed.length === 1 ? `/policies#doc-${failed[0].id}` : "/policies", action: "Open",
     title: failed.length === 1 ? (!failed[0].product_name?.trim() && !failed[0].insurer?.trim() ? "One document couldn’t be read" : `“${docName(failed[0])}” couldn’t be read`) : `${failed.length} documents couldn’t be read`,
-    detail: failed.length === 1 ? "Answers can’t use it until it is read. You can try again or upload a clearer copy." : "Answers can’t use them until they are read. You can try again or upload clearer copies." });
+    detail: failed.length === 1
+      ? `Answers can’t use it until it is read. ${canManage ? "You can" : "The household owner can"} try again or upload a clearer copy.`
+      : `Answers can’t use them until they are read. ${canManage ? "You can" : "The household owner can"} try again or upload clearer copies.` });
   const names = all.filter((p) => p.personal_coverage_confirmed && p.processing_status === "ready")
     .flatMap((p) => p.detected_people.filter((n) => !n.matchedFamilyMemberId && !notFamily.includes(`${p.id}:${n.name}`)).map((n) => ({ policy: p, name: n.name })));
-  if (names.length) items.push({ key: "names", tone: "info", href: `/policies#doc-${names[0].policy.id}`, action: "Confirm",
+  // Saying who a printed name is belongs to the household owner (components/household-role): not a member's to-do.
+  if (names.length && canManage) items.push({ key: "names", tone: "info", href: `/policies#doc-${names[0].policy.id}`, action: "Confirm",
     title: names.length === 1 ? `Who is “${names[0].name}”?` : `${names.length} names to confirm`,
     detail: names.length === 1 ? `Named in ${docName(names[0].policy)}. DearPolicy won’t use this document for that person until you say who they are.` : "Named in your documents. DearPolicy won’t use those documents for these people until you say who they are." });
   for (const c of claims ?? []) {

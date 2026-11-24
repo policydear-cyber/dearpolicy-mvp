@@ -225,6 +225,33 @@ export const NOT_CHECKED = "[amount not checked]";
 // A figure never ends in a comma: the sentence's own comma after it stays.
 const ANY_FIGURE = new RegExp(String.raw`(?:US\$|S\$|\$)?(?:` + DATE + String.raw`|\d(?:[\d,]*\d)?(?:\.\d+)?%?)`, "gi");
 const notChecked = (line: string) => unglue(line).replace(ANY_FIGURE, NOT_CHECKED);
+/** Page furniture: a line whose only figures are the company's registration number or the date the page was printed
+ * ("Reg. No 199002477Z (Date Printed: 19-Nov-2026)"). Neither is a cover amount, a premium or a policy date, and an image
+ * reader often drops or reshapes a small footer. Such a line is still shown as not checked (its digits are never used),
+ * but it is not an amount that failed its check, so it never makes a page "read in part". Any other figure on the line,
+ * or any other line, is judged as before. */
+const NUMBERED = String.raw`\.?\s*[:#-]?\s*(?=[A-Za-z0-9/-]*\d)[A-Za-z0-9][A-Za-z0-9/-]*`;
+const FURNITURE = new RegExp(
+  // "Co. Reg. No. 1999…Z", "GST Reg No. M2-…", "Business Registration No. …", a bare "Reg. No …"; "registration" only after
+  // one of those words (a policy's or a vehicle's registration number is not page furniture).
+  String.raw`\b(?:(?:co(?:mpany|\.)?|business|gst|uen)\s*reg(?:istration|\.)?\s*(?:no|number)|reg\.?\s*(?:no|number))\b` + NUMBERED
+  + String.raw`|\bcompany\s+(?:no|number)\b` + NUMBERED
+  + String.raw`|\bregistered\s+in\s+[A-Za-z ]{2,40}?\s+(?:no|number)\b` + NUMBERED
+  + String.raw`|\bvat\s*(?:reg(?:istration|\.)?\s*)?(?:no|number)\b\.?\s*[:#-]?\s*(?:[A-Z]{2}\s?)?(?:\d{9}|\d{3} \d{4} \d{2})\b`
+  + String.raw`|\bpage\s+\d+\s+of\s+\d+\b`
+  + String.raw`|\(?\b(?:date\s+printed|printed(?:\s+(?:on|date))?|date\s+of\s+print|generated(?:\s+by\s+[A-Za-z .]{1,40}?)?(?:\s+on)?)\s*[:-]?\s*(?:\d{1,2}[\s/.-]+(?:\d{1,2}|${MONTH})[\s/.-]+\d{2,4}|${MONTH}\s+\d{1,2},?\s+\d{4}|` + DATE + String.raw`)\)?`, "gi");
+/** Judged cell by cell: every cell must be furniture or company words, so a label cell ("Premium due date") beside a
+ * "printed" date, or a figure in another cell, makes the line a figure line like any other (Critic #569 MED-1). */
+const pageFurniture = (line: string) => {
+  let changed = false;
+  const ok = line.split("\t").every((cell) => {
+    const rest = cell.replace(FURNITURE, " ");
+    if (rest !== cell) changed = true;
+    return !/\d/.test(rest) && (rest.toLowerCase().match(/[a-z]+/g) ?? []).every((w) => FOOTER_WORDS.has(w));
+  });
+  return changed && ok;
+};
+const FOOTER_WORDS = new Set(["co", "company", "pte", "ltd", "limited", "confidential", "page", "of", "gst", "uen", "no", "number", "reg"]);
 
 /** One figure as the history keeps it: its kind and where it sits on the page, never its digits or the words beside it. */
 type Seen = { key: string; shape: string; where: string };
@@ -495,7 +522,9 @@ function columnRows(textReading: string, imageReading: string, geometry: (number
 
 export type LineCheck = { agree: boolean; kind: DisagreeKind | null; why: string; text: string | null; log: string;
   /** How many of the page's figure lines are held back (shown as not checked). */
-  held: number };
+  held: number;
+  /** The only lines masked are page furniture (a footer's registration number or print date). */
+  furnitureOnly?: boolean };
 /** `ys`: where each text line stands down the page (lib/documents/layout.ts PageLine.y), when known. */
 export function checkLines(textReading: string, imageReading: string, pageNumber?: number, geometry?: (number[] | undefined)[], ys?: (number | undefined)[]): LineCheck {
   const first = checkLinesOnce(textReading, imageReading, pageNumber, undefined, geometry, ys);
@@ -876,6 +905,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     return null;
   };
   let figureLines = 0, noLabel = -1, why = "";
+  const furniture = new Set<number>();
   lines.forEach((line, i) => {
     if (skipText.has(i)) return;
     const tokens = lineTokens(line);
@@ -900,6 +930,7 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
     }
     const sentence = labelOf(tokens) ? sentenceGroup(i) : null;
     if (sentence) { for (const j of sentence) sentenced.add(j); return; }
+    if (pageFurniture(line)) { furniture.add(i); return; }
     unconfirmed.push(i);
     if (!labelOf(tokens) && noLabel < 0) noLabel = i;
     why ||= labelOf(tokens) ? `the image reading does not print ${figuresOf(tokens).join(", ")} beside "${labelOf(tokens)}" in that order` : `the text reading prints ${figuresOf(tokens).join(", ")} with no label beside it`;
@@ -961,16 +992,27 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
   // the emptied part would leave the row shown beside a held continuation, or a continuation shown beside its held row
   // (Critic #446 F1, F2; the same rule as R211-1).
   for (const i of [...spread]) for (const j of groupOf.get(i) ?? []) spread.add(j);
-  const confirmed = figureLines - [...spread].filter((i) => !skipText.has(i) && isFig(i)).length;
+  const confirmed = figureLines - furniture.size - [...spread].filter((i) => !skipText.has(i) && isFig(i)).length;
   // A joined row's words-only first line is held with its row, but is not a figure line of its own.
   const heldCount = [...spread].filter((i) => skipText.has(i) || isFig(i)).length;
   const seenText = seenFigures(textReading), seenImage = seenFigures(imageReading);
-  const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${confirmed} confirmed; figures ${seenText.length} in text, ${seenImage.length} in image; `
+  // What kind of line was held, in counts and fixed words only: a line printing an amount (a decimal or thousands amount,
+  // a percentage, or tab cells) is a possible benefit; any other held line (a small number, a year, a date in a note) is
+  // text around the table. The kind never changes what is held: it lets a reader of the history tell a lost benefit row
+  // from a footnote at a glance.
+  const amountLine = (l: string) => /\d,\d{3}|\d\.\d{2}|%/.test(l) || l.split("\t").filter((c) => c.trim()).length >= 2;
+  const heldFigureLines = [...spread].filter((i) => !skipText.has(i) && isFig(i));
+  const heldAmount = heldFigureLines.filter((i) => amountLine(lines[i])).length;
+  const heldKinds = heldFigureLines.length ? `; held ${heldFigureLines.length} (amount rows ${heldAmount}, other lines ${heldFigureLines.length - heldAmount})` : "";
+  const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${confirmed} confirmed${heldKinds}; figures ${seenText.length} in text, ${seenImage.length} in image; `
     + `only in text ${described(only(seenText, seenImage))}; only in image ${described(only(seenImage, seenText))}`;
   if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log, held: heldCount, heldLines: spread };
   const handed = lines.map((l, i) => rebuilt.get(i) ?? (lent.has(i) || joinedAway.has(i) ? "" : l));
-  const text = !spread.size ? handed.join("\n") : confirmed ? handed.map((l, i) => (spread.has(i) ? notChecked(l) : l)).join("\n") : null;
-  return { agree: kind === null, kind, why, text, log, held: heldCount, heldLines: spread };
+  const shown = (l: string, i: number) => (spread.has(i) || furniture.has(i) ? notChecked(l) : l);
+  const text = !spread.size && !furniture.size ? handed.join("\n") : confirmed ? handed.map(shown).join("\n") : null;
+  // Only page furniture was masked: nothing held, no row rebuilt, and a figure line of the page's own was confirmed.
+  const furnitureOnly = furniture.size > 0 && !spread.size && !rebuilt.size && !lent.size && !joinedAway.size && confirmed > 0;
+  return { agree: kind === null, kind, why, text, log, held: heldCount, heldLines: spread, furnitureOnly };
 }
 export const uncheckedText = (text: string) => text.startsWith(UNCHECKED_PAGE) ? text
   : [UNCHECKED_PAGE, ...text.split("\n").filter((l) => l.trim() && !/\d/.test(l.replace(LABELLED, " ")))].join("\n");
@@ -1017,6 +1059,8 @@ export async function crossCheckPages<P extends CheckedPage>(pages: P[], numbers
     // Every figure line confirmed, and the image prints a line the text does not: nothing on the page is unconfirmed.
     if (check.text === p.text) return withNamed(withCurrency({ ...p, checkLog: check.log }));
     // Some lines confirmed: those are kept word for word, the rest keep their words and lose their figures (Critic plan step 2).
+    // Only page furniture masked, nothing held: the page is as checked as it can be.
+    if (check.text && (check as { furnitureOnly?: boolean }).furnitureOnly) return withNamed(withCurrency({ ...p, text: check.text, checkLog: check.log }));
     if (check.text) return withNamed(withCurrency({ ...p, text: check.text, partChecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log }));
     return withNamed({ ...p, text: uncheckedText(p.text), unchecked: true, uncheckedWhy: check.kind ?? undefined, checkLog: check.log });
   });

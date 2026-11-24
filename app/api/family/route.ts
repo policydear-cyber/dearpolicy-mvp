@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isValidDateString } from "@/lib/db/client";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { hasSexColumn, parseSex } from "@/lib/household/member-profile";
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null; sex?: unknown };
     const sex = parseSex(body.sex);
     if (sex === "invalid") return NextResponse.json({ error: "Choose female, male or prefer not to say." }, { status: 400 });

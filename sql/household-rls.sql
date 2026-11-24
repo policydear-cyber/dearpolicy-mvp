@@ -184,6 +184,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON accounts, household_members, household_i
 DO $$
 DECLARE
   t text;
+  writer text;
+  member_write_tables text[] := ARRAY['chat_messages', 'chat_conversations', 'claim_sessions'];
   member_tables text[] := ARRAY[
     'family_members', 'policy_members', 'policy_detected_people',
     'policy_pages', 'policy_chunks', 'premium_records',
@@ -211,10 +213,19 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS household_member_insert ON public.%I', t);
     EXECUTE format('DROP POLICY IF EXISTS household_member_update ON public.%I', t);
     EXECUTE format('DROP POLICY IF EXISTS household_member_delete ON public.%I', t);
+    -- Every member reads. Writes: a household has exactly one owner, who
+    -- alone changes documents, people, benefits and claims (DC, 18 Nov
+    -- 2026; sql/household-single-owner.sql). Ask (the chat tables) stays
+    -- open to every member, because members use Ask.
+    IF t = ANY(member_write_tables) THEN
+      writer := 'is_household_member';
+    ELSE
+      writer := 'is_household_owner';
+    END IF;
     EXECUTE format($f$CREATE POLICY household_member_select ON public.%I FOR SELECT TO authenticated USING (is_household_member(account_id))$f$, t);
-    EXECUTE format($f$CREATE POLICY household_member_insert ON public.%I FOR INSERT TO authenticated WITH CHECK (is_household_member(account_id))$f$, t);
-    EXECUTE format($f$CREATE POLICY household_member_update ON public.%I FOR UPDATE TO authenticated USING (is_household_member(account_id)) WITH CHECK (is_household_member(account_id))$f$, t);
-    EXECUTE format($f$CREATE POLICY household_member_delete ON public.%I FOR DELETE TO authenticated USING (is_household_member(account_id))$f$, t);
+    EXECUTE format($f$CREATE POLICY household_member_insert ON public.%I FOR INSERT TO authenticated WITH CHECK (%s(account_id))$f$, t, writer);
+    EXECUTE format($f$CREATE POLICY household_member_update ON public.%I FOR UPDATE TO authenticated USING (%s(account_id)) WITH CHECK (%s(account_id))$f$, t, writer, writer);
+    EXECUTE format($f$CREATE POLICY household_member_delete ON public.%I FOR DELETE TO authenticated USING (%s(account_id))$f$, t, writer);
     EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON public.%I TO authenticated', t);
   END LOOP;
 END $$;
@@ -329,7 +340,8 @@ BEGIN
     EXECUTE 'DROP POLICY IF EXISTS household_member_update ON public.policies';
     EXECUTE 'DROP POLICY IF EXISTS household_member_delete ON public.policies';
     EXECUTE $f$CREATE POLICY household_member_select ON public.policies FOR SELECT TO authenticated USING (is_household_member(account_id))$f$;
-    EXECUTE $f$CREATE POLICY household_member_update ON public.policies FOR UPDATE TO authenticated USING (is_household_member(account_id)) WITH CHECK (is_household_member(account_id))$f$;
+    -- Deleting a document (the only browser write) is the owner's.
+    EXECUTE $f$CREATE POLICY household_member_update ON public.policies FOR UPDATE TO authenticated USING (is_household_owner(account_id)) WITH CHECK (is_household_owner(account_id))$f$;
     EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.policies FROM authenticated, anon';
     EXECUTE 'GRANT SELECT ON public.policies TO authenticated';
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'policies' AND column_name = 'lifecycle_state') THEN

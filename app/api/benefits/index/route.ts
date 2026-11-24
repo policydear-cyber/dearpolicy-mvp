@@ -4,7 +4,7 @@ import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { ensureBenefitSchema } from "@/lib/policies/benefit-catalog";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { readingModelLabel } from "@/lib/ai/reading-model";
@@ -103,7 +103,9 @@ const Schema=z.object({policyId:z.string().uuid().optional(),
 export async function POST(request:NextRequest){
   try{
     const body=Schema.parse(await request.json().catch(()=>({})));
-    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
+    // Finishing a document still unread (no policyId: the next pending one) is what "Try again" on Benefits does, for
+    // anyone in the household: it reads what the owner uploaded. Reading a chosen document again is the owner's.
+    const ctx=body.policyId?await requireHouseholdOwnerContext(request):await requireHouseholdContext(request),accountId=ctx.householdId;
     await ensureBenefitSchema();
     // The conditions table carries the column the query below filters on.
     await ensureConditionSchema().catch(()=>{});

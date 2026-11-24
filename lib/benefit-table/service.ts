@@ -7,7 +7,12 @@
  * checks, a re-read, a removed document or a removed person shows at once, and no stored row can go stale. */
 import { assembleTable, coverKeyOf, coversOf, sectionsOf, type BenefitTable, type Confirmation, type FamilyMember } from "./assemble";
 import { createHash } from "node:crypto";
-import { checkReading, foldChildColumns, type CheckedReading, type SourceDoc } from "./check";
+import { checkReading, foldChildColumns, type CheckedReading, type PageCurrencies, type SourceDoc } from "./check";
+import { activePredicate } from "@/lib/lifecycle/scopes";
+import { currenciesNamed } from "@/lib/documents/currency-names";
+import { UNCHECKED_PAGE } from "@/lib/documents/layout-check";
+import { withHouseholdCurrency } from "./household-currency";
+import { effectiveHouseholdCurrency } from "@/lib/documents/household-currency";
 import { mergeReadings, pagesToReread } from "./completeness";
 import type { TableModel, TableReply } from "./model";
 import { NON_COVER_ROLES, NO_COVER_READING_ROLES, correspondenceRole, schedulePage } from "@/lib/documents/messy";
@@ -21,7 +26,7 @@ import { figureCheckMode, figureChecksOn } from "./guard-flag";
 import { IMAGE_CHECK_VERSION, awaitingImageCheck, isImageCheckRecord, runImageCheck, type ImageCheckSetup } from "./image-check";
 import { LINKING_PROMPT, LINKING_SCHEMA, READING_PROMPT, READING_SCHEMA, pageReadingNote, partReadingNote, renderDocument, renderLinkingInput, type CoverType, type SectionLink, type SectionRef } from "./reading";
 
-export const PROMPT_VERSION = "2026-11-19.1";
+export const PROMPT_VERSION = "2026-11-21.1";
 export const READ_MAX_OUTPUT = 24_000;
 export const PAGE_MAX_OUTPUT = 8_000;
 /** Output room for one linking call. Live, 12 Nov: a household with 150 sections asked in one call used all of 8,000
@@ -340,6 +345,13 @@ export function holdReason(file: Pick<DocumentFile, "quarantine" | "scan_detail"
 }
 
 /** A stored reading checked against today's pages, with its page re-reads added. */
+/** The lettered currencies a document's pages name, and whether every page is known (household-currency.ts). */
+export function pageCurrenciesOf(doc: SourceDoc): PageCurrencies {
+  const named = new Set<string>();
+  for (const p of doc.pages) for (const c of currenciesNamed(p.text)) if (c !== "$") named.add(c);
+  const allKnown = doc.readable && doc.pages.length > 0 && doc.pages.every((p) => p.text.trim() !== "" && !p.text.startsWith(UNCHECKED_PAGE));
+  return { named: [...named], allKnown };
+}
 export function checkStored(doc: SourceDoc, stored: Pick<StoredReading, "document" | "pages">): CheckedReading {
   // A reading that lists covers but no benefit row in any part: each cover's own printed line is its row (check.ts).
   const rowsOf = (j: unknown) => { const b = (j as { benefits?: unknown } | null)?.benefits; return Array.isArray(b) ? b.length : 0; };
@@ -350,7 +362,7 @@ export function checkStored(doc: SourceDoc, stored: Pick<StoredReading, "documen
   for (const p of stored.pages ?? []) reading = mergeReadings(reading, checkReading(doc, p.json, { coverLineRows, notesKind: reading.kind }));
   // A child's share read as a row of its own in one part and its parent in another is folded once merged (check.ts).
   if (stored.pages?.length) { const dropped = [...reading.dropped]; reading = { ...reading, benefits: foldChildColumns(reading.benefits, dropped), dropped }; }
-  return reading;
+  return { ...reading, pageCurrencies: pageCurrenciesOf(doc) };
 }
 
 /** A stored reading checked against today's pages, remembered for this server instance: the check is the same for the same
@@ -675,6 +687,40 @@ export function figureChecksOf(readings: CheckedReading[]): FigureCheck[] {
   return out;
 }
 
+/** The household's set currency, read through the same database as the table (a fake in tests); null when it chose none or the read fails. */
+/** The household's set currency applied to the readings (household-currency.ts), with what the readings alone do not show:
+ * the names each document shares with its policy's other documents, and the documents whose pages are not all known. */
+async function withSetCurrency(db: Db, accountId: string, readings: CheckedReading[], docs: HouseholdDoc[], stored: Map<string, StoredReading>): Promise<CheckedReading[]> {
+  const household = await householdCurrencyFromDb(db, accountId);
+  if (!household) return readings;
+  const norm = (v: string | null | undefined) => String(v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const keys = new Map<string, string[]>(), insurers = new Map<string, string>();
+  for (const d of docs) {
+    if (d.file.insurer) insurers.set(d.id, d.file.insurer);
+    const out: string[] = [], pn = norm(d.file.policy_number), ip = norm(d.file.insurer) && norm(d.file.product_name) ? `${norm(d.file.insurer)}|${norm(d.file.product_name)}` : "";
+    if (pn.length >= 4) out.push(pn);
+    if (ip) out.push(ip);
+    keys.set(d.id, out);
+  }
+  // Pages the table never loads (unreadable, not checked) may print another currency: the document is unknown.
+  const unknown = new Set<string>();
+  try {
+    const rows = await db(`SELECT policy_id FROM policy_pages pp WHERE account_id=$1 AND NOT (${CHECKED_PAGE}) GROUP BY policy_id`, [accountId]);
+    for (const r of rows) unknown.add(String(r.policy_id));
+  } catch (e) { console.warn(`household currency: the unread-pages query failed, nothing filled: ${e instanceof Error ? e.message.slice(0, 120) : "error"}`); return readings; }
+  // A document read into no table (still waiting, or never read), whose role is not a letter or form, is unknown too.
+  for (const d of docs) if (!stored.has(d.id) && !NON_COVER_ROLES.has(d.file.document_role ?? "")) unknown.add(d.id);
+  const out = withHouseholdCurrency(readings, household, { keys, unknownDocuments: unknown, insurers,
+    // Why a document keeps no currency (fixed codes and document ids only): read in the server log when an amount shows "not stated".
+    onHold: (held) => { if (held.length) console.info(`household currency ${household}: ${held.length} of ${readings.length} documents held: ${JSON.stringify(held.map((h) => [h.documentId.slice(0, 8), h.why]))}`); } });
+  return out;
+}
+async function householdCurrencyFromDb(db: Db, accountId: string): Promise<string | null> {
+  try {
+    const rows = await db(`SELECT to_jsonb(a)->>'currency' AS currency FROM accounts a WHERE a.id=$1 AND ${activePredicate("a")}`, [accountId]);
+    return effectiveHouseholdCurrency(rows[0]?.currency);
+  } catch (e) { console.warn(`household currency: the setting could not be read, nothing filled: ${e instanceof Error ? e.message.slice(0, 120) : "error"}`); return null; }
+}
 async function load(db: Db, accountId: string): Promise<Loaded> {
   const storedOnce = db("SELECT policy_id, reading FROM benefit_readings WHERE account_id=$1", [accountId])
     .then((rows) => new Map(rows.map((r) => [String(r.policy_id), (typeof r.reading === "string" ? JSON.parse(r.reading) : r.reading) as StoredReading])));
@@ -709,7 +755,9 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
   const guarded = mode != null;
   const recordOf = (id: string) => { const g = stored.get(id)?.guards; return mode === "image" && !isImageCheckRecord(g) ? awaitingImageCheck() : g; };
   const figureConfirmations = guarded ? await figureConfirmationsOf(db, accountId) : [];
-  const readings = guarded ? checked.map((r) => applyGuards(r, recordOf(r.documentId), figureConfirmations)) : checked;
+  const guardedReadings = guarded ? checked.map((r) => applyGuards(r, recordOf(r.documentId), figureConfirmations)) : checked;
+  // The household's own currency, read now and applied to amounts that print none (household-currency.ts): nothing stored.
+  const readings = await withSetCurrency(db, accountId, guardedReadings, docs, stored);
   const links = (await db("SELECT section_key, cover_key, why, chosen_by FROM benefit_links WHERE account_id=$1", [accountId]))
     .map((r) => ({ section: String(r.section_key), cover: r.cover_key == null ? null : String(r.cover_key), why: String(r.why ?? ""), chosenBy: r.chosen_by === "household" ? "household" as const : "model" as const }));
   const ids = new Set(people.map((p) => p.id));

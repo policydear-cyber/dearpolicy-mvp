@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { requireHouseholdOwner } from "@/lib/household/repo";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { readHouseholdPlan } from "@/lib/billing/household-plan";
 import { billingConfig, createCheckoutSession, ensureStripeCustomer, expireOpenCheckouts, hasLiveSubscription } from "@/lib/billing/stripe";
 
@@ -19,8 +18,7 @@ export async function POST(request: NextRequest) {
     const config = billingConfig();
     if (!config) return NextResponse.json({ error: "Upgrades aren’t open yet." }, { status: 404 });
     const body = Body.parse(await request.json().catch(() => ({})));
-    const ctx = await requireHouseholdContext(request);
-    await requireHouseholdOwner(ctx.userId, ctx.householdId);
+    const ctx = await requireHouseholdOwnerContext(request);
     const current = await readHouseholdPlan(ctx.householdId);
     if (current.planId !== "free") return NextResponse.json({ error: ALREADY_PAID, code: "already_paid" }, { status: 409 });
     // One Stripe customer per household, stored first; no second subscription while one is paying or being paid; and

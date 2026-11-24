@@ -76,9 +76,28 @@ async function main() {
     assert.deepEqual(shown([death], [p2("Currency : Singapore Dollar\n" + BARE), { pageNumber: 9, text: "Policy currency may be GBP, SGD or USD." }], "SGD"), ["SGD 100000"]));
   await test("P a page naming two currencies is held", () => assert.deepEqual(shown([death], [p2("Currency : Singapore Dollar\nExample: US$ 1,000\n" + BARE)], "SGD"), ["held"]));
   await test("P a currency outside the list (yen) is held", () => assert.deepEqual(shown([death], [{ pageNumber: 1, text: "Excess ¥10,000" }, p2(BARE)], "SGD"), ["held"]));
-  await test("P a bare $ elsewhere names no currency and holds the bare page (owner rule; TE #526 F3)", () => assert.deepEqual(shown([death], [{ pageNumber: 1, text: "Premium $12.50 monthly" }, p2(BARE)], "SGD"), ["held"]));
-  await test("P ... and not with a ringgit household", () => assert.deepEqual(shown([{ ...death, currency: null }], [{ pageNumber: 1, text: "Premium $12.50 monthly" }, p2(BARE)], "MYR"), ["held"]));
-  await test("P 'dollars' written out names no currency: held", () => assert.deepEqual(shown([death], [p2("All amounts are in dollars\n" + BARE)], "SGD"), ["held"]));
+  await test("P a bare $ elsewhere names no currency: the household's currency fills the bare page (DC 22 Nov)", () => assert.deepEqual(shown([death], [{ pageNumber: 1, text: "Premium $12.50 monthly" }, p2(BARE)], "SGD"), ["SGD 100000"]));
+  await test("P ... and for a ringgit household a bare $ is read in the household's currency too (DC 22 Nov)", () => assert.deepEqual(shown([{ ...death, currency: null }], [{ pageNumber: 1, text: "Premium $12.50 monthly" }, p2(BARE)], "MYR"), ["MYR 100000"]));
+  await test("P a lettered currency beside a bare $ still wins: US$ on the page holds it for an S$ household", () => assert.deepEqual(shown([death], [p2("Premium US$12.50 monthly\n" + BARE)], "SGD"), ["held"]));
+  await test("P 'dollars' written out names no currency: the household's currency fills it (DC 22 Nov)", () => assert.deepEqual(shown([death], [p2("All amounts are in dollars\n" + BARE)], "SGD"), ["SGD 100000"]));
+  for (const line of ["Sum assured: HK Dollar 500,000", "All amounts in HK dollars", "Amount in Hongkong Dollars", "Taiwanese Dollar 500,000", "Macau dollars 100", "Kiwi dollars", "Aussie dollars 5,000", "Zimbabwean dollars", "Amounts in Hong Kong $", "Premium Kiwi $120.00"])
+    await test(`P (Critic #576) '${line}' is another dollar: held for an S$ household`, () => assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "SGD"), ["held"]));
+  for (const line of ["Sum Assured Singapore $500,000", "Amounts in Singapore $", "Amounts in Sing $"])
+    await test(`P (Critic #576) '${line}' is S$: held for a US$ household, filled for an S$ one`, () => {
+      assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "USD"), ["held"]);
+      assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "SGD"), ["SGD 100000"]);
+    });
+  for (const line of ["United States $ 5,000", "Indonesia $ 5", "Philippine $ 5", "Mexican $ 100", "Amounts in Chilean $"])
+    await test(`P (Critic #576) '${line}' is not the household's: held for an S$ household`, () => assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "SGD"), ["held"]));
+  for (const line of ["Premium $ 500", "Total $5,000", "Accidental Death $100,000", "Monthly $ 120"])
+    await test(`P (Critic #576) '${line}' stays a bare dollar: filled`, () => assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "SGD"), ["SGD 100000"]));
+  for (const line of ["Currency: Singaporean Dollar", "Sing Dollar"])
+    await test(`P (Critic #576) '${line}' is S$: held for a US$ household, filled for an S$ one`, () => {
+      assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "USD"), ["held"]);
+      assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "SGD"), ["SGD 100000"]);
+    });
+  for (const line of ["Sum Assured $500,000", "All amounts are in dollars", "Premium in dollars"])
+    await test(`P (Critic #576) '${line}' stays a bare dollar: filled`, () => assert.deepEqual(shown([death], [p2(line + "\n" + BARE)], "SGD"), ["SGD 100000"]));
   await test("P 'Canadian Dollar' never agrees", () => assert.deepEqual(shown([death], [p2("Currency: Canadian Dollar\n" + BARE)], "SGD"), ["held"]));
 
   // ---- C: Critic #526 (H1-H3)
@@ -87,8 +106,8 @@ async function main() {
     // The figure itself is still confirmed as money (the bare $), with no currency given to it.
     assert.deepEqual(shown([{ amount: 500000, currency: null, evidence: "Death Benefit $500,000.00" }], [{ pageNumber: 1, text: "Policy Currency: USD" }, p2("Life Assured\tMei Ling Tan\nDeath Benefit $500,000.00")], "SGD"), ["null 500000"]);
   });
-  await test("C H1 ... and the same bare $ page alone keeps no currency either (TE #526 F3)", () =>
-    assert.deepEqual(shown([{ amount: 500000, currency: null, evidence: "Death Benefit $500,000.00" }], [p2("Life Assured\tMei Ling Tan\nDeath Benefit $500,000.00")], "SGD"), ["null 500000"]));
+  await test("C H1 ... and the same bare $ page alone is read in the household's currency (DC 22 Nov)", () =>
+    assert.deepEqual(shown([{ amount: 500000, currency: null, evidence: "Death Benefit $500,000.00" }], [p2("Life Assured\tMei Ling Tan\nDeath Benefit $500,000.00")], "SGD"), ["SGD 500000"]));
   await test("C H2 'Sum Assured (RM)' over a bare figure is ringgit", () => assert.deepEqual(shown([{ ...death, currency: null }], [p2("Sum Assured (RM)\n" + BARE)], "SGD"), ["held"]));
   await test("C H2 'Currency: RM' is ringgit", () => assert.deepEqual(shown([{ ...death, currency: null }], [p2("Currency: RM\n" + BARE)], "SGD"), ["held"]));
   await test("C H2 rupiah 'Rp' is another currency", () => assert.deepEqual(shown([{ ...death, currency: null }], [{ pageNumber: 1, text: "Premi Rp 1.500.000" }, p2(BARE)], "SGD"), ["held"]));
@@ -112,7 +131,7 @@ async function main() {
     await test(`T F1 '${mark}' is never S$`, () => { const { cov, page } = usLine(mark); assert.notDeepEqual(shown([cov], [page], "SGD"), ["SGD 500000"]); });
   }
   await test("T F1 'US $' is US$ for a US$ household", () => { const { cov, page } = usLine("US $"); assert.deepEqual(shown([cov], [page], "USD"), ["USD 500000"]); });
-  for (const head of ["Currency: Myr", "Currency: NTD", "All amounts are in Malaysian currency", "Sum Assured ($)", "Currency: usd"])
+  for (const head of ["Currency: Myr", "Currency: NTD", "All amounts are in Malaysian currency", "Currency: usd"])
     await test(`T F1 a header '${head}' holds the bare lines`, () => assert.deepEqual(shown([{ ...death, currency: null }], [p2(head + "\n" + BARE)], "SGD"), ["held"]));
   await test("T F1 'Policy Currency: SGD' on page 1 never makes page 2's 'US $' lines S$", () => {
     const { cov, page } = usLine("US $");
@@ -212,6 +231,100 @@ async function main() {
     assert.doesNotMatch(prompt, /localStorage|sessionStorage|Not now|onDismiss|Remind me/i);
     const shell = read("components/AppShell.tsx");
     assert.match(shell, /!noNav && !reviewerArea && !operatorArea && pathname !== "\/household" && <HouseholdCurrencyPrompt/);
+  });
+
+  // Test engineer F1: glued, dotted and header forms name the currency; "Premium $500" stays a bare dollar.
+  const named: Array<[string, string]> = [
+    ["Hong Kong$ 500,000", "HKD"], ["Singapore$ 500,000", "SGD"], ["Australia$ 500,000", "?"], ["U.S.A. $ 500,000", "USD"],
+    ["Aust. $ 500,000", "AUD"], ["Aus $ 500,000", "AUD"], ["Sing. $ 500,000", "SGD"], ["Sum Assured US ($)", "USD"],
+    ["US ($) 100,000.00", "USD"], ["Amounts in Dollars (US)", "USD"], ["S  $ 500,000", "SGD"], ["Venezuela $ 5", "?"], ["Puerto Rico $ 5", "?"],
+  ];
+  for (const [text, code] of named) await test(`F1 '${text}' names ${code}`, () => assert.ok(HC.currenciesNamed(text).includes(code), JSON.stringify(HC.currenciesNamed(text))));
+  for (const text of ["Premium $500", "Accidental Death $100,000", "Total $ 5,000"]) await test(`F1 '${text}' stays a bare dollar`, () => assert.deepEqual([...new Set(HC.currenciesNamed(text))], ["$"]));
+
+  // Critic and Test engineer #577: a currency lettered ANYWHERE against the sign is named, never a bare "$" that takes the
+  // household's currency. Before the sign (any 1 to 4 letters, dots, spaces, dash or slash), after it ("$US", "($ US)"), in
+  // brackets ("Dollars (Singapore)", "($ - US)"), as a header ("Currency: Singapore") or as another mark ("Rm", "P100,000").
+  const letteredForms = ["$US500,000", "$US 500,000", "$HK 500,000", "$A 5,000", "$NZ 100", "$S500", "$ US 5,000", "($ US) 5,000", "($US)", "(in $US)", "500,000 $US", "US-$ 5,000", "US/$ 500",
+    "Currency: $ (US)", "Currency ($ US)", "Amounts in $ (US)", "A $100,000", "CA $ 5", "Can $ 5", "CDN $ 5", "TW $ 5", "N.T. $ 5", "N.Z. $ 5", "H.K. $ 5", "HKG $ 5", "S. $ 5", "SGP $ 5",
+    "Sin $ 5", "S'pore $ 5", "MY $ 5", "MX $ 5", "BN $ 5", "FJ $ 5", "U. S. $ 5", "U S $100,000", "NewZealand$ 5", "UnitedStates$ 5", "$CA 5", "($ S) 5", "($ HK)", "($ AU)", "($ CA)", "$ (US)", "($ - US)",
+    "Amounts in Dollars (Singapore)", "Dollars (SGP)", "Dollars (AUS)", "Dollars (Australia)", "Dollars (CA)", "Dollars (Canada)", "Dollars (New Zealand)", "All amounts in Hong Kong ($)", "Sum Assured CA ($)",
+    "Currency: Singapore", "Currency: US", "Currency: Hong Kong", "Currency: Australia", "Currency: Canada", "Currency: Malaysia", "In Singapore currency", "Rm 100,000", "R.M. 100,000", "P100,000", "R100,000", "SFr 100,000", "Stg 100,000", "Dhs 100,000", "円 100,000", "元 100,000"];
+  for (const t of letteredForms) await test(`C577 '${t}' is a named currency, not a bare $`, () => { const r = HC.currenciesNamed(t); assert.ok(r.some((c) => c !== "$"), JSON.stringify(r)); });
+  for (const t of ["Premium $500", "$ 500,000", "Total $5,000", "Sum Assured $ 100,000", "Accidental Death $100,000", "Cover to $ 1,000,000", "in $500", "Pay $50 monthly", "Up to $5,000 per year", "Fee $ 20"])
+    await test(`C577 control '${t}' stays a bare dollar`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
+  for (const [mark, own] of [["$US ", "USD"], ["US-$ ", "USD"], ["A $", "AUD"], ["CA $", "CAD"], ["HKG $", "HKD"]] as const) {
+    await test(`C577 a line '${mark}100,000.00' is filled for no household but its own currency`, () => {
+      for (const house of ["SGD", "MYR", "USD"]) {
+        const out = shown([{ ...death, currency: null }], [p2(`Life Assured\tMei Ling Tan\nDeath\tIn Force\t${mark}100,000.00`)], house);
+        assert.ok(!out.some((x) => x === `${house} 100000`) || house === own, `${house}: ${JSON.stringify(out)}`);
+      }
+    });
+  }
+  await test("C577 'Currency: Singapore' fills nothing for a USD or MYR household", () => {
+    for (const house of ["USD", "MYR"]) assert.ok(!shown([{ ...death, currency: null }], [p2("Currency: Singapore\n" + BARE)], house).some((x) => x === `${house} 100000`));
+  });
+
+  // Critic #579: letters after the figure, after the sign with a linking word or bracket, "Dollars - US"; and the benefit's
+  // own label before the sign ("ICU $200", "Plan A $100") is NOT a currency: it fills with the household's currency.
+  const afterForms = ["Sum insured $100,000 US", "$100,000 (US)", "$100 HK", "($100 HK)", "$100HK", "$ 100 A", "$100 S", "$ in US", "$ (in US)", "$ [US]", "$ {US}", "$ / US", "[US] $", "HK 100 $",
+    "Dollars - US", "Dollars: US", "Dollars in US", "Dollars (US)", "$ - US", "$: US", "$ in HK", "$ - Singapore"];
+  for (const t of afterForms) await test(`C579 '${t}' is a named currency, not a bare $`, () => { const r = HC.currenciesNamed(t); assert.ok(r.some((c) => c !== "$"), JSON.stringify(r)); });
+  for (const t of ["ICU $200", "OPD $50", "GP $30", "IP $100", "ER $100", "CI $100,000", "TPD $100", "ADB $100", "Per day $100", "Option B $100", "Plan A $100", "Class A $100", "Section A $100", "Rider A $100", "Plan A $100 per day"])
+    await test(`C579 control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
+  await test("C579 'Plan A $100' on a schedule fills the household currency; 'A $100' in a cell does not", () => {
+    const line = (m: string) => shown([{ ...death, currency: null }], [p2(`Life Assured\tMei Ling Tan\nDeath\tIn Force\t${m}100,000.00`)], "SGD");
+    assert.deepEqual(line("Plan A $"), ["SGD 100000"]);
+    assert.deepEqual(line("ICU $"), ["SGD 100000"]);
+    assert.ok(!line("A $").includes("SGD 100000"));
+  });
+
+  // Critic #579 round 2: dotted or spelled-out country after the figure or sign, any dash, colon, semicolon, comma or slash, and a
+  // dash or colon before the sign; and a lone A or C that is a label ("$100 a day", "(A) $100", "Plan A - $100", "Option 1A $100").
+  const moreForms = ["$100,000 U.S.", "$100,000 U.S.A", "$100,000 U S", "$100 (U.S.)", "$ U.S.", "$ U. S.", "$ in U.S.", "$100,000 Hong Kong", "$100,000 Kiwi", "$100,000 Canadian", "$1,000 Taiwan",
+    "$ – US", "$ — US", "$, US", "$, in US", "Amounts in $, US", "(Amounts in $; US)", "Sum $100,000 – US", "$ 100,000 / US", "$ 100,000 — HK", "US–$100", "US—$100", "US:$100", "US: $100"];
+  for (const t of moreForms) await test(`C579b '${t}' is a named currency, not a bare $`, () => { const r = HC.currenciesNamed(t); assert.ok(r.some((c) => c !== "$"), JSON.stringify(r)); });
+  for (const t of ["$100 a day", "$100 A day", "$100 A week", "(A) $100", "A) $100", "(C) $100", "Plan A - $100", "Option 1A $100", "Class C - $50", "$100 per day", "$500 Cancer benefit"])
+    await test(`C579b control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
+
+  // Critic #579 round 3: "Currency" or "Dollars" then letters with any bracket, dash, newline, abbreviation or table separator.
+  const roundThree = ["Currency (US)", "Currency (HK)", "Currency [US]", "Currency — US", "Currency – HK", "Currency\nUS", "Curr: US", "Ccy: HK", "Ccy US", "Cur. US", "Cur: SG", "Cur HK",
+    "Dollars US", "Dollars HK", "Dollar HK", "Dollars, US", "Dollars; US", "Dollars — US", "Dollars – HK", "(U.S.) $100", "(U.S.)$100", "(H.K.) $", "$100,000 U.S.D", "$ | US", "$100 • HK", "$100 · HK", "$ * US", "$100 ~ HK"];
+  for (const t of roundThree) await test(`C579c '${t.replace(/\n/g, "\\n")}' is a named currency, not a bare $`, () => { const r = HC.currenciesNamed(t); assert.ok(r.some((c) => c !== "$"), JSON.stringify(r)); });
+  await test("C579c a US schedule that lays out 'Currency' then 'US' and prints bare '$' fills nothing for an SGD household", () => {
+    assert.ok(!shown([{ ...death, currency: null }], [p2("Currency\nUS\nLife Assured\tMei Ling Tan\nDeath\tIn Force\t$100,000.00")], "SGD").includes("SGD 100000"));
+  });
+  for (const t of ["Dollars and cents", "Dollars per day", "Currency of payment", "Cur rent value $100", "$100 for A"])
+    await test(`C579c control '${t}' names no currency`, () => assert.ok(HC.currenciesNamed(t).every((c) => c === "$"), JSON.stringify(HC.currenciesNamed(t))));
+
+  // Critic #579 round 4: "Currency" then a connecting word or mark, a country before "currency", more country words.
+  const roundFour = ["Currency of Policy: US", "Currency of cover: US", "Currency used: US", "Currency is US", "Currency = US", "Currency -> HK", "Currency → HK", "US currency", "U.S. currency", "HK currency",
+    "Hong Kong currency", "In U.S. currency", "Currency: Hong-Kong", "Currency: Pounds", "Currency: Sterling", "Currency: GB", "Currency: Britain", "Currency: Swiss", "Currency: Switzerland", "Currency: UAE", "Currency: Dubai"];
+  for (const t of roundFour) await test(`C579d '${t}' is a named currency`, () => { const r = HC.currenciesNamed(t); assert.ok(r.length > 0 && r.every((c) => c !== "$"), JSON.stringify(r)); });
+  for (const t of ["Policy currency", "Currency conversion $100", "Foreign currency $100", "Currency $100"])
+    await test(`C579d control '${t}' names no currency`, () => assert.ok(HC.currenciesNamed(t).every((c) => c === "$"), JSON.stringify(HC.currenciesNamed(t))));
+
+  // Test engineer #579: known single letters take dot, dash, slash, colon or bracket before the sign; a 2 to 4 letter benefit label
+  // with a colon, dash or slash ("TPD: $500", "ICU - $50", "Ward:") is not a currency; more marks and headers.
+  const roundFive = ["S. $", "S .$", "(S) $", "S-$", "S/$", "S:$", "M $", "Pound 100,000", "STG 100,000", "Sfr 100,000", "Aed 100,000", "RP 100,000", "rs. 100,000", "B 100,000", "E 100,000", "W 100,000", "đ 100,000", "FJD 100,000",
+    "Currency: United Kingdom", "Currency: Great Britain", "Currency: Europe", "Currency: Eurozone", "Currency: JP", "Currency: PRC", "Currency: CH"];
+  for (const t of roundFive) await test(`C579e '${t}' is a named currency`, () => { const r = HC.currenciesNamed(t.includes("$") ? t + "100" : t); assert.ok(r.length > 0 && r.every((c) => c !== "$"), JSON.stringify(r)); });
+  // Critic #579 round 6: a country code or name before a colon, dash or slash is a currency, never a label.
+  const roundSix = ["UK: $", "JP: $", "CN: $", "TH: $", "PH: $", "KR: $", "VN: $", "EU: $", "GB: $", "AE: $", "ZA: $", "BR: $", "MO: $", "TT: $", "BM: $", "KY: $", "CL - $", "CO - $", "MYS: $", "MAL: $", "Austr: $", "Rp: $",
+    "Hong Kong: $", "Hong Kong - $", "Taiwan: $", "Kiwi - $", "Canada - $", "China: $", "Japan: $", "Australia - $", "New Zealand: $", "United States - $", "Brunei: $", "Fiji: $", "Mexico: $", "US - $", "HK/$"];
+  for (const t of roundSix) await test(`C579f '${t}' is a named currency`, () => { const r = HC.currenciesNamed(t + "100"); assert.ok(r.length > 0 && r.every((c) => c !== "$"), JSON.stringify(r)); });
+  // Test engineer #579 round 7: an opening bracket before the sign, ISO-3 codes, more names; Singapore states SGD.
+  const roundSeven = ["AU ($", "SG ($", "US ($", "HK [$", "Taiwan ($", "GBR ($", "FJI: $", "CHN: $", "JPN - $", "KOR/$", "THA: $", "ZAF: $", "CH: $", "Britain: $", "Europe - $", "Eurozone: $", "Switzerland: $", "Swiss/$", "Hawaii: $", "Guam - $", "United States ($", "SR: $", "SR ($", "PR - $", "VI: $", "GU/$"];
+  for (const t of roundSeven) await test(`C579g '${t}' is a named currency`, () => { const r = HC.currenciesNamed(t + "100)"); assert.ok(r.length > 0 && r.every((c) => c !== "$"), JSON.stringify(r)); });
+  for (const t of ["Singapore: $100", "Singapore - $100", "Singapore/$100", "Singaporean: $100", "Singapore ($100)"])
+    await test(`C579g '${t}' states SGD`, () => assert.deepEqual(HC.currenciesNamed(t), ["SGD"]));
+  for (const t of ["ID: $100", "IN: $100", "SI: $100,000", "SI $100,000", "PM: $50", "PT - $80", "MC: $20", "SC: $120", "ST: $10", "CR: $5", "Singapore hospitals: $100", "Overseas: $100"])
+    await test(`C579g control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
+  for (const t of ["TPD: $500", "ICU: $200", "OPD - $50", "CI - $50,000", "SA: $100", "TL: $100", "WL: $100", "GP: $30", "ER: $100", "PA: $100", "AD: $100", "Pg: $100", "Qty: $100", "Ref: $100", "Ltd - $100", "Pte - $100", "Ward: $100", "Room: $100", "TPD / $100"])
+    await test(`C579e control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
+  await test("C579e 'S. $' on an SGD document is stated, so the settings note is not shown and an MYR household is not filled", () => {
+    const line = (h: string) => shown([{ ...death, currency: null }], [p2("Life Assured\tMei Ling Tan\nDeath\tIn Force\tS. $100,000.00")], h);
+    assert.ok(!line("MYR").includes("MYR 100000") && !line("USD").includes("USD 100000"));
   });
 
   console.log(`household-currency-test: ${passed} passed, ${failures.length} failed`);

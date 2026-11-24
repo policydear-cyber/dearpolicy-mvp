@@ -147,5 +147,16 @@ test("policy-year bands are limits, not a table by year: both stay current figur
   assert.deepEqual(kept([r(1, "Death within policy year 1: S$5,000"), r(2, "Death from policy year 2: S$50,000")]), [null, null], "'within policy year 1'");
 });
 
+test("the by-year rule never limits the rest of a page (READYBUILDER 10 lost its premium by frequency, a fee and a waiver, 21 Nov)", () => {
+  const at = READING_PROMPT.indexOf("leave out the other years");
+  assert.ok(at > 0, "the by-year sampling rule is in the prompt");
+  const after = READING_PROMPT.slice(at, at + 700);
+  assert.match(after, /only for that table of years/);
+  assert.match(after, /every other row on its page and in the document is still listed/);
+  assert.match(after, /premium printed for each payment frequency/);
+  assert.match(after, /fee or cost printed in a sentence/);
+  assert.match(after, /charge stated as included in a premium/);
+});
+
 if (failures.length) { console.error(failures.join("\n")); console.error(`${failures.length} failed, ${passed} passed`); process.exit(1); }
 console.log(`term-dates: ${passed} passed`);

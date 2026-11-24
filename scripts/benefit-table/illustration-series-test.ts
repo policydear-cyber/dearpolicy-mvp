@@ -1,0 +1,282 @@
+/** An illustration's columns are series of figures for its one plan (premium by payment frequency, total premiums paid,
+ * values by year at a rate), never other plans: a heading on them must not hide the rows. Controls: a column that names a
+ * plan, and a non-illustration document's other-plan column, stay refused.
+ *   node --import tsx scripts/benefit-table/illustration-series-test.ts */
+import assert from "node:assert/strict";
+import { assembleTable, coverKeyOf, sectionKeyOf, illustrationSeries, type FamilyMember } from "@/lib/benefit-table/assemble";
+import { checkReading, type SourceDoc } from "@/lib/benefit-table/check";
+
+let passed = 0; const failures: string[] = [];
+function test(name: string, fn: () => void) { try { fn(); passed++; } catch (e) { failures.push(`${name}: ${e instanceof Error ? e.message : String(e)}`); } }
+
+const SCHED = "bbbbbbbb-0000-0000-0000-000000000001", ILL = "bbbbbbbb-0000-0000-0000-000000000002", WORD = "bbbbbbbb-0000-0000-0000-000000000003";
+const family: FamilyMember[] = [{ id: "p1", display_name: "Ong Pei Lin Charmaine" }];
+const illText = "Basic Premium\nMonthly ($)\tQuarterly ($)\tSemi-Annually ($)\tAnnually ($)\n399.24\t1,195.45\t2,372.31\t4,651.59\nPolicy Illustration\nTotal Basic Premiums Paid To-Date ($)\n1/29\t4,791\t5,030\n5/33\t23,954\t25,152\n10/38\t47,909\t50,304";
+const src = (id: string, name: string, text: string): SourceDoc => ({ id, name, readable: true, pages: [{ page: 1, text }] });
+const reading = (kind: string, covers: unknown[], benefits: unknown[], id: { product: string | null; plan: string | null } = { product: "READYBUILDER 10", plan: "READYBUILDER 10" }) => ({ document: { kind, product: id.product, insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: id.plan, periodFrom: null, periodTo: null }, covers, benefits });
+const base = { cap: null, basis: null, period: null, capQuote: null, baseQuote: null, percentOf: null, baseAmount: null, conditions: [], page: 1 };
+const sched = checkReading(src(SCHED, "Schedule", "Ong Pei Lin Charmaine\tREADYBUILDER 10\tS$49,000"), reading("personal_proof",
+  [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 1, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }], []));
+const FREQ = "399.24\t1,195.45\t2,372.31\t4,651.59";
+const premium = (column: string, value: number) => ({ ...base, pays: "amount", quote: FREQ, value, column, benefit: "Basic Premium", section: "Policy Illustration" });
+const paid = (column: string, year: number, value: number, line: string) => ({ ...base, pays: "value", quote: line, value, column, benefit: "Total premiums paid", section: "Policy Illustration", atPolicyYear: year });
+const illRows = (paidColumn: string) => [premium("Monthly ($)", 399.24), premium("Quarterly ($)", 1195.45), premium("Semi-Annually ($)", 2372.31), premium("Annually ($)", 4651.59),
+  paid(paidColumn, 1, 4791, "1/29\t4,791\t5,030"), paid(paidColumn, 5, 23954, "5/33\t23,954\t25,152"), paid(paidColumn, 10, 47909, "10/38\t47,909\t50,304")];
+const cover = coverKeyOf({ product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10" });
+const linksFor = (id: string, rows: { column: string; section: string }[]) => [...new Set(rows.map((r) => sectionKeyOf(id, r)))].map((section) => ({ section, cover, why: "the plan" }));
+const shown = (t: ReturnType<typeof assembleTable>) => t.people[0]!.rows.map((r) => r.figure).filter((f) => f.kind !== "none").map((f) => (f as { amount?: number }).amount);
+
+test("an illustration's frequency and total-premiums-paid columns are shown for the plan", () => {
+  const rows = illRows("Total Basic Premiums Paid To-Date ($)");
+  const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+  const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+  const amounts = shown(t);
+  for (const n of [1195.45, 2372.31, 4651.59, 4791, 23954, 47909]) assert.ok(amounts.includes(n), `missing ${n}: ${JSON.stringify(amounts)} refused ${JSON.stringify(t.refusedLinks.map((x) => x.why))}`);
+});
+test("illustrationSeries names those sections", () => {
+  const rows = illRows("Total Basic Premiums Paid To-Date ($)");
+  const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+  const s = illustrationSeries([ill]);
+  assert.ok(s.has(sectionKeyOf(ILL, { section: "Policy Illustration", column: "Quarterly ($)" })));
+  assert.ok(s.has(sectionKeyOf(ILL, { section: "Policy Illustration", column: "Total Basic Premiums Paid To-Date ($)" })));
+});
+test("control: a column that says plan stays refused in an illustration", () => {
+  const rows = illRows("Plan B ($)");
+  const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+  const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+  assert.ok(!shown(t).includes(47909), "a Plan B column is not shown");
+  assert.ok(t.refusedLinks.some((x) => /Plan B/.test(x.why)));
+});
+test("control: another plan's column in a document that is not an illustration stays refused", () => {
+  const text = "Benefit\tClassic\tPremier\nDeath benefit\tS$1,000\tS$2,000";
+  const rows = [{ ...base, pays: "amount", quote: "Death benefit\tClassic\tPremier", value: 2000, column: "Premier", benefit: "Death benefit", section: "Benefits" }];
+  const w = checkReading(src(WORD, "Wording", text), reading("product_summary", [], rows));
+  const t = assembleTable([sched, w], family, linksFor(WORD, rows as never));
+  assert.ok(!shown(t).includes(2000));
+});
+for (const heading of ["Standard", "Enhanced", "Cover Term 20 years", "Sum Assured $200,000", "Rider A", "Basic"]) {
+  test(`control: an alternative heading "${heading}" on by-year values stays refused`, () => {
+    const rows = illRows(heading);
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+    assert.ok(!shown(t).includes(47909), `${heading} was shown`);
+    assert.ok(t.refusedLinks.some((x) => x.why.includes(heading)));
+  });
+}
+test("control: two by-year columns Standard and Enhanced side by side are both refused, and so is a series beside them", () => {
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"), paid("Standard", 5, 11111, "5/33\t23,954\t25,152"), paid("Enhanced", 5, 22222, "5/33\t23,954\t25,152")];
+  const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+  const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+  assert.ok(!shown(t).includes(11111) && !shown(t).includes(22222), "alternatives are not shown");
+});
+for (const section of ["Enhanced Illustration", "Standard Plan Benefit Illustration", "Spouse Illustration", "Option A"]) {
+  test(`control: a perfect series column under the section "${section}" stays refused`, () => {
+    const rows = illRows("Total Premiums Paid To-Date ($)").map((r) => ({ ...r, section }));
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+    assert.ok(!shown(t).includes(47909), `${section} was shown`);
+  });
+}
+for (const heading of ["Total Premium 200000", "Guaranteed Death Benefit 200000", "Premium 20"]) {
+  test(`control: a number that is not a rate ("${heading}") stays refused`, () => {
+    const rows = illRows(heading);
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+    assert.ok(!shown(t).includes(47909), `${heading} was shown`);
+  });
+}
+for (const heading of ["Illustrated at 4.25% investment return Total ($)", "Guaranteed ($)", "Illustrated at 4.25 return"]) {
+  test(`a rate or a plain series heading ("${heading}") is shown`, () => {
+    const rows = illRows(heading);
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+    assert.ok(shown(t).includes(47909), `${heading} was refused`);
+  });
+}
+test("control: an alternative named in the row's own benefit words stays refused", () => {
+  const rows = illRows("Total Basic Premiums Paid To-Date ($)").map((r) => (r.value === 47909 ? { ...r, benefit: "Total premiums paid, Enhanced plan" } : r));
+  const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+  const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+  assert.ok(!shown(t).includes(47909));
+});
+for (const id of [{ product: "Enhanced Max", plan: "Enhanced Max" }, { product: "SUPERSAVER 20", plan: null }, { product: "READYBUILDER 10 PLUS", plan: "READYBUILDER 10 PLUS" }, { product: "READYBUILDER 10", plan: "Enhanced Max" }, { product: "READYBUILDER", plan: null }, { product: "SUPERSAVER 20", plan: "READYBUILDER 10" }]) {
+  test(`control: an illustration of another plan (${id.product}) linked to this cover stays refused`, () => {
+    const rows = illRows("Total Premiums Paid To-Date ($)");
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows, id));
+    const t = assembleTable([sched, ill], family, linksFor(ILL, rows as never));
+    assert.ok(!shown(t).includes(47909), `${id.product} was shown`);
+  });
+}
+test("an illustration naming no plan, or the cover's own, is shown", () => {
+  for (const id of [{ product: "READYBUILDER 10", plan: null }]) {
+    const rows = illRows("Total Premiums Paid To-Date ($)");
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows, id));
+    assert.ok(shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909));
+  }
+});
+for (const heading of ["Total Premium at 200000", "Total Premium 200000.00", "Total Premium 20.5"]) {
+  test(`control: a sum or term read as a rate ("${heading}") stays refused`, () => {
+    const rows = illRows(heading);
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    assert.ok(!shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909), `${heading} was shown`);
+  });
+}
+test("a rate with % shows", () => {
+  for (const h of ["Illustrated at 4.25%", "Guaranteed 3.25%"]) {
+    const rows = illRows(h);
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+    assert.ok(shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909), h);
+  }
+});
+test("control: an illustration naming another person is not shown on this person's cover", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const ill = checkReading(src(ILL, "Illustration", illText), { ...reading("illustration", [], rows), document: { ...reading("illustration", [], rows).document, namedPeople: ["Bob Tan"] } });
+  assert.ok(!shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909));
+});
+for (const id of [{ product: null, plan: null }, { product: "Alpha Saver Series", plan: null }]) {
+  test(`control: an illustration printing no plan (${id.product}) is not shown on a cover that prints a plan`, () => {
+    const rows = illRows("Total Premiums Paid To-Date ($)");
+    const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows, id));
+    assert.ok(!shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909));
+  });
+}
+test("control: 'Plan+' is not 'Plan'", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows, { product: "READYBUILDER 10+", plan: "READYBUILDER 10+" }));
+  assert.ok(!shown(assembleTable([sched, ill], family, linksFor(ILL, rows as never))).includes(47909));
+});
+test("control: two holders of the plan; an illustration naming only one shows for that one", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const fam2: FamilyMember[] = [...family, { id: "p2", display_name: "Bob Tan" }];
+  const schedBob = checkReading(src("bbbbbbbb-0000-0000-0000-000000000009", "Schedule2", "Bob Tan\tREADYBUILDER 10\tS$49,000"), reading("personal_proof",
+    [{ person: "Bob Tan", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 1, quote: "Bob Tan READYBUILDER 10 S$49,000" }], []));
+  const ill = checkReading(src(ILL, "Illustration", illText), reading("illustration", [], rows));
+  const t = assembleTable([sched, schedBob, ill], fam2, linksFor(ILL, rows as never));
+  const amounts = (i: number) => t.people[i]!.rows.map((r) => r.figure).filter((f) => f.kind !== "none").map((f) => (f as { amount?: number }).amount);
+  assert.ok(amounts(0).includes(47909), "Charmaine's own illustration shows for her");
+  assert.ok(!amounts(1).includes(47909), "not for Bob");
+});
+// The production shape (READYBUILDER 10, 23 Nov): ONE 58-page pack holds the schedule and the illustration pages; the
+// document's own kind is "other" (the first part's), the cover is read from the schedule page of the same document, and
+// the illustration's rows carry the generic headings the reading chose.
+const PACK = "bbbbbbbb-0000-0000-0000-0000000000aa";
+const packSrc = (): SourceDoc => ({ id: PACK, name: "Policy pack", readable: true, pages: [
+  { page: 3, text: "Ong Pei Lin Charmaine\tREADYBUILDER 10\tS$49,000" }, { page: 38, text: illText }] });
+const packReading = (kind: string, rows: unknown[], plan: string | null = null, product = "READYBUILDER 10") => checkReading(packSrc(), {
+  document: { kind, product, insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan, periodFrom: null, periodTo: null },
+  covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+  benefits: rows.map((r) => ({ ...(r as object), page: 38 })) });
+for (const kind of ["other", "policy_wording", "product_summary"]) {
+  test(`production shape: a pack of kind "${kind}" with the cover and the illustration in one document shows the series`, () => {
+    const rows = illRows("Total Basic Premiums Paid To-Date ($)");
+    const t = assembleTable([packReading(kind, rows)], family, linksFor(PACK, rows as never));
+    const got = shown(t);
+    for (const v of [1195.45, 2372.31, 4651.59, 4791, 23954, 47909]) assert.ok(got.includes(v), `${v} missing for ${kind}: ${JSON.stringify(got)}`);
+  });
+}
+// READYBUILDER 10, 22 Nov, the real stored shape (read back from the database after #576 was live and the table still hid
+// the rows): beside the series the pack holds by-year tables whose headings are not series words ("Guaranteed Cash Value
+// (GCV)", "Total Cash Value (TCV)", "Total Distribution Cost To-Date") and surrender-bonus rows by premium term. One of
+// them must not hide the premium frequencies and totals of the section that holds them.
+const REAL_EXTRA = "Guaranteed Cash Value (GCV) ($)\n1\t2,000\nTotal Cash Value (TCV) ($)\n1\t3,000\nTotal Distribution Cost To-Date ($)\n1/29\t1,234\t5,030";
+test("production shape: other by-year tables in the pack (GCV, TCV, distribution cost) do not hide the series", () => {
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"),
+    { ...base, pays: "value", quote: "1\t2,000", value: 2000, column: "Guaranteed Cash Value (GCV) ($)", benefit: "Guaranteed Cash Value", section: "1. Guaranteed Benefits", atPolicyYear: 1 },
+    { ...base, pays: "value", quote: "1\t3,000", value: 3000, column: "Total Cash Value (TCV) ($)", benefit: "Total Cash Value", section: "3. Illustrated Total Benefits based on Illustrated Investment Rate of Return at 3.25% p.a.", atPolicyYear: 1 },
+    { ...base, pays: "value", quote: "1/29\t1,234\t5,030", value: 1234, column: "Total Distribution Cost To-Date ($)", benefit: "Total Distribution Cost", section: "Policy Illustration", atPolicyYear: 1 }];
+  const src2: SourceDoc = { ...packSrc(), pages: [...packSrc().pages, { page: 36, text: REAL_EXTRA }] };
+  const r = checkReading(src2, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((x) => ({ ...(x as object), page: (x as { section: string }).section === "Policy Illustration" ? 38 : 36 })) });
+  const t = assembleTable([r], family, linksFor(PACK, rows as never));
+  const got = shown(t);
+  for (const v of [1195.45, 2372.31, 4651.59, 4791, 23954, 47909]) assert.ok(got.includes(v), `${v} missing: ${JSON.stringify(got)} refused ${JSON.stringify(t.refusedLinks.map((x) => x.why))}`);
+});
+test("control: Standard and Enhanced side by side in the pack still refuse the series, and are not shown", () => {
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"), paid("Standard", 5, 11111, "5/33\t11,111\t25,152"), paid("Enhanced", 5, 22222, "5/33\t22,222\t25,152")];
+  const src2: SourceDoc = { ...packSrc(), pages: [...packSrc().pages, { page: 37, text: "5/33\t11,111\t25,152\n5/33\t22,222\t25,152" }] };
+  const r = checkReading(src2, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((x) => ({ ...(x as object), page: /^(Standard|Enhanced)$/.test((x as { column: string }).column) ? 37 : 38 })) });
+  assert.ok(r.benefits.some((b) => b.value === 11111) && r.benefits.some((b) => b.value === 22222), "the alternative rows survive the check");
+  const t = assembleTable([r], family, linksFor(PACK, rows as never));
+  assert.ok(!shown(t).includes(11111) && !shown(t).includes(22222) && !shown(t).includes(47909), JSON.stringify(shown(t)));
+});
+test("control: the same series heading under two generic section titles with different amounts is two tables, none shown", () => {
+  const second = [{ ...paid("Total Basic Premiums Paid To-Date ($)", 1, 5030, "1/29\t5,030\t4,791"), section: "Benefit Illustration" },
+    { ...paid("Total Basic Premiums Paid To-Date ($)", 5, 25152, "5/33\t25,152\t23,954"), section: "Benefit Illustration" }];
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"), ...second];
+  const src2: SourceDoc = { ...packSrc(), pages: [...packSrc().pages, { page: 37, text: "1/29\t5,030\t4,791\n5/33\t25,152\t23,954" }] };
+  const r = checkReading(src2, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((x) => ({ ...(x as object), page: (x as { section: string }).section === "Benefit Illustration" ? 37 : 38 })) });
+  assert.ok(r.benefits.some((b) => b.value === 5030) && r.benefits.some((b) => b.value === 25152), "the second table's rows survive the check");
+  const t = assembleTable([r], family, linksFor(PACK, rows as never));
+  const got = shown(t);
+  assert.ok(!got.includes(5030) && !got.includes(25152) && !got.includes(47909) && !got.includes(4791), JSON.stringify(got));
+});
+for (const kind of ["personal_proof", "scheme_terms", "letter", "bill_or_receipt"]) {
+  test(`control: a pack of kind "${kind}" keeps the old refusal`, () => {
+    const rows = illRows("Total Basic Premiums Paid To-Date ($)");
+    const t = assembleTable([packReading(kind, rows)], family, linksFor(PACK, rows as never));
+    assert.ok(!shown(t).includes(47909));
+  });
+}
+test("control: a pack whose product is another plan's stays refused", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const t = assembleTable([packReading("other", rows, "Enhanced Max", "SUPERSAVER 20")], family, linksFor(PACK, rows as never));
+  assert.ok(!shown(t).includes(47909));
+});
+test("control: kind other / product_summary that does not hold the person's own cover stays refused", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  for (const kind of ["other", "product_summary", "policy_wording"]) {
+    // a summary document with no cover of its own, the schedule is another document
+    const sum = checkReading({ id: WORD, name: "Summary", readable: true, pages: [{ page: 1, text: illText }] }, reading(kind, [], rows));
+    const t = assembleTable([sched, sum], family, linksFor(WORD, rows as never));
+    assert.ok(!shown(t).includes(47909), kind);
+  }
+});
+test("control: two by-year tables under the same headings are two tables, none is shown", () => {
+  const two = illText + "\n5/33\t55,555\t25,152\n10/38\t99,999\t50,304";
+  const rows = [...illRows("Total Basic Premiums Paid To-Date ($)"), paid("Total Basic Premiums Paid To-Date ($)", 5, 55555, "5/33\t55,555\t25,152"), paid("Total Basic Premiums Paid To-Date ($)", 10, 99999, "10/38\t99,999\t50,304")];
+  const pack: SourceDoc = { id: PACK, name: "Policy pack", readable: true, pages: [{ page: 3, text: "Ong Pei Lin Charmaine\tREADYBUILDER 10\tS$49,000" }, { page: 38, text: two }] };
+  const r = checkReading(pack, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((q) => ({ ...(q as object), page: 38 })) });
+  assert.ok(r.benefits.some((b) => b.value === 55555), "fixture keeps the second table's rows");
+  const t = assembleTable([r], family, linksFor(PACK, rows as never));
+  assert.ok(!shown(t).includes(47909) && !shown(t).includes(99999), JSON.stringify(shown(t)));
+});
+test("control: a pack holding two plans' covers shows no generic table for either", () => {
+  const rows = illRows("Total Premiums Paid To-Date ($)");
+  const r = checkReading(packSrc(), {
+    document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+    covers: [{ person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" },
+      { person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "Beta Growth", sumInsured: 1000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" }],
+    benefits: rows.map((q) => ({ ...(q as object), page: 38 })) });
+  assert.ok(!shown(assembleTable([r], family, linksFor(PACK, rows as never))).includes(47909));
+});
+{
+  const base = { person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "READYBUILDER 10", plan: "READYBUILDER 10", sumInsured: 49000, asOf: null, page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000" };
+  const withCovers = (extra: object[]) => {
+    const rows = illRows("Total Premiums Paid To-Date ($)");
+    const src2: SourceDoc = { ...packSrc(), pages: [{ page: 3, text: "Ong Pei Lin Charmaine\tREADYBUILDER 10\tS$49,000\nTan Ah Kow\tAlpha Saver\tS$20,000" }, { page: 38, text: illText }] };
+    const r = checkReading(src2, { document: { kind: "other", product: "READYBUILDER 10", insurer: null, namedPeople: ["Ong Pei Lin Charmaine"], plan: null, periodFrom: null, periodTo: null },
+      covers: [base, ...extra], benefits: rows.map((q) => ({ ...(q as object), page: 38 })) });
+    return shown(assembleTable([r], [...family, { id: "p3", display_name: "Tan Ah Kow" }], linksFor(PACK, rows as never)));
+  };
+  const riderQuote = { page: 3, quote: "Ong Pei Lin Charmaine READYBUILDER 10 S$49,000", asOf: null, sumInsured: null };
+  test("a rider cover (riderOf set) with no plan and its own product name does not block the pack", () =>
+    assert.ok(withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "Waiver of Premium Rider", cover: "Waiver of Premium Rider", plan: null, riderOf: "READYBUILDER 10" }]).includes(47909)));
+  test("control: a product-only \"Alpha Saver +\" is not \"Alpha Saver\"; product-only READYBUILDER 10 + is not READYBUILDER 10", () =>
+    assert.ok(!withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10 +", cover: "READYBUILDER 10 +", plan: null }]).includes(47909)));
+  test("control: a product-only cover of another product (no plan, no riderOf) in the pack refuses the series", () =>
+    assert.ok(!withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "Beta Growth", cover: "Beta Growth", plan: null }]).includes(47909)));
+  test("a rider cover with the plan equal does not block the pack", () =>
+    assert.ok(withCovers([{ ...riderQuote, person: "Ong Pei Lin Charmaine", product: "READYBUILDER 10", cover: "TERMINAL ILLNESS", plan: "READYBUILDER 10" }]).includes(47909)));
+  test("control: a family pack with another person's cover under another plan refuses the series (it prints both plans' tables)", () =>
+    assert.ok(!withCovers([{ ...riderQuote, person: "Tan Ah Kow", product: "Alpha Saver", cover: "Alpha Saver", plan: "Alpha Saver", sumInsured: 20000, quote: "Tan Ah Kow Alpha Saver S$20,000" }]).includes(47909)));
+}
+if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
+console.log(`illustration-series: ${passed} pass`);
+process.exit(0);

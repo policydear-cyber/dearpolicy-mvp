@@ -94,7 +94,7 @@ export type SourceDoc = { id: string; name: string; readable: boolean; pages: { 
 export type Source = { documentId: string; document: string; page: number; excerpt: string };
 /** premiumSource: where the premium is printed, when not on the cover's own line (a schedule's "Instalment Premium : 470.85"),
  * and premiumLabel the words that line prints before it ("Instalment Premium"). */
-export type CheckedCover = ReadCover & { source: Source; currency: string | null; premiumSource?: Source | null; premiumLabel?: string | null;
+export type CheckedCover = ReadCover & { source: Source; currency: string | null; /** The currency is the household's own setting, applied when shown (household-currency.ts), not one the document prints. */ fromSettings?: boolean; premiumSource?: Source | null; premiumLabel?: string | null;
   /** Said with the premium when its page also prints a first-year premium ('First Year Instalment Premium * : 376.68'). */
   premiumNote?: string | null;
   /** A premium taken from its page's premium line has the currency that line or its page settles, never the cover's
@@ -212,7 +212,7 @@ const plainPremiumLineCount = (text: string) =>
 
 /** capSource: where the percentage's printed cap is, next to the row. capUnread: the row's words say it is capped ("up to",
  * "whichever is lesser") but no cap was read and checked, so no amount is worked out for it. */
-export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | null; baseSource: Source | null; capSource: Source | null; capUnread: boolean; droppedConditions: string[];
+export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | null; /** As CheckedCover.fromSettings. */ fromSettings?: boolean; baseSource: Source | null; capSource: Source | null; capUnread: boolean; droppedConditions: string[];
   /** The row is the most paid for several benefits' or policies' claims in total (combinedLimit below), not a benefit. */
   combinedLimit?: boolean;
   /** The row is printed under a heading that names the limits of compensation (LIMITS_HEADING). */
@@ -258,7 +258,10 @@ export type CheckedBenefit = ReadBenefit & { source: Source; currency: string | 
   coverLine?: boolean };
 export type Dropped = { what: string; why: string };
 /** periodFrom and periodTo: the document's own period of cover, each kept only when the document prints it. */
-export type CheckedReading = { documentId: string; document: string; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
+/** The lettered currencies the document's pages name (a bare "$" names none), and whether every page's text is known: what
+ * household-currency.ts needs to tell a bare amount from one that may be in another currency. */
+export type PageCurrencies = { named: string[]; allKnown: boolean };
+export type CheckedReading = { documentId: string; document: string; pageCurrencies?: PageCurrencies; kind: Reading["document"]["kind"]; product: string | null; plan: string | null; namedPeople: string[];
   periodFrom?: string | null; periodTo?: string | null; covers: CheckedCover[]; benefits: CheckedBenefit[]; dropped: Dropped[];
   /** What the document's own pages say the plan is, when they say savings or investment (lib/coverage/plan-type.ts). */
   planType?: PlanType | null;

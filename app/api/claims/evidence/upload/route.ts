@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
@@ -20,7 +20,7 @@ export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
     const form = await request.formData();
     const file = form.get("file");

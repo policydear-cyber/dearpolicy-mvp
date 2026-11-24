@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
-import { requireHouseholdContext } from "@/lib/auth/request-context";
-import { requireHouseholdOwner } from "@/lib/household/repo";
+import { requireHouseholdOwnerContext } from "@/lib/auth/request-context";
 import { deleteFolder, updateFolder } from "@/lib/policies/folders";
 import { UpdateFolder, folderError } from "../http";
 
@@ -14,8 +13,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
-    const ctx = await requireHouseholdContext(request);
-    await requireHouseholdOwner(ctx.userId, ctx.householdId);
+    const ctx = await requireHouseholdOwnerContext(request);
     await updateFolder(ctx.householdId, id, UpdateFolder.parse(await request.json().catch(() => ({}))));
     return NextResponse.json({ ok: true });
   } catch (error) {
@@ -28,8 +26,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
-    const ctx = await requireHouseholdContext(request);
-    await requireHouseholdOwner(ctx.userId, ctx.householdId);
+    const ctx = await requireHouseholdOwnerContext(request);
     await deleteFolder(ctx.householdId, id);
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { ChatConflict,deleteHistory,listConversations } from "@/lib/chat/store";
 
 export const runtime="nodejs";
@@ -31,7 +31,7 @@ const DeleteSchema=z.object({
 export async function DELETE(request:NextRequest){
   try{
     const body=DeleteSchema.parse(await request.json().catch(()=>({})));
-    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
+    const ctx=await requireHouseholdOwnerContext(request),accountId=ctx.householdId;
     if(body.familyMemberId){
       const member=await query(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,[body.familyMemberId,accountId]);
       if(!member.rows.length)return NextResponse.json({error:"Family profile not found."},{status:404});
