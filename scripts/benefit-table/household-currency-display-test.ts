@@ -93,6 +93,27 @@ test("D11 a reading with no page facts (not checked here) is left as it is", () 
   const r = { ...bare(), pageCurrencies: undefined };
   assert.equal(withHouseholdCurrency([r], "SGD")[0]!.benefits[0]!.currency, null);
 });
+test("D12 a document with pages the table never loads (unreadable, not checked) is held", () => {
+  const r = bare();
+  const out = withHouseholdCurrency([r], "SGD", { unknownDocuments: new Set([r.documentId]) });
+  assert.equal(out[0]!.benefits[0]!.currency, null);
+});
+test("D13 a wording with no cover that letters US$ holds the schedule of the same policy, grouped by the file's policy number", () => {
+  const schedule = reading("s2", "MPA-20417-S", "$100,000", "$50,000");
+  const wording = { ...reading("w2", "MPA-20417-S", "$1", "$1", "All amounts in this policy are in US$."), covers: [] };
+  const keys = new Map([["s2", ["MPA20417S"]], ["w2", ["MPA20417S"]]]);
+  const out = withHouseholdCurrency([schedule, wording], "SGD", { keys });
+  assert.equal(out[0]!.benefits[0]!.currency, null, "the schedule is held");
+  const alone = withHouseholdCurrency([schedule], "SGD", { keys });
+  assert.equal(alone[0]!.benefits[0]!.currency, "SGD", "alone it is filled");
+});
+test("D14 a document never read into the table, of the same policy or insurer and product, holds the policy", () => {
+  const schedule = reading("s3", "MPA-7", "$100,000", "$50,000");
+  const keys = new Map([["s3", ["ACME|SHIELD"]], ["u1", ["ACME|SHIELD"]]]);
+  assert.equal(withHouseholdCurrency([schedule], "SGD", { keys, unknownDocuments: new Set(["u1"]) })[0]!.benefits[0]!.currency, null);
+  const unrelated = new Map([["s3", ["ACME|SHIELD"]], ["u1", ["OTHER|PLAN"]]]);
+  assert.equal(withHouseholdCurrency([schedule], "SGD", { keys: unrelated, unknownDocuments: new Set(["u1"]) })[0]!.benefits[0]!.currency, "SGD");
+});
 
 console.log(`household-currency-display: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

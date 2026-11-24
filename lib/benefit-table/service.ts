@@ -687,6 +687,29 @@ export function figureChecksOf(readings: CheckedReading[]): FigureCheck[] {
 }
 
 /** The household's set currency, read through the same database as the table (a fake in tests); null when it chose none or the read fails. */
+/** The household's set currency applied to the readings (household-currency.ts), with what the readings alone do not show:
+ * the names each document shares with its policy's other documents, and the documents whose pages are not all known. */
+async function withSetCurrency(db: Db, accountId: string, readings: CheckedReading[], docs: HouseholdDoc[], stored: Map<string, StoredReading>): Promise<CheckedReading[]> {
+  const household = await householdCurrencyFromDb(db, accountId);
+  if (!household) return readings;
+  const norm = (v: string | null | undefined) => String(v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const keys = new Map<string, string[]>();
+  for (const d of docs) {
+    const out: string[] = [], pn = norm(d.file.policy_number), ip = norm(d.file.insurer) && norm(d.file.product_name) ? `${norm(d.file.insurer)}|${norm(d.file.product_name)}` : "";
+    if (pn.length >= 4) out.push(pn);
+    if (ip) out.push(ip);
+    keys.set(d.id, out);
+  }
+  // Pages the table never loads (unreadable, not checked) may print another currency: the document is unknown.
+  const unknown = new Set<string>();
+  try {
+    const rows = await db(`SELECT policy_id FROM policy_pages pp WHERE account_id=$1 AND NOT (${CHECKED_PAGE}) GROUP BY policy_id`, [accountId]);
+    for (const r of rows) unknown.add(String(r.policy_id));
+  } catch { return readings; }
+  // A document read into no table (still waiting, or never read), whose role is not a letter or form, is unknown too.
+  for (const d of docs) if (!stored.has(d.id) && !NON_COVER_ROLES.has(d.file.document_role ?? "")) unknown.add(d.id);
+  return withHouseholdCurrency(readings, household, { keys, unknownDocuments: unknown });
+}
 async function householdCurrencyFromDb(db: Db, accountId: string): Promise<string | null> {
   try {
     const rows = await db("SELECT to_jsonb(a)->>'currency' AS currency FROM accounts a WHERE a.id=$1", [accountId]);
@@ -729,7 +752,7 @@ async function load(db: Db, accountId: string): Promise<Loaded> {
   const figureConfirmations = guarded ? await figureConfirmationsOf(db, accountId) : [];
   const guardedReadings = guarded ? checked.map((r) => applyGuards(r, recordOf(r.documentId), figureConfirmations)) : checked;
   // The household's own currency, read now and applied to amounts that print none (household-currency.ts): nothing stored.
-  const readings = withHouseholdCurrency(guardedReadings, await householdCurrencyFromDb(db, accountId));
+  const readings = await withSetCurrency(db, accountId, guardedReadings, docs, stored);
   const links = (await db("SELECT section_key, cover_key, why, chosen_by FROM benefit_links WHERE account_id=$1", [accountId]))
     .map((r) => ({ section: String(r.section_key), cover: r.cover_key == null ? null : String(r.cover_key), why: String(r.why ?? ""), chosenBy: r.chosen_by === "household" ? "household" as const : "model" as const }));
   const ids = new Set(people.map((p) => p.id));

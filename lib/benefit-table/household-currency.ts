@@ -22,7 +22,14 @@ const MONEY_PAYS = new Set<string>(["amount", "up_to", "per_day", "per_period", 
 
 const key = (n: string | null | undefined) => String(n ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
-export function withHouseholdCurrency(readings: CheckedReading[], household: string | null | undefined): CheckedReading[] {
+/** What the readings alone do not show (service.ts load()):
+ * - `keys`: for a document, the names it shares with the documents of its policy: the policy number its file records and
+ *   its insurer and product. A wording with no cover is grouped with its schedule by these;
+ * - `unknownDocuments`: documents some of whose pages the table never loads (unreadable, not checked), or that were
+ *   never read into the table: what they print is not known, so the policy they belong to is held. */
+export type CurrencyContext = { keys?: Map<string, string[]>; unknownDocuments?: Set<string> };
+
+export function withHouseholdCurrency(readings: CheckedReading[], household: string | null | undefined, ctx: CurrencyContext = {}): CheckedReading[] {
   if (!household) return readings;
   // Documents of one policy (a printed policy number in common) stand or fall together: a schedule that says
   // "Currency: US Dollar" holds the policy wording's bare "$" too.
@@ -30,12 +37,24 @@ export function withHouseholdCurrency(readings: CheckedReading[], household: str
   const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)));
   const owner = new Map<string, number>();
   readings.forEach((r, i) => {
-    for (const n of new Set(r.covers.map((c) => key(c.policyNumber)).filter((k) => k.length >= 4))) {
+    for (const n of new Set([...r.covers.map((c) => key(c.policyNumber)).filter((k) => k.length >= 4), ...(ctx.keys?.get(r.documentId) ?? [])])) {
       const first = owner.get(n);
       if (first == null) owner.set(n, i); else parent[find(i)] = find(first);
     }
   });
   const held = new Set<number>();
+  // A document the table has no reading of, or only part of, holds every reading that shares a name with it.
+  const unknownKeys = new Set<string>();
+  const byId = new Map(readings.map((r, i) => [r.documentId, i]));
+  for (const id of ctx.unknownDocuments ?? []) {
+    const ks = ctx.keys?.get(id) ?? [];
+    if (byId.has(id)) held.add(find(byId.get(id)!));
+    for (const k of ks) unknownKeys.add(k);
+  }
+  readings.forEach((r, i) => {
+    const ks = [...r.covers.map((c) => key(c.policyNumber)).filter((k) => k.length >= 4), ...(ctx.keys?.get(r.documentId) ?? [])];
+    if (ks.some((k) => unknownKeys.has(k))) held.add(find(i));
+  });
   readings.forEach((r, i) => {
     const named = r.pageCurrencies?.named ?? [];
     const other = named.some((c) => c !== household)
