@@ -318,7 +318,7 @@ async function main() {
   for (const t of roundSeven) await test(`C579g '${t}' is a named currency`, () => { const r = HC.currenciesNamed(t + "100)"); assert.ok(r.length > 0 && r.every((c) => c !== "$"), JSON.stringify(r)); });
   for (const t of ["Singapore: $100", "Singapore - $100", "Singapore/$100", "Singaporean: $100", "Singapore ($100)"])
     await test(`C579g '${t}' states SGD`, () => assert.deepEqual(HC.currenciesNamed(t), ["SGD"]));
-  for (const t of ["ID: $100", "IN: $100", "Singapore hospitals: $100", "Overseas: $100"])
+  for (const t of ["ID: $100", "IN: $100", "SI: $100,000", "SI $100,000", "PM: $50", "PT - $80", "MC: $20", "SC: $120", "ST: $10", "CR: $5", "Singapore hospitals: $100", "Overseas: $100"])
     await test(`C579g control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
   for (const t of ["TPD: $500", "ICU: $200", "OPD - $50", "CI - $50,000", "SA: $100", "TL: $100", "WL: $100", "GP: $30", "ER: $100", "PA: $100", "AD: $100", "Pg: $100", "Qty: $100", "Ref: $100", "Ltd - $100", "Pte - $100", "Ward: $100", "Room: $100", "TPD / $100"])
     await test(`C579e control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
