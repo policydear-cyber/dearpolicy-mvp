@@ -6,7 +6,7 @@
  * engineer #526 F1). The page-image check keeps its own narrow reading (image-currency currenciesIn): there a false match
  * would hide a correct amount (Critic #526, e593f88 H1). */
 /** Countries and kinds of dollar a text may write out beside a dollar sign or after "Currency:". */
-const COUNTRY_WORD = /^(?:singapore|us|usa|united states|american|hong kong|hk|taiwan(?:ese)?|macau|macao|new zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|ca|can|cdn|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|barbad(?:os|ian)|belize|bermuda(?:n)?|cayman|guyana|liberia(?:n)?|namibia(?:n)?|ecuador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|uk|european|euro|eu|au|aus|sg|sgp)$/;
+const COUNTRY_WORD = /^(?:singapore|us|usa|united states|american|hong kong|hk|taiwan(?:ese)?|macau|macao|new zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|ca|can|cdn|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|barbad(?:os|ian)|belize|bermuda(?:n)?|cayman|guyana|liberia(?:n)?|namibia(?:n)?|ecuador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|uk|european|euro|eu|au|aus|sg|sgp|pounds?|sterling|gb|gbp|britain|swiss|switzerland|uae|dubai|oz|indo|hongkong)$/;
 const countryCode = (w: string) => /^(?:singapore|sg|sgp|singaporean)$/.test(w) ? "SGD" : /^(?:us|usa|united states|american)$/.test(w) ? "USD" : /^(?:hk|hong kong)$/.test(w) ? "HKD" : /^(?:au|australia|australian)$/.test(w) ? "AUD" : COUNTRY_WORD.test(w) ? "?" : null;
 export function currenciesNamed(text: string): string[] {
   const out: string[] = [];
@@ -56,7 +56,7 @@ export function currenciesNamed(text: string): string[] {
   // by a word ("$100 a day", "$100 A week") is not a currency.
   const AFTER_SEP = String.raw`[\s\-–—:;,/|•·*^~\[\](){}]`;
   const readWords = (raw: string): string | null => {
-    const tokens = raw.trim().split(/\s+/).map((x) => x.replace(/\./g, "")).filter(Boolean);
+    const tokens = raw.trim().split(/[\s-]+/).map((x) => x.replace(/\./g, "")).filter(Boolean);
     const joined: string[] = [];
     let run = ""; for (const tk of tokens) { if (tk.length === 1) run += tk; else break; } if (run.length >= 2) joined.push(run);
     joined.push(...[tokens.slice(0, 2).join(" "), tokens[0] ?? ""].filter(Boolean));
@@ -69,12 +69,14 @@ export function currenciesNamed(text: string): string[] {
     }
     return null;
   };
-  const afterSign = new RegExp(String.raw`\$${AFTER_SEP}*(?:in${AFTER_SEP}+)?(?:\d[\d,.]*${AFTER_SEP}*)?([A-Za-z][A-Za-z.' ]{0,24})`, "g");
+  const afterSign = new RegExp(String.raw`\$${AFTER_SEP}*(?:in${AFTER_SEP}+)?(?:\d[\d,.]*${AFTER_SEP}*)?([A-Za-z][A-Za-z.' -]{0,24})`, "g");
   for (const m of t.matchAll(afterSign)) { const c = readWords(m[1]!); if (c) out.push(c); }
   // "Currency", "Curr", "Ccy", "Cur" then a bracket, dash, colon, newline or nothing, and "Dollars" then letters with any separator
   // ("Currency (US)", "Currency\nUS", "Ccy: HK", "Dollars US", "Dollars, US", "Dollars — HK"): the named currency.
-  for (const m of t.matchAll(new RegExp(String.raw`\b(?:currency|curr|ccy|cur)\b\.?${AFTER_SEP}*(?:in${AFTER_SEP}+)?([A-Za-z][A-Za-z.' ]{0,24})`, "gi"))) { const c = readWords(m[1]!); if (c) out.push(c); }
-  for (const m of t.matchAll(new RegExp(String.raw`\bdollars?\b${AFTER_SEP}*(?:in${AFTER_SEP}+)?([A-Za-z][A-Za-z.' ]{0,24})`, "gi"))) { const c = readWords(m[1]!); if (c) out.push(c); }
+  for (const m of t.matchAll(new RegExp(String.raw`\b(?:currency|curr|ccy|cur)\b\.?${AFTER_SEP}*(?:in${AFTER_SEP}+)?([A-Za-z][A-Za-z.' -]{0,24})`, "gi"))) { const c = readWords(m[1]!); if (c) out.push(c); }
+  for (const m of t.matchAll(new RegExp(String.raw`\b(?:currency|curr|ccy)\b[^\n.]{0,25}?(?:[:=\-–—→>]|\bis\b|\bin\b)${AFTER_SEP}*([A-Za-z][A-Za-z.' -]{0,24})`, "gi"))) { const c = readWords(m[1]!); if (c) out.push(c); }
+  for (const m of t.matchAll(/(?<![A-Za-z])([A-Za-z][A-Za-z.]*(?:[ -][A-Za-z]+)?)\s+currency\b/gi)) { const c = readWords(m[1]!); if (c) out.push(c); }
+  for (const m of t.matchAll(new RegExp(String.raw`\bdollars?\b${AFTER_SEP}*(?:in${AFTER_SEP}+)?([A-Za-z][A-Za-z.' -]{0,24})`, "gi"))) { const c = readWords(m[1]!); if (c) out.push(c); }
   // Letters, then a figure, then the sign ("HK 100 $").
   for (const m of t.matchAll(/(?<![A-Za-z])([A-Za-z]{1,4})\s\d[\d,.]*\s?\$/g)) { const c = known(m[1]!); if (c) out.push(c); }
   // Letters before "($)" ("Sum Assured US ($)", "Hong Kong ($)").

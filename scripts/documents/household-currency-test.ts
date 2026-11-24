@@ -297,6 +297,13 @@ async function main() {
   for (const t of ["Dollars and cents", "Dollars per day", "Currency of payment", "Cur rent value $100", "$100 for A"])
     await test(`C579c control '${t}' names no currency`, () => assert.ok(HC.currenciesNamed(t).every((c) => c === "$"), JSON.stringify(HC.currenciesNamed(t))));
 
+  // Critic #579 round 4: "Currency" then a connecting word or mark, a country before "currency", more country words.
+  const roundFour = ["Currency of Policy: US", "Currency of cover: US", "Currency used: US", "Currency is US", "Currency = US", "Currency -> HK", "Currency → HK", "US currency", "U.S. currency", "HK currency",
+    "Hong Kong currency", "In U.S. currency", "Currency: Hong-Kong", "Currency: Pounds", "Currency: Sterling", "Currency: GB", "Currency: Britain", "Currency: Swiss", "Currency: Switzerland", "Currency: UAE", "Currency: Dubai"];
+  for (const t of roundFour) await test(`C579d '${t}' is a named currency`, () => { const r = HC.currenciesNamed(t); assert.ok(r.length > 0 && r.every((c) => c !== "$"), JSON.stringify(r)); });
+  for (const t of ["Policy currency", "Currency conversion $100", "Foreign currency $100", "Currency $100"])
+    await test(`C579d control '${t}' names no currency`, () => assert.ok(HC.currenciesNamed(t).every((c) => c === "$"), JSON.stringify(HC.currenciesNamed(t))));
+
   console.log(`household-currency-test: ${passed} passed, ${failures.length} failed`);
   if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }
 }
