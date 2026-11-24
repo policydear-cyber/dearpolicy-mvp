@@ -114,6 +114,23 @@ test("D14 a document never read into the table, of the same policy or insurer an
   const unrelated = new Map([["s3", ["ACME|SHIELD"]], ["u1", ["OTHER|PLAN"]]]);
   assert.equal(withHouseholdCurrency([schedule], "SGD", { keys: unrelated, unknownDocuments: new Set(["u1"]) })[0]!.benefits[0]!.currency, "SGD");
 });
+test("D15 a cover-less wording that letters US$ holds every policy of its insurer, whatever the products are called, and every policy when it names no insurer", () => {
+  const schedule = reading("s4", "MPA-8", "$100,000", "$50,000");
+  const wording = { ...reading("w4", "MPA-8", "$1", "$1", "All amounts in this policy are in US$."), covers: [] };
+  const same = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "ACME"], ["w4", "ACME"]]) });
+  assert.equal(same[0]!.benefits[0]!.currency, null);
+  const noInsurer = withHouseholdCurrency([schedule, wording], "SGD", {});
+  assert.equal(noInsurer[0]!.benefits[0]!.currency, null);
+  const other = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "OTHER"], ["w4", "ACME"]]) });
+  assert.equal(other[0]!.benefits[0]!.currency, "SGD");
+});
+test("D16 a count read as an amount (\"Waiting period 14\") takes no currency; money does", () => {
+  const r = bare();
+  const count = { ...r, benefits: [{ ...r.benefits[0]!, value: 14, source: { ...r.benefits[0]!.source, excerpt: "Waiting period\t14" } }] };
+  assert.equal(withHouseholdCurrency([count], "SGD")[0]!.benefits[0]!.currency, null);
+  const small = { ...r, benefits: [{ ...r.benefits[0]!, value: 50, source: { ...r.benefits[0]!.source, excerpt: "Daily cash\t$50.00" } }] };
+  assert.equal(withHouseholdCurrency([small], "SGD")[0]!.benefits[0]!.currency, "SGD");
+});
 
 console.log(`household-currency-display: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

@@ -693,8 +693,9 @@ async function withSetCurrency(db: Db, accountId: string, readings: CheckedReadi
   const household = await householdCurrencyFromDb(db, accountId);
   if (!household) return readings;
   const norm = (v: string | null | undefined) => String(v ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  const keys = new Map<string, string[]>();
+  const keys = new Map<string, string[]>(), insurers = new Map<string, string>();
   for (const d of docs) {
+    if (norm(d.file.insurer)) insurers.set(d.id, norm(d.file.insurer));
     const out: string[] = [], pn = norm(d.file.policy_number), ip = norm(d.file.insurer) && norm(d.file.product_name) ? `${norm(d.file.insurer)}|${norm(d.file.product_name)}` : "";
     if (pn.length >= 4) out.push(pn);
     if (ip) out.push(ip);
@@ -708,7 +709,7 @@ async function withSetCurrency(db: Db, accountId: string, readings: CheckedReadi
   } catch { return readings; }
   // A document read into no table (still waiting, or never read), whose role is not a letter or form, is unknown too.
   for (const d of docs) if (!stored.has(d.id) && !NON_COVER_ROLES.has(d.file.document_role ?? "")) unknown.add(d.id);
-  return withHouseholdCurrency(readings, household, { keys, unknownDocuments: unknown });
+  return withHouseholdCurrency(readings, household, { keys, unknownDocuments: unknown, insurers });
 }
 async function householdCurrencyFromDb(db: Db, accountId: string): Promise<string | null> {
   try {

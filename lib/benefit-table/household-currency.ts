@@ -27,7 +27,7 @@ const key = (n: string | null | undefined) => String(n ?? "").toUpperCase().repl
  *   its insurer and product. A wording with no cover is grouped with its schedule by these;
  * - `unknownDocuments`: documents some of whose pages the table never loads (unreadable, not checked), or that were
  *   never read into the table: what they print is not known, so the policy they belong to is held. */
-export type CurrencyContext = { keys?: Map<string, string[]>; unknownDocuments?: Set<string> };
+export type CurrencyContext = { keys?: Map<string, string[]>; unknownDocuments?: Set<string>; insurers?: Map<string, string> };
 
 export function withHouseholdCurrency(readings: CheckedReading[], household: string | null | undefined, ctx: CurrencyContext = {}): CheckedReading[] {
   if (!household) return readings;
@@ -55,6 +55,18 @@ export function withHouseholdCurrency(readings: CheckedReading[], household: str
     const ks = [...r.covers.map((c) => key(c.policyNumber)).filter((k) => k.length >= 4), ...(ctx.keys?.get(r.documentId) ?? [])];
     if (ks.some((k) => unknownKeys.has(k))) held.add(find(i));
   });
+  // A document with no cover of its own (a wording, terms) that names another currency applies to its insurer's policies
+  // whatever the products are called, and to every policy when it names no insurer either (nothing ties it to one).
+  const wordingInsurers = new Set<string>();
+  let wordingNamesAny = false;
+  for (const r of readings) {
+    if (r.covers.length || !(r.pageCurrencies?.named ?? []).some((c) => c !== household)) continue;
+    const ins = ctx.insurers?.get(r.documentId);
+    if (ins) wordingInsurers.add(ins); else wordingNamesAny = true;
+  }
+  readings.forEach((r, i) => {
+    if (wordingNamesAny || wordingInsurers.has(ctx.insurers?.get(r.documentId) ?? "\u0000")) held.add(find(i));
+  });
   readings.forEach((r, i) => {
     const named = r.pageCurrencies?.named ?? [];
     const other = named.some((c) => c !== household)
@@ -63,7 +75,9 @@ export function withHouseholdCurrency(readings: CheckedReading[], household: str
   });
   return readings.map((r, i) => {
     if (held.has(find(i))) return r;
-    const money = (b: CheckedBenefit) => b.currency == null && MONEY_PAYS.has(b.pays) && b.value != null;
+    // A count read as an amount ("Waiting period 14", "Units 2") is not money: the figure is money-shaped or at least 100.
+    const moneyShaped = (b: CheckedBenefit) => (b.value ?? 0) >= 100 || /\d{1,3}(?:,\d{3})+|\d\.\d{2}\b|\$\s?\d/.test(b.source.excerpt);
+    const money = (b: CheckedBenefit) => b.currency == null && MONEY_PAYS.has(b.pays) && b.value != null && moneyShaped(b);
     const cover = (c: CheckedCover): CheckedCover => (c.currency == null && (c.sumInsured != null || c.premium != null)
       ? { ...c, currency: household, ...(c.premiumCurrency === null ? { premiumCurrency: household } : {}), fromSettings: true } : c);
     return { ...r, covers: r.covers.map(cover), benefits: r.benefits.map((b) => (money(b) ? { ...b, currency: household, fromSettings: true } : b)) };
