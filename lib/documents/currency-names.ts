@@ -22,13 +22,13 @@ export function currenciesNamed(text: string): string[] {
     "sum", "sums", "fee", "fees", "tax", "max", "min", "pay", "paid", "cost", "only", "plus", "less", "each", "net", "age", "cash", "loss", "free", "plan", "part", "over",
     "than", "from", "upto", "not", "any", "all", "now", "our", "your", "was", "has", "may", "via", "etc", "amt", "upon", "also", "then", "that", "this", "with", "rate", "cap", "bal", "day", "days"]);
   const CODE_OF: Record<string, string> = { S: "SGD", SG: "SGD", SGP: "SGD", SIN: "SGD", SING: "SGD", SPORE: "SGD", US: "USD", USA: "USD", HK: "HKD", HKG: "HKD", A: "AUD", AU: "AUD", AUS: "AUD", AUST: "AUD",
-    NZ: "?", NZL: "?", C: "?", CA: "?", CAN: "?", CDN: "?", NT: "?", TW: "?", TWN: "?", MY: "?", MX: "?", MEX: "?", BN: "?", FJ: "?", R: "?", RM: "MYR" };
+    SGD: "SGD", USD: "USD", HKD: "HKD", AUD: "AUD", NZD: "?", CAD: "?", MYR: "MYR", NZ: "?", NZL: "?", C: "?", CA: "?", CAN: "?", CDN: "?", NT: "?", TW: "?", TWN: "?", MY: "?", MX: "?", MEX: "?", BN: "?", FJ: "?", R: "?", RM: "MYR" };
   const norm = (prefix: string) => prefix.replace(/[^A-Za-z]/g, "").toUpperCase();
   const known = (prefix: string): string | null => CODE_OF[norm(prefix)] ?? null;
   const LETTERS = String.raw`(?:[A-Za-z](?:[.' ]{1,2}[A-Za-z]){1,3}(?![A-Za-z])|[Ss]'pore|[A-Za-z]{1,4})`;
   // Before the sign: brackets and any dash, colon, slash, semicolon or comma between the letters and the sign are allowed.
-  const SEPS = String.raw`[-–—:;,/]`;
-  const before = new RegExp(String.raw`(?<![A-Za-z])([\[({]?)(${LETTERS})([\])}]?)\.?(\s{0,3}${SEPS}?\s{0,2})\$`, "g");
+  const SEPS = String.raw`[-–—:;,/|•·*^~]`;
+  const before = new RegExp(String.raw`(?<![A-Za-z])([\[({]?)(${LETTERS})\.?([\])}]?)\.?(\s{0,3}${SEPS}?\s{0,2})\$`, "g");
   // A letter that is the benefit's own label, not a currency: after a word ("Plan A $100", "Class C - $50"), in list markers
   // ("(A) $100", "A) $100"), after a digit ("Option 1A $100"). Glued to the sign ("A$", "C$") it is a currency.
   const labelBefore = (text: string, off: number, open: string, close: string, n: string, gap: string) =>
@@ -54,10 +54,9 @@ export function currenciesNamed(text: string): string[] {
   // US", "$100,000 U.S.A", "$100 (U.S.)", "$100,000 Hong Kong", "$ 100,000 / HK", "$ - Singapore"): the first one or two words, or
   // single letters with dots ("U. S. A."), when they are a known currency's code or a country written out. A lone letter followed
   // by a word ("$100 a day", "$100 A week") is not a currency.
-  const AFTER_SEP = String.raw`[\s\-–—:;,/\[\](){}]`;
-  const afterSign = new RegExp(String.raw`\$${AFTER_SEP}*(?:in${AFTER_SEP}+)?(?:\d[\d,.]*${AFTER_SEP}*)?([A-Za-z][A-Za-z.' ]{0,24})`, "g");
-  for (const m of t.matchAll(afterSign)) {
-    const tokens = m[1]!.trim().split(/\s+/).map((x) => x.replace(/\./g, "")).filter(Boolean);
+  const AFTER_SEP = String.raw`[\s\-–—:;,/|•·*^~\[\](){}]`;
+  const readWords = (raw: string): string | null => {
+    const tokens = raw.trim().split(/\s+/).map((x) => x.replace(/\./g, "")).filter(Boolean);
     const joined: string[] = [];
     let run = ""; for (const tk of tokens) { if (tk.length === 1) run += tk; else break; } if (run.length >= 2) joined.push(run);
     joined.push(...[tokens.slice(0, 2).join(" "), tokens[0] ?? ""].filter(Boolean));
@@ -65,11 +64,17 @@ export function currenciesNamed(text: string): string[] {
       const w = c.toLowerCase();
       const code = CODE_OF[w.toUpperCase()] ?? countryCode(w);
       if (!code) continue;
-      if (c.length === 1 && tokens.length > 1 && tokens[1]!.length > 1) break;   // "$100 a day": a label word follows
-      out.push(code);
-      break;
+      if (c.length === 1 && tokens.length > 1 && tokens[1]!.length > 1) return null;   // "$100 a day": a label word follows
+      return code;
     }
-  }
+    return null;
+  };
+  const afterSign = new RegExp(String.raw`\$${AFTER_SEP}*(?:in${AFTER_SEP}+)?(?:\d[\d,.]*${AFTER_SEP}*)?([A-Za-z][A-Za-z.' ]{0,24})`, "g");
+  for (const m of t.matchAll(afterSign)) { const c = readWords(m[1]!); if (c) out.push(c); }
+  // "Currency", "Curr", "Ccy", "Cur" then a bracket, dash, colon, newline or nothing, and "Dollars" then letters with any separator
+  // ("Currency (US)", "Currency\nUS", "Ccy: HK", "Dollars US", "Dollars, US", "Dollars — HK"): the named currency.
+  for (const m of t.matchAll(new RegExp(String.raw`\b(?:currency|curr|ccy|cur)\b\.?${AFTER_SEP}*(?:in${AFTER_SEP}+)?([A-Za-z][A-Za-z.' ]{0,24})`, "gi"))) { const c = readWords(m[1]!); if (c) out.push(c); }
+  for (const m of t.matchAll(new RegExp(String.raw`\bdollars?\b${AFTER_SEP}*(?:in${AFTER_SEP}+)?([A-Za-z][A-Za-z.' ]{0,24})`, "gi"))) { const c = readWords(m[1]!); if (c) out.push(c); }
   // Letters, then a figure, then the sign ("HK 100 $").
   for (const m of t.matchAll(/(?<![A-Za-z])([A-Za-z]{1,4})\s\d[\d,.]*\s?\$/g)) { const c = known(m[1]!); if (c) out.push(c); }
   // Letters before "($)" ("Sum Assured US ($)", "Hong Kong ($)").

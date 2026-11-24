@@ -287,6 +287,16 @@ async function main() {
   for (const t of ["$100 a day", "$100 A day", "$100 A week", "(A) $100", "A) $100", "(C) $100", "Plan A - $100", "Option 1A $100", "Class C - $50", "$100 per day", "$500 Cancer benefit"])
     await test(`C579b control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
 
+  // Critic #579 round 3: "Currency" or "Dollars" then letters with any bracket, dash, newline, abbreviation or table separator.
+  const roundThree = ["Currency (US)", "Currency (HK)", "Currency [US]", "Currency — US", "Currency – HK", "Currency\nUS", "Curr: US", "Ccy: HK", "Ccy US", "Cur. US", "Cur: SG", "Cur HK",
+    "Dollars US", "Dollars HK", "Dollar HK", "Dollars, US", "Dollars; US", "Dollars — US", "Dollars – HK", "(U.S.) $100", "(U.S.)$100", "(H.K.) $", "$100,000 U.S.D", "$ | US", "$100 • HK", "$100 · HK", "$ * US", "$100 ~ HK"];
+  for (const t of roundThree) await test(`C579c '${t.replace(/\n/g, "\\n")}' is a named currency, not a bare $`, () => { const r = HC.currenciesNamed(t); assert.ok(r.some((c) => c !== "$"), JSON.stringify(r)); });
+  await test("C579c a US schedule that lays out 'Currency' then 'US' and prints bare '$' fills nothing for an SGD household", () => {
+    assert.ok(!shown([{ ...death, currency: null }], [p2("Currency\nUS\nLife Assured\tMei Ling Tan\nDeath\tIn Force\t$100,000.00")], "SGD").includes("SGD 100000"));
+  });
+  for (const t of ["Dollars and cents", "Dollars per day", "Currency of payment", "Cur rent value $100", "$100 for A"])
+    await test(`C579c control '${t}' names no currency`, () => assert.ok(HC.currenciesNamed(t).every((c) => c === "$"), JSON.stringify(HC.currenciesNamed(t))));
+
   console.log(`household-currency-test: ${passed} passed, ${failures.length} failed`);
   if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }
 }
