@@ -95,6 +95,8 @@ export type TableRow = {
   /** For a value printed for an age or policy year (a table of values by year): that age and year as printed, and the
    * yearly rate its column is illustrated at (check.ts valueAt). Life stages places the value by these, never by the label. */
   valueAt?: { age?: number; policyYear?: number; rate?: string };
+  /** The row's currency is the household's own setting, applied when shown (household-currency.ts): the card says so. */
+  fromSettings?: true;
   /** Other policy years where the same running total is printed again with the same amount (collapseRepeats). */
   repeatedAt?: number[];
 };
@@ -1904,7 +1906,7 @@ export function assembleTable(readings: CheckedReading[], family: FamilyMember[]
       const figure: Figure = atYearFigure(printedFigure, at);
       p.rows.push({ ...(Object.keys(at).length ? { valueAt: at } : {}), personId: p.id, person: p.name, coverKey: c.coverKey, product: c.product, cover: c.cover, plan: c.plan, benefit: b.benefit,
         section: b.section, column: b.column, pays: b.pays, figure, fromDay: b.fromDay, maxDays: b.maxDays,
-        conditions: [...(b.limitsHeading && belowSumInsured(figure, c) && !b.conditions.includes(b.source.excerpt) ? [...b.conditions, b.source.excerpt] : b.conditions), ...capNotes], source: b.source, baseSource: named ? named.cover.source : b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column),
+        conditions: [...(b.limitsHeading && belowSumInsured(figure, c) && !b.conditions.includes(b.source.excerpt) ? [...b.conditions, b.source.excerpt] : b.conditions), ...capNotes], source: b.source, baseSource: named ? named.cover.source : b.percentOf === "sum_insured" ? c.source : b.baseSource, linkWhy: l.why, qualifier: qualifierOf(b.column), ...(b.fromSettings ? { fromSettings: true as const } : {}),
         percent: b.pays !== "percent" ? null : b.childLimit && figure.kind === "worked_out" && childStatusOf(b, named ? named.cover : c, singaporeDay(now)) === "child" ? b.childLimit.percent : b.value,
         ...(b.childLimit && b.pays === "percent" ? { childLimit: { ...b.childLimit, own: b.value!, status: childStatusOf(b, named ? named.cover : c, singaporeDay(now)),
           days: statusDays(singaporeDay(now), (named ? named.cover : c).documentPeriodFrom, (named ? named.cover : c).documentPeriodTo),

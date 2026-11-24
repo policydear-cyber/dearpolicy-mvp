@@ -16,8 +16,10 @@ type Cover={personId:string;coverKey:string;product:string;cover:string;plan:str
   sumInsured:number|null;premium:number|null;premiumFrequency:string|null;startDate:string|null;endDate:string|null;currency:string|null;
   source:Source;premiumSource?:Source|null;
   /** The currency the premium's own line or page settles; unset, the premium has the cover's currency (check.ts). */
-  premiumCurrency?:string|null;};
-type Row=SummaryRow&{coverKey:string;source:Source;product?:string|null;coverLine?:boolean};
+  premiumCurrency?:string|null;
+  /** The currency is the household's own setting, applied when shown (lib/benefit-table/household-currency.ts). */
+  fromSettings?:boolean;};
+type Row=SummaryRow&{coverKey:string;source:Source;product?:string|null;coverLine?:boolean;fromSettings?:boolean};
 type Person={id:string;name:string;covers:Cover[];rows:Row[];
   /** The person's schedule lines (what Home's tiles count), from GET /api/benefit-table. Optional: an older server sends none. */
   scheduleLines?:{policyId:string;category:string}[]};
@@ -73,6 +75,7 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
       </div>
     </header>
     {shared?<p className="muted cov-reading" data-testid="table-shared">{shared}</p>:null}
+    {cover.fromSettings||rows.some(r=>r.fromSettings)?<p className="muted cov-reading" data-testid="table-currency-note">Currency from your account settings.</p>:null}
     {!rows.length?<p className="muted cov-reading">{listedWith?`What it pays is set out with ${coverName(listedWith)}${listedWith.cover!==listedWith.product?` (${listedWith.cover})`:""}, in the same policy wording.`:reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:<>
       {/* Only its schedule's own cover line is on file: shown as printed, with the same ask for its wording. */}
       {rows.every(r=>r.coverLine)&&!listedWith?<p className="muted cov-reading" data-testid="table-cover-line">As printed on the schedule. {reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:null}
