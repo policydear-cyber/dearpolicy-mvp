@@ -2135,10 +2135,10 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
    for reduced motion. Content is fully visible without it; nothing starts hidden unless the animation is supported. */
 @keyframes dp-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: no-preference) {
-  .landing-hero-text { animation: dp-rise .5s var(--ease) both; }
-  .landing-wallet, .landing-fan, .landing-example { animation: dp-rise .5s var(--ease) .12s both; }
+  .landing-hero-text { animation: dp-rise .5s var(--ease) backwards; }
+  .landing-wallet, .landing-fan, .landing-example { animation: dp-rise .5s var(--ease) .12s backwards; }
   @supports (animation-timeline: view()) {
-    .landing-section { animation: dp-rise linear both; animation-timeline: view(); animation-range: entry 0% entry 35%; }
+    @media screen { .landing-section { animation: dp-rise linear backwards; animation-timeline: view(); animation-range: entry 0% entry 35%; } }
   }
   .coverage-card, .action-card, .family-card, .claim-session-card { animation: dp-rise .28s var(--ease) backwards; }
   .coverage-grid > :nth-child(2) { animation-delay: 30ms; }
