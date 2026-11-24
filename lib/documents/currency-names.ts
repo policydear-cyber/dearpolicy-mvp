@@ -7,6 +7,8 @@
  * would hide a correct amount (Critic #526, e593f88 H1). */
 /** Countries and kinds of dollar a text may write out beside a dollar sign or after "Currency:". */
 const COUNTRY_WORD = /^(?:singapore|us|usa|united states|american|hong kong|hk|taiwan(?:ese)?|macau|macao|new zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|ca|can|cdn|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|barbad(?:os|ian)|belize|bermuda(?:n)?|cayman|guyana|liberia(?:n)?|namibia(?:n)?|ecuador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|uk|european|euro|eu|au|aus|sg|sgp|pounds?|sterling|gb|gbp|britain|united kingdom|great britain|europe|eurozone|jp|th|ph|id|cn|prc|ch|swiss|switzerland|uae|dubai|oz|indo|hongkong)$/;
+// A country name or code written before the sign, with a bracket, colon, dash or slash between ("Hong Kong: $", "UK - $", "Taiwan ($").
+const COUNTRY_BEFORE_SIGN = /(?<![A-Za-z])(?:hong\s?kong|hk|taiwan(?:ese)?|macau|macao|new\s*zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|bahamian|barbad(?:os|ian)|belize(?:an)?|bermuda(?:n)?|bermudian|cayman|guyana|liberia(?:n)?|namibia(?:n)?|solomon|surinam(?:e|ese)?|trinidad|tobago|zimbabwe(?:an)?|caribbean|ecuador|salvador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|european|uruguay(?:an)?|cuba(?:n)?|dominican|nicaragua(?:n)?|venezuela(?:n)?|puerto\s+rico|filipino|straits|uk|gb|eu|jp|cn|th|ph|kr|vn|ae|za|br|mo|tt|bm|ky|cl|co|mys|mal|rp|austr|united\s*kingdom|great\s*britain|new\s*zealand|south\s*africa|brazil)\.?[\s)\]]*[:\-–—/]?\s*\$/gi;
 const countryCode = (w: string) => /^(?:singapore|sg|sgp|singaporean)$/.test(w) ? "SGD" : /^(?:us|usa|united states|american)$/.test(w) ? "USD" : /^(?:hk|hong kong)$/.test(w) ? "HKD" : /^(?:au|australia|australian)$/.test(w) ? "AUD" : COUNTRY_WORD.test(w) ? "?" : null;
 export function currenciesNamed(text: string): string[] {
   const out: string[] = [];
@@ -47,6 +49,7 @@ export function currenciesNamed(text: string): string[] {
     if (!n || NOT_CURRENCY.has(n.toLowerCase()) || ((spaced || SEP_IN_GAP.test(gap)) && !known(w)) || labelBefore(rest, off, open, close, n, gap)) return m;
     return " ";
   });
+  rest = rest.replace(COUNTRY_BEFORE_SIGN, " ").replace(/(?<![A-Za-z])united\s*states\.?[\s)\]]*[:\-–—/]?\s*\$/gi, " ");
   // After the sign: glued letters ("$US500", "$HK", "$A", "$NZ 100") are a currency.
   const afterGlued = /\$([A-Za-z]{1,3})(?![A-Za-z])/g;
   for (const m of rest.matchAll(afterGlued)) { const n = norm(m[1]!); if (!NOT_CURRENCY.has(n.toLowerCase())) out.push(known(n) ?? "?"); }
@@ -127,14 +130,14 @@ export function currenciesNamed(text: string): string[] {
   // "Accidental Death $100,000", and the household's currency is meant to fill those (DC 22 Nov).
   // Glued ("Singapore$"), dotted ("U.S.A. $", "Sing. $", "Aust. $") or spaced all count. "Amounts in Dollars (US)" names it after.
   if (/(?<![A-Za-z])(?:singapore(?:an)?|sing)\.?\s*\$/i.test(t)) out.push("SGD");
-  if (/(?<![A-Za-z])(?:united\s*states|u\.?s\.?a?|american?)\.?\s*\$/i.test(t)) out.push("USD");
+  if (/(?<![A-Za-z])(?:united\s*states|u\.?s\.?a?|american?)\.?[\s)\]]*[:\-–—/]?\s*\$/i.test(t)) out.push("USD");
   for (const m of t.matchAll(/\bdollars?\s*\(\s*(US|USA|USD|S|SG|SGD|HK|HKD|AU|AUD|A|NZ|NZD|NT|C|CAD)\s*\)/gi)) {
     const c = m[1].toUpperCase();
     out.push(c === "S" || c === "SG" || c === "SGD" ? "SGD" : c === "US" || c === "USA" || c === "USD" ? "USD" : c === "HK" || c === "HKD" ? "HKD" : c === "AU" || c === "A" || c === "AUD" ? "AUD" : "?");
   }
-  if (/(?<![A-Za-z])(?:hong\s?kong|hk)\.?\s*\$/i.test(t)) out.push("HKD");
-  if (/(?<![A-Za-z])(?:aust?|aus)\.?\s*\$/i.test(t)) out.push("AUD");
-  if (/(?<![A-Za-z])(?:hong\s?kong|hk|taiwan(?:ese)?|macau|macao|new\s*zealand|nz|kiwi|aussie|australia(?:n)?|canad(?:a|ian)|brunei|fiji(?:an)?|indonesia(?:n)?|philippine|philippines|mexic(?:o|an)|chile(?:an)?|colombia(?:n)?|argentin(?:e|a|ian)|jamaica(?:n)?|bahamas|bahamian|barbad(?:os|ian)|belize(?:an)?|bermuda(?:n)?|bermudian|cayman|guyana|liberia(?:n)?|namibia(?:n)?|solomon|surinam(?:e|ese)?|trinidad|tobago|zimbabwe(?:an)?|caribbean|ecuador|salvador|malaysia(?:n)?|china|chinese|japan(?:ese)?|korea(?:n)?|india(?:n)?|thai(?:land)?|vietnam(?:ese)?|british|european|uruguay(?:an)?|cuba(?:n)?|dominican|nicaragua(?:n)?|venezuela(?:n)?|puerto\s+rico|filipino|straits)\.?\s*\$/i.test(t)) out.push("?");
+  if (/(?<![A-Za-z])(?:hong\s?kong|hk)\.?[\s)\]]*[:\-–—/]?\s*\$/i.test(t)) out.push("HKD");
+  if (/(?<![A-Za-z])(?:aust?|aus)\.?[\s)\]]*[:\-–—/]?\s*\$/i.test(t)) out.push("AUD");
+  if (new RegExp(COUNTRY_BEFORE_SIGN.source, "i").test(t)) out.push("?");
   if (/(?<![A-Za-z])dollars?\b/i.test(t) && !out.length) out.push("$");
   for (const w of ["yen", "yuan", "pounds?", "renminbi", "rupees?", "rupiah", "baht", "won", "francs?", "dong", "kr(?:ona|one|oner)", "dirhams?", "riyals?", "rials?", "rand", "kyat", "riel", "taka", "patacas?", "dinars?", "lira", "roubles?", "rubles?", "reais", "zloty", "shekels?", "kip", "rufiyaa", "liras?"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
   // A currency named in words with no sign or code beside the figure ("Currency: Singapore", "Currency - US", "In Singapore
