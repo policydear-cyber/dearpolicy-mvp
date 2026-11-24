@@ -71,7 +71,10 @@ export function withHouseholdCurrency(readings: CheckedReading[], household: str
   for (const r of readings) {
     if (r.covers.length || !(r.pageCurrencies?.named ?? []).some((c) => c !== household)) continue;
     const ins = insurerKey(ctx.insurers?.get(r.documentId));
-    if (ins) wordingInsurers.add(ins); else wordingNamesAny = true;
+    // An insurer that no policy of the household is filed under may be one of them under another name ("American
+    // International Assurance" for "AIA"): nothing ties it to a policy, so every policy is held.
+    const filedUnder = readings.some((o) => o.covers.length && insurerKey(ctx.insurers?.get(o.documentId)) === ins);
+    if (ins && filedUnder) wordingInsurers.add(ins); else wordingNamesAny = true;
   }
   readings.forEach((r, i) => {
     const mine = insurerKey(ctx.insurers?.get(r.documentId));

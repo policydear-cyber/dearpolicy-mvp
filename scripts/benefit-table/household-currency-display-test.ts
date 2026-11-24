@@ -125,8 +125,14 @@ test("D15 a cover-less wording that letters US$ holds every policy of its insure
     const spelled = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "Merlion Mutual Assurance Ltd"], ["w4", spelling]]) });
     assert.equal(spelled[0]!.benefits[0]!.currency, null, `insurer spelled ${spelling}`);
   }
-  const other = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "Other Insurer"], ["w4", "ACME"]]) });
+  // The wording's insurer is filed under no policy (it may be the same insurer under another name): every policy is held.
+  const alias = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "AIA Singapore"], ["w4", "American International Assurance Company, Ltd."]]) });
+  assert.equal(alias[0]!.benefits[0]!.currency, null, "AIA under its legal name");
+  // Another insurer's policy of the household is filled when the wording's insurer is filed under a policy of its own.
+  const own = reading("s5", "ZZZ-9", "$100,000", "$50,000");
+  const other = withHouseholdCurrency([schedule, own, wording], "SGD", { insurers: new Map([["s4", "Other Insurer"], ["s5", "Acme Ltd"], ["w4", "ACME"]]) });
   assert.equal(other[0]!.benefits[0]!.currency, "SGD");
+  assert.equal(other[1]!.benefits[0]!.currency, null);
 });
 test("D16 a count read as an amount (\"Waiting period 14\") takes no currency; money does", () => {
   const r = bare();
