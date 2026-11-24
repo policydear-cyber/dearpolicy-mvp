@@ -996,7 +996,15 @@ function checkLinesOnce(textReading: string, imageReading: string, pageNumber?: 
   // A joined row's words-only first line is held with its row, but is not a figure line of its own.
   const heldCount = [...spread].filter((i) => skipText.has(i) || isFig(i)).length;
   const seenText = seenFigures(textReading), seenImage = seenFigures(imageReading);
-  const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${confirmed} confirmed; figures ${seenText.length} in text, ${seenImage.length} in image; `
+  // What kind of line was held, in counts and fixed words only: a line printing an amount (a decimal or thousands amount,
+  // a percentage, or tab cells) is a possible benefit; any other held line (a small number, a year, a date in a note) is
+  // text around the table. The kind never changes what is held: it lets a reader of the history tell a lost benefit row
+  // from a footnote at a glance.
+  const amountLine = (l: string) => /\d,\d{3}|\d\.\d{2}|%/.test(l) || l.split("\t").filter((c) => c.trim()).length >= 2;
+  const heldFigureLines = [...spread].filter((i) => !skipText.has(i) && isFig(i));
+  const heldAmount = heldFigureLines.filter((i) => amountLine(lines[i])).length;
+  const heldKinds = heldFigureLines.length ? `; held ${heldFigureLines.length} (amount rows ${heldAmount}, other lines ${heldFigureLines.length - heldAmount})` : "";
+  const log = `figure lines ${figureLines} in text, ${imageLines} in image, ${confirmed} confirmed${heldKinds}; figures ${seenText.length} in text, ${seenImage.length} in image; `
     + `only in text ${described(only(seenText, seenImage))}; only in image ${described(only(seenImage, seenText))}`;
   if (!b.length) return { agree: false, kind, why: "the image reading prints no figures", text: null, log, held: heldCount, heldLines: spread };
   const handed = lines.map((l, i) => rebuilt.get(i) ?? (lent.has(i) || joinedAway.has(i) ? "" : l));

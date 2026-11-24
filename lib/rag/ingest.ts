@@ -596,8 +596,10 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // Why each page failed goes to the server-only processing history, never into the page text (Critic plan step 3).
       // With it, what kind of difference it was, in counts and fixed words only, so one run shows the cause (Critic plan
       // step 1); a page whose every figure line was confirmed is recorded too when the image printed a line the text did not.
-      for (const p of pages.filter((x) => numbers.includes(x.pageNumber) && (x.uncheckedWhy || x.checkLog))) {
-        const outcome = p.unchecked ? "unchecked" : p.partChecked ? "some lines unchecked" : "every figure line confirmed";
+      // Only a page that lost figures is recorded: a page whose every figure line was confirmed is not an error, and listing it
+      // in the admin Errors list made a normal check look like a failure (DC, 24 Nov).
+      for (const p of pages.filter((x) => numbers.includes(x.pageNumber) && (x.unchecked || x.partChecked) && (x.uncheckedWhy || x.checkLog))) {
+        const outcome = p.unchecked ? "unchecked" : "some lines unchecked";
         await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PAGE_CHECK_DISAGREED",
           error: [`page ${p.pageNumber}: ${outcome}`, p.uncheckedWhy, p.checkLog].filter(Boolean).join("; ") }).catch(() => undefined);
       }

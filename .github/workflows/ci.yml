@@ -150,6 +150,8 @@ jobs:
         run: npm run documents:wrapped-row-check-test
       - name: A page footer (registration number, print date) is not an amount, so it never makes a page read in part
         run: npm run documents:page-footer-check-test
+      - name: The page check records which held lines were amount rows and which were text around the table
+        run: npm run documents:held-line-kind-test
 
       - name: Household currency (amounts with no printed currency)
         run: npm run documents:household-currency-test
