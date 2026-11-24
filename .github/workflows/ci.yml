@@ -152,6 +152,8 @@ jobs:
         run: npm run documents:page-footer-check-test
       - name: The page check records which held lines were amount rows and which were text around the table
         run: npm run documents:held-line-kind-test
+      - name: Household currency shown, not stored (benefit table)
+        run: npm run benefit-table:household-currency-display-test
 
       - name: Household currency (amounts with no printed currency)
         run: npm run documents:household-currency-test

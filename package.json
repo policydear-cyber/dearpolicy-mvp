@@ -371,6 +371,7 @@
     "documents:sentence-paragraph-check-test": "node --import tsx scripts/documents/sentence-paragraph-check-test.ts",
     "documents:page-footer-check-test": "node --import tsx scripts/documents/page-footer-check-test.ts",
     "documents:held-line-kind-test": "node --import tsx scripts/documents/held-line-kind-test.ts",
+    "benefit-table:household-currency-display-test": "node --import tsx scripts/benefit-table/household-currency-display-test.ts",
     "documents:currency-misread-test": "node --import tsx scripts/documents/currency-misread-test.ts",
     "documents:dot-grouped-figure-test": "node --import tsx scripts/documents/dot-grouped-figure-test.ts",
     "documents:turned-page-test": "node --import tsx scripts/documents/turned-page-test.ts",
