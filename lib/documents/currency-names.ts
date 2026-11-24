@@ -141,7 +141,11 @@ export function currenciesNamed(text: string): string[] {
   if (new RegExp(COUNTRY_BEFORE_SIGN.source, "i").test(t)) out.push("?");
   if (new RegExp(SINGAPORE_BEFORE_SIGN.source, "i").test(t)) out.push("SGD");
   if (/(?<![A-Za-z])dollars?\b/i.test(t) && !out.length) out.push("$");
-  for (const w of ["yen", "yuan", "pounds?", "renminbi", "rupees?", "rupiah", "baht", "won", "francs?", "dong", "kr(?:ona|one|oner)", "dirhams?", "riyals?", "rials?", "rand", "kyat", "riel", "taka", "patacas?", "dinars?", "lira", "roubles?", "rubles?", "reais", "zloty", "shekels?", "kip", "rufiyaa", "liras?"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
+  for (const w of ["yen", "yuan", "pounds?", "renminbi", "rupees?", "rupiah", "baht", "francs?", "kr(?:ona|one|oner)", "dirhams?", "riyals?", "rials?", "kyat", "patacas?", "dinars?", "roubles?", "rubles?", "reais", "zloty", "shekels?", "rufiyaa"]) if (new RegExp(`\\b${w}\\b`, "i").test(t)) out.push("?");
+  // A word that is also an everyday English word ("you won't", "if we won", "random" is safe by \b, "pounds" of weight, "kip", "lira")
+  // names a currency only beside a figure ("50,000 won", "won 5,000"); alone it held every document that said "won't" (live, 24 Nov).
+  if (/\b(?:south\s+|north\s+)?korean\s+won\b|\bafrican\s+rand\b|\b(?:in|currency)\s*:?\s+(?:won|rand|kip|dong|taka|riel|liras?)\b/i.test(t)) out.push("?");
+  for (const w of ["won", "rand", "kip", "dong", "taka", "riel", "liras?", "lira", "pounds?"]) if (new RegExp(`(?:\\d[\\d,.]*\\s?${w}\\b|(?<![\\w’'])${w}\\s?\\d)`, "i").test(t)) out.push("?");
   // A currency named in words with no sign or code beside the figure ("Currency: Singapore", "Currency - US", "In Singapore
   // currency"): the named one, or another currency (Test engineer #577 F2).
   for (const m of t.matchAll(/\bcurrency\s*[:\-\t ]\s*([A-Za-z.]+(?: [A-Za-z]+)?)/gi)) {
