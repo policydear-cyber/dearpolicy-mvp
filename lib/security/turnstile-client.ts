@@ -15,7 +15,7 @@ function load(): Promise<Api> {
     const s = document.createElement("script");
     s.src = SCRIPT; s.async = true;
     s.onload = () => (ready() ? resolve(ready()!) : reject(new Error("turnstile missing")));
-    s.onerror = () => { loading = null; reject(new Error("turnstile blocked")); };
+    s.onerror = () => { loading = null; console.warn("[turnstile] the Cloudflare script did not load (blocked by the browser, an extension or the network)"); reject(new Error("turnstile blocked")); };
     document.head.appendChild(s);
   });
   return loading;
@@ -31,11 +31,14 @@ export async function getTurnstileToken(timeoutMs = 60_000): Promise<string | nu
   let id: string | null = null;
   const done = () => { try { if (id) api.remove(id); } catch { /* gone */ } box.remove(); };
   return new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => { done(); reject(new Error("turnstile timeout")); }, timeoutMs);
+    const timer = setTimeout(() => { console.warn("[turnstile] no answer from Cloudflare after " + Math.round(timeoutMs / 1000) + " seconds"); done(); reject(new Error("turnstile timeout")); }, timeoutMs);
     id = api.render(box, {
       sitekey: siteKey, appearance: "interaction-only",
       callback: (t: string) => { clearTimeout(timer); done(); resolve(t); },
-      "error-callback": () => { clearTimeout(timer); done(); reject(new Error("turnstile error")); },
+      // Cloudflare's own error code (for example 110200: this site's domain is not on the widget's list; 110100/110110: the
+      // site key is wrong) goes to the console only, so whoever sets this up can see why without a code reaching a household.
+      "error-callback": (code?: unknown) => { console.warn("[turnstile] the check failed with Cloudflare error " + String(code ?? "unknown")); clearTimeout(timer); done(); reject(new Error("turnstile error")); return true; },
+      "timeout-callback": () => console.warn("[turnstile] the check took too long and Cloudflare asked to retry"),
     });
   });
 }
