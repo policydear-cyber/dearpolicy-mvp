@@ -13,6 +13,7 @@ import { test, expect, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { readHousehold, readQuestions, sourceFiles, type Question } from "../../scripts/ingest-live/fixture";
+import { FAMILY_ADDED, chooseRelationship } from "../support/family-form";
 
 const OUT = path.resolve(process.env.INGEST_LIVE_OUT ?? "e2e-results/ingest-live");
 const FIXTURE = path.resolve(process.env.INGEST_LIVE_FIXTURE ?? "scripts/ingest-live/fixture");
@@ -55,7 +56,7 @@ test("live ingestion journey", async ({ page }) => {
     const found = existing.find((x) => x.display_name === m.displayName);
     if (found) { members[m.displayName] = found.id; continue; }
     await page.locator("#fm-new-name").fill(m.displayName);
-    await page.locator("#fm-new-relationship").selectOption(m.relationship);
+    await chooseRelationship(page, m.relationship);
     // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
     await page.locator("#fm-new-dob").fill("1990-01-01");
     await page.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
@@ -63,7 +64,7 @@ test("live ingestion journey", async ({ page }) => {
     if (m.dateOfBirth) await page.locator("#fm-new-dob").fill(m.dateOfBirth);
     if (m.preferredName) await page.locator("#fm-new-preferred").fill(m.preferredName);
     await page.getByRole("button", { name: "+ Add person" }).click();
-    soft(await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Family member added.", { timeout: 60_000 }).then(() => true, () => false), `family: "${m.displayName}" not confirmed as added`);
+    soft(await expect(page.locator(".profile-add-panel .upload-status")).toHaveText(FAMILY_ADDED, { timeout: 60_000 }).then(() => true, () => false), `family: "${m.displayName}" not confirmed as added`);
     const after = (await api<{ family: { id: string; display_name: string }[] }>(page, "/api/family")).body.family ?? [];
     const made = after.find((x) => x.display_name === m.displayName);
     if (soft(made, `family: "${m.displayName}" was not created through the Family page`)) members[m.displayName] = made!.id;

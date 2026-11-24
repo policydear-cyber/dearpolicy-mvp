@@ -557,6 +557,9 @@ jobs:
       - name: Member profile (sex and date of birth on the Family page; used only when the document prints nothing; works before the migration)
         run: npm run family:member-profile-test
 
+      - name: Family page starts with the person who signed up (owner first; households with people are never blocked)
+        run: npm run family:owner-first-test
+
       - name: Member profile in the chat's people module (sex settles daughter or son when the relationship word does not)
         run: npm run rag2:member-sex-test
 

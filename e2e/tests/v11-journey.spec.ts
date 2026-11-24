@@ -39,6 +39,7 @@ import {
   signUpThroughUi, signInThroughUi, signOutThroughUi, syntheticMemo, operator, reviewerAdmin, INDICATIVE_NOTICE,
 } from "../support/journey";
 import { renderDataset, PEOPLE, PREFIX, UPLOAD_ORDER, V11_QUESTIONS, type RenderedDoc, type EvalQuestion } from "../support/v11-dataset";
+import { FAMILY_ADDED, chooseRelationship } from "../support/family-form";
 
 const OUT = path.resolve("e2e-results/v11-journey");
 const SEED_FILE = path.resolve(".e2e-v11-seed.json");
@@ -238,14 +239,14 @@ test.describe.serial("V1.1 release journey", () => {
       for (const key of ["josephine", "marcus"] as const) {
         const p = PEOPLE[key];
         await owner.locator("#fm-new-name").fill(p.fullName);
-        await owner.locator("#fm-new-relationship").selectOption(p.relationship);
+        await chooseRelationship(owner, p.relationship);
         // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
         await owner.locator("#fm-new-dob").fill("1990-01-01");
         await owner.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
         await owner.locator("#fm-new-preferred").fill(p.fullName); // required since DC 17 Nov; a later line may set the real one
         await owner.locator("#fm-new-preferred").fill(p.preferred);
         await owner.getByRole("button", { name: "+ Add person" }).click();
-        await expect(owner.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.", { timeout: 60_000 });
+        await expect(owner.locator(".profile-add-panel [role=status]")).toHaveText(FAMILY_ADDED, { timeout: 60_000 });
       }
     });
     const family = (await api<{ family: { id: string; display_name: string }[] }>(owner, "/api/family")).body.family;
@@ -493,14 +494,14 @@ test.describe.serial("V1.1 release journey", () => {
       await other.goto("/family");
       const p = PEOPLE.josephineB;
       await other.locator("#fm-new-name").fill(p.fullName);
-      await other.locator("#fm-new-relationship").selectOption(p.relationship);
+      await chooseRelationship(other, p.relationship);
       // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
       await other.locator("#fm-new-dob").fill("1990-01-01");
       await other.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
       await other.locator("#fm-new-preferred").fill(p.fullName); // required since DC 17 Nov; a later line may set the real one
       await other.locator("#fm-new-preferred").fill(p.preferred);
       await other.getByRole("button", { name: "+ Add person" }).click();
-      await expect(other.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.", { timeout: 60_000 });
+      await expect(other.locator(".profile-add-panel [role=status]")).toHaveText(FAMILY_ADDED, { timeout: 60_000 });
       const famB = (await api<{ family: { id: string; display_name: string }[] }>(other, "/api/family")).body.family;
       journey["member:josephineB"] = famB[0]?.id;
       const d = docs.find((x) => x.key === "otherHouseholdAccident")!;

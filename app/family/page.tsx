@@ -7,7 +7,7 @@ import { AccountTabs } from "@/components/account-tabs";
 import { Icon } from "@/components/icons";
 import { HouseholdAccess } from "@/components/household-access";
 import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-role";
-import { profileGaps, PROFILE_GAP_FIELD } from "@/lib/household/member-profile";
+import { familyStart, profileGaps, PROFILE_GAP_FIELD } from "@/lib/household/member-profile";
 
 type Member = {
   id: string; display_name: string; relationship: string; date_of_birth: string | null;
@@ -69,6 +69,8 @@ export default function FamilyPage() {
   const [sexField, setSexField] = useState(false);
   /** The family list (and whether a sex can be saved) has loaded: until then the form can't know which fields it needs. */
   const [loaded, setLoaded] = useState(false);
+  /** An existing household with people but no "self": the owner chose to add themselves. */
+  const [addingSelf, setAddingSelf] = useState(false);
   const [status, setStatus] = useState("");
   const [confirmId, setConfirmId] = useState<string | null>(null);
   /** The person the last save or removal was about, so its outcome is also shown on their card (not only at the top). */
@@ -93,10 +95,10 @@ export default function FamilyPage() {
     if (empty) { setNewTried(true); focusAfterRender(`fm-new-${empty[0]}`); return; }
     if (dob > todayIso()) return setStatus("A date of birth can't be in the future.");
     if (dob < "1900-01-01") return setStatus("Check the year of that date of birth.");
-    const response = await fetch("/api/family", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: name, relationship, dateOfBirth: dob, preferredName: preferred.trim(), ...(sexField ? { sex } : {}) }) });
+    const response = await fetch("/api/family", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: name, relationship: aboutYou ? "self" : relationship, dateOfBirth: dob, preferredName: preferred.trim(), ...(sexField ? { sex } : {}) }) });
     const payload = await response.json();
-    if (!response.ok) return setStatus(customerMessage(payload.error, "This family member couldn't be added. Try again in a moment."));
-    setName(""); setDob(""); setPreferred(""); setSex(""); setRelationship(""); setNewTried(false); setStatus("Family member added."); await refresh();
+    if (!response.ok) return setStatus(customerMessage(payload.error, aboutYou ? "Your details couldn't be saved. Try again in a moment." : "This family member couldn't be added. Try again in a moment."));
+    setName(""); setDob(""); setPreferred(""); setSex(""); setRelationship(""); setNewTried(false); setAddingSelf(false); setStatus(aboutYou ? "Saved." : "Family member added."); await refresh();
   }
 
   async function save(member: Member) {
@@ -143,8 +145,11 @@ export default function FamilyPage() {
     if (response.ok) await refresh();
   }
 
+  /** The signed-up person comes first: until they are on file, the form is about them and nobody else is offered. */
+  const start = familyStart(family);
+  const aboutYou = loaded && (start === "owner" || addingSelf);
   /** Which add-form fields are empty, by field id, in screen order. */
-  const newEmpty: [string, boolean][] = [["name", !name.trim()], ["relationship", !relationship], ["dob", !dob], ["sex", sexField && !sex], ["preferred", !preferred.trim()]];
+  const newEmpty: [string, boolean][] = [["name", !name.trim()], ["relationship", !aboutYou && !relationship], ["dob", !dob], ["sex", sexField && !sex], ["preferred", !preferred.trim()]];
   const newShows = (field: string) => newTried && newEmpty.some(([f, isEmpty]) => f === field && isEmpty);
   /** Which of a person's details are empty, by field id: the full name, and the details profileGaps asks for. */
   function editEmpty(member: Member): [string, boolean][] {
@@ -159,7 +164,7 @@ export default function FamilyPage() {
     <div className="page">
       <header className="page-header compact"><div><h1><span className="title-icon"><Icon name="family"/></span>Account settings</h1></div></header>
       <AccountTabs />
-      <div className="section-heading"><div><h2>Your family</h2><p>The people your policies cover. Use each person&rsquo;s full name as their documents print it. DearPolicy uses it to match each document to the people it covers.</p></div></div>
+      <div className="section-heading"><div><h2>{start === "owner" ? "About you" : "Your family"}</h2><p>{start === "owner" ? "Use your full name as your documents print it." : "The people your policies cover. Use each person\u2019s full name as their documents print it. DearPolicy uses it to match each document to the people it covers."}</p></div></div>
 
       <section className="section">
         <div className="profile-list">
@@ -211,15 +216,17 @@ export default function FamilyPage() {
       {/* The people come first: a returning household opens this page to see or change them, and adds someone rarely. */}
       {!canManage ? <OwnerOnlyNote>Only the household owner can add, change or remove family members.</OwnerOnlyNote> :
       <section className="profile-add-panel" aria-label="Add a family member">
-        {family.length ? <h3>Add a family member</h3> : null}
+        {aboutYou ? (start === "owner" ? null : <h3>Add yourself</h3>) : family.length ? <h3>Add a family member</h3> : null}
+        {/* Households made before this step: people on file, the owner not yet. Nothing is blocked; one line offers it. */}
+        {loaded && start === "family-without-owner" && !addingSelf ? <p className="profile-missing" data-testid="owner-missing">You aren&rsquo;t on your list yet. <button type="button" className="text-link" onClick={() => { setAddingSelf(true); focusAfterRender("fm-new-name"); }}>Add yourself</button></p> : null}
         <form onSubmit={add} noValidate className="profile-add-grid" onChange={() => { if (status) { setStatus(""); setStatusFor(null); } }}>
-          <div className="field wide"><label htmlFor="fm-new-name">Full name, as on their policies <Req /></label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen" autoComplete="off" required {...invalid("fm-new-name", newShows("name"))} /><Missing id="fm-new-name" show={newShows("name")} /></div>
-          <div className="field"><label htmlFor="fm-new-relationship">Relationship to you <Req /></label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required {...invalid("fm-new-relationship", newShows("relationship"))}><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select><Missing id="fm-new-relationship" show={newShows("relationship")} /></div>
+          <div className="field wide"><label htmlFor="fm-new-name">{aboutYou ? "Your full name, as on your policies" : "Full name, as on their policies"} <Req /></label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen" autoComplete="off" required {...invalid("fm-new-name", newShows("name"))} /><Missing id="fm-new-name" show={newShows("name")} /></div>
+          {aboutYou ? null : <div className="field"><label htmlFor="fm-new-relationship">Relationship to you <Req /></label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required {...invalid("fm-new-relationship", newShows("relationship"))}><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select><Missing id="fm-new-relationship" show={newShows("relationship")} /></div>}
           <div className="field"><label htmlFor="fm-new-dob">Date of birth <Req /></label><input id="fm-new-dob" type="date" min="1900-01-01" max={today} value={dob} onChange={(e) => setDob(e.target.value)} required {...invalid("fm-new-dob", newShows("dob"))} /><Missing id="fm-new-dob" show={newShows("dob")} /></div>
           {sexField ? <div className="field"><label htmlFor="fm-new-sex">Sex <Req /></label><select id="fm-new-sex" value={sex} onChange={(e) => setSex(e.target.value)} required {...invalid("fm-new-sex", newShows("sex"))}><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select><Missing id="fm-new-sex" show={newShows("sex")} /></div> : null}
-          <div className="field"><label htmlFor="fm-new-preferred">Preferred name <Req /></label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="For example, Alex" autoComplete="off" required {...invalid("fm-new-preferred", newShows("preferred"))} /><Missing id="fm-new-preferred" show={newShows("preferred")} /></div>
+          <div className="field"><label htmlFor="fm-new-preferred">{aboutYou ? "What you go by" : "Preferred name"} <Req /></label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="For example, Alex" autoComplete="off" required {...invalid("fm-new-preferred", newShows("preferred"))} /><Missing id="fm-new-preferred" show={newShows("preferred")} /></div>
           {/* Never disabled once loaded: pressing Add with a field empty marks each empty field "Required". */}
-          <button className="button primary" type="submit" disabled={!loaded}>+ Add person</button>
+          <button className="button primary" type="submit" disabled={!loaded}>{aboutYou ? "Save" : "+ Add person"}</button>
         </form>
         {status && <div className="upload-status" role="status">{status}</div>}
       </section>}
