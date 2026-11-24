@@ -314,7 +314,7 @@ async function main() {
     "Hong Kong: $", "Hong Kong - $", "Taiwan: $", "Kiwi - $", "Canada - $", "China: $", "Japan: $", "Australia - $", "New Zealand: $", "United States - $", "Brunei: $", "Fiji: $", "Mexico: $", "US - $", "HK/$"];
   for (const t of roundSix) await test(`C579f '${t}' is a named currency`, () => { const r = HC.currenciesNamed(t + "100"); assert.ok(r.length > 0 && r.every((c) => c !== "$"), JSON.stringify(r)); });
   // Test engineer #579 round 7: an opening bracket before the sign, ISO-3 codes, more names; Singapore states SGD.
-  const roundSeven = ["AU ($", "SG ($", "US ($", "HK [$", "Taiwan ($", "GBR ($", "FJI: $", "CHN: $", "JPN - $", "KOR/$", "THA: $", "ZAF: $", "CH: $", "Britain: $", "Europe - $", "Eurozone: $", "Switzerland: $", "Swiss/$", "Hawaii: $", "Guam - $"];
+  const roundSeven = ["AU ($", "SG ($", "US ($", "HK [$", "Taiwan ($", "GBR ($", "FJI: $", "CHN: $", "JPN - $", "KOR/$", "THA: $", "ZAF: $", "CH: $", "Britain: $", "Europe - $", "Eurozone: $", "Switzerland: $", "Swiss/$", "Hawaii: $", "Guam - $", "United States ($", "SR: $", "SR ($", "PR - $", "VI: $", "GU/$"];
   for (const t of roundSeven) await test(`C579g '${t}' is a named currency`, () => { const r = HC.currenciesNamed(t + "100)"); assert.ok(r.length > 0 && r.every((c) => c !== "$"), JSON.stringify(r)); });
   for (const t of ["Singapore: $100", "Singapore - $100", "Singapore/$100", "Singaporean: $100", "Singapore ($100)"])
     await test(`C579g '${t}' states SGD`, () => assert.deepEqual(HC.currenciesNamed(t), ["SGD"]));
