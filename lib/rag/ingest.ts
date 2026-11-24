@@ -746,7 +746,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // ... and the other way round: this document prints a currency, so another document of the same policy whose amounts
     // took the household's (another) currency gives them back until it is read again.
     {
-      const named = pages.flatMap((p) => [...currenciesNamed(p.text), ...(p.imageCurrency ? [p.imageCurrency] : []), ...(p.imageCurrencies ?? [])]);
+      // A bare "$" names no currency: it is read in the household's own, so it never takes another document's amounts back.
+      const named = pages.flatMap((p) => [...currenciesNamed(p.text), ...(p.imageCurrency ? [p.imageCurrency] : []), ...(p.imageCurrencies ?? [])]).filter((c) => c !== "$");
       if (named.length) await withdrawRelatedHouseholdCurrency(args.accountId, args.policyId, policyNumbersOf(extraction), named).catch(() => 0);
     }
     if (messyNotes.length) extraction.documentNotes = [...new Set([...extraction.documentNotes, ...messyNotes])];

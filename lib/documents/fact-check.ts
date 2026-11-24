@@ -636,8 +636,8 @@ function checkCoverage<C extends PolicyExtraction["insuredPeople"][number]["cove
         ok = true; fromHousehold = own;
       }
       // A figure confirmed as money with no currency of its own (a reading that gave none on a line that prints the
-      // household's own mark) takes it on the same page terms; a page naming any other currency, or a bare "$", is never
-      // in the map.
+      // household's own mark) takes it on the same page terms; a page naming any other currency is never in the map. A bare "$"
+      // is read in the household's own currency.
       else if (ok && !coverage.currency && own) fromHousehold = own;
     }
   }
