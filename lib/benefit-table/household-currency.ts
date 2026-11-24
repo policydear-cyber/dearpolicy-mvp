@@ -65,7 +65,10 @@ export function withHouseholdCurrency(readings: CheckedReading[], household: str
     if (ins) wordingInsurers.add(ins); else wordingNamesAny = true;
   }
   readings.forEach((r, i) => {
-    if (wordingNamesAny || wordingInsurers.has(ctx.insurers?.get(r.documentId) ?? "\u0000")) held.add(find(i));
+    const mine = ctx.insurers?.get(r.documentId) ?? "";
+    // The insurer is extracted per document and rarely spelled the same ("Merlion Mutual", "Merlion Mutual Assurance Ltd").
+    const sameInsurer = !!mine && [...wordingInsurers].some((w) => w === mine || (Math.min(w.length, mine.length) >= 6 && (w.startsWith(mine) || mine.startsWith(w))));
+    if (wordingNamesAny || sameInsurer) held.add(find(i));
   });
   readings.forEach((r, i) => {
     const named = r.pageCurrencies?.named ?? [];

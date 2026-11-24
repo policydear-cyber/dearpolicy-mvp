@@ -121,6 +121,8 @@ test("D15 a cover-less wording that letters US$ holds every policy of its insure
   assert.equal(same[0]!.benefits[0]!.currency, null);
   const noInsurer = withHouseholdCurrency([schedule, wording], "SGD", {});
   assert.equal(noInsurer[0]!.benefits[0]!.currency, null);
+  const spelled = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "MERLIONMUTUALASSURANCELTD"], ["w4", "MERLIONMUTUAL"]]) });
+  assert.equal(spelled[0]!.benefits[0]!.currency, null, "insurer spelled differently");
   const other = withHouseholdCurrency([schedule, wording], "SGD", { insurers: new Map([["s4", "OTHER"], ["w4", "ACME"]]) });
   assert.equal(other[0]!.benefits[0]!.currency, "SGD");
 });
