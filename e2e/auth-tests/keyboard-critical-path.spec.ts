@@ -8,6 +8,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { name, syntheticWordingPdf } from "../support/synthetic";
 import { api, emailFor, newPassword, adminCreateUser, recordHousehold, hardenNavigation } from "../support/journey";
+import { FAMILY_ADDED, isAboutYou } from "../support/family-form";
 
 type Focus = { tag: string; text: string; label: string; id: string; type: string; visible: boolean };
 async function focused(page: Page): Promise<Focus> {
@@ -61,17 +62,20 @@ test.describe.serial("keyboard-only critical path", () => {
 
     await tabTo(page, (f) => f.id === "fm-new-name", "the new person's name field");
     await page.keyboard.type(person);
-    await tabTo(page, (f) => f.id === "fm-new-relationship", "the relationship field");
-    await page.keyboard.press("Home");
+    // The first person is the owner ("About you"): no relationship field. Anyone added later has one.
+    if (!(await isAboutYou(page))) {
+      await tabTo(page, (f) => f.id === "fm-new-relationship", "the relationship field");
+      await page.keyboard.press("Home");
+    }
     // Member profile (#527): date of birth and sex, by keyboard too.
     await tabTo(page, (f) => f.id === "fm-new-dob", "the date of birth field");
     await page.keyboard.type("01011990");
     await tabTo(page, (f) => f.id === "fm-new-sex", "the sex field"); await page.keyboard.press("Home");
     await tabTo(page, (f) => f.id === "fm-new-preferred", "the preferred name field");
     await page.keyboard.type(person);
-    await tabTo(page, (f) => f.text === "+ Add person", "the Add person button");
+    await tabTo(page, (f) => f.text === "+ Add person" || f.text === "Save", "the Add person button");
     await page.keyboard.press("Enter");
-    await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
+    await expect(page.locator(".profile-add-panel [role=status]")).toHaveText(FAMILY_ADDED);
 
     // Two-step delete, both steps by keyboard; focus stays on the control.
     await tabTo(page, (f) => f.label === `Delete ${person}`, "the person's Delete button");
@@ -85,17 +89,20 @@ test.describe.serial("keyboard-only critical path", () => {
     await tabTo(page, (f) => f.id === "fm-new-name", "the new person's name field");
     await page.keyboard.type(person);
     // PR #65: no relationship is pre-chosen, and Add person stays disabled until one is.
-    await tabTo(page, (f) => f.id === "fm-new-relationship", "the relationship field");
-    await page.keyboard.press("Home");
+    // The first person is the owner ("About you"): no relationship field. Anyone added later has one.
+    if (!(await isAboutYou(page))) {
+      await tabTo(page, (f) => f.id === "fm-new-relationship", "the relationship field");
+      await page.keyboard.press("Home");
+    }
     // Member profile (#527): date of birth and sex, by keyboard too.
     await tabTo(page, (f) => f.id === "fm-new-dob", "the date of birth field");
     await page.keyboard.type("01011990");
     await tabTo(page, (f) => f.id === "fm-new-sex", "the sex field"); await page.keyboard.press("Home");
     await tabTo(page, (f) => f.id === "fm-new-preferred", "the preferred name field");
     await page.keyboard.type(person);
-    await tabTo(page, (f) => f.text === "+ Add person", "the Add person button");
+    await tabTo(page, (f) => f.text === "+ Add person" || f.text === "Save", "the Add person button");
     await page.keyboard.press("Enter");
-    await expect(page.locator(".profile-add-panel [role=status]")).toHaveText("Family member added.");
+    await expect(page.locator(".profile-add-panel [role=status]")).toHaveText(FAMILY_ADDED);
     await page.goto("/policies");
     await tabTo(page, (f) => f.tag === "input" && f.type === "file", "the document file field");
     const chooser = page.waitForEvent("filechooser");

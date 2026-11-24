@@ -24,6 +24,7 @@ import path from "node:path";
 import { Client } from "pg";
 import { PREFIX } from "../support/synthetic";
 import * as FX from "../support/v1-fixtures";
+import { FAMILY_ADDED, chooseRelationship } from "../support/family-form";
 
 const OUT = path.resolve("e2e-results/v1-core-loop");
 const B_STATE = path.resolve(".e2e-v1-b.json");
@@ -107,14 +108,14 @@ async function addPerson(page: Page, fullName: string, preferred: string, relati
   const found = existing.find((m) => m.display_name === fullName || m.display_name === preferred);
   if (found) return found.id;
   await page.locator("#fm-new-name").fill(fullName);
-  await page.locator("#fm-new-relationship").selectOption(relationship);
+  await chooseRelationship(page, relationship);
   // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
   await page.locator("#fm-new-dob").fill("1990-01-01");
   await page.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
   await page.locator("#fm-new-preferred").fill(fullName); // required since DC 17 Nov; a later line may set the real one
   if (preferred && preferred !== fullName) await page.locator("#fm-new-preferred").fill(preferred);
   await page.getByRole("button", { name: "+ Add person" }).click();
-  await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Family member added.", { timeout: 60_000 });
+  await expect(page.locator(".profile-add-panel .upload-status")).toHaveText(FAMILY_ADDED, { timeout: 60_000 });
   const family = (await api<{ family: { id: string; display_name: string }[] }>(page, "/api/family")).body.family ?? [];
   const m = family.find((x) => x.display_name === fullName || x.display_name === preferred);
   soft(m, `family: ${preferred} was not created through the Family page`);

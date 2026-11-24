@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { test, expect, type Page, type Browser } from "@playwright/test";
 import { name, syntheticWordingPdf, SYNTHETIC_MALWARE_MARKER, SYNTHETIC_PENDING_MARKER, PREFIX } from "../support/synthetic";
+import { FAMILY_ADDED, chooseRelationship } from "../support/family-form";
 
 const BASE_B = process.env.E2E_BASE_URL_B ?? "http://localhost:3001";
 const FAKE = process.env.E2E_FAKE_SERVICES_URL ?? "http://127.0.0.1:4010";
@@ -73,13 +74,13 @@ test.describe.serial("synthetic household journey", () => {
     await page.goto("/family");
     for (const [who, relationship] of [[parent, "parent"], [child, "child"]] as const) {
       await page.locator("#fm-new-name").fill(who);
-      await page.locator("#fm-new-relationship").selectOption(relationship);
+      await chooseRelationship(page, relationship);
       // Member profile (#527): date of birth is required; sex once sql/member-profile.sql is applied.
       await page.locator("#fm-new-dob").fill(relationship === "child" ? "2015-06-01" : "1960-06-01");
       await page.locator("#fm-new-sex").selectOption("unspecified"); // e2e schemas include sql/member-profile.sql
       await page.locator("#fm-new-preferred").fill(who); // required since DC 17 Nov; a later line may set the real one
       await page.getByRole("button", { name: "+ Add person" }).click();
-      await expect(page.locator(".profile-add-panel .upload-status")).toHaveText("Family member added.");
+      await expect(page.locator(".profile-add-panel .upload-status")).toHaveText(FAMILY_ADDED);
     }
     const family = (await api<{ family: { id: string; display_name: string }[] }>(page, "/api/family")).body.family;
     for (const who of [parent, child]) {
