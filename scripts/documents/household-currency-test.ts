@@ -313,6 +313,13 @@ async function main() {
   const roundSix = ["UK: $", "JP: $", "CN: $", "TH: $", "PH: $", "KR: $", "VN: $", "EU: $", "GB: $", "AE: $", "ZA: $", "BR: $", "MO: $", "TT: $", "BM: $", "KY: $", "CL - $", "CO - $", "MYS: $", "MAL: $", "Austr: $", "Rp: $",
     "Hong Kong: $", "Hong Kong - $", "Taiwan: $", "Kiwi - $", "Canada - $", "China: $", "Japan: $", "Australia - $", "New Zealand: $", "United States - $", "Brunei: $", "Fiji: $", "Mexico: $", "US - $", "HK/$"];
   for (const t of roundSix) await test(`C579f '${t}' is a named currency`, () => { const r = HC.currenciesNamed(t + "100"); assert.ok(r.length > 0 && r.every((c) => c !== "$"), JSON.stringify(r)); });
+  // Test engineer #579 round 7: an opening bracket before the sign, ISO-3 codes, more names; Singapore states SGD.
+  const roundSeven = ["AU ($", "SG ($", "US ($", "HK [$", "Taiwan ($", "GBR ($", "FJI: $", "CHN: $", "JPN - $", "KOR/$", "THA: $", "ZAF: $", "CH: $", "Britain: $", "Europe - $", "Eurozone: $", "Switzerland: $", "Swiss/$", "Hawaii: $", "Guam - $"];
+  for (const t of roundSeven) await test(`C579g '${t}' is a named currency`, () => { const r = HC.currenciesNamed(t + "100)"); assert.ok(r.length > 0 && r.every((c) => c !== "$"), JSON.stringify(r)); });
+  for (const t of ["Singapore: $100", "Singapore - $100", "Singapore/$100", "Singaporean: $100", "Singapore ($100)"])
+    await test(`C579g '${t}' states SGD`, () => assert.deepEqual(HC.currenciesNamed(t), ["SGD"]));
+  for (const t of ["ID: $100", "IN: $100", "Singapore hospitals: $100", "Overseas: $100"])
+    await test(`C579g control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
   for (const t of ["TPD: $500", "ICU: $200", "OPD - $50", "CI - $50,000", "SA: $100", "TL: $100", "WL: $100", "GP: $30", "ER: $100", "PA: $100", "AD: $100", "Pg: $100", "Qty: $100", "Ref: $100", "Ltd - $100", "Pte - $100", "Ward: $100", "Room: $100", "TPD / $100"])
     await test(`C579e control '${t}' is a bare dollar and fills`, () => assert.deepEqual(HC.currenciesNamed(t), ["$"]));
   await test("C579e 'S. $' on an SGD document is stated, so the settings note is not shown and an MYR household is not filled", () => {
