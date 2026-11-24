@@ -229,13 +229,17 @@ async function main() {
         const r = await attempt(who, sql, params); matrix++;
         // A row-scoped attempt by a session that cannot see the row affects 0
         // rows; that is also a refusal (and gives no existence signal).
-        const ok = refused(r) || (r.ok && r.rows === 0 && who.role === "authenticated" && (who.name === "reviewer" || who.name === "other household") && sql.startsWith("UPDATE"));
+        // Since one owner per household (sql/household-rls.sql), a plain member can see the row but not pass the
+        // owner-only UPDATE policy, so its attempt is filtered to 0 rows as well.
+        const ok = refused(r) || (r.ok && r.rows === 0 && who.role === "authenticated" && (who.name === "reviewer" || who.name === "other household" || who.name === "household member") && sql.startsWith("UPDATE"));
         record(ok, `${who.name} can ${label}${r.ok ? ` (${r.rows} rows)` : ` (${r.error})`}`);
       }
     }
     // Control: the one browser write that is allowed (rolled back).
     const allowed = await attempt(identities[2], `UPDATE public.policies SET lifecycle_state='pending_deletion', lifecycle_version=lifecycle_version+1, updated_at=now() WHERE id=$1`, [policyId]);
     record(allowed.ok && allowed.rows === 1, `control: the owner's guarded move to pending_deletion must be accepted (${allowed.error})`);
+    const memberView = await attempt(identities[1], `UPDATE public.policies SET lifecycle_state='pending_deletion', lifecycle_version=lifecycle_version+1 WHERE id=$1`, [policyId]);
+    record(memberView.ok && memberView.rows === 0, "a plain household member (not the owner) can delete a document");
     const otherView = await attempt(identities[4], `UPDATE public.policies SET lifecycle_state='pending_deletion', lifecycle_version=lifecycle_version+1 WHERE id=$1`, [policyId]);
     record(otherView.ok && otherView.rows === 0, "another household can reach household A's policy lifecycle");
 

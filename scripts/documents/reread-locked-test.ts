@@ -4,7 +4,7 @@
  * storage. No model, no network, no job is run.
  *
  * Covers: no password -> 409 PDF_PASSWORD_NEEDED; a wrong one -> 409 PDF_PASSWORD_INCORRECT; in both the document stays
- * ready and no read is queued; a member gets the same; refused presses don't use up the hour's paid-read allowance, so
+ * ready and no read is queued; a member is refused 403 (owner only, #538); refused presses don't use up the hour's paid-read allowance, so
  * the right password then starts the read (TE #565 F1, F2); a plain PDF reads again as before.
  *   npm run -s documents:reread-locked-test */
 import assert from "node:assert/strict";
@@ -116,10 +116,17 @@ async function main() {
     assert.equal(r.status, 409); assert.equal(r.body.reasonCode, "PDF_PASSWORD_INCORRECT");
     assert.deepEqual(await state(locked), { processing_status: "ready", processing_error: null });
   });
-  await test("a member gets the same refusal", async () => {
-    assert.equal((await press(member, locked)).body.reasonCode, "PDF_PASSWORD_NEEDED");
-    assert.equal((await press(member, locked, "wrong")).body.reasonCode, "PDF_PASSWORD_INCORRECT");
-    assert.equal((await state(locked)).processing_status, "ready");
+  // One owner per household (DC, 18 Nov): only the owner reads a document again, so a member is refused 403 before any
+  // password is looked at. Before that a member got the same password refusals as the owner. The document must still stay
+  // ready, and a member must not be told whether a password is needed or wrong.
+  await test("a member is refused 403 (owner only) with or without a password, and the document stays ready", async () => {
+    for (const pw of [undefined, "wrong", "Harbour-2026"]) {
+      const r = await press(member, locked, pw);
+      assert.equal(r.status, 403, JSON.stringify(r.body));
+      assert.match(r.body.error ?? "", /Only the household owner can do this/);
+      assert.equal(r.body.reasonCode, undefined);
+    }
+    assert.deepEqual(await state(locked), { processing_status: "ready", processing_error: null });
   });
   await test("25 refused presses don't use up the hour's paid-read allowance: the right password then starts the read (TE #565 F2)", async () => {
     for (let i = 0; i < 25; i++) assert.equal((await press(owner, locked, i % 2 ? "wrong" : undefined)).status, 409);

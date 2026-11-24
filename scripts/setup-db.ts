@@ -44,6 +44,8 @@ const MIGRATIONS = [
   "sql/benefit-figure-confirmations.sql",
   "sql/member-profile.sql",
   "sql/household-currency.sql",
+  // One owner per household: the deferred one-owner constraint (docs/migration-runbook.md step 20).
+  "sql/household-single-owner.sql",
   "sql/household-plans.sql",
   "sql/policy-folders.sql",
   "sql/policy-folders-auto.sql",

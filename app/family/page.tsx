@@ -6,6 +6,7 @@ import { customerMessage } from "@/components/customer-text";
 import { AccountTabs } from "@/components/account-tabs";
 import { Icon } from "@/components/icons";
 import { HouseholdAccess } from "@/components/household-access";
+import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-role";
 import { profileGaps, PROFILE_GAP_FIELD } from "@/lib/household/member-profile";
 
 type Member = {
@@ -47,6 +48,8 @@ function todayIso() {
 }
 
 export default function FamilyPage() {
+  // Only the household owner adds, edits or removes family members (components/household-role).
+  const canManage = useCanManageHousehold();
   // Set after hydration: the server's "today" (and time zone) can differ.
   const [today, setToday] = useState<string | undefined>(undefined);
   useEffect(() => { setToday(todayIso()); }, []);
@@ -172,7 +175,7 @@ export default function FamilyPage() {
               </div>
               <div className="profile-glance">
                 {/* Details still missing (people added before they were asked for): one plain line and a way to add them. */}
-                {(() => { const gaps = profileGaps(baseline[member.id] ?? member, sexField); if (!gaps.length || editing === member.id) return null;
+                {(() => { const gaps = profileGaps(baseline[member.id] ?? member, sexField); if (!gaps.length || editing === member.id || !canManage) return null;
                   const who = baseline[member.id]?.display_name ?? member.display_name;
                   return <p className="profile-missing" data-testid="profile-missing">Add {who}&rsquo;s {listWords(gaps)}. <button type="button" className="text-link" onClick={() => { setEditing(member.id); setTimeout(() => document.getElementById(`fm-${member.id}-${PROFILE_GAP_FIELD[gaps[0]]}`)?.focus(), 0); }}>Add now</button></p>; })()}
               </div>
@@ -189,7 +192,7 @@ export default function FamilyPage() {
                 ? <><strong>{baseline[member.id]?.display_name ?? member.display_name} is still linked to {member.policy_count === 1 ? "a document" : `${member.policy_count} documents`}.</strong> Untick them on {member.policy_count === 1 ? "it" : "each one"} on the Documents page first. Saved answers that used their cover are then marked out of date when reopened.</>
                 : <><strong>Remove {baseline[member.id]?.display_name ?? member.display_name} from your household?</strong> This can&rsquo;t be undone. Saved answers that used their cover are marked out of date when reopened. If DearPolicy still has chats or claims about them, it keeps them and says so.</>}</div>}
               {statusFor === member.id && status && confirmId !== member.id ? <p className={`profile-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : undefined}>{status}</p> : null}
-              <div className="profile-actions">
+              {canManage && <div className="profile-actions">
                 {editing === member.id || isDirty(member) ? <>
                   <button className="button secondary" disabled={!isDirty(member)} onClick={() => save(member)}>{isDirty(member) ? "Save" : "Saved"}</button>
                   <button className="button secondary" onClick={() => { update(member.id, baseline[member.id]); setEditing(null); setEditTried((t) => ({ ...t, [member.id]: false })); }}>{isDirty(member) ? "Undo changes" : "Close"}</button>
@@ -199,13 +202,14 @@ export default function FamilyPage() {
                   ? <Link className="button primary" href="/policies">Go to Documents</Link>
                   : <button className={`button secondary${confirmId === member.id ? " danger" : ""}`} onClick={() => remove(member)} aria-label={confirmId === member.id ? `Confirm delete ${member.display_name}` : `Delete ${member.display_name}`}>{confirmId === member.id ? "Confirm delete" : "Delete"}</button>}
                 {confirmId === member.id && <button className="button secondary" onClick={() => setConfirmId(null)}>Cancel</button>}
-              </div>
+              </div>}
             </div>
           ))}
         </div>
       </section>
 
       {/* The people come first: a returning household opens this page to see or change them, and adds someone rarely. */}
+      {!canManage ? <OwnerOnlyNote>Only the household owner can add, change or remove family members.</OwnerOnlyNote> :
       <section className="profile-add-panel" aria-label="Add a family member">
         {family.length ? <h3>Add a family member</h3> : null}
         <form onSubmit={add} noValidate className="profile-add-grid" onChange={() => { if (status) { setStatus(""); setStatusFor(null); } }}>
@@ -218,7 +222,7 @@ export default function FamilyPage() {
           <button className="button primary" type="submit" disabled={!loaded}>+ Add person</button>
         </form>
         {status && <div className="upload-status" role="status">{status}</div>}
-      </section>
+      </section>}
 
       <HouseholdAccess />
     </div>

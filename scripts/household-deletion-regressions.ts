@@ -200,7 +200,10 @@ async function main() {
 
       asUser(nonOwner);
       const res = await deleteHouseholdRoute(requestFor("http://localhost/api/household", { household: householdId, method: "DELETE", body: { confirmName: "Household Non-Owner Delete" } }));
-      assert.equal(res.status, 404, "a non-owner's delete attempt must be refused (RLS blocks the actual DELETE; deleteHousehold() reports rowCount=0 as NotFoundError)");
+      // Since one owner per household, the route checks for the owner first (requireHouseholdOwnerContext) and refuses
+      // with 403 "Only the household owner can do this." before anything is attempted; RLS's owner-only accounts_delete
+      // still stands underneath. (Before, the refusal surfaced as 404 from RLS filtering the DELETE.)
+      assert.equal(res.status, 403, "a non-owner's delete attempt must be refused by the owner check");
 
       const account = await pool.query(`SELECT 1 FROM accounts WHERE id=$1`, [householdId]);
       assert.equal(account.rows.length, 1, "the household must survive a refused non-owner attempt completely untouched");

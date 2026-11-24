@@ -179,6 +179,27 @@ async function runDatabaseTests() {
       assert.equal(stillThere.rows[0].n, "1", "a refused removal must never leave the membership row deleted");
     });
 
+    await testAsync("an owner refused leaving, who then hands over the household, can leave with the same request key (TE #538 F2)", async () => {
+      const householdId = await seedHousehold(pool);
+      const ownerId = await seedMember(pool, householdId, "owner");
+      const nextOwner = await seedMember(pool, householdId, "member");
+      const key = `delete:${ownerId}`; // the route's default key, the same on every attempt
+      await assert.rejects(
+        () => requestHouseholdLeave({ accountId: householdId, callerUserId: ownerId, targetUserId: ownerId, idempotencyKey: key }),
+        ConflictError,
+      );
+      const blocked = await pool.query<{ lifecycle_state: string }>(`SELECT lifecycle_state FROM deletion_requests WHERE account_id=$1 AND idempotency_key=$2`, [householdId, key]);
+      assert.equal(blocked.rows[0]?.lifecycle_state, "blocked", "a refused leave is recorded as blocked, not left pending");
+      // Ownership handed over (as transferOwnership does): the old owner is now a member.
+      await pool.query(`UPDATE household_members SET role = CASE WHEN user_id=$2 THEN 'owner' ELSE 'member' END WHERE household_id=$1`, [householdId, nextOwner]);
+      const outcome = await requestHouseholdLeave({ accountId: householdId, callerUserId: ownerId, targetUserId: ownerId, idempotencyKey: key });
+      assert.equal(outcome.status, "completed", "the second attempt really leaves, never a stale pending answer");
+      const gone = await pool.query(`SELECT 1 FROM household_members WHERE household_id=$1 AND user_id=$2`, [householdId, ownerId]);
+      assert.equal(gone.rows.length, 0, "the old owner is no longer in the household");
+      const again = await requestHouseholdLeave({ accountId: householdId, callerUserId: ownerId, targetUserId: ownerId, idempotencyKey: key });
+      assert.equal(again.status, "completed", "a retry after success still returns the completed request without acting again");
+    });
+
     await testAsync("removing one of two owners is allowed (one owner remains afterward)", async () => {
       const householdId = await seedHousehold(pool);
       const ownerA = await seedMember(pool, householdId, "owner");

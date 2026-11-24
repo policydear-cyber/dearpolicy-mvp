@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { appDb, benefitTableLive } from "@/lib/benefit-table/app";
 import { TableInputError, setLink } from "@/lib/benefit-table/service";
 
@@ -13,7 +13,7 @@ const Body=z.object({ section:z.string().min(1).max(600), cover:z.string().min(1
 /** The household says which cover a part of a document belongs to, or none. Kept through re-reads. */
 export async function POST(request:NextRequest){
   try{
-    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
+    const ctx=await requireHouseholdOwnerContext(request),accountId=ctx.householdId;
     if(!(await benefitTableLive(accountId)))return NextResponse.json({enabled:false},{status:404});
     const body=Body.parse(await request.json().catch(()=>({})));
     await setLink(appDb,accountId,body.section,body.cover);

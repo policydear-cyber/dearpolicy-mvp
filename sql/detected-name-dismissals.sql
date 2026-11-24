@@ -6,7 +6,7 @@
 -- Linking the same name to a person later deletes the record.
 --
 -- Additive only: one new table, nothing existing is changed or dropped.
--- Requires sql/schema.sql and sql/household-rls.sql (is_household_member).
+-- Requires sql/schema.sql and sql/household-rls.sql (is_household_member, is_household_owner). Writes are the owner's: one owner per household (sql/household-single-owner.sql).
 -- Code deployed before this file is applied keeps working without it (every
 -- reader checks to_regclass first; the page then remembers the answer in the
 -- browser only). Rollback: DROP TABLE policy_name_dismissals;
@@ -30,10 +30,10 @@ DROP POLICY IF EXISTS household_member_update ON public.policy_name_dismissals;
 DROP POLICY IF EXISTS household_member_delete ON public.policy_name_dismissals;
 CREATE POLICY household_member_select ON public.policy_name_dismissals FOR SELECT TO authenticated USING (is_household_member(account_id));
 -- A row may only name a document of its own household.
-CREATE POLICY household_member_insert ON public.policy_name_dismissals FOR INSERT TO authenticated WITH CHECK (is_household_member(account_id)
+CREATE POLICY household_member_insert ON public.policy_name_dismissals FOR INSERT TO authenticated WITH CHECK (is_household_owner(account_id)
   AND EXISTS (SELECT 1 FROM public.policies p WHERE p.id = policy_name_dismissals.policy_id AND p.account_id = policy_name_dismissals.account_id));
-CREATE POLICY household_member_update ON public.policy_name_dismissals FOR UPDATE TO authenticated USING (is_household_member(account_id)) WITH CHECK (is_household_member(account_id)
+CREATE POLICY household_member_update ON public.policy_name_dismissals FOR UPDATE TO authenticated USING (is_household_owner(account_id)) WITH CHECK (is_household_owner(account_id)
   AND EXISTS (SELECT 1 FROM public.policies p WHERE p.id = policy_name_dismissals.policy_id AND p.account_id = policy_name_dismissals.account_id));
-CREATE POLICY household_member_delete ON public.policy_name_dismissals FOR DELETE TO authenticated USING (is_household_member(account_id));
+CREATE POLICY household_member_delete ON public.policy_name_dismissals FOR DELETE TO authenticated USING (is_household_owner(account_id));
 REVOKE ALL ON public.policy_name_dismissals FROM anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.policy_name_dismissals TO authenticated;

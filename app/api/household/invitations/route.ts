@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { listInvitations, createInvitation, type Role } from "@/lib/household/repo";
 import { clientKey } from "@/lib/http/rate-limit";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
@@ -13,8 +13,10 @@ export const ROUTE_AUTH = "household-owner" as const;
 // one answers a given request.
 const inviteAttempts = createDbRateLimiter({ name: "invitations-create", windowMs: 60 * 60 * 1000, max: 20 });
 
+// A household has exactly one owner: an invitation only ever adds a member.
+// Ownership moves by transfer (PATCH /api/household/members/[userId]).
 function isRole(value: unknown): value is Role {
-  return value === "owner" || value === "member" || value === undefined;
+  return value === "member" || value === undefined;
 }
 
 /** Owner-only: lists pending invitations for the active household. RLS
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest) {
  * currently a manual/out-of-band step). */
 export async function POST(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const attempt = await inviteAttempts.attempt(`${ctx.userId}:${clientKey(request)}`);
     if (!attempt.allowed) {
       return NextResponse.json(
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const email = typeof body.email === "string" ? body.email : "";
     if (!isRole(body.role)) {
-      return NextResponse.json({ error: "role must be \"owner\" or \"member\"." }, { status: 400 });
+      return NextResponse.json({ error: "An invitation can only add a member. To hand over the household, transfer ownership." }, { status: 400 });
     }
     const { token, expiresAt } = await createInvitation(ctx.userId, ctx.householdId, email, body.role ?? "member");
     return NextResponse.json({ token, expiresAt }, { status: 201 });

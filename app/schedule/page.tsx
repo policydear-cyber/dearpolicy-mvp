@@ -1,6 +1,7 @@
 "use client";
 
 import { Icon } from "@/components/icons";
+import { useCanManageHousehold } from "@/components/household-role";
 import Link from "next/link";
 import { benefitGroupKey,groupHeading } from "@/lib/policies/group-heading";
 import { useEffect,useMemo,useState } from "react";
@@ -218,6 +219,8 @@ export default function BenefitsPage(){
  * this benefit but its amount is unreadable, and the person holding the
  * paper copy can read it. Saved as the household's own statement. */
 function UnreadableAmount({benefit,onSaved}:{benefit:Benefit;onSaved:(message:string)=>Promise<void>}){
+  // Typing in an amount changes the household's benefits: the owner's (components/household-role).
+  const canManage=useCanManageHousehold();
   const [open,setOpen]=useState(false);
   const [amount,setAmount]=useState("");
   const [currency,setCurrency]=useState(benefit.currency??"");
@@ -237,6 +240,7 @@ function UnreadableAmount({benefit,onSaved}:{benefit:Benefit;onSaved:(message:st
     }catch(e){setError(customerError(e,"That amount couldn't be saved. Try again."));}
     finally{setSaving(false);}
   }
+  if(!canManage)return null;
   if(!open)return <button type="button" className="link-button" onClick={()=>setOpen(true)}>I can read the amount on my copy</button>;
   return <div className="clarify-amount">
     <div className="schedule-amount-row">

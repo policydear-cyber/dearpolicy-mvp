@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z, ZodError } from "zod";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { requireHouseholdOwner } from "@/lib/household/repo";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { loadPolicyDates } from "@/lib/policies/policy-dates-load";
 import { NotRenewedUnavailable, setNotRenewed } from "@/lib/policies/not-renewed";
 
@@ -16,8 +15,7 @@ const Body = z.object({ member: z.string().uuid(), key: z.string().min(1).max(40
 
 export async function POST(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext(request);
-    await requireHouseholdOwner(ctx.userId, ctx.householdId);
+    const ctx = await requireHouseholdOwnerContext(request);
     const body = Body.parse(await request.json().catch(() => ({})));
     const { policies, contractKeys } = await loadPolicyDates(ctx.householdId, body.member);
     const policy = policies.find((p) => p.key === body.key && p.endsOn === body.endsOn);

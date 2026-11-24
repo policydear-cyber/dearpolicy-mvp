@@ -3,7 +3,7 @@ import { isUuid } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { userFacingScanResultDetail, POLICY_PROCESSING_STOPPED_MESSAGE } from "@/lib/policies/quarantine/ui";
 import { USER_ACTIONABLE_PROCESSING_ERRORS } from "@/lib/documents/processing-errors";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdContext, requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { maskShownText } from "@/lib/chat/identity-numbers";
 import { READING_POLICY_SQL, readAsPolicyDocument } from "@/lib/policies/document-filter";
@@ -49,7 +49,7 @@ export async function DELETE(
   if (wholePolicy) {
     let outcome: Awaited<ReturnType<typeof requestPolicyDeletion>> | null = null;
     try {
-      const ctx = await requireHouseholdContext(request);
+      const ctx = await requireHouseholdOwnerContext(request);
       householdId = ctx.householdId;
       actorUserId = ctx.userId;
 
@@ -101,7 +101,7 @@ export async function DELETE(
 
   let outcome: Awaited<ReturnType<typeof requestPolicyDocumentDeletion>> | null = null;
   try {
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     householdId = ctx.householdId;
     actorUserId = ctx.userId;
 
@@ -270,7 +270,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     const { id } = await params;
     if (!isUuid(id)) return NextResponse.json({ error: "Document not found" }, { status: 404 });
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const body = (await request.json().catch(() => ({}))) as { field?: string; value?: string };
     const field = String(body.field ?? "");
     const value = String(body.value ?? "").trim().slice(0, 200);

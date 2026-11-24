@@ -394,7 +394,8 @@ test("partial pages failed: the card and the finished line name pages 4 and 7, a
   assert.equal(pageList([2, 5, 7]), "pages 2, 5 and 7");
   // The page offers Read again inside the page note itself, with the same confirming click as the actions row.
   const page = readFileSync("app/policies/page.tsx", "utf8");
-  assert.match(page, /data-testid="pages-not-read"><b>\{missing\.title\}<\/b><span>\{missing\.what\}<\/span><small>\{missing\.next\}<\/small>\{readAgainButton\}/);
+  // One owner per household (#538): the owner sees this next step; a member is told the owner can do it.
+  assert.match(page, /data-testid="pages-not-read"><b>\{missing\.title\}<\/b><span>\{missing\.what\}<\/span><small>\{canManage \? missing\.next : OWNER_NEXT\}<\/small>\{readAgainButton\}/);
   assert.match(page, /const read = documentReadLabel\(policy\);/);
   assert.match(page, /readingFinishedSummary\(/);
   assert.doesNotMatch(page, /"Your documents are ready\. Home has been updated\."/, "the page no longer says ready on its own");

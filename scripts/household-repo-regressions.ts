@@ -24,7 +24,9 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  NotHouseholdOwnerError,
   acceptInvitation,
+  transferOwnership,
   createInvitation,
   ensureDefaultHousehold,
   removeMember,
@@ -42,16 +44,18 @@ const HOUSEHOLD = "20000000-0000-4000-8000-000000000001";
  * takes based on what a query returns), without needing a real database. */
 function scriptedPool(rules: Array<{ match: RegExp; result: { rows: unknown[]; rowCount: number } }>) {
   const executed: string[] = [];
+  const params: unknown[][] = [];
   const client = {
-    query: async (sql: string) => {
+    query: async (sql: string, values?: unknown[]) => {
       executed.push(sql.trim().split("\n")[0]);
+      params.push(values ?? []);
       const rule = rules.find((r) => r.match.test(sql));
       return rule ? rule.result : { rows: [], rowCount: 0 };
     },
     release: () => {},
   } as unknown as PoolClient;
   const pool: Pick<Pool, "connect"> = { connect: async () => client };
-  return { pool, executed };
+  return { pool, executed, params };
 }
 
 async function main() {
@@ -122,6 +126,32 @@ async function main() {
     await assert.rejects(() => removeMember(OWNER, HOUSEHOLD, MEMBER, pool as unknown as Pool), NotFoundError);
   }
 
+  {
+    // A member leaving while the owner hands the household to them (TE #538 F1): the delete only removes a member row,
+    // so when the transfer wins, nothing is removed and the household keeps its new owner.
+    let reads = 0;
+    const { pool, executed } = scriptedPool([
+      { match: /^delete from household_members/i, result: { rows: [], rowCount: 0 } },
+    ]);
+    const realConnect = pool.connect;
+    (pool as { connect: typeof realConnect }).connect = async () => {
+      const client = await realConnect();
+      const query = client.query.bind(client) as (sql: string, values?: unknown[]) => Promise<unknown>;
+      (client as unknown as { query: typeof query }).query = async (sql: string, values?: unknown[]) => {
+        if (/^select role from household_members/i.test(sql.trim())) {
+          reads++;
+          await query(sql, values);
+          return { rows: [{ role: reads === 1 ? "member" : "owner" }], rowCount: 1 };
+        }
+        return query(sql, values);
+      };
+      return client;
+    };
+    await assert.rejects(() => removeMember(MEMBER, HOUSEHOLD, MEMBER, pool as unknown as Pool), ConflictError);
+    const del = executed.find((q) => /^delete from household_members/i.test(q)) ?? "";
+    assert.match(del, /role <> 'owner'/, "the delete itself refuses an owner row, whatever was read before");
+  }
+
   // --- setMemberRole: last-owner demotion protection ---------------------
   {
     const { pool } = scriptedPool([
@@ -133,6 +163,50 @@ async function main() {
       ConflictError,
       "demoting the sole remaining owner must be refused",
     );
+  }
+
+  // --- transferOwnership: one owner, handed over in one transaction --------
+  {
+    const { pool, executed } = scriptedPool([
+      { match: /^select user_id, role from household_members/i, result: { rows: [{ user_id: OWNER, role: "owner" }, { user_id: MEMBER, role: "member" }], rowCount: 2 } },
+      { match: /set role = 'owner'/i, result: { rows: [], rowCount: 1 } },
+      { match: /set role = 'member'/i, result: { rows: [], rowCount: 1 } },
+    ]);
+    await transferOwnership(OWNER, HOUSEHOLD, MEMBER, pool as unknown as Pool);
+    const promote = executed.findIndex((q) => /set role = 'owner'/i.test(q));
+    const demote = executed.findIndex((q) => /set role = 'member'/i.test(q));
+    assert.ok(promote >= 0 && demote > promote, "the new owner is named before the old one steps down (RLS needs the caller still owner)");
+    assert.equal(executed[0], "BEGIN", "the transfer runs in one transaction");
+  }
+  {
+    const { pool, executed } = scriptedPool([
+      { match: /^select user_id, role from household_members/i, result: { rows: [{ user_id: MEMBER, role: "member" }, { user_id: OWNER, role: "owner" }], rowCount: 2 } },
+    ]);
+    await assert.rejects(() => transferOwnership(MEMBER, HOUSEHOLD, OWNER, pool as unknown as Pool), NotHouseholdOwnerError, "a member can't take or give ownership");
+    assert.ok(!executed.some((q) => /^update/i.test(q)), "nothing is changed when a member asks");
+  }
+  {
+    const { pool } = scriptedPool([
+      { match: /^select user_id, role from household_members/i, result: { rows: [{ user_id: OWNER, role: "owner" }], rowCount: 1 } },
+    ]);
+    await assert.rejects(() => transferOwnership(OWNER, HOUSEHOLD, MEMBER, pool as unknown as Pool), NotFoundError, "only someone in the household can become its owner");
+  }
+  await assert.rejects(() => transferOwnership(OWNER, HOUSEHOLD, OWNER, scriptedPool([]).pool as unknown as Pool), ConflictError);
+  {
+    // { role: "owner" } on the members route means transfer, never a second owner.
+    const { pool, executed } = scriptedPool([
+      { match: /^select user_id, role from household_members/i, result: { rows: [{ user_id: OWNER, role: "owner" }, { user_id: MEMBER, role: "member" }], rowCount: 2 } },
+      { match: /set role = /i, result: { rows: [], rowCount: 1 } },
+    ]);
+    await setMemberRole(OWNER, HOUSEHOLD, MEMBER, "owner", pool as unknown as Pool);
+    assert.ok(executed.some((q) => /set role = 'member'/i.test(q)), "promoting someone demotes the old owner in the same call");
+  }
+
+  // --- createInvitation: only ever a member --------------------------------
+  {
+    const { pool, executed } = scriptedPool([]);
+    await assert.rejects(() => createInvitation(OWNER, HOUSEHOLD, "tan.mei.ling@example.com", "owner", pool as unknown as Pool), ConflictError);
+    assert.equal(executed.length, 0, "an owner invitation is refused before any query runs");
   }
 
   // --- createInvitation: rejects a malformed email up front ---------------
@@ -201,9 +275,22 @@ async function main() {
     assert.ok(executed.some((s) => /^update household_invitations set accepted_at/i.test(s)), "acceptance must mark the invitation used");
   }
 
+  {
+    // An invitation stored as "owner" (made before one owner per household) still only adds a member.
+    const { pool, executed, params } = scriptedPool([
+      { match: /^select id, household_id, email/i, result: { rows: [{ ...baseInvitation, role: "owner" }], rowCount: 1 } },
+      { match: /^insert into household_members/i, result: { rows: [], rowCount: 1 } },
+      { match: /^update household_invitations set accepted_at/i, result: { rows: [], rowCount: 1 } },
+    ]);
+    await acceptInvitation("tok", inviteeId, "invitee@example.com", pool as unknown as Pool);
+    const insert = executed.findIndex((q) => /^insert into household_members/i.test(q));
+    assert.equal(params[insert]?.[2], "member", "an old owner invitation joins as a member, never a second owner");
+  }
+
   console.log(
     "household-repo regressions passed: ensureDefaultHousehold() is idempotent, last-owner removal/demotion is " +
-      "refused, invitation email/expiry/revocation/reuse checks all hold, and a guessed/valid-shaped token that " +
+      "refused, ownership moves only by transfer (new owner first, old owner becomes a member, one transaction), " +
+      "invitations only ever add a member, invitation email/expiry/revocation/reuse checks all hold, and a guessed/valid-shaped token that " +
       "doesn't match a real row is rejected.",
   );
 }

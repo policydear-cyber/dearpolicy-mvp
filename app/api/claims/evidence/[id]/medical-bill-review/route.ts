@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
-import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { requireHouseholdOwnerContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { confirmMedicalBillReview, MedicalBillEvidenceError } from "@/lib/claims/evidence/medical-bill-evidence";
 import { validateBillReviewFields } from "@/lib/claims/evidence/bill-review-validation";
 import { householdReviewerIdentity } from "@/lib/claims/evidence/reviewer";
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const { id } = await params;
     if (!isUuid(id)) return NextResponse.json({ error: "Invalid claim-evidence document id." }, { status: 400 });
-    const ctx = await requireHouseholdContext(request);
+    const ctx = await requireHouseholdOwnerContext(request);
     const body = (await request.json().catch(() => ({}))) as {
       familyMemberId?: string; claimSessionId?: string; reviewedFields?: unknown; reason?: string; confirmTranscription?: unknown;
     };

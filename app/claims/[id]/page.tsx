@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useCallback, useState } from "react";
 import { useParams } from "next/navigation";
+import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-role";
 import {
   DOCUMENT_TYPE_GROUPS, DOCUMENT_TYPE_OPTIONS, buildEvidenceUploadForm, defaultDocumentTypeFor, documentTypeGroup, documentTypeLabel, evidenceStatusDisplay,
   POLICY_DEFINITION_REVIEW_REQUIRED_MESSAGE,
@@ -91,14 +92,14 @@ function sentFor(requested: string, documents: EvidenceDoc[]): EvidenceDoc | nul
 
 /** What happens next for this claim, in plain steps. Follows only the server's display tone; it never says what the
  * insurer will decide or how long anything takes. */
-function nextSteps(tone: ClaimDisplay["tone"]): string[] {
+function nextSteps(tone: ClaimDisplay["tone"], canManage = true): string[] {
   if (tone === "info") return [
     "Answer the remaining questions in the chat, so DearPolicy knows what happened.",
     "DearPolicy then lists the documents this claim needs.",
-    "You upload them here, and DearPolicy reads each one.",
+    canManage ? "You upload them here, and DearPolicy reads each one." : "The household owner uploads them here, and DearPolicy reads each one.",
   ];
   if (tone === "waiting") return [
-    "Upload each document still needed. A photo or a PDF is fine.",
+    canManage ? "Upload each document still needed. A photo or a PDF is fine." : "The household owner uploads each document still needed.",
     "DearPolicy reads each one and checks the name matches. Anything that must meet the policy’s own definition is checked by a DearPolicy reviewer.",
     "An indicative estimate appears below once your documents support it. The insurer makes the final decision.",
   ];
@@ -111,6 +112,8 @@ function nextSteps(tone: ClaimDisplay["tone"]): string[] {
 export default function ClaimEvidencePage() {
   const params = useParams<{ id: string }>();
   const claimSessionId = params.id;
+  // Adding, rejecting or deleting a claim document is the household owner's (components/household-role).
+  const canManage = useCanManageHousehold();
   const [claim, setClaim] = useState<Claim | null>(null);
   const [documents, setDocuments] = useState<EvidenceDoc[]>([]);
   // Two documents of one kind uploaded the same day read apart as "(2)", "(3)" in upload order (Critic #559 L2).
@@ -211,7 +214,7 @@ export default function ClaimEvidencePage() {
 
   return (
     <div className="page">
-      <header className="page-header"><div><div className="eyebrow">Claim documents</div><h1>{claim.event_summary ?? "Your claim"}</h1><p className="lead">Upload the documents for this claim here, and check what DearPolicy read from them. Nothing is used for an estimate until it has been reviewed. The insurer decides what is paid.</p></div>{claim.conversation_id ? <a className="button secondary" href={`/chat?conversation=${claim.conversation_id}`} data-testid="claim-conversation-link">← Back to the conversation</a> : null}</header>
+      <header className="page-header"><div><div className="eyebrow">Claim documents</div><h1>{claim.event_summary ?? "Your claim"}</h1><p className="lead">{canManage ? "Upload the documents for this claim here, and check what DearPolicy read from them." : "See the documents for this claim and what DearPolicy read from them. The household owner uploads them."} Nothing is used for an estimate until it has been reviewed. The insurer decides what is paid.</p></div>{claim.conversation_id ? <a className="button secondary" href={`/chat?conversation=${claim.conversation_id}`} data-testid="claim-conversation-link">← Back to the conversation</a> : null}</header>
 
       <section className="section claim-status-panel" data-testid="claim-display" data-tone={claim.display?.tone ?? "info"}>
         <div className="eyebrow">Status</div>
@@ -226,19 +229,20 @@ export default function ClaimEvidencePage() {
             <ul>{items.map(({ text, sent }) => <li key={text} className={sent ? "sent" : ""}>
               <span className="claim-needed-mark" aria-hidden="true">{sent ? "✓" : ""}</span>
               <span className="claim-needed-text">{text}{sent ? <small>Uploaded: {nameOf(sent)}</small> : <small>Still needed</small>}</span>
-              {!sent && <button type="button" className="button secondary compact" onClick={() => startUpload(text)} aria-label={`Upload ${text}`}>Upload</button>}
+              {!sent && canManage && <button type="button" className="button secondary compact" onClick={() => startUpload(text)} aria-label={`Upload ${text}`}>Upload</button>}
             </li>)}</ul>
           </div>;
         })() : null}
         <div className="claim-next" data-testid="claim-next-steps">
           <strong>What happens next</strong>
-          <ol>{nextSteps(claim.display?.tone ?? "info").map((step) => <li key={step}>{step}</li>)}</ol>
+          <ol>{nextSteps(claim.display?.tone ?? "info", canManage).map((step) => <li key={step}>{step}</li>)}</ol>
           {claim.display?.tone === "ready" && claim.decision_packet ? <p><a className="text-link" href={`/api/claims/${claim.id}/pack`}>Download the claim pack (PDF) →</a></p> : null}
         </div>
       </section>
 
       <section className="section">
         <h2>Upload a document</h2>
+        {!canManage ? <OwnerOnlyNote>Only the household owner can upload documents for a claim. Send yours to them to add.</OwnerOnlyNote> :
         <form onSubmit={handleUpload} className="field claim-upload-form" style={{ display: "grid", gap: 10, maxWidth: 480 }}>
           <label>Document type
             <select value={docType} onChange={(e) => setDocType(e.target.value)} required>
@@ -265,7 +269,7 @@ export default function ClaimEvidencePage() {
           <label>Document file<input id="claim-file" type="file" name="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff" required /></label>
           {uploadError && <div className="alert error" role="alert">{uploadError}</div>}
           <button className="button primary" type="submit" disabled={busy || !docType}>{busy ? "Uploading…" : "Upload"}</button>
-        </form>
+        </form>}
       </section>
 
       <section className="section">
@@ -329,7 +333,7 @@ export default function ClaimEvidencePage() {
                   : <p className="muted">DearPolicy has not confirmed this document is about this family member, so its bill details can't be checked yet.</p>
               )}
 
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              {canManage && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                 {["needs_review", "extracted", "uploaded", "quarantined", "processing", "matched", "failed"].includes(doc.status) && (
                   <button className="button secondary compact" onClick={() => handleReject(doc.id)}>Reject document</button>
                 )}
@@ -340,7 +344,7 @@ export default function ClaimEvidencePage() {
                 {confirmDeleteId === doc.id && !deletingId && (
                   <button className="button secondary compact" onClick={() => setConfirmDeleteId(null)}>Cancel</button>
                 )}
-              </div>
+              </div>}
               {confirmDeleteId === doc.id && !deletingId && (
                 <p className="muted" role="note">Deleting removes this document and anything DearPolicy read or estimated from it. This can&rsquo;t be undone.</p>
               )}

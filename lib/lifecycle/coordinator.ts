@@ -54,7 +54,7 @@ import { deleteHouseholdPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { scrubDeletedDocuments } from "./content-scrub";
 import { transitionLifecycle, type LifecycleDbClient } from "./state-machine";
 import { activePredicate, readIncludingDeletedForInternalUse } from "./scopes";
-import { appendDeletionAudit, createOrGetDeletionRequest, transitionDeletionRequest, type DeletionRequestRow } from "./deletion-requests";
+import { appendDeletionAudit, createOrGetDeletionRequest, DeletionRequestVersionConflictError, transitionDeletionRequest, type DeletionRequestRow } from "./deletion-requests";
 import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
 import { appendPolicyDocumentAudit } from "@/lib/policies/quarantine/audit";
 import { scrubDeletedDocumentDerivedContent } from "./derived-content-scrub";
@@ -1216,16 +1216,34 @@ async function performMembershipRemoval(args: {
   });
 
   if (!created) {
-    return { status: mapRequestStateToStatus(request), deletionRequestId: request.id, resourceId: args.targetUserId };
+    // A refused attempt removed nothing (removeMember() runs synchronously, in one transaction). With one owner per
+    // household, "make someone else the owner, then leave" is the owner's only way out, and the route's default key is
+    // the same for every attempt on one membership -- so a refused attempt must not answer every later one with its
+    // stale "pending" (Test engineer #538 F2). A refusal is marked "blocked" below and may run again; an attempt still
+    // in flight (pending) or finished (completed) is returned as it is, never run twice (G2).
+    if (request.lifecycle_state !== "blocked") {
+      return { status: mapRequestStateToStatus(request), deletionRequestId: request.id, resourceId: args.targetUserId };
+    }
+    try {
+      await transitionDeletionRequest(pool, { id: request.id, fromStates: ["blocked"], toState: "pending_deletion" });
+    } catch (error) {
+      // Another attempt took this request first: it is the one that runs; this one reports it as in progress.
+      if (error instanceof DeletionRequestVersionConflictError) return { status: "pending_cleanup", deletionRequestId: request.id, resourceId: args.targetUserId };
+      throw error;
+    }
   }
 
   // The actual removal -- see this function's own doc comment on why
-  // removeMember() is called rather than reimplemented. A thrown error
-  // here leaves this deletion_requests row at its default
-  // pending_deletion state; a retry with the same idempotencyKey is
-  // caught by the `!created` branch above and safely returns without
-  // attempting the removal again.
-  await removeMember(args.callerUserId, args.accountId, args.targetUserId);
+  // removeMember() is called rather than reimplemented. A refusal marks this
+  // request "blocked" (nothing was removed), so the same request can be
+  // tried again once what blocked it has changed; an attempt in flight
+  // stays pending_deletion and a retry of it returns without acting.
+  try {
+    await removeMember(args.callerUserId, args.accountId, args.targetUserId);
+  } catch (error) {
+    await transitionDeletionRequest(pool, { id: request.id, fromStates: ["pending_deletion"], toState: "blocked" }).catch(() => undefined);
+    throw error;
+  }
 
   await transitionDeletionRequest(pool, {
     id: request.id,
