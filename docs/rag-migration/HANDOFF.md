@@ -115,7 +115,7 @@ are assumed present. The current gate/tools/loop are new implementations, not re
 
 ## Artifact paths
 - `docs/rag-migration/checkpoint/` — CHECKPOINT.md, DEMO10.md, EXPECTED-VS-ACTUAL.md (BROWSER.md after 2c).
-- `docs/rag-migration/agents/HANDOFF-K.md`; repo root: `HANDOFF-C.md`, `INTEGRATION-1.md`, `REVIEW.md` (D1–D31),
+- `docs/rag-migration/agents/HANDOFF-K.md`; repo root: `docs/archive/HANDOFF-C.md`, `docs/archive/INTEGRATION-1.md`, `REVIEW.md` (D1–D31),
   `ARCHITECTURE.md`, `DEMO-TRANSCRIPT.md` (repo root).
 - Suites: `scripts/rag2-{tools,loop,conv,calc,fix,adversarial}-regressions.ts`; demos `scripts/rag2-demo10.ts`,
   `scripts/rag2-loop-demo.ts`; fixtures `scripts/fixtures/rag2`, `rag2-loop`, `rag2-conv`, `rag2-calc`, `rag2-adv`.
