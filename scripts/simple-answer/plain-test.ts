@@ -35,6 +35,18 @@ t("cards that differ in a figure, a condition, a page or a basis amount are neve
   assert.equal(mergeSamePerson([card("a", "Tan Desmond"), card("b", "Ong Charmaine", { source: { policyName: "Group Certificate", page: 2, citationIds: [] } })]).length, 2);
   assert.equal(mergeSamePerson([card("a", "Tan Desmond"), card("b", "Ong Charmaine", { basis: "20% of Ong Charmaine's Personal Accident sum insured of S$300,000" })]).length, 2);
 });
+t("cards that differ only in a source note, a footnote or an either/or group are never merged", () => {
+  const src = (extra: object) => ({ policyName: "Group Certificate", page: 1, citationIds: [], ...extra });
+  assert.equal(mergeSamePerson([card("a", "Tan Desmond", { source: src({ note: "Core Scheme only" }) }), card("b", "Ong Charmaine", { source: src({}) })]).length, 2);
+  assert.equal(mergeSamePerson([card("a", "Tan Desmond", { source: src({ footnote: { marker: "#", text: "Not for minors" } }) }), card("b", "Ong Charmaine", { source: src({}) })]).length, 2);
+  assert.equal(mergeSamePerson([card("a", "Tan Desmond", { group: { id: "g1", kind: "either_or", note: "x" } }), card("b", "Ong Charmaine")]).length, 2);
+  assert.equal(mergeSamePerson([card("a", "Tan Desmond", { source: src({ note: "n" }) }), card("b", "Ong Charmaine", { source: src({ note: "n" }) })]).length, 1);
+});
+t("a mark stays when the card has a footnote that uses it", () => {
+  const withNote = { source: { policyName: "P", page: 1, citationIds: [], footnote: { marker: "#", text: "Not for minors" } } };
+  const out = html([card("a", "Tan Desmond", { text: "Simple Fracture: Arm#, Elbow", ...withNote })]);
+  assert.match(out, /Arm#/);
+});
 t("three people share one card; one person's own repeat is not a second person", () => {
   const m = mergeSamePerson([card("a", "Ana"), card("b", "Ben"), card("c", "Cy"), card("d", "Ana")]);
   assert.equal(m.length, 1);
@@ -55,6 +67,8 @@ t("'the insurer decides which applies' reads as depending on the case; a claim d
   assert.equal(plainWords("The insurer decides which figure applies."), "Which one applies depends on your case.");
   assert.equal(plainWords("The insurer decides whether the accident is covered."), "The insurer decides whether the accident is covered.");
   assert.equal(plainWords("premium cessation and benefit cessation"), "when premiums stop and when cover ends");
+  assert.equal(plainWords("Premium cessation age 65"), "The age premiums stop 65");
+  assert.equal(plainWords("The court decides which applies."), "The court decides which applies.");
 });
 t("a benefit's printed terms are labelled 'Depends on your case', not the old phrase", () => {
   const out = html([card("a", "Tan Desmond")]);

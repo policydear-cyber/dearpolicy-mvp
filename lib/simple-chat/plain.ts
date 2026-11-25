@@ -12,18 +12,20 @@ const sameCase = (from: string, to: string) => (/^[A-Z]/.test(from) ? to.charAt(
 
 /** "the insurer decides which applies" is a claim decision said about a document question: the household's own case is
  * what decides which printed figure applies. */
-const WHICH_APPLIES = /\b(the insurer|the insurance company|[A-Z][A-Za-z&]+(?: [A-Z][A-Za-z&]+)?) decides which (?:one |figure |amount |benefit )?(?:applies|to use|is used)\b/gi;
+const WHICH_APPLIES = /\b(the insurers?|the insurance company) decides which (?:one |figure |amount |benefit )?(?:applies|to use|is used)\b/gi;
 
 /** Words a layman does not use for "premiums stop" and "cover ends". */
 const JARGON: [RegExp, string][] = [
-  [/\bpremium cessation(?: age| date)?\b/gi, "when premiums stop"],
-  [/\bbenefit cessation(?: age| date)?\b/gi, "when cover ends"],
+  [/\bpremium cessation (age|date)\b/gi, "the $1 premiums stop"],
+  [/\bbenefit cessation (age|date)\b/gi, "the $1 cover ends"],
+  [/\bpremium cessation\b/gi, "when premiums stop"],
+  [/\bbenefit cessation\b/gi, "when cover ends"],
 ];
 
 export function plainWords(text: string): string {
-  let out = stripMarks(text);
+  let out = text;
   out = out.replace(WHICH_APPLIES, (m) => sameCase(m, "which one applies depends on your case"));
-  for (const [re, to] of JARGON) out = out.replace(re, (m) => sameCase(m, to));
+  for (const [re, to] of JARGON) out = out.replace(re, (m, g1) => sameCase(m, to.replace("$1", typeof g1 === "string" ? g1.toLowerCase() : "")));
   return out;
 }
 
@@ -59,7 +61,7 @@ const listNames = (names: string[]) => names.length < 2 ? names.join("") : `${na
 export function mergeSamePerson(statements: AnswerStatement[]): AnswerStatement[] {
   const key = (s: AnswerStatement) => {
     const n = s.personName ?? "";
-    return JSON.stringify([s.kind, s.amount?.text, s.amount?.currencyResolved, s.amount?.illustration, withoutName(s.text, n), withoutName(s.fullText, n),
+    return JSON.stringify([s.kind, s.source?.note ?? null, s.source?.footnote ?? null, s.group ? [s.group.kind, s.group.note] : null, s.amount?.text, s.amount?.currencyResolved, s.amount?.illustration, withoutName(s.text, n), withoutName(s.fullText, n),
       withoutName(s.basis, n), (s.conditions ?? []).map((c) => withoutName(c, n)), s.source?.policyName, s.source?.page, s.source?.rowLabel, s.asOf ?? null, s.table ?? null]);
   };
   const first = new Map<string, AnswerStatement>();
@@ -80,3 +82,7 @@ export function mergeSamePerson(statements: AnswerStatement[]): AnswerStatement[
       conditions: (s.conditions ?? []).map((c) => forEach(c, s.personName!)!) } : s;
   });
 }
+
+/** A statement's words without the marks its page prints after a word, unless the statement carries a footnote that
+ * those marks point to (then the mark is what links the word to its footnote and stays). */
+export const markless = (s: Pick<AnswerStatement, "source">, text: string) => (s.source?.footnote ? text : stripMarks(text));

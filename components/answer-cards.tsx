@@ -1,7 +1,7 @@
 import { Fragment, useId, useRef } from "react";
 import type { ChatAnswer, ChatCitation } from "@/types";
 import { COVER_NOTE_ID } from "@/lib/chat/cover-note";
-import { TERMS_LABEL, mergeSamePerson, plainWords } from "@/lib/simple-chat/plain";
+import { TERMS_LABEL, markless, mergeSamePerson, plainWords } from "@/lib/simple-chat/plain";
 
 /** One checked statement of an answer, as the server sends it alongside the
  * prose (the Developer's answer-fields change). Only calculation and
@@ -98,9 +98,9 @@ function Qualifiers({ s, point = false }: { s: AnswerStatement; point?: boolean 
   const basis = s.basis && !said.includes(norm(s.basis)) && !restates(s.basis, s.text, 0.75) ? s.basis : null;
   const note = s.amount && s.source?.note && !conditions.some((c) => c === norm(s.source!.note!) || c.includes(norm(s.source!.note!))) ? s.source.note : null;
   return <>
-    {basis ? <p className="answer-card-basis">{plainWords(basis)}</p> : null}
+    {basis ? <p className="answer-card-basis">{plainWords(markless(s, basis))}</p> : null}
     {point && s.conditions?.length ? <p className="answer-point-conditions-label" data-testid="answer-point-conditions-label">{s.conditions.length === 1 ? "Condition" : "Conditions"} from the document:</p> : null}
-    {s.conditions?.length ? <ul className="answer-card-conditions">{s.conditions.map((c, i) => <li key={i}>{plainWords(s.amount ? withoutFooterClause(c) : c)}</li>)}</ul> : null}
+    {s.conditions?.length ? <ul className="answer-card-conditions">{s.conditions.map((c, i) => <li key={i}>{plainWords(markless(s, s.amount ? withoutFooterClause(c) : c))}</li>)}</ul> : null}
     {note ? <p className="answer-card-note" data-testid="answer-card-note">{plainWords(note)}</p> : null}
   </>;
 }
@@ -121,8 +121,8 @@ function AmountCard({ s, openSource }: { s: AnswerStatement; openSource: (id: st
       {printed || !a.currencyResolved ? <small>{[printed ? TERMS_LABEL : null, a.currencyResolved ? null : "Currency not stated"].filter(Boolean).join(" · ")}</small> : null}
     </div>
     {/* With no conditions[] from the server, the whole checked sentence stays on the card; it is never cut client-side. */}
-    {!s.conditions?.length && s.fullText && norm(s.fullText) !== norm(s.text) ? <p className="answer-card-condition" data-testid="answer-card-condition">{s.fullText}</p> : null}
-    <p className="answer-card-text">{s.text}</p>
+    {!s.conditions?.length && s.fullText && norm(s.fullText) !== norm(s.text) ? <p className="answer-card-condition" data-testid="answer-card-condition">{markless(s, s.fullText)}</p> : null}
+    <p className="answer-card-text">{markless(s, s.text)}</p>
     <Qualifiers s={s} />
     <div className="answer-chips">
       {s.source ? <button type="button" className="answer-chip-button" onClick={() => openSource(s.id)} aria-label={`Where this comes from: ${s.source.policyName}${s.source.page != null ? `, page ${s.source.page}` : ""}`}><span className="answer-chip">{s.source.policyName}{pageRef(s.source.page)}</span></button> : null}
@@ -204,7 +204,7 @@ export function AnswerCards({ answer, render, sources, prose = [], after, stepsF
   };
   const one = (s: AnswerStatement) => {
     if (asCard(s)) return <AmountCard key={s.id} openSource={openSource} s={{ ...s, text: render(s.text), fullText: render(s.fullText ?? ""), basis: s.basis ? render(s.basis) : s.basis }} />;
-    const text = pointText(s);
+    const text = markless(s, pointText(s));
     if (!text && !s.basis && !s.conditions?.length) return null;
     return <div key={s.id} className={`answer-point${s.kind === "uncertainty" ? " caution" : ""}`}>
       {s.table ? <p>{render(s.text)}</p> : text ? <p>{text}</p> : null}
