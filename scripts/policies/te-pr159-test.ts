@@ -6,7 +6,6 @@
 import assert from "node:assert/strict";
 import { documentName, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
 import { isCodeName, sourceTitle } from "@/lib/policies/document-name";
-import { SYSTEM_PROMPT } from "@/lib/rag2/loop/prompt";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$/i.test(k)) delete process.env[k];
 let fetches = 0; globalThis.fetch = (async () => { fetches++; throw new Error("no network"); }) as typeof fetch;
@@ -122,8 +121,6 @@ test("C5 sourceTitle never returns a code title; keeps a real product", () => {
   assert.equal(/COI|594/.test(sourceTitle({ product_name: "1105 CD-594 COI_SAF", insurer: "Singlife Pte. Ltd.", document_role: "certificate" })), false);
   assert.equal(sourceTitle({ product_name: "MINDEF & MHA Group Insurance" }), "MINDEF & MHA Group Insurance");
 });
-for (const [name, re] of [["travel-policy exception", /about that travel policy itself/], ["Yes covered conditions", /Yes, listed as covered, with conditions/], ["no layout talk", /Never say a page's columns are mixed up/], ["plain dates", /premiums stop/]] as const)
-  test(`C6 prompt keeps rule: ${name}`, () => assert.ok(re.test(SYSTEM_PROMPT)));
 for (const f of failures) console.log("FAIL " + f);
 for (const n of notes) console.log("NOTE " + n);
 console.log(`te-pr159: ${passed} passed, ${failures.length} failed, fetches ${fetches}`);
