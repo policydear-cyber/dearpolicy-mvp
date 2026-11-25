@@ -99,6 +99,8 @@ t("many printed amounts say 'Depends on your case' once above them, not on every
   assert.equal((many.match(/data-testid="answer-card"/g) ?? []).length, 5, "every amount stays");
   assert.equal((printedCards(2).match(/Depends on your case/g) ?? []).length, 2, "two cards keep their own label");
   assert.doesNotMatch(printedCards(2), /answer-printed-note/);
+  assert.match(printedCards(3), /answer-printed-note/, "exactly three printed cards get the note");
+  assert.equal((printedCards(3).match(/Depends on your case/g) ?? []).length, 1);
   // Critic #595: a worked-out figure beside printed ones is never covered by "the amounts your documents print".
   const mixed = renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],
     statements: [...Array.from({ length: 3 }, (_, i) => ({ id: "m" + i, kind: "benefit_terms", personName: "Lim Ah Kow", text: "Benefit " + i + ".", fullText: "Benefit " + i + ".", conditions: [], amount: { text: "S$" + (i + 1) + ",000", currencyResolved: true, illustration: false } })),
