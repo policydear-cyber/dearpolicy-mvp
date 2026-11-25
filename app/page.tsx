@@ -95,7 +95,7 @@ export default function DashboardPage(){
       main feature, before anything else. Each card is covered, with its amount only when the amount is confirmed, and
       names what pays, so a card with no single amount is never an empty box (DC 17 Nov); the evidence and every figure
       are one tap away on Coverage. A cover no document gives this person has no card. */}
-  <div className="home-top">
+  <div className="home-top" data-loading={loading&&!data?"true":undefined}>
    <section className="home-cards" aria-labelledby="home-cards-title">
     <div className="home-cards-head"><h1 id="home-cards-title">{name?`${name}\u2019s protection`:"Your family\u2019s protection"}</h1>{canManage&&<Link href="/policies" className="text-link"><Icon name="upload"/>Upload</Link>}</div>
     {people}

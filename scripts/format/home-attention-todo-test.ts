@@ -17,7 +17,7 @@ test("Home has no To-do list, no all-clear line and no last-visit line", () => {
   assert.doesNotMatch(component, /AllClear|Nothing needs you|home-since|Since your last visit/);
 });
 test("the cards come first and the ask box sits beside them, before anything else on Home", () => {
-  const top = page.indexOf('<div className="home-top">');
+  const top = page.indexOf('<div className="home-top"');
   assert.ok(top > 0, "Home has a top block");
   for (const later of ["unclaimed-panel", "<HomeAttention/>"]) assert.ok(page.indexOf(later) > top, `${later} comes after the cards`);
   const block = page.slice(top, page.indexOf("unclaimed-panel"));
