@@ -17,3 +17,28 @@ export function sendFailure(status: number | null, text: string, code?: unknown)
   if (status === 409 || CONFLICT_TEXT.test(text)) return "conflict";
   return "other";
 }
+
+/** The chat as the server holds it now (GET /api/chat/history/:id). */
+export type FreshChat = { revision: number; show: () => void };
+
+/**
+ * Sends a chat message, and when the server refuses it as out of date (409, a real stale-chat refusal) asks for the chat
+ * as it now stands and sends once more with that revision. The refusal stored nothing, so one more send cannot ask
+ * twice. A chat page can be behind its own chat with one tab open (an answer that finished after the page stopped
+ * waiting, or after a failed send, moves the chat on); telling the person to reload then looped: every later send
+ * was refused the same way (Live tester, 25 Nov). Never retried for an empty household, another refusal, or when the
+ * fresh chat cannot be read, and never more than once.
+ */
+export async function sendWithResync<R extends { status: number; data: { error?: unknown; code?: unknown } }>(
+  send: (revision: number | null) => Promise<R>,
+  revision: number | null,
+  loadFresh: () => Promise<FreshChat | null>,
+): Promise<R & { resynced: boolean }> {
+  const first = await send(revision);
+  const said = typeof first.data?.error === "string" ? first.data.error : "";
+  if (revision === null || first.status !== 409 || sendFailure(409, said, first.data?.code) !== "conflict") return { ...first, resynced: false };
+  const fresh = await loadFresh().catch(() => null);
+  if (!fresh || !Number.isFinite(fresh.revision) || fresh.revision === revision) return { ...first, resynced: false };
+  fresh.show();
+  return { ...(await send(fresh.revision)), resynced: true };
+}

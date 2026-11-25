@@ -22,7 +22,7 @@ import { asksWhatToDo } from "@/lib/simple-chat/plain";
 import { GENERIC_DISCLAIMER } from "@/lib/chat/generic-disclaimer";
 import { StoppedNotice,isStopped } from "@/components/answer-stopped";
 import { LearnLinks } from "@/components/learn-links";
-import { sendFailure } from "@/components/chat-send-failure";
+import { sendFailure, sendWithResync } from "@/components/chat-send-failure";
 import { applyReplaced,type ReplacedAnswer } from "@/lib/chat/replaced-live";
 import { COVER_NOTE } from "@/lib/chat/cover-note";
 import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
@@ -38,7 +38,7 @@ const MAX_QUESTION_LENGTH=2000;
 const NO_FAMILY_TEXT="Add a family member first, then ask again.";
 /** The chat was changed elsewhere (another tab or window) since this page
  * loaded it: the server refuses to append to a stale copy. */
-const CONFLICT_TEXT="This chat was updated in another tab or window, so this message was not sent. Reload the chat to see the latest messages, then send it again.";
+const CONFLICT_TEXT="This chat was updated in another tab or window, or by an answer that finished late, so this message was not sent. Reload the chat to see the latest messages, then send it again.";
 const shown=answerText,words=codeWords;
 /** An answer's next steps, each once and in order, once nothing is waiting on a question (then they sit with the question). */
 /** The next steps, then how to reach the insurer as the household's documents print it. While a question is open, the
@@ -280,11 +280,23 @@ function ChatContent(){
     const userMessage:Message={role:"user",content:text};
     setMessages(previous=>[...previous,userMessage]);setQuestion("");setBusy(true);setError("");setProgress("");setStageId(null);setQueued(false);setProgressDetail(null);
     try{
-      const response=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},signal:abort.signal,
-        body:JSON.stringify({familyMemberId:memberId||null,scope:memberId?"member":"family",
-          question:text,conversationId,conversationRevision:conversationId?revision:undefined,asynchronous:true,
-          timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,personChoiceId})});
-      const data=await response.json().catch(()=>({}));
+      const outcome=await sendWithResync(async(rev)=>{
+        const r=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},signal:abort.signal,
+          body:JSON.stringify({familyMemberId:memberId||null,scope:memberId?"member":"family",
+            question:text,conversationId,conversationRevision:conversationId?(rev??undefined):undefined,asynchronous:true,
+            timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,personChoiceId})});
+        return {status:r.status,ok:r.ok,data:await r.json().catch(()=>({}))};
+      },conversationId?revision:null,async()=>{
+        const fresh=await fetch("/api/chat/history/"+conversationId,{signal:abort.signal,cache:"no-store"});
+        const chat=await fresh.json();
+        if(!fresh.ok)return null;
+        return {revision:Number(chat.conversation?.revision),show:()=>{
+          if(version!==requestVersion.current)return;
+          setRevision(Number(chat.conversation.revision));setMessageCursor(chat.nextCursor??null);
+          setMessages([...chat.messages.map((m:{id:string;role:Message["role"];content:string;answer_json?:ChatAnswer})=>({id:m.id,role:m.role,content:m.content,answer:m.answer_json??undefined})),userMessage]);
+        }};
+      });
+      const response=outcome as {status:number;ok:boolean;data:Record<string,unknown>},data=outcome.data as Record<string,any>;
       if(!response.ok){const said=typeof data.error==="string"?data.error:"",kind=sendFailure(response.status,said,data.code);if(kind==="no_family")throw new NoFamilyError(said);if(data.code==="question_limit"&&said)throw new PlanLimitError(said);if(kind==="conflict")throw new ConflictError();throw new Error(data.error??"DearPolicy couldn't answer just now");}
       if(version!==requestVersion.current)return;
       setConversationId(data.conversationId);setRevision(data.conversationRevision);rememberConversation(data.conversationId??null);
