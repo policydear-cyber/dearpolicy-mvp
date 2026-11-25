@@ -42,6 +42,28 @@ t("cards that differ only in a source note, a footnote or an either/or group are
   assert.equal(mergeSamePerson([card("a", "Tan Desmond", { group: { id: "g1", kind: "either_or", note: "x" } }), card("b", "Ong Charmaine")]).length, 2);
   assert.equal(mergeSamePerson([card("a", "Tan Desmond", { source: src({ note: "n" }) }), card("b", "Ong Charmaine", { source: src({ note: "n" }) })]).length, 1);
 });
+t("every part of what a card says keeps two cards apart: kind, currency, illustration, text, full text, policy, row, date, table, document", () => {
+  const base = card("a", "Tan Desmond");
+  const other = (over: Partial<AnswerStatement>) => mergeSamePerson([base, card("b", "Ong Charmaine", over)]).length;
+  assert.equal(other({}), 1, "control: identical cards merge");
+  assert.equal(other({ kind: "calculation" }), 2, "kind");
+  assert.equal(other({ amount: { text: "S$120,000", currencyResolved: false, illustration: false } }), 2, "currency not stated");
+  assert.equal(other({ amount: { text: "S$120,000", currencyResolved: true, illustration: true } }), 2, "illustration");
+  assert.equal(other({ text: "Pays for a leg broken in an accident." }), 2, "text");
+  assert.equal(other({ fullText: "Pays for an arm broken in an accident, once." }), 2, "full text");
+  assert.equal(other({ source: { policyName: "Other Certificate", page: 1, citationIds: [] } }), 2, "policy");
+  assert.equal(other({ source: { policyName: "Group Certificate", page: 1, rowLabel: "Arm", citationIds: [] } }), 2, "row");
+  assert.equal(other({ asOf: "2023-01-01" }), 2, "date");
+  assert.equal(other({ table: { headers: null, rows: [["a", "1"]], printedAbove: [] } }), 2, "table");
+  const doc = (id: string) => ({ policyName: "Group Certificate", page: 1, citationIds: [id] });
+  assert.equal(mergeSamePerson([card("a", "Tan Desmond", { source: doc("simple-pol1-p1-3") }), card("b", "Ong Charmaine", { source: doc("simple-pol1-p1-9") })]).length, 1, "same document, each card's own number");
+  assert.equal(mergeSamePerson([card("a", "Tan Desmond", { source: doc("simple-pol1-p1-3") }), card("b", "Ong Charmaine", { source: doc("simple-pol2-p1-4") })]).length, 2, "a second document of the same name");
+});
+t("a short first name is replaced only where it is a word", () => {
+  const m = mergeSamePerson([card("a", "Li Wei", { text: "Li Wei's limit of life cover is total, also all.", fullText: "", basis: null }), card("b", "Al Tan", { text: "Al Tan's limit of life cover is total, also all.", fullText: "", basis: null })]);
+  assert.equal(m.length, 1);
+  assert.equal(m[0].text, "each person's limit of life cover is total, also all.");
+});
 t("a mark stays when the card has a footnote that uses it", () => {
   const withNote = { source: { policyName: "P", page: 1, citationIds: [], footnote: { marker: "#", text: "Not for minors" } } };
   const out = html([card("a", "Tan Desmond", { text: "Simple Fracture: Arm#, Elbow", ...withNote })]);

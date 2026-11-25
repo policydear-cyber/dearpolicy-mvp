@@ -49,7 +49,7 @@ function forEach(s: string | null | undefined, name: string): string | null | un
   if (!s) return s;
   const words = name.split(/[^\p{L}]+/u).filter((w) => w.length >= 2);
   const parts = [name, ...words].map(escapeRe);
-  return s.replace(new RegExp(`(?:${parts.join("|")})(?:'s|’s)?`, "gi"), (m) => (/['’]s$/i.test(m) ? "each person's" : "each person")).replace(/(?:each person(?:'s)?\s+){2,}/g, "each person ");
+  return s.replace(new RegExp(`(?<![\\p{L}])(?:${parts.join("|")})(?:'s|’s)?(?![\\p{L}])`, "giu"), (m) => (/['’]s$/i.test(m) ? "each person's" : "each person")).replace(/(?:each person(?:'s)?\s+){2,}/g, "each person ");
 }
 const listNames = (names: string[]) => names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 
@@ -62,7 +62,7 @@ export function mergeSamePerson(statements: AnswerStatement[]): AnswerStatement[
   const key = (s: AnswerStatement) => {
     const n = s.personName ?? "";
     return JSON.stringify([s.kind, s.source?.note ?? null, s.source?.footnote ?? null, s.group ? [s.group.kind, s.group.note] : null, s.amount?.text, s.amount?.currencyResolved, s.amount?.illustration, withoutName(s.text, n), withoutName(s.fullText, n),
-      withoutName(s.basis, n), (s.conditions ?? []).map((c) => withoutName(c, n)), s.source?.policyName, s.source?.page, s.source?.rowLabel, s.asOf ?? null, s.table ?? null]);
+      withoutName(s.basis, n), (s.conditions ?? []).map((c) => withoutName(c, n)), s.source?.policyName, [...new Set((s.source?.citationIds ?? []).map((id) => id.replace(/-\d+(?=(?:-base)?$)/, "")))].sort(), s.source?.page, s.source?.rowLabel, s.asOf ?? null, s.table ?? null]);
   };
   const first = new Map<string, AnswerStatement>();
   const names = new Map<string, string[]>();
