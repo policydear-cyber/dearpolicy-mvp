@@ -99,6 +99,12 @@ t("many printed amounts say 'Depends on your case' once above them, not on every
   assert.equal((many.match(/data-testid="answer-card"/g) ?? []).length, 5, "every amount stays");
   assert.equal((printedCards(2).match(/Depends on your case/g) ?? []).length, 2, "two cards keep their own label");
   assert.doesNotMatch(printedCards(2), /answer-printed-note/);
+  // Critic #595: a worked-out figure beside printed ones is never covered by "the amounts your documents print".
+  const mixed = renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],
+    statements: [...Array.from({ length: 3 }, (_, i) => ({ id: "m" + i, kind: "benefit_terms", personName: "Lim Ah Kow", text: "Benefit " + i + ".", fullText: "Benefit " + i + ".", conditions: [], amount: { text: "S$" + (i + 1) + ",000", currencyResolved: true, illustration: false } })),
+      { id: "m9", kind: "calculation", personName: "Lim Ah Kow", text: "For a 4-day stay.", fullText: "For a 4-day stay.", conditions: [], amount: { text: "S$400", currencyResolved: true, illustration: true } }] } as unknown as StructuredAnswer, render: (x: string) => x, prose: [] }));
+  assert.doesNotMatch(mixed, /answer-printed-note/, "no note beside a worked-out figure");
+  assert.equal((mixed.match(/Depends on your case/g) ?? []).length, 3, "each printed card keeps its own label");
 });
 t("a point's conditions are headed as its conditions, never a bare line; a card's sit under its figure (live 637c547)", () => {
   const html = (amount: unknown, conditions: string[]) => renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],

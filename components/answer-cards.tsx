@@ -208,7 +208,10 @@ export function AnswerCards({ answer, render, sources, prose = [], after, stepsF
   };
   // Many printed amounts at once (a "what am I covered for?" answer): the same two words under every one of ten cards read
   // as noise, and a flat sum looks doubtful (Live tester, 25 Nov). Say it once above them; a lone card keeps its own label.
-  const manyPrinted = statements.filter((s) => asCard(s) && s.kind === "benefit_terms").length >= PRINTED_NOTE_FROM;
+  // Only when every amount card is printed terms: beside a figure worked out for this case, "the amounts your documents
+  // print" would read as covering it too (Critic #595), so each printed card then keeps its own label.
+  const cardStatements = statements.filter(asCard);
+  const manyPrinted = cardStatements.length >= PRINTED_NOTE_FROM && cardStatements.every((s) => s.kind === "benefit_terms");
   const one = (s: AnswerStatement) => {
     if (asCard(s)) return <AmountCard key={s.id} openSource={openSource} quiet={manyPrinted} s={{ ...s, text: render(s.text), fullText: render(s.fullText ?? ""), basis: s.basis ? render(s.basis) : s.basis }} />;
     const text = markless(s, pointText(s));
