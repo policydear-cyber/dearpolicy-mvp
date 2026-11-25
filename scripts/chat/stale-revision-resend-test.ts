@@ -25,13 +25,18 @@ test("S3 an unreadable or malformed chat gives nothing, so nothing on the page c
   }
 });
 test("S4 the page catches up after a refused send and never posts the message a second time", () => {
-  assert.match(page, /if\(conflict&&conversationId\)void catchUp\(conversationId,version\)/);
+  assert.match(page, /if\(conflict&&conversationId\)void catchUp\(conversationId,version,text\)/);
   assert.equal((page.match(/fetch\("\/api\/chat",\{method:"POST"/g) ?? []).length, 1, "one place posts a chat message");
   assert.match(page, /setRevision\(state\.revision\);setMemberId\(state\.memberId\)/);
 });
 test("S5 the refusal makes no claim the page cannot be sure of (box content, successful catch-up)", () => {
   assert.match(page, /Send it again, or reload the chat to see the latest messages\./);
   assert.doesNotMatch(page, /Your message is in the box/);
+});
+
+test("S6 a deleted chat says so, and a message the chat already holds is not drawn or offered twice", () => {
+  assert.match(page, /This chat no longer exists\. Start a new chat to ask again\./);
+  assert.match(page, /const stored=shown\.length>0&&shown\[shown\.length-1\]\.role==="user"/);
 });
 
 console.log(`stale-revision catch-up: ${passed} passed, ${failures.length} failed`);

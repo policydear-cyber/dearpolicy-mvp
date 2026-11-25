@@ -276,14 +276,24 @@ function ChatContent(){
   }
   /** After a refused send the page is behind its own chat: take the chat as it now stands (revision, person, messages) so the
    * next send is not refused the same way, and keep the failed message and its note at the end. Never sends anything. */
-  async function catchUp(id:string,version:number){
+  async function catchUp(id:string,version:number,text:string){
     try{
       const response=await fetch("/api/chat/history/"+id,{cache:"no-store"});
+      // A chat deleted elsewhere is refused forever: say so, instead of "send it again" (Test engineer F2, #594).
+      if(response.status===404&&version===requestVersion.current){
+        setMessages(previous=>previous.map((m,i)=>i===previous.length-1&&m.role==="user"?{...m,error:"This chat no longer exists. Start a new chat to ask again.",conflict:false}:m));
+        return;
+      }
       const chat=await response.json();
       const state=response.ok?catchUpState(chat):null;
       if(!state||version!==requestVersion.current)return;
       setRevision(state.revision);setMemberId(state.memberId);setMessageCursor(state.cursor);
-      setMessages(previous=>{const failed=previous[previous.length-1];return failed&&failed.role==="user"?[...chat.messages.map((m:{id:string;role:Message["role"];content:string;answer_json?:ChatAnswer})=>({id:m.id,role:m.role,content:m.content,answer:m.answer_json??undefined})),failed]:previous;});
+      const shown=chat.messages.map((m:{id:string;role:Message["role"];content:string;answer_json?:ChatAnswer})=>({id:m.id,role:m.role,content:m.content,answer:m.answer_json??undefined}));
+      // The chat already ends with this very message (an earlier send of it was stored but its answer never reached this
+      // page): do not draw it twice or offer to send it again, which would ask twice (Test engineer F1, #594).
+      const stored=shown.length>0&&shown[shown.length-1].role==="user"&&String(shown[shown.length-1].content).trim()===text;
+      if(stored){setMessages(shown);if(boxText.current.trim()===text)setQuestion("");return;}
+      setMessages(previous=>{const failed=previous[previous.length-1];return failed&&failed.role==="user"?[...shown,failed]:previous;});
     }catch{/* the Reload button still works */}
   }
   async function sendText(text:string,personChoiceId?:string){
@@ -319,7 +329,7 @@ function ChatContent(){
         const restored=!stopped&&!boxText.current.trim();
         if(restored)setQuestion(text);
         setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message,conflict,noFamily,planLimit,stopped,restored}:m));
-        if(conflict&&conversationId)void catchUp(conversationId,version);
+        if(conflict&&conversationId)void catchUp(conversationId,version,text);
       }
     }
     finally{if(version===requestVersion.current){jobId.current=null;setBusy(false);controller.current=null;}if(planStatus.status?.upgrade)planStatus.refresh();}
