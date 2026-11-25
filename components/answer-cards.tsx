@@ -211,7 +211,7 @@ export function AnswerCards({ answer, render, sources, prose = [], after, stepsF
   // Only when every amount card is printed terms: beside a figure worked out for this case, "the amounts your documents
   // print" would read as covering it too (Critic #595), so each printed card then keeps its own label.
   const cardStatements = statements.filter(asCard);
-  const manyPrinted = cardStatements.length >= PRINTED_NOTE_FROM && cardStatements.every((s) => s.kind === "benefit_terms");
+  const manyPrinted = cardStatements.length >= PRINTED_NOTE_FROM && !statements.some((s) => s.amount && s.kind !== "benefit_terms");
   const one = (s: AnswerStatement) => {
     if (asCard(s)) return <AmountCard key={s.id} openSource={openSource} quiet={manyPrinted} s={{ ...s, text: render(s.text), fullText: render(s.fullText ?? ""), basis: s.basis ? render(s.basis) : s.basis }} />;
     const text = markless(s, pointText(s));
