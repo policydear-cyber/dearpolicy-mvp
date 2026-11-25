@@ -90,6 +90,16 @@ t("a figure whose currency the document does not state says so on its card; othe
   assert.doesNotMatch(card(true), /Currency not stated|illustration|printed amount/);
   assert.match(card(true, "benefit_terms"), /Depends on your case/);
 });
+const printedCards = (n: number) => renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],
+  statements: Array.from({ length: n }, (_, i) => ({ id: "p" + i, kind: "benefit_terms", personName: "Lim Ah Kow", text: "Benefit " + i + ".", fullText: "Benefit " + i + ".", conditions: [], amount: { text: "S$" + (i + 1) + ",000", currencyResolved: true, illustration: false } })) } as unknown as StructuredAnswer, render: (x: string) => x, prose: [] }));
+t("many printed amounts say 'Depends on your case' once above them, not on every card; two keep their own label", () => {
+  const many = printedCards(5);
+  assert.equal((many.match(/Depends on your case/g) ?? []).length, 1, "once");
+  assert.match(many, /data-testid="answer-printed-note"/);
+  assert.equal((many.match(/data-testid="answer-card"/g) ?? []).length, 5, "every amount stays");
+  assert.equal((printedCards(2).match(/Depends on your case/g) ?? []).length, 2, "two cards keep their own label");
+  assert.doesNotMatch(printedCards(2), /answer-printed-note/);
+});
 t("a point's conditions are headed as its conditions, never a bare line; a card's sit under its figure (live 637c547)", () => {
   const html = (amount: unknown, conditions: string[]) => renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],
     statements: [{ id: "s2", kind: "fact", personName: "Ana Ruiz", text: "The group scheme pays a daily hospital cash amount from the 11th day of a stay.", fullText: null, conditions, amount }] } as unknown as StructuredAnswer, render: (x: string) => x, prose: [] }));
