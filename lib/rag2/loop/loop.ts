@@ -10,7 +10,7 @@
  * break the conversation rules (a second question, a fact already known, a question no evidence makes relevant).
  * The visible reply is composed only from the model's final_answer / ask_user (compose.ts).
  */
-import { isCodeName } from "@/lib/policies/document-name";
+import { documentName, isCodeName } from "@/lib/policies/document-name";
 import { requirementToAsk } from "./requirement-question";
 import { planSchedules } from "./schedule-disposition";
 import { STEM_SYN as TOPIC_SYN, sharedTopic, topicStems } from "./topic";
@@ -2937,7 +2937,7 @@ export async function loadLibraryText(accountId: string): Promise<Map<string, st
 export async function revalidateEvidence(accountId: string, state: RagLoopState): Promise<{ stale: Map<string, string>; policyNames: Map<string, string>; docFacts: Map<string, string> }> {
   const stale = new Map<string, string>();
   const docs = await loadDocs(accountId).catch(() => null);
-  const policyNames = new Map((docs ?? []).map((d) => [d.id, (d.productName && !isCodeName(d.productName) ? d.productName : null) ?? d.insurer ?? "Policy document"]));
+  const policyNames = new Map((docs ?? []).map((d) => [d.id, d.productName && !isCodeName(d.productName) ? d.productName : documentName({ product_name: null, original_filename: "", insurer: d.insurer, document_role: d.documentRole, policy_number: d.policyNumber })]));
   // V1.1 (evidence contract): what a document states on its face -- product, insurer, policy and group numbers, and
   // that an endorsement amends its policy -- is part of what a sentence citing it may say.
   const docFacts = new Map((docs ?? []).map((d) => [d.id, [d.productName, d.insurer, d.policyNumber, d.groupPolicyNumber, d.documentRole === "endorsement" ? "endorsement amends amended amendment" : null].filter(Boolean).join(" ")]));

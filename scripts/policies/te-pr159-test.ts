@@ -111,12 +111,12 @@ test("X7 a name is the same at every site: it depends only on its own document",
   assert.equal(documentName(a as never), documentName({ ...a } as never));
 });
 
+// Filing references are not product names; chosen short names are.
+for (const n of ["1105 CD-594 COI_SAF", "SGGRP_COI_APP", "2026 CD-12 SAF"]) test(`C1 code name '${n}'`, () => assert.equal(isCodeName(n), true));
+for (const n of ["MINDEF & MHA Group Insurance", "AXA 2026", "Singlife Comprehensive Critical Illness II", "My CI 2026", "PruLink Enhanced Protector (PW9)"]) test(`C2 readable name '${n}'`, () => assert.equal(isCodeName(n), false));
+test("C3 code product falls back to a plain label", () => assert.equal(documentName({ product_name: "1105 CD-594 COI_SAF", original_filename: "1105 CD-594 COI_SAF.pdf", insurer: "Singlife Pte. Ltd.", document_role: "certificate" }).includes("COI"), false));
+
 for (const f of failures) console.log("FAIL " + f);
 for (const n of notes) console.log("NOTE " + n);
 console.log(`te-pr159: ${passed} passed, ${failures.length} failed, fetches ${fetches}`);
 process.exit(failures.length ? 1 : 0);
-
-// Filing references are not product names; chosen short names are.
-for (const n of ["1105 CD-594 COI_SAF", "SGGRP_COI_APP", "2026 CD-12 SAF"]) test(`C1 code name '${n}'`, () => assert.equal(isCodeName(n), true));
-for (const n of ["MINDEF & MHA Group Insurance", "AXA 2026", "Singlife Comprehensive Critical Illness II", "My CI 2026", "PruLink Enhanced Protector (PW9)"]) test(`C2 readable name '${n}'`, () => assert.equal(isCodeName(n), false));
-test("C3 code product falls back to a plain label", () => assert.equal(documentName({ product_name: "1105 CD-594 COI_SAF", original_filename: "x.pdf", insurer: "Singlife Pte. Ltd.", document_role: "certificate" }).includes("COI"), false));
