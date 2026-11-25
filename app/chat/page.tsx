@@ -38,6 +38,8 @@ const MAX_QUESTION_LENGTH=2000;
 const NO_FAMILY_TEXT="Add a family member first, then ask again.";
 /** The chat was changed elsewhere (another tab or window) since this page
  * loaded it: the server refuses to append to a stale copy. */
+const CHAT_GONE_TEXT="This chat no longer exists.";
+const ALREADY_SENT_TEXT="This message is already in the chat above, so it was not sent again.";
 const CONFLICT_TEXT="This chat was updated in another tab or window, or by an answer that finished late, so this message was not sent. Send it again, or reload the chat to see the latest messages.";
 const shown=answerText,words=codeWords;
 /** An answer's next steps, each once and in order, once nothing is waiting on a question (then they sit with the question). */
@@ -281,7 +283,7 @@ function ChatContent(){
       const response=await fetch("/api/chat/history/"+id,{cache:"no-store"});
       // A chat deleted elsewhere is refused forever: say so, instead of "send it again" (Test engineer F2, #594).
       if(response.status===404&&version===requestVersion.current){
-        setMessages(previous=>previous.map((m,i)=>i===previous.length-1&&m.role==="user"?{...m,error:"This chat no longer exists. Start a new chat to ask again.",conflict:false}:m));
+        setMessages(previous=>previous.map((m,i)=>i===previous.length-1&&m.role==="user"?{...m,error:CHAT_GONE_TEXT+" Start a new chat to ask again.",conflict:false}:m));
         return;
       }
       const chat=await response.json();
@@ -291,8 +293,15 @@ function ChatContent(){
       const shown=chat.messages.map((m:{id:string;role:Message["role"];content:string;answer_json?:ChatAnswer})=>({id:m.id,role:m.role,content:m.content,answer:m.answer_json??undefined}));
       // The chat already ends with this very message (an earlier send of it was stored but its answer never reached this
       // page): do not draw it twice or offer to send it again, which would ask twice (Test engineer F1, #594).
-      const stored=shown.length>0&&shown[shown.length-1].role==="user"&&String(shown[shown.length-1].content).trim()===text;
-      if(stored){setMessages(shown);if(boxText.current.trim()===text)setQuestion("");return;}
+      // The server saves a message and its answer together, so the chat ends with the answer: compare with the last message
+      // the household sent, not the last message.
+      const lastSent=[...shown].reverse().find((m:{role:string})=>m.role==="user");
+      const stored=!!lastSent&&String(lastSent.content).trim()===text;
+      if(stored){
+        if(boxText.current.trim()===text)setQuestion("");
+        setMessages(previous=>{const failed=previous[previous.length-1];return failed&&failed.role==="user"?[...shown,{...failed,error:ALREADY_SENT_TEXT,conflict:false,restored:false}]:shown;});
+        return;
+      }
       setMessages(previous=>{const failed=previous[previous.length-1];return failed&&failed.role==="user"?[...shown,failed]:previous;});
     }catch{/* the Reload button still works */}
   }
@@ -524,7 +533,7 @@ function ChatContent(){
           ?<div className="alert error message-inline-error" role="alert" data-testid="chat-conflict"><strong>Not sent.</strong><span> {message.error}</span>{conversationId?<button type="button" className="mini-button" disabled={busy} onClick={()=>void restore(conversationId)}>Reload this chat</button>:null}</div>
           :message.stopped
           ?<div className="alert message-inline-error" role="alert" data-testid="chat-stopped-waiting"><strong>Still not answered.</strong><span> {message.error}</span>{conversationId?<button type="button" className="mini-button" disabled={busy} onClick={()=>void restore(conversationId)}>Check for the answer</button>:null}</div>
-          :<div className="alert error message-inline-error" role="alert"><strong>This didn&rsquo;t go through.</strong><span> {message.error.replace(/\.?\s*$/,".")} {message.restored&&index===messages.length-1&&!busy?"Your question is back in the box below, ready to send again.":"Send it again when you’re ready."}</span></div>):null}
+          :<div className="alert error message-inline-error" role="alert"><strong>This didn&rsquo;t go through.</strong><span> {message.error.replace(/\.?\s*$/,".")} {(message.error.startsWith(CHAT_GONE_TEXT)||message.error.startsWith(ALREADY_SENT_TEXT))?"":message.restored&&index===messages.length-1&&!busy?"Your question is back in the box below, ready to send again.":"Send it again when you’re ready."}</span></div>):null}
       </div>)}
       {busy?<div className="message assistant"><div className="message-label">DearPolicy</div>
         <AnswerWait label={progress} stageId={stageId} detail={progressDetail} elapsed={elapsed} queued={queued}/></div>:null}

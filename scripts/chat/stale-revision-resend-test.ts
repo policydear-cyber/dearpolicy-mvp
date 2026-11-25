@@ -34,9 +34,17 @@ test("S5 the refusal makes no claim the page cannot be sure of (box content, suc
   assert.doesNotMatch(page, /Your message is in the box/);
 });
 
-test("S6 a deleted chat says so, and a message the chat already holds is not drawn or offered twice", () => {
-  assert.match(page, /This chat no longer exists\. Start a new chat to ask again\./);
-  assert.match(page, /const stored=shown\.length>0&&shown\[shown\.length-1\]\.role==="user"/);
+test("S6 a deleted chat says so, with no 'send it again' after it", () => {
+  assert.match(page, /const CHAT_GONE_TEXT="This chat no longer exists\."/);
+  assert.match(page, /message\.error\.startsWith\(CHAT_GONE_TEXT\)/);
+});
+test("S7 a message the chat already holds is found among the household's own messages (the chat ends with the answer), not drawn as a second send", () => {
+  // Behaviour of the lookup the page uses, on a history that ends [user, assistant] (Test engineer F1, #594).
+  const shown = [{ role: "user", content: "Is dental covered?" }, { role: "assistant", content: "No." }];
+  const lastSent = [...shown].reverse().find((m) => m.role === "user");
+  assert.equal(String(lastSent?.content).trim(), "Is dental covered?");
+  assert.match(page, /const lastSent=\[\.\.\.shown\]\.reverse\(\)\.find\(\(m:\{role:string\}\)=>m\.role==="user"\)/);
+  assert.match(page, /ALREADY_SENT_TEXT/);
 });
 
 console.log(`stale-revision catch-up: ${passed} passed, ${failures.length} failed`);
