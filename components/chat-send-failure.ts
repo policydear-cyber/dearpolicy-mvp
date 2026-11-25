@@ -34,3 +34,15 @@ export function catchUpState(chat: { conversation?: { revision?: unknown; family
   const member = chat.conversation.family_member_id;
   return { revision, memberId: typeof member === "string" ? member : "", cursor: typeof chat.nextCursor === "string" ? chat.nextCursor : null };
 }
+
+/**
+ * True when the chat as the server holds it already carries this very message as the household's latest: an earlier send of
+ * it was stored, but its answer never reached this page. The server saves a message and its answer together, so the chat
+ * ends with the answer; the household's own latest message is the last "user" one. Sending it again would ask twice, so the
+ * page does not offer to (Test engineer F1, #594). Compared as typed (outer spaces ignored): a different wording, case or
+ * mark is a different message, and an equal message from earlier turns does not count.
+ */
+export function alreadySentLast(history: ReadonlyArray<{ role: string; content: unknown }>, text: string): boolean {
+  const lastSent = [...history].reverse().find((m) => m.role === "user");
+  return !!lastSent && String(lastSent.content).trim() === text.trim();
+}

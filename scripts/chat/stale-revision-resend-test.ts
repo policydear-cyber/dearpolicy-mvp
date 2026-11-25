@@ -4,7 +4,7 @@
  *   npm run -s chat:stale-revision-resend-test */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { catchUpState } from "@/components/chat-send-failure";
+import { catchUpState, alreadySentLast } from "@/components/chat-send-failure";
 
 let passed = 0;
 const failures: string[] = [];
@@ -38,13 +38,23 @@ test("S6 a deleted chat says so, with no 'send it again' after it", () => {
   assert.match(page, /const CHAT_GONE_TEXT="This chat no longer exists\."/);
   assert.match(page, /message\.error\.startsWith\(CHAT_GONE_TEXT\)/);
 });
-test("S7 a message the chat already holds is found among the household's own messages (the chat ends with the answer), not drawn as a second send", () => {
-  // Behaviour of the lookup the page uses, on a history that ends [user, assistant] (Test engineer F1, #594).
-  const shown = [{ role: "user", content: "Is dental covered?" }, { role: "assistant", content: "No." }];
-  const lastSent = [...shown].reverse().find((m) => m.role === "user");
-  assert.equal(String(lastSent?.content).trim(), "Is dental covered?");
-  assert.match(page, /const lastSent=\[\.\.\.shown\]\.reverse\(\)\.find\(\(m:\{role:string\}\)=>m\.role==="user"\)/);
-  assert.match(page, /ALREADY_SENT_TEXT/);
+const U = (content: string) => ({ role: "user", content }), A = (content: string) => ({ role: "assistant", content });
+test("S7 a message the chat already holds as the household's latest is found though the chat ends with the answer", () => {
+  assert.equal(alreadySentLast([U("Is dental covered?"), A("No.")], "Is dental covered?"), true);
+  assert.equal(alreadySentLast([U("Is dental covered?"), A("No.")], "  Is dental covered?  "), true, "outer spaces ignored");
+  assert.equal(alreadySentLast([U("Is dental covered?"), A("No."), U("Is dental covered?"), A("No.")], "Is dental covered?"), true, "two identical messages");
+});
+test("S8 a different message, an older equal one, or no history is not 'already sent'", () => {
+  assert.equal(alreadySentLast([U("Is dental covered?"), A("No.")], "Is dental covered"), false, "a mark is a different message");
+  assert.equal(alreadySentLast([U("Is dental covered?"), A("No.")], "is dental covered?"), false, "case is a different message");
+  assert.equal(alreadySentLast([U("Is dental covered?"), A("No."), U("What about optical?"), A("Yes.")], "Is dental covered?"), false, "an older equal message does not count");
+  assert.equal(alreadySentLast([A("Hello")], "Is dental covered?"), false);
+  assert.equal(alreadySentLast([], "Is dental covered?"), false);
+});
+test("S9 the page uses it, and says why nothing was sent", () => {
+  assert.match(page, /const stored=alreadySentLast\(shown,text\)/);
+  assert.match(page, /const ALREADY_SENT_TEXT="This message is already in the chat above, so it was not sent again\."/);
+  assert.match(page, /error:ALREADY_SENT_TEXT,conflict:false,restored:false/);
 });
 
 console.log(`stale-revision catch-up: ${passed} passed, ${failures.length} failed`);

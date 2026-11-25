@@ -22,7 +22,7 @@ import { asksWhatToDo } from "@/lib/simple-chat/plain";
 import { GENERIC_DISCLAIMER } from "@/lib/chat/generic-disclaimer";
 import { StoppedNotice,isStopped } from "@/components/answer-stopped";
 import { LearnLinks } from "@/components/learn-links";
-import { sendFailure, catchUpState } from "@/components/chat-send-failure";
+import { sendFailure, catchUpState, alreadySentLast } from "@/components/chat-send-failure";
 import { applyReplaced,type ReplacedAnswer } from "@/lib/chat/replaced-live";
 import { COVER_NOTE } from "@/lib/chat/cover-note";
 import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
@@ -295,8 +295,7 @@ function ChatContent(){
       // page): do not draw it twice or offer to send it again, which would ask twice (Test engineer F1, #594).
       // The server saves a message and its answer together, so the chat ends with the answer: compare with the last message
       // the household sent, not the last message.
-      const lastSent=[...shown].reverse().find((m:{role:string})=>m.role==="user");
-      const stored=!!lastSent&&String(lastSent.content).trim()===text;
+      const stored=alreadySentLast(shown,text);
       if(stored){
         if(boxText.current.trim()===text)setQuestion("");
         setMessages(previous=>{const failed=previous[previous.length-1];return failed&&failed.role==="user"?[...shown,{...failed,error:ALREADY_SENT_TEXT,conflict:false,restored:false}]:shown;});
