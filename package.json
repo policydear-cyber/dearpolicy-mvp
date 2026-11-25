@@ -118,6 +118,7 @@
     "simple:all-accounts-test": "node --import tsx --test scripts/simple-answer/all-accounts-test.ts",
     "simple:still-reading-test": "node --import tsx scripts/simple-answer/still-reading-test.ts",
     "simple:cover-not-counted-test": "node --import tsx scripts/simple-answer/cover-not-counted-test.ts",
+    "simple:plain-test": "node --import tsx scripts/simple-answer/plain-test.ts",
     "simple:style-test": "node --import tsx scripts/simple-answer/style-test.ts",
     "simple:declutter-contacts-test": "node --import tsx scripts/simple-answer/declutter-contacts-test.ts",
     "simple:printed-table-test": "node --import tsx scripts/simple-answer/printed-table-test.ts",

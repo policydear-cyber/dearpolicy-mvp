@@ -18,6 +18,7 @@ import { AnswerWait,isAnswerStage,type AnswerStageId } from "@/components/answer
 import { SourceList } from "@/components/source-list";
 import { AnswerCards,showsCards } from "@/components/answer-cards";
 import { InsurerContacts } from "@/components/insurer-contacts";
+import { asksWhatToDo } from "@/lib/simple-chat/plain";
 import { GENERIC_DISCLAIMER } from "@/lib/chat/generic-disclaimer";
 import { StoppedNotice,isStopped } from "@/components/answer-stopped";
 import { LearnLinks } from "@/components/learn-links";
@@ -401,7 +402,7 @@ function ChatContent(){
           {/* An answer that arrives with checked statements is shown as cards (bottom line, one card per amount, sources one tap
               away); the same text otherwise, as before. A claim assessment keeps its own layout. */}
           {(()=>{const cards=message.role==="assistant"&&showsCards(message.answer);return <>
-          {cards?<AnswerCards answer={message.answer as Parameters<typeof AnswerCards>[0]["answer"]} render={text=>readableDates(customerAnswerText(shown(text)))} prose={[message.content??"",...(message.answer!.details??[])]} sources={<SourceList citations={message.answer!.citations}/>} after={nextStepsAfter(message.answer)}/>:null}
+          {cards?<AnswerCards answer={message.answer as Parameters<typeof AnswerCards>[0]["answer"]} render={text=>readableDates(customerAnswerText(shown(text)))} prose={[message.content??"",...(message.answer!.details??[])]} sources={<SourceList citations={message.answer!.citations}/>} after={nextStepsAfter(message.answer)} stepsFirst={asksWhatToDo(all.slice(0,index).reverse().find(m=>m.role==="user")?.content)}/>:null}
           {/* A turn that stopped before answering is drawn as a stop, with one tap to a narrower question. */}
           {cards?null:message.role==="assistant"&&isStopped(message.answer,message.content)?<StoppedNotice text={readableDates(customerAnswerText(message.content))} question={all.slice(0,index).reverse().find(m=>m.role==="user")?.content} people={family.map(m=>({id:m.id,name:m.display_name}))} onAsk={(text,id)=>{setQuestion(text.slice(0,MAX_QUESTION_LENGTH));if(id)setMemberId(id);composer.current?.focus();}}/>
           :message.role==="assistant"?(message.content?<p>{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}

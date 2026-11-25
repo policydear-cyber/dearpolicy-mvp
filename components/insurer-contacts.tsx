@@ -14,7 +14,7 @@ export function InsurerContacts({ contacts }: { contacts?: InsurerContact[] | nu
       <ul>{c.items.map((item) => <li key={item.kind + item.value}>
         <span className="insurer-contact-label">{item.label}</span>{" "}
         <a href={href(item.kind, item.value)} {...(item.kind === "website" ? { target: "_blank", rel: "noopener noreferrer" } : {})}>{item.value}</a>
-        <small title={`${item.source.policyName}, page ${item.source.page}`}> · {item.source.policyName}, p.{item.source.page}</small>
+        <span className="sr-only"> (from {item.source.policyName}, page {item.source.page})</span>
       </li>)}</ul>
     </div>)}
   </div>;

@@ -3027,6 +3027,9 @@ export function personalFileName(name: string): string | null {
   // "document (3)", "Download (1)", "PXL_20260901_101532"), with dates, times and counters, is not a name a person chose.
   const rest = base.replace(/(?<![A-Za-z])(?:whatsapp|image|img|screenshot|screen\s*shot|scan|scanned|camscanner|document|doc|file|download|upload|untitled|pdf|photo|pxl|dsc|mvimg|output|attachment|print|copy|of|at|am|pm)(?![A-Za-z])/gi, " ");
   if (!/[A-Za-z]{2,}/.test(rest.replace(/[\d_.:()\s-]+/g, " "))) return null;
+  // A name built like a filing code ("1105 CD-594 COI_SAF": underscores, or a code word such as "CD-594" or "A1234") is
+  // a system's label, not a title a household would recognise.
+  if (base.includes("_") || /(?<![A-Za-z])[A-Za-z]{1,5}-?\d{2,}(?![A-Za-z])/.test(base) && /(?<![A-Za-z])[A-Z]{2,}(?![A-Za-z])/.test(base)) return null;
   return base;
 }
 

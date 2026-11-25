@@ -13,6 +13,8 @@
  * server logs and in the operator area.
  */
 
+import { plainWords } from "@/lib/simple-chat/plain";
+
 /** Words and shapes that only ever belong to the system, never to a household. */
 export const INTERNAL_DETAIL =
   /\b(openai|anthropic|gemini|claude|gpt-?\d|o\d-mini|llama|ollama|mistral|pinecone|supabase|postgres(?:ql)?|pgvector|virustotal|vercel|quota|rate[- ]?limit|billing|insufficient_quota|api[_ ]?key|org(?:anization|anisation)?[-_ ]?id|org-[a-z0-9]{6,}|req(?:uest)?[-_ ]?id|token(?:s)? (?:in|out|used)|model[_ ]?(?:call|name|error|execution)s?|tokens?|embedding|vector|chunk|queue|job id|worker|stack|trace|undefined|null|NaN|ECONN\w*|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket|fetch failed|sql|relation "|syntax error|violates|constraint|timeout exceeded|internal server error|status code|http \d{3}|\b[45]\d\d\b|https?:\/\/|\{|\}|\[object)/i;
@@ -47,5 +49,5 @@ export const ANSWER_UNAVAILABLE = "DearPolicy could not answer this just now. Pl
 /** Answer text as shown to a household: unchanged unless it is a leaked
  * provider error, which becomes one plain sentence. */
 export function customerAnswerText(text: string): string {
-  return RAW_PROVIDER_ERROR.test(text) ? ANSWER_UNAVAILABLE : text;
+  return RAW_PROVIDER_ERROR.test(text) ? ANSWER_UNAVAILABLE : plainWords(text);
 }
