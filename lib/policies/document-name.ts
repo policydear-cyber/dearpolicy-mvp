@@ -60,7 +60,7 @@ export function documentName(doc:{product_name:string|null;original_filename:str
   if(product&&!isCodeName(product))return product;
   // An ID number in the file name is masked before the name is made readable: spacing splits it ("S7712345D" ->
   // "S7712345 D") into a shape no mask knows (TE pr181 F2).
-  if(!isMachineFilename(doc.original_filename)&&!isCodeName(prettifyFilename(doc.original_filename)))return prettifyFilename(maskIdentityText(doc.original_filename));
+  if(!isMachineFilename(doc.original_filename)&&!upperCode(doc.original_filename.replace(/\.[a-zA-Z0-9]{1,5}$/,""))&&!isCodeName(prettifyFilename(doc.original_filename)))return prettifyFilename(maskIdentityText(doc.original_filename));
   const kind=documentKind(doc.document_role),insurer=doc.insurer?.trim()?insurerShortName(doc.insurer):"";
   // Two policies named by insurer and kind alone are told apart by their numbers, whatever other documents are named with
   // them: code groups and matches documents by name (who is covered, which card's policy, a premium notice's plan), and
@@ -68,6 +68,9 @@ export function documentName(doc:{product_name:string|null;original_filename:str
   const number=normalizedIdentifier(doc.policy_number),ending=/\d/.test(number)?number.slice(-4):"";
   return (insurer?`${insurer} ${kind}`:kind.charAt(0).toUpperCase()+kind.slice(1))+(ending?` (ending ${ending})`:"");
 }
+
+/** An all-capitals underscore name ("SGGRP_COI_APP", "POL_SCHED_V2"): a system code, where "HSBC_Life_2025" is a chosen name. */
+function upperCode(base:string):boolean {return isCodeName(base)&&!/\p{Ll}/u.test(base);}
 
 /** A code a system gives a file or template ("SGGRP_COI_APP", "POL_SCHED_V2"), not a name a person reads: no space, and its
  * words joined by underscores. */

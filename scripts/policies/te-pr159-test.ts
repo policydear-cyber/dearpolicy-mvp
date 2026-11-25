@@ -116,6 +116,7 @@ for (const n of ["1105 CD-594 COI_SAF", "SGGRP_COI_APP", "2026 CD-12 SAF"]) test
 for (const n of ["MINDEF & MHA Group Insurance", "AXA 2026", "Singlife Comprehensive Critical Illness II", "My CI 2026", "PruLink Enhanced Protector (PW9)"]) test(`C2 readable name '${n}'`, () => assert.equal(isCodeName(n), false));
 test("C3 code product falls back to a plain label", () => assert.equal(documentName({ product_name: "1105 CD-594 COI_SAF", original_filename: "1105 CD-594 COI_SAF.pdf", insurer: "Singlife Pte. Ltd.", document_role: "certificate" }).includes("COI"), false));
 
+test("C4 underscore code file name falls back", () => assert.equal(/SGGRP|COI/.test(documentName({ product_name: "SGGRP_COI_APP", original_filename: "SGGRP_COI_APP.pdf", insurer: "Singlife Pte. Ltd.", document_role: "certificate" })), false));
 for (const f of failures) console.log("FAIL " + f);
 for (const n of notes) console.log("NOTE " + n);
 console.log(`te-pr159: ${passed} passed, ${failures.length} failed, fetches ${fetches}`);
