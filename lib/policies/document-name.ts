@@ -91,3 +91,10 @@ export function normalizedIdentifier(value:string|null|undefined){return (value?
 export function documentCardTitle(doc:{product_name:string|null;original_filename:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null}):string {
   return documentName({...doc,original_filename:doc.original_filename??""});
 }
+
+/** The title a source line or a document check uses: the product name, unless it is a filing or system code, then the plain label. */
+export function sourceTitle(doc:{product_name:string|null;original_filename?:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null}):string {
+  const product=doc.product_name?.trim();
+  if(product&&!isCodeName(product))return product;
+  return documentName({product_name:null,original_filename:doc.original_filename??"",insurer:doc.insurer,document_role:doc.document_role,policy_number:doc.policy_number});
+}
