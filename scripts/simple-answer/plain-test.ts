@@ -59,6 +59,19 @@ t("every part of what a card says keeps two cards apart: kind, currency, illustr
   assert.equal(mergeSamePerson([card("a", "Tan Desmond", { source: doc("simple-pol1-p1-3") }), card("b", "Ong Charmaine", { source: doc("simple-pol1-p1-9") })]).length, 1, "same document, each card's own number");
   assert.equal(mergeSamePerson([card("a", "Tan Desmond", { source: doc("simple-pol1-p1-3") }), card("b", "Ong Charmaine", { source: doc("simple-pol2-p1-4") })]).length, 2, "a second document of the same name");
 });
+t("two people's different alternatives keep each person's own either/or set; identical sets merge", () => {
+  const g = (id: string) => ({ id, kind: "either_or" as const, note: "alternatives" });
+  const amt = (text: string) => ({ text, currencyResolved: true, illustration: false });
+  const c = (id: string, person: string, grp: string, amount: string) => card(id, person, { group: g(grp), amount: amt(amount), basis: null, text: `Pays ${amount}.`, fullText: `Pays ${amount}.` });
+  const differing = mergeSamePerson([c("a", "Desmond", "gD", "S$100"), c("b", "Desmond", "gD", "S$5,000"), c("c", "Charmaine", "gC", "S$100"), c("d", "Charmaine", "gC", "S$7,000")]);
+  assert.equal(differing.length, 4, "nothing merges when the sets differ");
+  const same = mergeSamePerson([c("a", "Desmond", "gD", "S$100"), c("b", "Desmond", "gD", "S$5,000"), c("c", "Charmaine", "gC", "S$100"), c("d", "Charmaine", "gC", "S$5,000")]);
+  assert.equal(same.length, 2);
+  assert.ok(same.every((s) => s.personName === "Desmond and Charmaine, each"));
+});
+t("names with apostrophes and hyphens compare as whole names", () => {
+  assert.equal(mergeSamePerson([card("a", "Mary-Jane O'Neil"), card("b", "Ann D'Souza")]).length, 1);
+});
 t("a short first name is replaced only where it is a word", () => {
   const m = mergeSamePerson([card("a", "Li Wei", { text: "Li Wei's limit of life cover is total, also all.", fullText: "", basis: null }), card("b", "Al Tan", { text: "Al Tan's limit of life cover is total, also all.", fullText: "", basis: null })]);
   assert.equal(m.length, 1);

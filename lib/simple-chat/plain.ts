@@ -40,8 +40,8 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** A card's strings with the person's own name words replaced, so two people's cards compare by what they say. */
 function withoutName(s: string | null | undefined, name: string): string {
   const words = name.split(/[^\p{L}]+/u).filter((w) => w.length >= 2);
-  let out = (s ?? "").toLowerCase();
-  for (const w of words) out = out.replace(new RegExp(`\\b${escapeRe(w.toLowerCase())}(?:'s|’s)?\\b`, "g"), "{p}");
+  const parts = [name, ...words].filter(Boolean).map(escapeRe);
+  const out = parts.length ? (s ?? "").replace(new RegExp(`(?<![\\p{L}])(?:${parts.join("|")})(?:'s|’s)?(?![\\p{L}])`, "giu"), "{p}").toLowerCase() : (s ?? "").toLowerCase();
   return out.replace(/(?:\{p\}\s*)+/g, "{p} ").replace(/\s+/g, " ").trim();
 }
 /** The card's own words with the first person's name made general, since the card now speaks for each of them. */
@@ -59,10 +59,22 @@ const listNames = (names: string[]) => names.length < 2 ? names.join("") : `${na
  * that differs in anything stays its own: a different sum insured, a different condition, a different document.
  */
 export function mergeSamePerson(statements: AnswerStatement[]): AnswerStatement[] {
-  const key = (s: AnswerStatement) => {
+  const baseKey = (s: AnswerStatement) => {
     const n = s.personName ?? "";
     return JSON.stringify([s.kind, s.source?.note ?? null, s.source?.footnote ?? null, s.group ? [s.group.kind, s.group.note] : null, s.amount?.text, s.amount?.currencyResolved, s.amount?.illustration, withoutName(s.text, n), withoutName(s.fullText, n),
       withoutName(s.basis, n), (s.conditions ?? []).map((c) => withoutName(c, n)), s.source?.policyName, [...new Set((s.source?.citationIds ?? []).map((id) => id.replace(/-\d+(?=(?:-base)?$)/, "")))].sort(), s.source?.page, s.source?.rowLabel, s.asOf ?? null, s.table ?? null]);
+  };
+  // A card in an either/or group merges only with a card whose group has the same members once names are set aside: two
+  // people's alternatives that differ never lose which alternative belongs to whom.
+  const keys = new Map<AnswerStatement, string>();
+  const key = (s: AnswerStatement): string => {
+    let k = keys.get(s);
+    if (k === undefined) {
+      k = baseKey(s);
+      if (s.group) k += JSON.stringify(statements.filter((m) => m.group?.id === s.group!.id).map(baseKey).sort());
+      keys.set(s, k);
+    }
+    return k;
   };
   const first = new Map<string, AnswerStatement>();
   const names = new Map<string, string[]>();
