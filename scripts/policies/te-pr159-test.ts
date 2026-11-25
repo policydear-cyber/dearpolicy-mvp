@@ -122,7 +122,7 @@ test("C5 sourceTitle never returns a code title; keeps a real product", () => {
   assert.equal(/COI|594/.test(sourceTitle({ product_name: "1105 CD-594 COI_SAF", insurer: "Singlife Pte. Ltd.", document_role: "certificate" })), false);
   assert.equal(sourceTitle({ product_name: "MINDEF & MHA Group Insurance" }), "MINDEF & MHA Group Insurance");
 });
-for (const [name, re] of [["travel-policy exception", /question is about that travel policy itself/], ["Yes covered conditions", /Yes, listed as covered, with conditions/], ["no layout talk", /Never describe a page's layout or say its columns are mixed up/], ["plain dates", /premiums stop/]] as const)
+for (const [name, re] of [["travel-policy exception", /about that travel policy itself/], ["Yes covered conditions", /Yes, listed as covered, with conditions/], ["no layout talk", /Never say a page's columns are mixed up/], ["plain dates", /premiums stop/]] as const)
   test(`C6 prompt keeps rule: ${name}`, () => assert.ok(re.test(SYSTEM_PROMPT)));
 for (const f of failures) console.log("FAIL " + f);
 for (const n of notes) console.log("NOTE " + n);
