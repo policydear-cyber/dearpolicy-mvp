@@ -215,6 +215,12 @@ async function main() {
     assert.match(P.SYSTEM_PROMPT, /record with note_facts EVERY fact the household's message gives/);
     assert.match(P.SYSTEM_PROMPT, /never ask for a fact that message or the recorded facts already give/);
   });
+  await check("P5e the prompt keeps the plain-lead rule: trip-only benefits, Yes covered with conditions, no layout talk, plain dates", () => {
+    assert.match(P.SYSTEM_PROMPT, /about that travel policy itself/);
+    assert.match(P.SYSTEM_PROMPT, /Yes, listed as covered, with conditions/);
+    assert.match(P.SYSTEM_PROMPT, /Never say a page's columns are mixed up/);
+    assert.match(P.SYSTEM_PROMPT, /premiums stop/);
+  });
   await check("P5d unit: statedInMessage finds a fact the message already gives (paraphrases) and nothing else", () => {
     const m = "He was admitted on 2 October at about 9.30pm and discharged on 5 October at 9am, so 3 nights.";
     assert.ok(Q.statedInMessage("admitted_at", m)); assert.ok(Q.statedInMessage("discharge_datetime", m));

@@ -5,6 +5,7 @@
  * an insurer loses only its company form, never part of its own name. */
 import assert from "node:assert/strict";
 import { documentName, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
+import { isCodeName, sourceTitle } from "@/lib/policies/document-name";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$/i.test(k)) delete process.env[k];
 let fetches = 0; globalThis.fetch = (async () => { fetches++; throw new Error("no network"); }) as typeof fetch;
@@ -110,6 +111,16 @@ test("X7 a name is the same at every site: it depends only on its own document",
   assert.equal(documentName(a as never), documentName({ ...a } as never));
 });
 
+// Filing references are not product names; chosen short names are.
+for (const n of ["1105 CD-594 COI_SAF", "SGGRP_COI_APP", "2026 CD-12 SAF"]) test(`C1 code name '${n}'`, () => assert.equal(isCodeName(n), true));
+for (const n of ["MINDEF & MHA Group Insurance", "AXA 2026", "Singlife Comprehensive Critical Illness II", "My CI 2026", "PruLink Enhanced Protector (PW9)"]) test(`C2 readable name '${n}'`, () => assert.equal(isCodeName(n), false));
+test("C3 code product falls back to a plain label", () => assert.equal(documentName({ product_name: "1105 CD-594 COI_SAF", original_filename: "1105 CD-594 COI_SAF.pdf", insurer: "Singlife Pte. Ltd.", document_role: "certificate" }).includes("COI"), false));
+
+test("C4 underscore code file name falls back", () => assert.equal(/SGGRP|COI/.test(documentName({ product_name: "SGGRP_COI_APP", original_filename: "SGGRP_COI_APP.pdf", insurer: "Singlife Pte. Ltd.", document_role: "certificate" })), false));
+test("C5 sourceTitle never returns a code title; keeps a real product", () => {
+  assert.equal(/COI|594/.test(sourceTitle({ product_name: "1105 CD-594 COI_SAF", insurer: "Singlife Pte. Ltd.", document_role: "certificate" })), false);
+  assert.equal(sourceTitle({ product_name: "MINDEF & MHA Group Insurance" }), "MINDEF & MHA Group Insurance");
+});
 for (const f of failures) console.log("FAIL " + f);
 for (const n of notes) console.log("NOTE " + n);
 console.log(`te-pr159: ${passed} passed, ${failures.length} failed, fetches ${fetches}`);

@@ -60,7 +60,7 @@ export function documentName(doc:{product_name:string|null;original_filename:str
   if(product&&!isCodeName(product))return product;
   // An ID number in the file name is masked before the name is made readable: spacing splits it ("S7712345D" ->
   // "S7712345 D") into a shape no mask knows (TE pr181 F2).
-  if(!isMachineFilename(doc.original_filename))return prettifyFilename(maskIdentityText(doc.original_filename));
+  if(!isMachineFilename(doc.original_filename)&&!upperCode(doc.original_filename.replace(/\.[a-zA-Z0-9]{1,5}$/,""))&&!isCodeName(prettifyFilename(doc.original_filename)))return prettifyFilename(maskIdentityText(doc.original_filename));
   const kind=documentKind(doc.document_role),insurer=doc.insurer?.trim()?insurerShortName(doc.insurer):"";
   // Two policies named by insurer and kind alone are told apart by their numbers, whatever other documents are named with
   // them: code groups and matches documents by name (who is covered, which card's policy, a premium notice's plan), and
@@ -69,9 +69,18 @@ export function documentName(doc:{product_name:string|null;original_filename:str
   return (insurer?`${insurer} ${kind}`:kind.charAt(0).toUpperCase()+kind.slice(1))+(ending?` (ending ${ending})`:"");
 }
 
+/** An all-capitals underscore name ("SGGRP_COI_APP", "POL_SCHED_V2"): a system code, where "HSBC_Life_2025" is a chosen name. */
+function upperCode(base:string):boolean {return isCodeName(base)&&!/\p{Ll}/u.test(base);}
+
 /** A code a system gives a file or template ("SGGRP_COI_APP", "POL_SCHED_V2"), not a name a person reads: no space, and its
  * words joined by underscores. */
-export function isCodeName(name:string):boolean {const t=name.trim();return !/\s/.test(t)&&/_/.test(t);}
+export function isCodeName(name:string):boolean {
+  const t=name.trim();
+  if(!/\s/.test(t)&&/_/.test(t))return true;
+  // A filing reference ("1105 CD-594 COI_SAF"): two or more number-bearing parts and no word of four letters or more.
+  const tokens=t.split(/[\s_\-]+/).filter(Boolean);
+  return tokens.filter(w=>/\d/.test(w)).length>=2&&!tokens.some(w=>/^\p{L}{4,}$/u.test(w));
+}
 
 /** A policy or group number with only its letters and digits, upper-cased, for comparing. */
 export function normalizedIdentifier(value:string|null|undefined){return (value??"").toUpperCase().replace(/[^A-Z0-9]/g,"");}
@@ -81,4 +90,11 @@ export function normalizedIdentifier(value:string|null|undefined){return (value?
  * the API sends without a file name still gets a name. The file name itself stays visible as the card's small line. */
 export function documentCardTitle(doc:{product_name:string|null;original_filename:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null}):string {
   return documentName({...doc,original_filename:doc.original_filename??""});
+}
+
+/** The title a source line or a document check uses: the product name, unless it is a filing or system code, then the plain label. */
+export function sourceTitle(doc:{product_name:string|null;original_filename?:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null}):string {
+  const product=doc.product_name?.trim();
+  if(product&&!isCodeName(product))return product;
+  return documentName({product_name:null,original_filename:doc.original_filename??"",insurer:doc.insurer,document_role:doc.document_role,policy_number:doc.policy_number});
 }
