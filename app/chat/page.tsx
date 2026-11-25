@@ -38,7 +38,7 @@ const MAX_QUESTION_LENGTH=2000;
 const NO_FAMILY_TEXT="Add a family member first, then ask again.";
 /** The chat was changed elsewhere (another tab or window) since this page
  * loaded it: the server refuses to append to a stale copy. */
-const CONFLICT_TEXT="This chat was updated in another tab or window, or by an answer that finished late, so this message was not sent. The latest messages are shown now. Your message is in the box, so send it again.";
+const CONFLICT_TEXT="This chat was updated in another tab or window, or by an answer that finished late, so this message was not sent. Send it again, or reload the chat to see the latest messages.";
 const shown=answerText,words=codeWords;
 /** An answer's next steps, each once and in order, once nothing is waiting on a question (then they sit with the question). */
 /** The next steps, then how to reach the insurer as the household's documents print it. While a question is open, the

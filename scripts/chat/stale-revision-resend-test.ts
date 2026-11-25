@@ -29,8 +29,9 @@ test("S4 the page catches up after a refused send and never posts the message a 
   assert.equal((page.match(/fetch\("\/api\/chat",\{method:"POST"/g) ?? []).length, 1, "one place posts a chat message");
   assert.match(page, /setRevision\(state\.revision\);setMemberId\(state\.memberId\)/);
 });
-test("S5 the refusal says the chat is up to date and the message is in the box", () => {
-  assert.match(page, /The latest messages are shown now\. Your message is in the box, so send it again\./);
+test("S5 the refusal makes no claim the page cannot be sure of (box content, successful catch-up)", () => {
+  assert.match(page, /Send it again, or reload the chat to see the latest messages\./);
+  assert.doesNotMatch(page, /Your message is in the box/);
 });
 
 console.log(`stale-revision catch-up: ${passed} passed, ${failures.length} failed`);
