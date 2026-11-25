@@ -335,7 +335,7 @@ async function main() {
   // Live 25 Nov: a stray "th" (Thailand) or "Chinese medicine" on the line after a figure held a Singlife and an FWD wording.
   for (const t of ["Advance Payment Benefit\t100% Sum Insured (up to S$400,000)\nth\n•\tDaily Hospital Cash Benefit", "arrange return of body\tS$5,000\tS$7,500\tS$10,000\nChinese medicine practitioner, physio", "Benefit S$10,000\nCan be claimed once", "Limit S$500\nID card replacement"])
     await test(`C590b '${t.slice(0, 30)}' names no other currency`, () => assert.ok(!HC.currenciesNamed(t).includes("?"), JSON.stringify(HC.currenciesNamed(t))));
-  for (const t of ["Sum insured $100,000 Hong Kong", "Sum insured $100,000\nUS", "Amounts in $ (Taiwan)", "Premium S$100 th", "$100 Chinese"])
+  for (const t of ["Sum insured $100,000 Hong Kong", "Sum insured $100,000\nUS", "Amounts in $\nTaiwan", "Benefit ($)\nThailand", "$\nChina", "Amounts in $ (Taiwan)", "Premium S$100 th", "$100 Chinese"])
     await test(`C590b '${t.replace(/\n/g, " / ")}' still names a currency`, () => assert.ok(HC.currenciesNamed(t).some((c) => c !== "$" && c !== "SGD") || /Premium S\$100 th/.test(t), JSON.stringify(HC.currenciesNamed(t))));
   console.log(`household-currency-test: ${passed} passed, ${failures.length} failed`);
   if (failures.length) { for (const f of failures) console.error("  FAIL " + f); process.exit(1); }
