@@ -88,7 +88,7 @@ const card = (currencyResolved: boolean, kind = "fact") => renderToStaticMarkup(
 t("a figure whose currency the document does not state says so on its card; others carry no label (TE #101)", () => {
   assert.match(card(false), /Currency not stated/);
   assert.doesNotMatch(card(true), /Currency not stated|illustration|printed amount/);
-  assert.match(card(true, "benefit_terms"), /Policy terms, not worked out for this case/);
+  assert.match(card(true, "benefit_terms"), /Depends on your case/);
 });
 t("a point's conditions are headed as its conditions, never a bare line; a card's sit under its figure (live 637c547)", () => {
   const html = (amount: unknown, conditions: string[]) => renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],

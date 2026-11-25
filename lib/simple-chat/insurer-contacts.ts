@@ -182,15 +182,15 @@ function namedInsurers(household: Household, question: string): Set<string> {
   return out;
 }
 
-/** How many of each kind are shown for one insurer: a claims line, one other phone, an email and a website at most. */
-function pick(found: Found[]): ContactItem[] {
+/** What is shown for one insurer: one phone (the claims line when one is printed) and one way to write (an email, or the
+ * website when there is no email). Four lines per insurer buried the one number a household needs. */
+export function pick(found: Found[]): ContactItem[] {
   const seen = new Set<string>();
   const unique = found.filter((f) => !seen.has(f.key) && seen.add(f.key));
-  const claims = unique.filter((f) => f.kind === "phone" && f.label === "Claims").slice(0, 1);
-  const otherPhone = unique.filter((f) => f.kind === "phone" && f.label !== "Claims").slice(0, claims.length ? 1 : 2);
-  const email = [...unique.filter((f) => f.kind === "email" && f.label === "Claims email"), ...unique.filter((f) => f.kind === "email" && f.label !== "Claims email")].slice(0, 1);
-  const web = unique.filter((f) => f.kind === "website").slice(0, 1);
-  return [...claims, ...otherPhone, ...email, ...web].map(({ key: _key, ...item }) => item);
+  const phone = unique.find((f) => f.kind === "phone" && f.label === "Claims") ?? unique.find((f) => f.kind === "phone");
+  const email = unique.find((f) => f.kind === "email" && f.label === "Claims email") ?? unique.find((f) => f.kind === "email");
+  const web = email ? null : unique.find((f) => f.kind === "website");
+  return [phone, email, web].filter((f): f is Found => !!f).map(({ key: _key, ...item }) => item);
 }
 
 /** Whether contact details help this answer: it gives next steps, or the question is about claiming or reaching the insurer. */

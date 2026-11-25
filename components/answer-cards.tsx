@@ -1,6 +1,7 @@
 import { Fragment, useId, useRef } from "react";
 import type { ChatAnswer, ChatCitation } from "@/types";
 import { COVER_NOTE_ID } from "@/lib/chat/cover-note";
+import { TERMS_LABEL, markless, mergeSamePerson, plainWords } from "@/lib/simple-chat/plain";
 
 /** One checked statement of an answer, as the server sends it alongside the
  * prose (the Developer's answer-fields change). Only calculation and
@@ -97,10 +98,10 @@ function Qualifiers({ s, point = false }: { s: AnswerStatement; point?: boolean 
   const basis = s.basis && !said.includes(norm(s.basis)) && !restates(s.basis, s.text, 0.75) ? s.basis : null;
   const note = s.amount && s.source?.note && !conditions.some((c) => c === norm(s.source!.note!) || c.includes(norm(s.source!.note!))) ? s.source.note : null;
   return <>
-    {basis ? <p className="answer-card-basis">{basis}</p> : null}
+    {basis ? <p className="answer-card-basis">{plainWords(markless(s, basis))}</p> : null}
     {point && s.conditions?.length ? <p className="answer-point-conditions-label" data-testid="answer-point-conditions-label">{s.conditions.length === 1 ? "Condition" : "Conditions"} from the document:</p> : null}
-    {s.conditions?.length ? <ul className="answer-card-conditions">{s.conditions.map((c, i) => <li key={i}>{s.amount ? withoutFooterClause(c) : c}</li>)}</ul> : null}
-    {note ? <p className="answer-card-note" data-testid="answer-card-note">{note}</p> : null}
+    {s.conditions?.length ? <ul className="answer-card-conditions">{s.conditions.map((c, i) => <li key={i}>{plainWords(markless(s, s.amount ? withoutFooterClause(c) : c))}</li>)}</ul> : null}
+    {note ? <p className="answer-card-note" data-testid="answer-card-note">{plainWords(note)}</p> : null}
   </>;
 }
 
@@ -117,11 +118,11 @@ function AmountCard({ s, openSource }: { s: AnswerStatement; openSource: (id: st
       {/* Only what changes how to read this figure is labelled: a policy's terms (Critic R121-3) and a currency the
           document does not state (TE #101). "Illustration" and "printed amount" are not drawn under every figure; the
           footer says what every amount is. */}
-      {printed || !a.currencyResolved ? <small>{[printed ? "Policy terms, not worked out for this case" : null, a.currencyResolved ? null : "Currency not stated"].filter(Boolean).join(" · ")}</small> : null}
+      {printed || !a.currencyResolved ? <small>{[printed ? TERMS_LABEL : null, a.currencyResolved ? null : "Currency not stated"].filter(Boolean).join(" · ")}</small> : null}
     </div>
     {/* With no conditions[] from the server, the whole checked sentence stays on the card; it is never cut client-side. */}
-    {!s.conditions?.length && s.fullText && norm(s.fullText) !== norm(s.text) ? <p className="answer-card-condition" data-testid="answer-card-condition">{s.fullText}</p> : null}
-    <p className="answer-card-text">{s.text}</p>
+    {!s.conditions?.length && s.fullText && norm(s.fullText) !== norm(s.text) ? <p className="answer-card-condition" data-testid="answer-card-condition">{markless(s, s.fullText)}</p> : null}
+    <p className="answer-card-text">{markless(s, s.text)}</p>
     <Qualifiers s={s} />
     <div className="answer-chips">
       {s.source ? <button type="button" className="answer-chip-button" onClick={() => openSource(s.id)} aria-label={`Where this comes from: ${s.source.policyName}${s.source.page != null ? `, page ${s.source.page}` : ""}`}><span className="answer-chip">{s.source.policyName}{pageRef(s.source.page)}</span></button> : null}
@@ -158,11 +159,13 @@ function WhereFrom({ statements, citations, sources, idFor, detailsRef }: { stat
 /** The short answer: bottom line (only when the server marked a real outcome and it carries its qualifier), one card
  * per amount, other statements as short points, any sentence of the prose no statement covers, and the source detail
  * collapsed underneath. `prose` is the answer's own text (content, then details): the cards never drop any of it. */
-export function AnswerCards({ answer, render, sources, prose = [], after }: { answer: StructuredAnswer; render: (text: string) => string; sources?: React.ReactNode; prose?: string[]; after?: React.ReactNode }) {
+export function AnswerCards({ answer, render, sources, prose = [], after, stepsFirst = false }: { answer: StructuredAnswer; render: (text: string) => string; sources?: React.ReactNode; prose?: string[]; after?: React.ReactNode; stepsFirst?: boolean }) {
   // The server's one line on documents not fully read is said last and quietly, after the answer and its next steps
   // (DC, 18 Nov 2026: a limitation never opens an answer).
   const coverNote = (answer.statements ?? []).find((s) => s.id === COVER_NOTE_ID) ?? null;
-  const statements = (answer.statements ?? []).filter((s) => s !== coverNote);
+  const allStatements = (answer.statements ?? []).filter((s) => s !== coverNote);
+  // Cards that say the same for several people are one card for all of them (nothing is dropped from what is said).
+  const statements = mergeSamePerson(allStatements);
   const uid = useId();
   const where = useRef<HTMLDetailsElement>(null);
   const idFor = (id: string) => `where-${uid.replace(/[^a-zA-Z0-9_-]/g, "")}-${id}`;
@@ -175,7 +178,7 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
   };
   // An amount with no person is shown as its checked sentence, never as a nameless card.
   const asCard = (s: AnswerStatement) => !!s.amount && !!s.personName;
-  const covered = statements.flatMap((s) => [s.fullText, s.text].filter((t): t is string => !!t).flatMap((t) => { const r = render(t); return [r, ...sentences(r)]; }).map(norm));
+  const covered = allStatements.flatMap((s) => [s.fullText, s.text].filter((t): t is string => !!t).flatMap((t) => { const r = render(t); return [r, ...sentences(r)]; }).map(norm));
   const isCovered = (sentence: string) => { const n = norm(sentence); return !n || covered.includes(n); };
   // Only the server's bottomLine is shown; it carries its own qualifier. None is ever derived here.
   const bottomLine = answer.bottomLine?.trim() ? answer.bottomLine : null;
@@ -201,7 +204,7 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
   };
   const one = (s: AnswerStatement) => {
     if (asCard(s)) return <AmountCard key={s.id} openSource={openSource} s={{ ...s, text: render(s.text), fullText: render(s.fullText ?? ""), basis: s.basis ? render(s.basis) : s.basis }} />;
-    const text = pointText(s);
+    const text = markless(s, pointText(s));
     if (!text && !s.basis && !s.conditions?.length) return null;
     return <div key={s.id} className={`answer-point${s.kind === "uncertainty" ? " caution" : ""}`}>
       {s.table ? <p>{render(s.text)}</p> : text ? <p>{text}</p> : null}
@@ -246,11 +249,13 @@ export function AnswerCards({ answer, render, sources, prose = [], after }: { an
   return <div className="answer-cards">
     {bottomLine ? <p className="answer-bottom-line" data-testid="answer-bottom-line">{render(bottomLine)}</p> : null}
     {showSummary ? <p className="answer-point">{summary}</p> : null}
+    {/* A question about what to do: the steps come before the amounts. */}
+    {stepsFirst ? after : null}
     {blocks}
     {/* What the prose says that no statement covers stays in view, in its own words. */}
     {remaining.length ? <div className="answer-remaining" data-testid="answer-remaining"><b>Also in this answer</b>{remaining.map((s, i) => <p key={i}>{s}</p>)}</div> : null}
     {/* What to do next sits with the answer, above the collapsed detail. */}
-    {after}
+    {stepsFirst ? null : after}
     <div className="answer-more">
       <WhereFrom statements={statements} citations={answer.citations} sources={sources} idFor={idFor} detailsRef={where} />
     </div>
