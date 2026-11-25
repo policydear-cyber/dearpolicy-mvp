@@ -75,7 +75,9 @@ export function currenciesNamed(text: string): string[] {
     return null;
   };
   const afterSign = new RegExp(String.raw`\$${AFTER_SEP}*(?:in${AFTER_SEP}+)?(?:\d[\d,.]*${AFTER_SEP}*)?([A-Za-z][A-Za-z.' -]{0,24})`, "g");
-  for (const m of t.matchAll(afterSign)) { const c = readWords(m[1]!); if (c) out.push(c); }
+  // A word on the NEXT line after a figure is usually the next row's label or a stray page fragment ("(up to S$400,000)\nth",
+  // "S$10,000\nChinese medicine practitioner"): across a line break only a known currency counts, never "another country".
+  for (const m of t.matchAll(afterSign)) { const c = readWords(m[1]!); if (c && !(c === "?" && /\n/.test(m[0].slice(0, m[0].length - m[1]!.length)))) out.push(c); }
   // "Currency", "Curr", "Ccy", "Cur" then a bracket, dash, colon, newline or nothing, and "Dollars" then letters with any separator
   // ("Currency (US)", "Currency\nUS", "Ccy: HK", "Dollars US", "Dollars, US", "Dollars — HK"): the named currency.
   for (const m of t.matchAll(new RegExp(String.raw`\b(?:currency|curr|ccy|cur)\b\.?${AFTER_SEP}*(?:in${AFTER_SEP}+)?([A-Za-z][A-Za-z.' -]{0,24})`, "gi"))) { const c = readWords(m[1]!); if (c) out.push(c); }
