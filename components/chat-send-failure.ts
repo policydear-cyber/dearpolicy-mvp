@@ -18,27 +18,19 @@ export function sendFailure(status: number | null, text: string, code?: unknown)
   return "other";
 }
 
-/** The chat as the server holds it now (GET /api/chat/history/:id). */
-export type FreshChat = { revision: number; show: () => void };
-
 /**
- * Sends a chat message, and when the server refuses it as out of date (409, a real stale-chat refusal) asks for the chat
- * as it now stands and sends once more with that revision. The refusal stored nothing, so one more send cannot ask
- * twice. A chat page can be behind its own chat with one tab open (an answer that finished after the page stopped
- * waiting, or after a failed send, moves the chat on); telling the person to reload then looped: every later send
- * was refused the same way (Live tester, 25 Nov). Never retried for an empty household, another refusal, or when the
- * fresh chat cannot be read, and never more than once.
+ * After a refused send (the page is behind its own chat), what the page takes from the chat as the server holds it now
+ * (GET /api/chat/history/:id): the current revision, the chat's own person and where older messages start. A chat page can
+ * be behind its own chat with one tab open (an answer that finished after the page stopped waiting, or after a failed
+ * send, moves the chat on); without this every later send was refused the same way until a manual reload (Live tester,
+ * 25 Nov). The message is NOT sent again for the person: the refused send stored nothing but did count as a question on
+ * a plan with limits, a late answer may have moved the chat to another person or asked a question the household has not
+ * seen, so the person reads the chat as it now stands and sends again themselves (Critic #594).
  */
-export async function sendWithResync<R extends { status: number; data: { error?: unknown; code?: unknown } }>(
-  send: (revision: number | null) => Promise<R>,
-  revision: number | null,
-  loadFresh: () => Promise<FreshChat | null>,
-): Promise<R & { resynced: boolean }> {
-  const first = await send(revision);
-  const said = typeof first.data?.error === "string" ? first.data.error : "";
-  if (revision === null || first.status !== 409 || sendFailure(409, said, first.data?.code) !== "conflict") return { ...first, resynced: false };
-  const fresh = await loadFresh().catch(() => null);
-  if (!fresh || !Number.isFinite(fresh.revision) || fresh.revision === revision) return { ...first, resynced: false };
-  fresh.show();
-  return { ...(await send(fresh.revision)), resynced: true };
+export type CaughtUp = { revision: number; memberId: string; cursor: string | null };
+export function catchUpState(chat: { conversation?: { revision?: unknown; family_member_id?: unknown } | null; nextCursor?: unknown } | null | undefined): CaughtUp | null {
+  const revision = Number(chat?.conversation?.revision);
+  if (!chat?.conversation || !Number.isFinite(revision) || revision < 0) return null;
+  const member = chat.conversation.family_member_id;
+  return { revision, memberId: typeof member === "string" ? member : "", cursor: typeof chat.nextCursor === "string" ? chat.nextCursor : null };
 }
