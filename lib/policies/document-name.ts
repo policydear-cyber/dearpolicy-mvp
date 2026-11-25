@@ -71,7 +71,13 @@ export function documentName(doc:{product_name:string|null;original_filename:str
 
 /** A code a system gives a file or template ("SGGRP_COI_APP", "POL_SCHED_V2"), not a name a person reads: no space, and its
  * words joined by underscores. */
-export function isCodeName(name:string):boolean {const t=name.trim();return !/\s/.test(t)&&/_/.test(t);}
+export function isCodeName(name:string):boolean {
+  const t=name.trim();
+  if(!/\s/.test(t)&&/_/.test(t))return true;
+  // A filing reference ("1105 CD-594 COI_SAF"): two or more number-bearing parts and no word of four letters or more.
+  const tokens=t.split(/[\s_\-]+/).filter(Boolean);
+  return tokens.filter(w=>/\d/.test(w)).length>=2&&!tokens.some(w=>/^\p{L}{4,}$/u.test(w));
+}
 
 /** A policy or group number with only its letters and digits, upper-cased, for comparing. */
 export function normalizedIdentifier(value:string|null|undefined){return (value??"").toUpperCase().replace(/[^A-Z0-9]/g,"");}

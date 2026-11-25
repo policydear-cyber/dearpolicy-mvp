@@ -5,6 +5,7 @@
  * an insurer loses only its company form, never part of its own name. */
 import assert from "node:assert/strict";
 import { documentName, insurerShortName, isMachineFilename } from "@/lib/policies/inventory";
+import { isCodeName } from "@/lib/policies/document-name";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$/i.test(k)) delete process.env[k];
 let fetches = 0; globalThis.fetch = (async () => { fetches++; throw new Error("no network"); }) as typeof fetch;
@@ -114,3 +115,8 @@ for (const f of failures) console.log("FAIL " + f);
 for (const n of notes) console.log("NOTE " + n);
 console.log(`te-pr159: ${passed} passed, ${failures.length} failed, fetches ${fetches}`);
 process.exit(failures.length ? 1 : 0);
+
+// Filing references are not product names; chosen short names are.
+for (const n of ["1105 CD-594 COI_SAF", "SGGRP_COI_APP", "2026 CD-12 SAF"]) test(`C1 code name '${n}'`, () => assert.equal(isCodeName(n), true));
+for (const n of ["MINDEF & MHA Group Insurance", "AXA 2026", "Singlife Comprehensive Critical Illness II", "My CI 2026", "PruLink Enhanced Protector (PW9)"]) test(`C2 readable name '${n}'`, () => assert.equal(isCodeName(n), false));
+test("C3 code product falls back to a plain label", () => assert.equal(documentName({ product_name: "1105 CD-594 COI_SAF", original_filename: "x.pdf", insurer: "Singlife Pte. Ltd.", document_role: "certificate" }).includes("COI"), false));

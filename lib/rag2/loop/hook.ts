@@ -5,6 +5,7 @@
  * runs the loop, turns its reply into a ChatAnswer and saves it through the chat's saveTurn -- so the existing
  * output guard and save-time figure gate (lib/chat/answer-verification.ts) check it like every other answer.
  */
+import { documentName, isCodeName } from "@/lib/policies/document-name";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { getConversation, historyToken, openConversation, ChatConflict } from "@/lib/chat/store";
@@ -159,14 +160,14 @@ export function preciseExcerpt(r: RagLoopState["evidence"][string]): string {
 async function citationsFor(accountId: string, state: RagLoopState, ids: string[]): Promise<ChatCitation[]> {
   const refs = ids.map((id) => state.evidence[id]).filter(Boolean);
   if (!refs.length) return [];
-  const rows = (await query<{ id: string; product_name: string | null; insurer: string | null; document_role: string | null }>(`SELECT id::text AS id, product_name, insurer, document_role FROM policies WHERE account_id=$1 AND id::text=ANY($2::text[]) AND ${activePredicate()}`, [accountId, [...new Set(refs.map((r) => r.policyId))]]).catch(() => ({ rows: [] as { id: string; product_name: string | null; insurer: string | null; document_role: string | null }[] }))).rows;
+  const rows = (await query<{ id: string; product_name: string | null; insurer: string | null; document_role: string | null; original_filename: string | null }>(`SELECT id::text AS id, product_name, insurer, document_role, original_filename FROM policies WHERE account_id=$1 AND id::text=ANY($2::text[]) AND ${activePredicate()}`, [accountId, [...new Set(refs.map((r) => r.policyId))]]).catch(() => ({ rows: [] as { id: string; product_name: string | null; insurer: string | null; document_role: string | null; original_filename: string | null }[] }))).rows;
   const out: ChatCitation[] = [];
   for (const r of refs) {
     if (out.some((c) => c.policyId === r.policyId && c.pageStart === r.page.start && c.pageEnd === r.page.end && c.excerpt === preciseExcerpt(r))) continue;
     const p = rows.find((x) => x.id === r.policyId);
     // The page is the household-facing link; the excerpt is the exact supporting sentence / row, with the table header,
     // continued header or footnote it needs to be read correctly (lib/rag2/evidence.ts refineEvidence).
-    out.push({ chunkId: "rag2:" + r.id, policyId: r.policyId, policyName: p?.product_name ?? "Policy document", insurer: p?.insurer ?? undefined, pageStart: r.page.start, pageEnd: r.page.end, documentRole: p?.document_role ?? null, excerpt: preciseExcerpt(r) });
+    out.push({ chunkId: "rag2:" + r.id, policyId: r.policyId, policyName: p ? (p.product_name && !isCodeName(p.product_name) ? p.product_name : documentName({ product_name: null, original_filename: p.original_filename ?? "", insurer: p.insurer, document_role: p.document_role })) : "Policy document", insurer: p?.insurer ?? undefined, pageStart: r.page.start, pageEnd: r.page.end, documentRole: p?.document_role ?? null, excerpt: preciseExcerpt(r) });
   }
   return out;
 }
