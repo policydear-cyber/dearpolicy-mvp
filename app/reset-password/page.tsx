@@ -51,6 +51,8 @@ function ResetPasswordForm() {
       {sent ? (
         <p className="lead">If there is an account for that email, we have sent it a link to reset your password. The link expires soon, so use it today.</p>
       ) : (
+        <>
+        <p className="lead">Enter the email you signed up with. If it has an account, we will send a link to choose a new password. Open that link in this same browser.</p>
         <form onSubmit={submit} className="field">
           <label htmlFor="rp-email">Email</label>
           <input id="rp-email" type="email" autoComplete="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -58,6 +60,7 @@ function ResetPasswordForm() {
             {busy ? "Sending…" : "Send reset link"}
           </button>
         </form>
+        </>
       )}
       <p className="auth-links" style={{ marginTop: 16 }}>
         <Link href="/login">Back to sign in</Link>
