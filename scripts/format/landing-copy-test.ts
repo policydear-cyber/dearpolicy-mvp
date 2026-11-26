@@ -17,5 +17,16 @@ test("L1 the currency line exists and keeps what the document prints", () => { a
 test("L2 it says what happens when a document shows only a dollar sign, in plain words", () => { assert.match(line, /If it shows only \\u201c\$\\u201d, DearPolicy reads it in the currency you choose when you sign up\.$/); });
 test("L3 no jargon: the word 'bare' and the claim 'never guessed' are gone from the landing page", () => { assert.doesNotMatch(landing, /\bbare\b/i); assert.doesNotMatch(landing, /never guessed/i); });
 
+const reset = readFileSync("app/reset-password/page.tsx", "utf8");
+const intro = /<p className="lead">(Enter the email[^<]*)<\/p>\s*<form/.exec(reset)?.[1] ?? "";
+test("L4 the reset page tells a worried person what happens next, before the button, without saying whether the email has an account", () => {
+  assert.match(intro, /^Enter the email you signed up with\. If it has an account, we will send a link to choose a new password\./);
+  assert.doesNotMatch(intro, /\b(no account|not registered|does not exist)\b/i);
+});
+test("L5 it asks for the same browser, matching the 'opened in a different browser' error the page can show", () => {
+  assert.match(intro, /Open that link in this same browser\.$/);
+  assert.match(reset, /opened in a different browser/);
+});
+
 console.log(`landing copy: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
