@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BenefitTableCoverage, type BenefitTableData } from "@/components/benefit-table-coverage";
+import { BenefitTableCoverage, unplacedByDocument, type BenefitTableData } from "@/components/benefit-table-coverage";
 
 let passed = 0;
 const failures: string[] = [];
@@ -33,6 +33,42 @@ test("U4 an unmatched cover and no unplaced parts: the section shows but not the
   const html = renderToStaticMarkup(createElement(BenefitTableCoverage, { data: { enabled: true, people: [], documents: [], unmatchedCovers: [{ person: "Someone Else", product: "Plan", cover: "Cover", plan: null, source: { documentId: "d1", page: 1 } }], illustrationCovers: [], unlinkedSections: [] } as unknown as BenefitTableData }));
   assert.match(html, /table-also-found/);
   assert.doesNotMatch(html, /table-unplaced/);
+});
+test("U5 the parts are grouped per document with a count, and a heading printed again is shown once with how many times", () => {
+  const p = (key: string, section: string, document: string) => ({ section: { key, section, column: null, document }, source: null });
+  const groups = unplacedByDocument([p("1", "Premium table", "Plan A"), p("2", "Premium table", "Plan A"), p("3", "Premium table", "Plan A"), p("4", "Benefits", "Plan A"), p("5", "Notes", "Plan B")]);
+  assert.deepEqual(groups.map((g) => [g.document, g.count, g.parts.map((x) => [x.title, x.times])]), [["Plan A", 4, [["Premium table", 3], ["Benefits", 1]]], ["Plan B", 1, [["Notes", 1]]]]);
+  const html = renderToStaticMarkup(createElement(BenefitTableCoverage, { data: { enabled: true, people: [], documents: [], unmatchedCovers: [], illustrationCovers: [], unlinkedSections: [p("1", "Premium table", "Plan A"), p("2", "Premium table", "Plan A"), p("5", "Notes", "Plan B")] } as unknown as BenefitTableData }));
+  assert.equal((html.match(/data-testid="table-unplaced-doc"/g) ?? []).length, 2, "one group per document");
+  assert.match(html, /<strong>Plan A<\/strong> <small>2 parts<\/small>/);
+  assert.match(html, /Premium table<small>2 times<\/small>/);
+  assert.match(html, /<strong>Plan B<\/strong> <small>1 part<\/small>/);
+});
+test("U6 a repeated heading keeps every page link; two documents with one name stay two groups", () => {
+  const q = (key: string, section: string, document: string, documentId: string, page: number) => ({ section: { key, section, column: null, document }, source: { documentId, document, page, excerpt: "" } });
+  const groups = unplacedByDocument([q("1", "Premium table", "Policy wording", "d1", 4), q("2", "Premium table", "Policy wording", "d1", 9), q("3", "Premium table", "Policy wording", "d1", 9), q("4", "Premium table", "Policy wording", "d2", 4)]);
+  assert.equal(groups.length, 2, "same name, different documents");
+  assert.deepEqual(groups[0].parts[0].sources.map((x) => x.page), [4, 9], "each distinct page once");
+  assert.equal(groups[0].parts[0].times, 3);
+  const html = renderToStaticMarkup(createElement(BenefitTableCoverage, { data: { enabled: true, people: [], documents: [], unmatchedCovers: [], illustrationCovers: [], unlinkedSections: [q("1", "Premium table", "Policy wording", "d1", 4), q("2", "Premium table", "Policy wording", "d1", 9)] } as unknown as BenefitTableData }));
+  assert.match(html, /file#page=4/); assert.match(html, /file#page=9/);
+});
+test("U7 a part with no page link joins the one document of the same name; it never splits one document in two", () => {
+  const withLink = { section: { key: "1", section: "Benefits", column: null, document: "Plan A" }, source: { documentId: "d1", document: "Plan A", page: 2, excerpt: "" } };
+  const noLink = { section: { key: "2", section: "Notes", column: null, document: "Plan A" }, source: null };
+  const groups = unplacedByDocument([noLink, withLink]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].count, 2);
+  assert.equal(groups[0].id, "d1");
+});
+test("U8 two documents with one name and a part with no link: three groups; one heading in two columns stays two parts", () => {
+  const q = (key: string, section: string, column: string | null, id: string | null) => ({ section: { key, section, column, document: "Policy wording" }, source: id ? { documentId: id, document: "Policy wording", page: 1, excerpt: "" } : null });
+  const groups = unplacedByDocument([q("1", "Benefits", null, "d1"), q("2", "Benefits", null, "d2"), q("3", "Notes", null, null)]);
+  assert.equal(groups.length, 3, "a no-link part never picks one of two same-named documents");
+  const cols = unplacedByDocument([q("1", "Benefits", "Plan A", "d1"), q("2", "Benefits", "Plan B", "d1")]);
+  assert.deepEqual(cols[0].parts.map((x) => x.title), ["Benefits (Plan A)", "Benefits (Plan B)"]);
+  const untitled = unplacedByDocument([{ section: { key: "9", section: null, column: null, document: "Plan A" }, source: null }]);
+  assert.equal(untitled[0].parts[0].title, "Untitled part");
 });
 
 console.log(`unplaced note: ${passed} passed, ${failures.length} failed`);
