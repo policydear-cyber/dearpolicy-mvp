@@ -12,17 +12,21 @@ function test(name: string, fn: () => void) {
 const form = readFileSync("app/signup/SignupForm.tsx", "utf8");
 
 test("N1 once the form is ready, a line says what comes next, and it is true whether or not an email check is needed", () => {
-  assert.match(form, /!busy && !inviteNext \? <p id="su-ready-hint" className="field-hint" data-testid="signup-next-step">Next: you may need to open a link we email you\. Then add your family and upload your first policy\.<\/p>/);
+  assert.match(form, /!busy && !inviteNext && password\.length >= 8 \? <p id="su-ready-hint" className="field-hint" data-testid="signup-next-step">Next: you may need to open a link we email you\. Then add your family and upload your first policy\.<\/p>/);
 });
 test("N2 the missing-email and missing-currency hints still come first", () => {
   assert.ok(form.indexOf("Enter your email to continue.") < form.indexOf("Choose your policy currency to continue."));
   assert.ok(form.indexOf("Choose your policy currency to continue.") < form.indexOf('data-testid="signup-next-step"'));
 });
 test("N3 someone joining by invitation is not told to upload their own first policy", () => {
-  assert.match(form, /!inviteNext \? <p id="su-ready-hint"/);
+  assert.match(form, /!inviteNext && password\.length >= 8 \? <p id="su-ready-hint"/);
 });
-test("N4 the check-your-email notice says what to do after the link", () => {
-  assert.match(form, /Open the link we sent to finish creating your account\. Then add your family and upload your first policy\./);
+test("N4 the check-your-email notice says what follows the link: family and upload, or joining the household for an invited person", () => {
+  assert.match(form, /setNotice\(inviteNext \? "Check your email\. Open the link we sent to finish creating your account\. Then you join the household you were invited to\." : "Check your email\. Open the link we sent to finish creating your account\. Then add your family and upload your first policy\."\)/);
+});
+test("N5 the hint waits for a password the button accepts (8 characters)", () => {
+  assert.match(form, /password\.length < 8 \|\| !currency/);
+  assert.match(form, /password\.length >= 8 \? <p id="su-ready-hint"/);
 });
 
 console.log(`signup next step: ${passed} passed, ${failures.length} failed`);
