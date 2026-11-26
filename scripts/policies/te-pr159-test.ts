@@ -113,6 +113,12 @@ test("X7 a name is the same at every site: it depends only on its own document",
 
 // Filing references are not product names; chosen short names are.
 for (const n of ["1105 CD-594 COI_SAF", "SGGRP_COI_APP", "2026 CD-12 SAF"]) test(`C1 code name '${n}'`, () => assert.equal(isCodeName(n), true));
+for (const n of ["Dps", "Hsbc", "Cpf", "Dbs"]) test(`C1b lone vowel-less abbreviation '${n}' is a code, not a name`, () => assert.equal(isCodeName(n), true));
+for (const n of ["Max", "Term", "Gold", "Shield", "Pro", "PRUlink", "AXA", "Life", "保险单", "医疗保", "日本", "한국", "Мир", "ภาษา", "Ταξίδι", "Ñoño", "FWD", "HSBC", "CPF", "NTUC", "DPS", "MRT", "Myth", "Gym", "Lynx", "Shy", "Bcdfgh", "X", "مرحبا", "बीमा"]) test(`C2b short real name '${n}' stays a name`, () => assert.equal(isCodeName(n), false));
+test("C5b sourceTitle gives 'Dps' the plain label", () => {
+  const t = sourceTitle({ product_name: "Dps", insurer: "Great Eastern Life Assurance", document_role: "brochure" });
+  assert.notEqual(t, "Dps"); assert.match(t, /Great Eastern/);
+});
 for (const n of ["MINDEF & MHA Group Insurance", "AXA 2026", "Singlife Comprehensive Critical Illness II", "My CI 2026", "PruLink Enhanced Protector (PW9)"]) test(`C2 readable name '${n}'`, () => assert.equal(isCodeName(n), false));
 test("C3 code product falls back to a plain label", () => assert.equal(documentName({ product_name: "1105 CD-594 COI_SAF", original_filename: "1105 CD-594 COI_SAF.pdf", insurer: "Singlife Pte. Ltd.", document_role: "certificate" }).includes("COI"), false));
 

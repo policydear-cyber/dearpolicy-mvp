@@ -77,6 +77,9 @@ function upperCode(base:string):boolean {return isCodeName(base)&&!/\p{Ll}/u.tes
 export function isCodeName(name:string):boolean {
   const t=name.trim();
   if(!/\s/.test(t)&&/_/.test(t))return true;
+  // A lone short Latin abbreviation with no vowel ("Dps", "Hsbc"; never an all-capitals one such as FWD, HSBC or CPF, a brand or scheme a household knows, and never another script, whose names have none of a, e, i, o, u, y): a stored shorthand, not a name a household would call the
+  // document. The plain label (insurer and kind) is used instead (Live tester, 26 Nov: "Dps was read").
+  if(/^[A-Za-z]{2,5}$/.test(t)&&!/[aeiouyAEIOUY]/.test(t)&&t!==t.toUpperCase())return true;
   // A filing reference ("1105 CD-594 COI_SAF"): two or more number-bearing parts and no word of four letters or more.
   const tokens=t.split(/[\s_\-]+/).filter(Boolean);
   return tokens.filter(w=>/\d/.test(w)).length>=2&&!tokens.some(w=>/^\p{L}{4,}$/u.test(w));
