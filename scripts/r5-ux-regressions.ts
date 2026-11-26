@@ -210,7 +210,7 @@ async function main() {
     assert.ok(!/summarisePremiums\(/.test(dashboard), "Home has no premium count of its own");
     assert.match(summary, /countedPremiums\(accountId,/, "the Payments summary counts through the same helper");
     assert.ok(!/runAfterResponse|readPendingDocuments|seedLedger/.test(summary), "the Payments summary reads only, starting no background work");
-    assert.match(payments, /fetch\("\/api\/premiums\/summary"\)/, "Payments loads the counted premiums");
+    assert.match(payments, /fetch\("\/api\/premiums\/summary"[,)]/, "Payments loads the counted premiums");
     const source = read("lib/format/premium-source.ts");
     assert.match(payments, /<span>\{premiumRowDetail\(item\)\}<\/span>/, "each premium names where it was read");
     // DC 16 Nov: Home shows no premiums (its cards come first, decluttered); Payments is where every premium is listed.
