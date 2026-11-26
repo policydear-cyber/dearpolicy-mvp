@@ -1230,16 +1230,29 @@ test("a short document no row comes from is sent whole, unless it could not be r
   assert.ok(pagesToSend(rows, payee).has(`${TERMS}#37`));
 });
 
-test("the page that prints a policy's start date is sent with a cited document, at most two, and not for a document no row comes from", () => {
-  const SCHED_PAGE = 2, WORDING = 5;
-  const withStart: Household = { ...HOUSE, documents: HOUSE.documents.map((d) => d.policyId !== TERMS ? d : { ...d, pages: [...d.pages, { page: SCHED_PAGE + 40, text: "Policy Schedule\nPolicy Issue Date\t: 28/02/2024\nPolicy Effective Date\t: 11/02/2024" }, { page: WORDING + 40, text: "Policy Effective Date : 11/02/2024 appears again" }] }) };
-  const sent = pagesToSend(rows, withStart);
-  assert.ok(sent.has(`${TERMS}#${SCHED_PAGE + 40}`), "start page sent");
-  assert.ok(sent.has(`${TERMS}#${WORDING + 40}`), "a second start page (a renewal or another policy) is sent too");
-  const three: Household = { ...withStart, documents: withStart.documents.map((d) => d.policyId !== TERMS ? d : { ...d, pages: [...d.pages, { page: 90, text: "Policy Start Date : 01/01/2025" }] }) };
-  assert.ok(!pagesToSend(rows, three).has(`${TERMS}#90`), "at most two start pages per document");
-  const without = pagesToSend(rows, HOUSE);
-  assert.ok(![...without].some((k) => k.endsWith("#42")), "no start label, nothing extra");
+test("the page that prints a policy's start date is sent with a cited document: one per different date, at most two, never for an uncited document", () => {
+  const start = (page: number, text: string) => ({ page, text });
+  const withPages = (pages: { page: number; text: string }[]): Household => ({ ...HOUSE, documents: HOUSE.documents.map((d) => d.policyId !== TERMS ? d : { ...d, pages: [...d.pages, ...pages] }) });
+  const sentFrom = (h: Household) => pagesToSend(rows, h);
+  // a start page, and a second page printing a different date (a renewal or another policy), are both sent
+  const two = sentFrom(withPages([start(42, "Policy Schedule\nPolicy Issue Date\t: 28/02/2024\nPolicy Effective Date\t: 11/02/2024"), start(45, "Renewal\nPolicy Effective Date : 11/02/2025")]));
+  assert.ok(two.has(`${TERMS}#42`) && two.has(`${TERMS}#45`), "different dates, both sent");
+  // the same date on many pages does not crowd out a later different date
+  const dup = sentFrom(withPages([start(42, "Policy Effective Date : 11/02/2024"), start(43, "Policy Effective Date : 11/02/2024"), start(44, "Policy Effective Date : 11/02/2024"), start(45, "Policy Effective Date : 11/02/2025")]));
+  assert.ok(dup.has(`${TERMS}#42`) && dup.has(`${TERMS}#45`) && !dup.has(`${TERMS}#43`) && !dup.has(`${TERMS}#44`), "one page per date");
+  // at most two different dates
+  const three = sentFrom(withPages([start(42, "Policy Effective Date : 01/01/2023"), start(43, "Policy Effective Date : 01/01/2024"), start(44, "Policy Effective Date : 01/01/2025")]));
+  assert.ok(three.has(`${TERMS}#42`) && three.has(`${TERMS}#43`) && !three.has(`${TERMS}#44`), "cap of two");
+  // each label reads as a start; a birth date, a sample date and a bare word do not
+  for (const [i, t] of ["Policy Start Date : 01/02/2024", "Policy Commencement Date : 01/02/2024", "Policy Inception Date : 01/02/2024", "Commencement Date : 01/02/2024", "Date of Commencement: 01/02/2024"].entries())
+    assert.ok(sentFrom(withPages([start(60 + i, t)])).has(`${TERMS}#${60 + i}`), `label sent: ${t}`);
+  for (const [i, t] of ["Date of Birth : 01/01/1980", "Policy Start Date : DD/MM/YYYY", "The date the policy starts is shown on the schedule"].entries())
+    assert.ok(!sentFrom(withPages([start(70 + i, t)])).has(`${TERMS}#${70 + i}`), `not a start: ${t}`);
+  // nothing extra for a document no row comes from and that is long
+  const LONGDOC = "aaaaaaaa-0000-0000-0000-00000000000b";
+  const longer: Household = { ...HOUSE, documents: [...HOUSE.documents, doc(LONGDOC, "Other.pdf", [1, 2, 3, 4].map((page) => ({ page, text: page === 3 ? "Policy Effective Date : 01/02/2024" : `Page ${page}` })))] };
+  assert.ok(![1, 2, 3, 4].some((n) => pagesToSend(rows, longer).has(`${LONGDOC}#${n}`)), "uncited long document gets no start page");
+  assert.ok(![...sentFrom(HOUSE)].some((k) => /#(42|45|60|70)$/.test(k)), "no start label, nothing extra");
 });
 
 // ------------------------------------------------------------------ live run 22 Oct (ab4026a) round 4

@@ -654,7 +654,15 @@ export function pagesToSend(rows: ChatRow[], household: Household): Set<string> 
       for (const p of d.pages) if (RULE_PAGE.test(p.text)) sent.add(`${d.policyId}#${p.page}`);
       // The page that prints the policy's start ("Policy Effective Date"), at most START_PAGES for the document (a pack or a renewal can print more than one): a waiting period is
       // measured from it, and without it the answer said the date "could not be checked" (live run 26 Nov, ICU).
-      for (const p of d.pages.filter((x) => START_PAGE.test(x.text)).slice(0, START_PAGES)) sent.add(`${d.policyId}#${p.page}`);
+      // The first page for each different start date, so the same date printed on many pages does not crowd out another.
+      const seen = new Set<string>();
+      for (const p of d.pages) {
+        const m = START_PAGE.exec(p.text);
+        if (!m) continue;
+        const day = String(printedDay(m[1]) ?? m[1]);
+        if (seen.has(day) || seen.size >= START_PAGES) continue;
+        seen.add(day); sent.add(`${d.policyId}#${p.page}`);
+      }
     }
     else if (!unreadable(d) && d.pages.length <= SHORT_DOCUMENT_PAGES && whole + d.pages.length <= SHORT_DOCUMENTS_BUDGET) {
       for (const p of d.pages) sent.add(`${d.policyId}#${p.page}`);
