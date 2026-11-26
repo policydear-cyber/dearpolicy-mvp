@@ -88,10 +88,10 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     await expect(submit).toBeDisabled();
     await owner.getByLabel("Policy currency").selectOption("SGD");
     await owner.getByLabel("Email").fill(ownerEmail);
-    await owner.getByLabel("Password").fill("short");
+    await owner.getByLabel("Password", { exact: true }).fill("short");
     await expect(submit, "a password under 8 characters keeps the button disabled").toBeDisabled();
     await owner.getByLabel("Email").fill("not-an-email");
-    await owner.getByLabel("Password").fill(ownerPassword);
+    await owner.getByLabel("Password", { exact: true }).fill(ownerPassword);
     let posted = false;
     owner.on("request", (r) => { if (r.url().endsWith("/api/auth/signup")) posted = true; });
     await submit.click();
@@ -130,7 +130,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     const again = await (await browser.newContext()).newPage();
     await again.goto("/signup");
     await again.getByLabel("Email").fill(ownerEmail);
-    await again.getByLabel("Password").fill(newPassword());
+    await again.getByLabel("Password", { exact: true }).fill(newPassword());
     await again.getByLabel("Policy currency").selectOption("SGD");
     await again.getByRole("button", { name: "Create account" }).click();
     await expect(again.locator(".alert[role=alert]")).toContainText(/already registered/i);
