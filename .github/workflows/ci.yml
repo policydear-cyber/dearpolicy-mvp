@@ -561,6 +561,8 @@ jobs:
 
       - name: Chat answers without check narration; insurer contacts only from the household's own pages
         run: npm run simple:declutter-contacts-test
+      - name: "What does my policy not cover? names the other policies that print exclusions and the answer left out (no figure, any insurer)"
+        run: npm run simple:other-exclusions-test
 
       - name: Printed figures rows shown as a table with the page's own headings; no cell moved
         run: npm run simple:printed-table-test
