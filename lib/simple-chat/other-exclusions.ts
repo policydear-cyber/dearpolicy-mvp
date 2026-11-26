@@ -57,7 +57,8 @@ export function otherExclusionsNote(household: Household, message: string, answe
   const shown = left.slice(0, MOST_NAMED).map((x) => x.name);
   const more = left.length - shown.length;
   const list = shown.join(", ") + (more > 0 ? ` and ${more} more` : "");
-  return `Your documents print exclusions for ${list}, which this answer does not list. Ask “What does ${shown[0]} not cover?” to see ${left.length === 1 ? "them" : "one policy's at a time"}.`;
+  // A pointer, never a claim about the answer above: the model may have covered a policy under another name.
+  return `Your documents print exclusions for ${list}. To see ${left.length === 1 ? "them" : "one policy's in full"}, ask “What does ${shown[0]} not cover?”`;
 }
 
 const fold = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
