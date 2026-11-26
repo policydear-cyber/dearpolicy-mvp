@@ -21,7 +21,7 @@ import type { ChatAnswer } from "@/types";
 import { simpleChatModel } from "./flag";
 import { appHelp } from "./app-help";
 import { loadHousehold, renderLibrary, spouseMeant, type Household } from "./library";
-import { OTHER_EXCLUSIONS_ID, otherExclusionsNote } from "./other-exclusions";
+import { OTHER_EXCLUSIONS_ID, membersNamed, otherExclusionsNote } from "./other-exclusions";
 import { LIBRARY_CACHE_WRITE_RATE, ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
 import { aboutLibrary, answerAsText, NO_ANSWER, NOTHING_SHOWN, noteCoverNotCounted, readModelAnswer, sentences as sentencesOf, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
@@ -525,7 +525,7 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
     const text = [answer.bottomLine, answer.summary, ...(answer.statements ?? []).flatMap((st) => [st.text, st.fullText])].filter((x): x is string => typeof x === "string").join(" ");
     // Whose the answer is: the chat's own person, anyone the message names, anyone the turn was narrowed to; nobody means everyone.
     const scoped = context.family.find((f) => f.id === context.conversation.family_member_id)?.display_name;
-    const people = [...new Set([...(scoped ? [scoped] : []), ...membersNamedIn(household, message), ...(subjects.people ?? [])])];
+    const people = [...new Set([...(scoped ? [scoped] : []), ...membersNamedIn(household, message), ...membersNamed(household, message), ...(subjects.people ?? [])])];
     // Only on an answer that says something: never beside a "could not tell".
     const says = (answer.statements ?? []).some((st) => st.kind !== "uncertainty");
     const others = says ? otherExclusionsNote(household, message, text, (d) => docLabel(household, d), people.length ? people : null) : null;

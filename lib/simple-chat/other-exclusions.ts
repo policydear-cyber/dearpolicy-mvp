@@ -21,13 +21,13 @@ export function asksWhatIsNotCovered(message: string): boolean {
 const EXCLUSION_PAGE = /\bexclusions?\b|\b(?:general\s+)?exceptions?\s+(?:to\s+cover|and\s+limitations)\b|\b(?:we|the\s+company|the\s+insurer)\s+(?:will\s+not|shall\s+not|won['’]?t|does\s+not|do\s+not)\s+(?:pay|cover)\b|\bnot\s+covered\b/i;
 
 /** "Exclusions: none", "No exclusions apply" and "see the exclusions section" print no exclusion. */
-const NO_EXCLUSION = /\bexclusions?\s*[:\-–—]?\s*(?:none|nil|n\/a|not\s+applicable|do(?:es)?\s+not\s+apply)\b|\bno\s+(?:general\s+)?exclusions?\b|\b(?:see|refer\s+to|read|subject\s+to|as\s+(?:listed|set\s+out)\s+in|under)\s+(?:the\s+)?(?:section\s+(?:on\s+)?|clause\s+(?:on\s+)?)?(?:general\s+)?exclusions?\b[^.\n]*/gi;
+const NO_EXCLUSION = /\bexclusions?\s*[:\-–—]?\s*(?:none|nil|n\/a|not\s+applicable|nothing(?:\s+is)?(?:\s+excluded)?|do(?:es)?\s+not\s+apply)\b|\bno\s+(?:general\s+)?exclusions?\b|\b(?:see|refer\s+to|read|subject\s+to|as\s+(?:listed|set\s+out)\s+in|under)\s+(?:the\s+)?(?:section\s+(?:on\s+)?|clause\s+(?:on\s+)?)?(?:general\s+)?exclusions?\b[^.\n]*/gi;
 export const printsExclusion = (text: string) => EXCLUSION_PAGE.test(text.replace(NO_EXCLUSION, " "));
 /** A name as a whole phrase: "Plan D" is not found inside "Plan Delta", nor "War" inside "warranty". */
 const hasPhrase = (text: string, phrase: string) => !!phrase && new RegExp(`(?<![\\p{L}\\p{N}])${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(text);
 const LONGEST_NAME = 60;
 
-const plain = (label: string) => label.replace(/\s*\([^)]*\)\s*$/, "").trim();
+const plain = (label: string) => label.replace(/\s*[\(\[][^)\]]*[\)\]]\s*$/, "").trim();
 const base = (label: string) => plain(label).toLowerCase();
 
 /** The note, or null when there is none to say: not a question about what is not covered, one policy only, or every
@@ -58,4 +58,13 @@ export function otherExclusionsNote(household: Household, message: string, answe
   const more = left.length - shown.length;
   const list = shown.join(", ") + (more > 0 ? ` and ${more} more` : "");
   return `Your documents print exclusions for ${list}, which this answer does not list. Ask “What does ${shown[0]} not cover?” to see ${left.length === 1 ? "them" : "one policy's at a time"}.`;
+}
+
+/** The members the message names: a word of a member's name that no other member's name has, written whole (accents and
+ * case folded, any length from two letters: "Zoe", "Zoë", "Al" is not "Alan", "Ann" is not "Anna"). */
+export function membersNamed(household: Household, message: string): string[] {
+  const fold = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const words = (n: string) => fold(n.replace(/\s*\([^)]*\)\s*$/, "")).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2);
+  const said = new Set(fold(message).split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+  return household.members.map((m) => m.name).filter((n) => words(n).filter((w) => !household.members.some((o) => o.name !== n && words(o.name).includes(w))).some((w) => said.has(w)));
 }

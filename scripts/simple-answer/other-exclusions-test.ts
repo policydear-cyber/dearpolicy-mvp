@@ -5,7 +5,7 @@
  *   node --import tsx scripts/simple-answer/other-exclusions-test.ts
  */
 import assert from "node:assert/strict";
-import { asksWhatIsNotCovered, otherExclusionsNote } from "@/lib/simple-chat/other-exclusions";
+import { asksWhatIsNotCovered, membersNamed, otherExclusionsNote } from "@/lib/simple-chat/other-exclusions";
 import type { Household, HouseholdDocument } from "@/lib/simple-chat/library";
 import { runSimpleChat } from "@/lib/simple-chat/hook";
 import type { SimpleModel } from "@/lib/simple-chat/model";
@@ -41,6 +41,28 @@ const HH2 = { accountId: "44444444-4444-4444-4444-444444444444", members: [{ nam
   doc("aaaaaaaa-0000-0000-0000-000000000002", "Beta Travel", EXCL, { linkedPeople: ["Ben"] }),
   doc("aaaaaaaa-0000-0000-0000-000000000003", "Gamma Care", EXCL, { linkedPeople: ["Ana"] })] } as unknown as Household;
 async function main() {
+await t("a named member is matched whole, any length, accents folded: Zoe/Zoë, Al is not Alan, Ann is not Anna", () => {
+  const H = { accountId: "a", members: [{ name: "Zoë Lim", relationship: "self" }, { name: "Al Ray", relationship: "x" }, { name: "Alan Poe", relationship: "x" }, { name: "Ann Wu", relationship: "x" }, { name: "Anna Wu", relationship: "x" }], documents: [] } as unknown as Household;
+  assert.deepEqual(membersNamed(H, "What does Zoe's policy not cover?"), ["Zoë Lim"]);
+  assert.deepEqual(membersNamed(H, "What does Zoë’s policy not cover?"), ["Zoë Lim"]);
+  assert.deepEqual(membersNamed(H, "What does Al's policy not cover?"), ["Al Ray"]);
+  assert.deepEqual(membersNamed(H, "what does Ann have"), ["Ann Wu"]);
+  assert.deepEqual(membersNamed(H, "what does everyone have"), []);
+});
+await t("the ending says them for one policy and one policy's at a time for several", () => {
+  const one = otherExclusionsNote(hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL)]), Q, "Alpha Plan: war.", label)!;
+  assert.match(one, /to see them\.$/);
+  const many = otherExclusionsNote(hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL), doc("3", "Gamma Care", EXCL)]), Q, "Alpha Plan: war.", label)!;
+  assert.match(many, /to see one policy's at a time\.$/);
+});
+await t("in the chat turn: a member named with an accent or a short name limits the note to their policies; the note is last", async () => {
+  const H = { accountId: "44444444-4444-4444-4444-444444444444", members: [{ name: "Zoë Lim", relationship: "self" }, { name: "Ben", relationship: "spouse" }], documents: [
+    doc("aaaaaaaa-0000-0000-0000-000000000001", "Alpha Plan", EXCL, { linkedPeople: ["Zoë Lim"] }),
+    doc("aaaaaaaa-0000-0000-0000-000000000002", "Beta Travel", EXCL, { linkedPeople: ["Ben"] }),
+    doc("aaaaaaaa-0000-0000-0000-000000000003", "Gamma Care", EXCL, { linkedPeople: ["Zoë Lim"] })] } as unknown as Household;
+  const st = await turn(H, "What does Zoe's policy not cover?", null, [fact("Alpha Plan does not pay for war.", "Zoë Lim")]);
+  assert.ok(st); assert.match(st!.text, /Gamma Care/); assert.doesNotMatch(st!.text, /Beta Travel/);
+});
 await t("in the chat turn: a chat for one person, or a question naming one, never names another person's policy", async () => {
   const scoped = await turn(HH2, Q, "p1", [fact("Alpha Plan does not pay for war.", "Ana")]);
   assert.ok(scoped); assert.match(scoped!.text, /Gamma Care/); assert.doesNotMatch(scoped!.text, /Beta Travel/);
