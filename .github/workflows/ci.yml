@@ -256,6 +256,8 @@ jobs:
         run: npm run format:late-section-shift-test
       - name: Phone tap targets (Coverage tabs and rows, Learn chips, Yearly/Monthly toggle are 44px)
         run: npm run format:tap-target-test
+      - name: Landing currency line (plain words about a bare dollar sign)
+        run: npm run format:landing-copy-test
       - name: Sign-up says what happens next (email link, then add family and upload)
         run: npm run format:signup-next-step-test
       - name: "A broken page shows DearPolicy's own message (nothing lost, retry, way back, no raw error)"
