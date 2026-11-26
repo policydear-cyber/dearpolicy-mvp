@@ -3,9 +3,10 @@
  * decide what the household sees. No model, database or network.
  *   npm run benefit-table:chat-test */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { assembleTable, coverKeyOf, sectionKeyOf, type Confirmation, type FamilyMember } from "@/lib/benefit-table/assemble";
 import { checkReading, declaredCurrency, type SourceDoc } from "@/lib/benefit-table/check";
-import { type ChatRow, amountsFromRows, asksForNobody, namesSomeone, intensiveCareRateOf, chatRows, planTableRows, printedDay, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
+import { type ChatRow, amountsFromRows, asksForNobody, namesSomeone, intensiveCareRateOf, chatRows, planTableRows, printedDay, coverStart, coverLabels, citedPages, dropAgreeingDayRules, dropAmountPointers, dropPeopleShutOut, rowLabel, NARROWED_PAGES_NOTE, pagesToSend, keepLabelledAmounts, nameStatesMoney, noteLeftOutAmounts, NO_ROWS_YET, renderTable } from "@/lib/benefit-table/chat";
 import { escapeText, PAGES_LEFT_OUT, PAGES_NOTE, spouseMeant, type Household } from "@/lib/simple-chat/library";
 import { LEFT_OUT_AMOUNT, NOTHING_SHOWN, libraryGroups, readModelAnswer, stayBlock, stayDaysSaid, verifyAnswer } from "@/lib/simple-chat/verify";
 import { CONFIRM_AMOUNT_STEP } from "@/lib/simple-chat/declutter";
@@ -1382,6 +1383,15 @@ test("a number the documents print as a policy number is no money when the sente
   assert.notEqual(said("The policy number is fine and the payout is 3037851."), "The policy number is fine and the payout is 3037851.");
 });
 
+test("a cover's start is its printed start date only: an \"as of\" date never makes an old policy look new (live check 26 Nov, ICU)", () => {
+  assert.equal(coverStart({ startDate: "11/02/2024", asOf: "20/11/2026" } as never), "11/02/2024");
+  assert.equal(coverStart({ startDate: null, asOf: "20/11/2026" } as never), null, "an as-of date is not a start");
+  assert.equal(coverStart({ asOf: "20/11/2026" } as never), null);
+  assert.equal(coverStart({ startDate: null }), null);
+  const source = readFileSync("lib/benefit-table/chat.ts", "utf8");
+  assert.ok(/coverStart\(c\)\] as const/.test(source), "chatRows takes each cover's start from coverStart");
+  assert.ok(!/c\.startDate \?\? c\.asOf/.test(source), "no fallback from the start date to the as-of date");
+});
 test("a card inside a waiting period is never shown: the model gives the period as printed, the server compares the dates (stress run 23 Oct, S023)", () => {
   const amb = rows.find((r) => r.person === "Lim Ah Kow" && r.benefit === "Ambulance Cost")!;
   const ci = (id: string, coverSince: string | null, docIndex = amb.docIndex): ChatRow => ({ ...amb, id, cover: "CRITICAL ILLNESS PLAN", benefit: "Critical Illness Benefit", docIndex,
