@@ -71,14 +71,23 @@ test("U8 two documents with one name and a part with no link: three groups; one 
   assert.equal(untitled[0].parts[0].title, "Part with no heading");
 });
 
-test("U9 headings that differ only in their numbers are one line with every page link; a different wording stays its own line", () => {
+test("U9 headings that differ only in their numbers are one line; each folded heading stays named with its own page links; a different wording stays its own line", () => {
   const q = (key: string, section: string, page: number) => ({ section: { key, section, column: null, document: "CareShield" }, source: { documentId: "d1", document: "CareShield", page, excerpt: "" } });
   const groups = unplacedByDocument([q("1", "What does it offer? (Year of claim: 2026)", 3), q("2", "What does it offer? (Year of claim: 2027)", 4), q("3", "What does it offer? (Year of claim: 2028)", 5), q("4", "Exclusions", 8), q("5", "Plan 1 or Plan 2", 9)]);
   assert.equal(groups[0].count, 5);
-  assert.deepEqual(groups[0].parts.map((x) => [x.similar, x.sources.map((y) => y.page)]), [[2, [3, 4, 5]], [0, [8]], [0, [9]]]);
-  const html = renderToStaticMarkup(createElement(BenefitTableCoverage, { data: { enabled: true, people: [], documents: [], unmatchedCovers: [], illustrationCovers: [], unlinkedSections: [q("1", "What does it offer? (Year of claim: 2026)", 3), q("2", "What does it offer? (Year of claim: 2027)", 4)] } as unknown as BenefitTableData }));
-  assert.match(html, /<small>1 more like this<\/small>/);
-  assert.equal((html.match(/Year of claim/g) ?? []).length, 1);
+  assert.deepEqual(groups[0].parts.map((x) => [x.others.map((o) => o.title), x.sources.map((y) => y.page), x.others.flatMap((o) => o.sources.map((y) => y.page))]), [[["What does it offer? (Year of claim: 2027)", "What does it offer? (Year of claim: 2028)"], [3], [4, 5]], [[], [8], []], [[], [9], []]]);
+  const html = renderToStaticMarkup(createElement(BenefitTableCoverage, { data: { enabled: true, people: [], documents: [], unmatchedCovers: [], illustrationCovers: [], unlinkedSections: [q("1", "Age 0-17", 3), q("2", "Age 18-65", 4)] } as unknown as BenefitTableData }));
+  assert.match(html, /1 more like this/);
+  assert.match(html, /Age 18-65/, "the folded heading is still named");
+  assert.match(html, /file#page=3/); assert.match(html, /file#page=4/);
+});
+test("U10 the count is the same whichever part comes first, and identical repeats are counted", () => {
+  const q = (key: string, section: string) => ({ section: { key, section, column: null, document: "Plan" }, source: null });
+  const a = unplacedByDocument([q("1", "Plan 1"), q("2", "Plan 1"), q("3", "Plan 2")])[0].parts;
+  const b = unplacedByDocument([q("1", "Plan 2"), q("2", "Plan 1"), q("3", "Plan 1")])[0].parts;
+  assert.equal(a.length, 1); assert.equal(b.length, 1);
+  assert.deepEqual([a[0].times, a[0].others.map((o) => [o.title, o.times])], [2, [["Plan 2", 1]]]);
+  assert.deepEqual([b[0].times, b[0].others.map((o) => [o.title, o.times])], [1, [["Plan 1", 2]]]);
 });
 
 console.log(`unplaced note: ${passed} passed, ${failures.length} failed`);

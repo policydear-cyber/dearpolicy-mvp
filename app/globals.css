@@ -1492,6 +1492,9 @@ div.answer-point { display: grid; gap: 4px; }
 .cov-unplaced-pages { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .cov-unplaced li.cov-unplaced-doc { display: block; }
 .cov-unplaced-doc-head { margin: 0; }
+.cov-unplaced-more { flex-basis: 100%; font-size: 0.9em; }
+.cov-unplaced-more > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.cov-unplaced-more ul { margin: 0; padding-left: 1rem; }
 .cov-unplaced li > ul { margin-top: 4px; }
 .cov-unplaced li > span { min-width: 0; overflow-wrap: anywhere; }
 .cov-unplaced small { color: var(--muted); font-size: var(--fs-xs); margin-left: 6px; }
