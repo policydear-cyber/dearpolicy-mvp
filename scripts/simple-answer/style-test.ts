@@ -113,6 +113,11 @@ t("many printed amounts say 'Depends on your case' once above them, not on every
       { id: "q9", kind: "calculation", text: "For a 4-day stay.", fullText: "For a 4-day stay.", conditions: [], amount: { text: "S$400", currencyResolved: true, illustration: true } }] } as unknown as StructuredAnswer, render: (x: string) => x, prose: [] }));
   assert.doesNotMatch(noPerson, /answer-printed-note/, "no note beside a worked-out figure that has no person");
 });
+t("the prompt tells the model to name a stated, unmet or open condition first, and never to invent one", () => {
+  assert.match(SIMPLE_SYSTEM_PROMPT, /documents state that the main cover applies only if a condition holds/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /names that condition first, not a bare "Yes, covered"/);
+  assert.match(SIMPLE_SYSTEM_PROMPT, /Never invent a condition the documents do not state/);
+});
 t("a point's conditions are headed as its conditions, never a bare line; a card's sit under its figure (live 637c547)", () => {
   const html = (amount: unknown, conditions: string[]) => renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],
     statements: [{ id: "s2", kind: "fact", personName: "Ana Ruiz", text: "The group scheme pays a daily hospital cash amount from the 11th day of a stay.", fullText: null, conditions, amount }] } as unknown as StructuredAnswer, render: (x: string) => x, prose: [] }));
