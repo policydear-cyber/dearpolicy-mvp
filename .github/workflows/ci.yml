@@ -258,6 +258,8 @@ jobs:
         run: npm run format:signup-next-step-test
       - name: "A broken page shows DearPolicy's own message (nothing lost, retry, way back, no raw error)"
         run: npm run format:page-error-test
+      - name: Coverage says where its currency comes from once for each person, not on every cover card
+        run: npm run format:coverage-currency-note-test
       - name: Coverage page notice for parts not in the summary (says what may be missing from answers and what to do, for one part and many)
         run: npm run benefit-table:unplaced-note-test
       - name: Answer verification (a reversal, an exclusion heading, a dropped condition, a swapped unit or period, a neighbouring row's amount, a swapped or missing currency, a missing hash, a superseded document or the wrong person never passes; true statements in many phrasings still do; totals add only verified figures in one currency; every answer path's figures checked at save)
