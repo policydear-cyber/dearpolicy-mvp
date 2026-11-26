@@ -9,6 +9,12 @@ const LINK_ERRORS: Record<string, string> = {
   other_browser: "That reset link opened in a different browser from the one you asked in, so it could not sign you in. Send yourself a new link below and open it in the same browser.",
 };
 
+/** When the request itself did not go through, so no link was sent. */
+const SEND_PROBLEMS = {
+  tooMany: "You have asked for several reset links in a row, so we have paused new ones for now. Please wait a while, then try again.",
+  failed: "We could not send the link just now, so nothing has been sent. Check your connection and try again.",
+};
+
 export default function ResetPasswordPage() {
   return (
     <Suspense fallback={null}>
@@ -22,21 +28,27 @@ function ResetPasswordForm() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
+    setProblem(null);
     try {
-      await fetch("/api/auth/reset-password", {
+      const res = await fetch("/api/auth/reset-password", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email }),
       });
+      // A refusal is the same for every email (the limit is per connection, a failure is ours), so telling the person
+      // reveals nothing about accounts. A success is always shown the same way, whether or not the email matched an
+      // account -- see app/api/auth/reset-password/route.ts for why.
+      if (res.ok) setSent(true);
+      else setProblem(res.status === 429 ? SEND_PROBLEMS.tooMany : SEND_PROBLEMS.failed);
+    } catch {
+      setProblem(SEND_PROBLEMS.failed);
     } finally {
       setBusy(false);
-      // Always shown, whether or not the email matched an account -- see
-      // app/api/auth/reset-password/route.ts for why.
-      setSent(true);
     }
   };
 
@@ -46,6 +58,11 @@ function ResetPasswordForm() {
       {!sent && linkError && LINK_ERRORS[linkError] ? (
         <div className="alert error" role="alert">
           {LINK_ERRORS[linkError]}
+        </div>
+      ) : null}
+      {!sent && problem ? (
+        <div className="alert error" role="alert">
+          {problem}
         </div>
       ) : null}
       {sent ? (

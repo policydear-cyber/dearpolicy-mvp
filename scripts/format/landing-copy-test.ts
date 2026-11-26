@@ -28,5 +28,18 @@ test("L5 it asks for the same browser, matching the 'opened in a different brows
   assert.match(reset, /opened in a different browser/);
 });
 
+test("L6 a refused or failed request keeps the form and says no link was sent; only a successful response shows the 'sent' line", () => {
+  assert.match(reset, /if \(res\.ok\) setSent\(true\);/);
+  assert.match(reset, /res\.status === 429 \? SEND_PROBLEMS\.tooMany : SEND_PROBLEMS\.failed/);
+  assert.match(reset, /\} catch \{\s*setProblem\(SEND_PROBLEMS\.failed\);/);
+  assert.doesNotMatch(reset, /finally \{[^}]*setSent\(true\)/);
+  assert.match(reset, /nothing has been sent/);
+});
+test("L7 the failure lines never say whether an email has an account", () => {
+  const block = /const SEND_PROBLEMS = \{[^}]*\};/.exec(reset)?.[0] ?? "";
+  assert.ok(block.length > 0);
+  assert.doesNotMatch(block, /\b(no account|not registered|does not exist|unknown email)\b/i);
+});
+
 console.log(`landing copy: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
