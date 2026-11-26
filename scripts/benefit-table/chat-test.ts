@@ -1230,6 +1230,16 @@ test("a short document no row comes from is sent whole, unless it could not be r
   assert.ok(pagesToSend(rows, payee).has(`${TERMS}#37`));
 });
 
+test("the page that prints a policy's start date is sent with a cited document, once, and not for a document no row comes from", () => {
+  const SCHED_PAGE = 2, WORDING = 5;
+  const withStart: Household = { ...HOUSE, documents: HOUSE.documents.map((d) => d.policyId !== TERMS ? d : { ...d, pages: [...d.pages, { page: SCHED_PAGE + 40, text: "Policy Schedule\nPolicy Issue Date\t: 28/02/2024\nPolicy Effective Date\t: 11/02/2024" }, { page: WORDING + 40, text: "Policy Effective Date : 11/02/2024 appears again" }] }) };
+  const sent = pagesToSend(rows, withStart);
+  assert.ok(sent.has(`${TERMS}#${SCHED_PAGE + 40}`), "start page sent");
+  assert.ok(!sent.has(`${TERMS}#${WORDING + 40}`), "one start page per document");
+  const without = pagesToSend(rows, HOUSE);
+  assert.ok(![...without].some((k) => k.endsWith("#42")), "no start label, nothing extra");
+});
+
 // ------------------------------------------------------------------ live run 22 Oct (ab4026a) round 4
 /** The answer for these model statements, as the chat turn has it before the shut-out check, and that check's result. */
 function shutOut(bottomLine: string, statements: Record<string, unknown>[]) {

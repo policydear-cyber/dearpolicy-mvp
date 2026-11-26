@@ -12,7 +12,7 @@ import { benefitName, benefitNames, qualifierText } from "./headline";
 import type { Household } from "@/lib/simple-chat/library";
 import { documentId, escapeText, unreadable } from "@/lib/simple-chat/library";
 import { type ServerFigure, LEFT_OUT_AMOUNT, LEFT_OUT_FACT, docLabel, childrenSaid, conditionApplies, locateQuote, matchMember, membersNamedIn, readModelAnswer, rowWithContinuation, sentences, statesMoney, readStayRule, documentOwnWords, verifyAnswer, type StayRule } from "@/lib/simple-chat/verify";
-import { CAP_WORDS } from "./check";
+import { CAP_WORDS, POLICY_START } from "./check";
 import { noteMultiple, sameNote, type Multiplier, type RowFacts } from "./multiplier";
 import { withoutChildLimit } from "./child-limit";
 import { kindSettled, kindsForInjury, namedKinds, rowFractureKind } from "./fracture-kind";
@@ -633,6 +633,8 @@ export function citedPages(rows: ChatRow[]): Set<string> {
  * release-set H10). A page that prints it is sent for every document a row comes from, cited or not (Critic R113-1). */
 export const RULE_PAGE = /\bwaiting\s+period|\bexclusions?\b|pre-?\s?existing|\bwill\s+not\s+pay\b|\bdoes\s+not\s+cover\b|\bnot\s+covered\b|\bsurvival\s+period|\bnot\s+(?:be\s+)?payable\b|\bnot\s+be\s+liable\b|can\s+only\s+be\s+claimed|\beither\s+under\b|no\s+other\s+benefit\s+(?:has\s+been\s+)?paid|balance\s+of\s+the\s+sum|terminated\s+upon\s+payment|\binstead\s+of\b|\bin\s+lieu\b|\breduce[sd]?\b|\bdeducted\b|paid\s+(?:directly\s+)?to\s+the\s+(?:insured|policy\s*holder|life\s+assured|proper|estate|legal|nominee)|proper\s+claimant|legal\s+(?:personal\s+)?representatives?\b|\bnominees?\b/i;
 
+const START_PAGE = new RegExp(POLICY_START.source, "i");
+
 /** Documents of at most this many pages that no row comes from are sent whole (pagesToSend). */
 const SHORT_DOCUMENT_PAGES = 3;
 /** At most this many pages in all are sent for such documents, so a household of many receipts stays small (Critic R126-3). */
@@ -646,7 +648,13 @@ export function pagesToSend(rows: ChatRow[], household: Household): Set<string> 
   const docs = new Set([...sent].map((k) => k.slice(0, k.indexOf("#"))));
   let whole = 0;
   for (const d of household.documents) {
-    if (docs.has(d.policyId)) { for (const p of d.pages) if (RULE_PAGE.test(p.text)) sent.add(`${d.policyId}#${p.page}`); }
+    if (docs.has(d.policyId)) {
+      for (const p of d.pages) if (RULE_PAGE.test(p.text)) sent.add(`${d.policyId}#${p.page}`);
+      // The page that prints the policy's start ("Policy Effective Date"), once for the document: a waiting period is
+      // measured from it, and without it the answer said the date "could not be checked" (live run 26 Nov, ICU).
+      const start = d.pages.find((p) => START_PAGE.test(p.text));
+      if (start) sent.add(`${d.policyId}#${start.page}`);
+    }
     else if (!unreadable(d) && d.pages.length <= SHORT_DOCUMENT_PAGES && whole + d.pages.length <= SHORT_DOCUMENTS_BUDGET) {
       for (const p of d.pages) sent.add(`${d.policyId}#${p.page}`);
       whole += d.pages.length;
