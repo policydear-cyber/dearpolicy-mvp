@@ -1,7 +1,7 @@
 /* The three plans (components/plan-cards.tsx). Tokens only: every colour comes from the top of app/globals.css. */
 .plan-cards-wrap { display: grid; gap: 16px; }
 .plan-interval { display: inline-flex; justify-self: start; gap: 4px; padding: 4px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
-.plan-interval button { min-height: 40px; padding: 6px 16px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+.plan-interval button { min-height: 44px; padding: 6px 16px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-2); font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
 .plan-interval button span { font-weight: 500; color: var(--muted); }
 .plan-interval button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-float); }
 .plan-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }

@@ -107,6 +107,7 @@
     "simple:payment-schedule-test": "node --import tsx scripts/simple-answer/payment-schedule-test.ts",
     "format:home-load-error-test": "node --import tsx scripts/format/home-load-error-test.ts",
     "format:late-section-shift-test": "node --import tsx scripts/format/late-section-shift-test.ts",
+    "format:tap-target-test": "node --import tsx scripts/format/tap-target-test.ts",
     "benefit-table:unplaced-note-test": "node --import tsx scripts/benefit-table/unplaced-note-test.ts",
     "chat:stale-revision-resend-test": "node --import tsx scripts/chat/stale-revision-resend-test.ts",
     "chat:no-family-send-test": "node --import tsx scripts/chat/no-family-send-test.ts",
