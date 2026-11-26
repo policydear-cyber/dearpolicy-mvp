@@ -14,7 +14,7 @@ const landing = readFileSync("app/welcome/page.tsx", "utf8");
 const line = /text: "(Amounts keep the currency[^"]*)"/.exec(landing)?.[1] ?? "";
 
 test("L1 the currency line exists and keeps what the document prints", () => { assert.match(line, /^Amounts keep the currency your document prints\./); });
-test("L2 it says what happens when a document shows only a dollar sign, in plain words", () => { assert.match(line, /If it shows only \\u201c\$\\u201d, DearPolicy uses the currency you choose when you sign up\.$/); });
+test("L2 it says what happens when a document shows only a dollar sign, in plain words", () => { assert.match(line, /If it shows only \\u201c\$\\u201d, DearPolicy reads it in the currency you choose when you sign up\.$/); });
 test("L3 no jargon: the word 'bare' and the claim 'never guessed' are gone from the landing page", () => { assert.doesNotMatch(landing, /\bbare\b/i); assert.doesNotMatch(landing, /never guessed/i); });
 
 console.log(`landing copy: ${passed} passed, ${failures.length} failed`);
