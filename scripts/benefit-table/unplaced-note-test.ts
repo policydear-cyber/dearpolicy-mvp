@@ -61,6 +61,15 @@ test("U7 a part with no page link joins the one document of the same name; it ne
   assert.equal(groups[0].count, 2);
   assert.equal(groups[0].id, "d1");
 });
+test("U8 two documents with one name and a part with no link: three groups; one heading in two columns stays two parts", () => {
+  const q = (key: string, section: string, column: string | null, id: string | null) => ({ section: { key, section, column, document: "Policy wording" }, source: id ? { documentId: id, document: "Policy wording", page: 1, excerpt: "" } : null });
+  const groups = unplacedByDocument([q("1", "Benefits", null, "d1"), q("2", "Benefits", null, "d2"), q("3", "Notes", null, null)]);
+  assert.equal(groups.length, 3, "a no-link part never picks one of two same-named documents");
+  const cols = unplacedByDocument([q("1", "Benefits", "Plan A", "d1"), q("2", "Benefits", "Plan B", "d1")]);
+  assert.deepEqual(cols[0].parts.map((x) => x.title), ["Benefits (Plan A)", "Benefits (Plan B)"]);
+  const untitled = unplacedByDocument([{ section: { key: "9", section: null, column: null, document: "Plan A" }, source: null }]);
+  assert.equal(untitled[0].parts[0].title, "Untitled part");
+});
 
 console.log(`unplaced note: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
