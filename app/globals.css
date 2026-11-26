@@ -1488,10 +1488,13 @@ div.answer-point { display: grid; gap: 4px; }
 .cov-unplaced summary { cursor: pointer; min-height: 24px; }
 .cov-unplaced-note { margin: 6px 0 0; color: var(--muted); font-size: var(--fs-sm); }
 .cov-unplaced ul { list-style: none; margin: 6px 0 0; padding: 0; }
-.cov-unplaced li { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.cov-unplaced li { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .cov-unplaced-pages { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .cov-unplaced li.cov-unplaced-doc { display: block; }
 .cov-unplaced-doc-head { margin: 0; }
+.cov-unplaced-more { flex-basis: 100%; font-size: 0.9em; }
+.cov-unplaced-more > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.cov-unplaced-more ul { margin: 0; padding-left: 1rem; }
 .cov-unplaced li > ul { margin-top: 4px; }
 .cov-unplaced li > span { min-width: 0; overflow-wrap: anywhere; }
 .cov-unplaced small { color: var(--muted); font-size: var(--fs-xs); margin-left: 6px; }

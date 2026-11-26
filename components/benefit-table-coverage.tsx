@@ -169,7 +169,7 @@ const pagesWord=(pages:number[])=>pages.length===1?`page ${pages[0]}`:`pages ${p
 /** The parts not in the summary, one group per document with a count, and a part whose heading is printed again (once a year, once
  * per band) shown once with how many times: a long raw list gives no way to tell whether a real benefit is missing (Live tester, 26 Nov). */
 export function unplacedByDocument(parts:{section:{key:string;section?:string|null;column?:string|null;document:string};source:Source|null}[]){
-  const groups=new Map<string,{id:string;document:string;count:number;parts:{key:string;title:string;times:number;sources:Source[]}[]}>();
+  const groups=new Map<string,{id:string;document:string;count:number;parts:{key:string;title:string;norm:string;times:number;others:{title:string;times:number;sources:Source[]}[];sources:Source[]}[]}>();
   // One group per document: by its id when the part has a page link. A part with no link joins the group of the same name when
   // there is exactly one, else its own group by name. Parts with a link go first so the ids are known.
   const ordered=[...parts.filter(u=>u.source),...parts.filter(u=>!u.source)];
@@ -180,13 +180,19 @@ export function unplacedByDocument(parts:{section:{key:string;section?:string|nu
     const g=groups.get(id)??{id,document,count:0,parts:[]};
     groups.set(id,g);
     g.count++;
-    const title=`${u.section.section??"Untitled part"}${u.section.column?` (${u.section.column})`:""}`;
-    const same=g.parts.find(x=>x.title===title);
-    const target=same??{key:u.section.key,title,times:0,sources:[] as Source[]};
-    if(!same)g.parts.push(target);
-    target.times++;
+    const title=`${u.section.section??"Part with no heading"}${u.section.column?` (${u.section.column})`:""}`;
+    // Headings that differ only in their numbers (a claim year, an income band) are one line: the first is shown with how many
+    // more are alike, each still named under it. A different heading, or the same digits in a different place, stays its own line.
+    const norm=title.replace(/\d[\d,.]*/g,"#");
+    const main=g.parts.find(x=>x.title===title);
+    const host=main??(/\d/.test(title)?g.parts.find(x=>x.norm===norm):undefined);
+    const target=host??{key:u.section.key,title,norm,times:0,others:[],sources:[] as Source[]};
+    if(!host)g.parts.push(target);
+    // The folded headings stay named: each keeps its own count and page links, shown under the line.
+    const own=(main||!host)?target:(target.others.find(x=>x.title===title)??(target.others.push({title,times:0,sources:[]}),target.others[target.others.length-1]));
+    own.times++;
     // Every page the heading is printed on stays reachable.
-    if(u.source&&!target.sources.some(x=>x.documentId===u.source!.documentId&&x.page===u.source!.page))target.sources.push(u.source);
+    if(u.source&&!own.sources.some(x=>x.documentId===u.source!.documentId&&x.page===u.source!.page))own.sources.push(u.source);
   }
   return [...groups.values()];
 }
@@ -247,7 +253,8 @@ export function BenefitTableCoverage({data,reload}:{data:BenefitTableData;reload
         {data.unlinkedSections.length?<li data-testid="table-unplaced"><details className="cov-unplaced"><summary>{data.unlinkedSections.length===1?"One part":`${data.unlinkedSections.length} parts`} of your documents {data.unlinkedSections.length===1?"isn’t":"aren’t"} in this summary or in the chat. Tap to see which.</summary>
           <p className="cov-unplaced-note" data-testid="table-unplaced-note">{data.unlinkedSections.length===1?"A benefit in it may be missing":"A benefit in them may be missing"} from your answers. Use the page link beside a part to read {data.unlinkedSections.length===1?"it":"them"} in your own document, or ask your insurer.</p>
           <ul>{unplacedByDocument(data.unlinkedSections).map(g=><li key={g.id} className="cov-unplaced-doc" data-testid="table-unplaced-doc"><p className="cov-unplaced-doc-head"><strong>{g.document}</strong> <small>{g.count===1?"1 part":`${g.count} parts`}</small></p>
-            <ul>{g.parts.map(u=><li key={u.key}><span>{u.title}{u.times>1?<small>{u.times} times</small>:null}</span>{u.sources.length?<span className="cov-unplaced-pages">{u.sources.map(src=><PageLink key={src.documentId+":"+src.page} source={src}/>)}</span>:null}</li>)}</ul></li>)}</ul></details></li>:null}
+            <ul>{g.parts.map(u=><li key={u.key}><span>{u.title}{u.times>1?<small>{u.times} times</small>:null}</span>{u.sources.length?<span className="cov-unplaced-pages">{u.sources.map(src=><PageLink key={src.documentId+":"+src.page} source={src}/>)}</span>:null}
+              {u.others.length?<details className="cov-unplaced-more"><summary>{u.others.length===1?"1 more like this":`${u.others.length} more like this`}</summary><ul>{u.others.map(o=><li key={o.title}><span>{o.title}{o.times>1?<small>{o.times} times</small>:null}</span>{o.sources.length?<span className="cov-unplaced-pages">{o.sources.map(src=><PageLink key={src.documentId+":"+src.page} source={src}/>)}</span>:null}</li>)}</ul></details>:null}</li>)}</ul></li>)}</ul></details></li>:null}
         {data.illustrationCovers.map((c,i)=><li key={"q"+i}><span><strong>{c.person}</strong>: {coverName(c)}. Only in a quotation, which is not proof of cover.</span><PageLink source={c.source}/></li>)}
       </ul>
     </section>:null}
