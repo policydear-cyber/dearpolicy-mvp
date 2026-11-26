@@ -68,7 +68,17 @@ test("U8 two documents with one name and a part with no link: three groups; one 
   const cols = unplacedByDocument([q("1", "Benefits", "Plan A", "d1"), q("2", "Benefits", "Plan B", "d1")]);
   assert.deepEqual(cols[0].parts.map((x) => x.title), ["Benefits (Plan A)", "Benefits (Plan B)"]);
   const untitled = unplacedByDocument([{ section: { key: "9", section: null, column: null, document: "Plan A" }, source: null }]);
-  assert.equal(untitled[0].parts[0].title, "Untitled part");
+  assert.equal(untitled[0].parts[0].title, "Part with no heading");
+});
+
+test("U9 headings that differ only in their numbers are one line with every page link; a different wording stays its own line", () => {
+  const q = (key: string, section: string, page: number) => ({ section: { key, section, column: null, document: "CareShield" }, source: { documentId: "d1", document: "CareShield", page, excerpt: "" } });
+  const groups = unplacedByDocument([q("1", "What does it offer? (Year of claim: 2026)", 3), q("2", "What does it offer? (Year of claim: 2027)", 4), q("3", "What does it offer? (Year of claim: 2028)", 5), q("4", "Exclusions", 8), q("5", "Plan 1 or Plan 2", 9)]);
+  assert.equal(groups[0].count, 5);
+  assert.deepEqual(groups[0].parts.map((x) => [x.similar, x.sources.map((y) => y.page)]), [[2, [3, 4, 5]], [0, [8]], [0, [9]]]);
+  const html = renderToStaticMarkup(createElement(BenefitTableCoverage, { data: { enabled: true, people: [], documents: [], unmatchedCovers: [], illustrationCovers: [], unlinkedSections: [q("1", "What does it offer? (Year of claim: 2026)", 3), q("2", "What does it offer? (Year of claim: 2027)", 4)] } as unknown as BenefitTableData }));
+  assert.match(html, /<small>1 more like this<\/small>/);
+  assert.equal((html.match(/Year of claim/g) ?? []).length, 1);
 });
 
 console.log(`unplaced note: ${passed} passed, ${failures.length} failed`);
