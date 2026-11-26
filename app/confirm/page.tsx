@@ -19,7 +19,7 @@ export default async function ConfirmPage({ searchParams }: { searchParams: Prom
       <div className="page" style={{ maxWidth: 420, paddingTop: 96 }}>
         <h1>That link is incomplete</h1>
         <p className="lead">Open the link from the email again, or ask for a new one.</p>
-        <p style={{ marginTop: 16 }}>
+        <p className="auth-links" style={{ marginTop: 16 }}>
           <Link href="/login">Go to sign in</Link>
         </p>
       </div>

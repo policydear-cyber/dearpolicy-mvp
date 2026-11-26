@@ -59,7 +59,7 @@ function ResetPasswordForm() {
           </button>
         </form>
       )}
-      <p style={{ marginTop: 16 }}>
+      <p className="auth-links" style={{ marginTop: 16 }}>
         <Link href="/login">Back to sign in</Link>
       </p>
     </div>

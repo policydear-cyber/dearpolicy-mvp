@@ -45,6 +45,8 @@ test("T8 the Sign in and Sign up text links (Forgot your password, Create an acc
   assert.match(login, /<p className="auth-links"[^>]*>\s*<Link href="\/reset-password">Forgot your password\?<\/Link>/);
   assert.match(login, /<p className="auth-links">\s*New here\? <Link[^>]*>Create an account<\/Link>/);
   assert.match(signup, /<p className="auth-links"[^>]*>\s*Already have an account\? <Link[^>]*>Sign in<\/Link>/);
+  assert.match(readFileSync("app/reset-password/page.tsx", "utf8"), /<p className="auth-links"[^>]*>\s*<Link href="\/login">Back to sign in<\/Link>/);
+  assert.match(readFileSync("app/confirm/page.tsx", "utf8"), /<p className="auth-links"[^>]*>\s*<Link href="\/login">Go to sign in<\/Link>/);
 });
 
 console.log(`tap targets: ${passed} passed, ${failures.length} failed`);
