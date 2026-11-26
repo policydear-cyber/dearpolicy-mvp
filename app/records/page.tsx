@@ -59,7 +59,7 @@ export default function RecordsPage() {
 
   // Nothing is said about payments until they have loaded: "No payments found yet" before the list arrives is wrong.
   useEffect(()=>{
-    void fetch("/api/premiums/summary",{signal:AbortSignal.timeout(20000)}).then((x)=>{ if(!x.ok) throw new Error(); return x.json(); }).then((r)=>setPeople(r.people ?? [])).catch(()=>setPeopleFailed(true));
+    void fetch("/api/premiums/summary",typeof AbortSignal!=="undefined"&&typeof AbortSignal.timeout==="function"?{signal:AbortSignal.timeout(20000)}:undefined).then((x)=>{ if(!x.ok) throw new Error(); return x.json(); }).then((r)=>setPeople(r.people ?? [])).catch(()=>setPeopleFailed(true));
     void fetch("/api/premiums").then((x)=>{ if(!x.ok) throw new Error(); return x.json(); }).then((r)=>setRecords(r.records ?? [])).catch(()=>setFailed(true));
   },[]);
 

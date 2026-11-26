@@ -27,7 +27,7 @@ test("S3 Records: Payment records wait for the premiums above to load or fail", 
   assert.match(records, /<\/section>\}\n    <\/div>/);
 });
 test("S3b Records: a premiums request that never answers ends in the failure line, so Payment records are not held forever", () => {
-  assert.match(records, /fetch\("\/api\/premiums\/summary",\{signal:AbortSignal\.timeout\(20000\)\}\)/);
+  assert.match(records, /fetch\("\/api\/premiums\/summary",typeof AbortSignal!=="undefined"&&typeof AbortSignal\.timeout==="function"\?\{signal:AbortSignal\.timeout\(20000\)\}:undefined\)/, "guarded: older phones have no AbortSignal.timeout");
 });
 test("S4 Records: payments still load, show their loading line, failure and empty states", () => {
   assert.match(records, /Loading your payments…/);
