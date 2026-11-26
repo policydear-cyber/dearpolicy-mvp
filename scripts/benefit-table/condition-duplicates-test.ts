@@ -23,9 +23,20 @@ test("D3 a different condition is kept", () => {
   assert.equal(same("highly probable to lead to death within the next twelve (12) months", LONG), false);
   assert.equal(same("The Company may at its sole discretion pay an advance payment", LONG), false);
 });
-test("D4 opposite wording is never merged (a negation or exception on one side only)", () => {
-  assert.equal(same("The claim must be made within thirty days of the accident date", "The claim must not be made within thirty days of the accident date or later"), false);
-  assert.equal(same("Benefit is paid when the Insured Person is employed in Singapore full time", "Benefit is paid unless the Insured Person is employed in Singapore full time"), false);
+test("D4 opposite or different wording is never merged: numbers, direction words, negations", () => {
+  const no = (a: string, b: string) => { assert.equal(same(a, b), false, a + " | " + b); assert.equal(same(b, a), false, b + " | " + a); };
+  no("Claim within 30 days of discharge from hospital", "Claim within 60 days of discharge from hospital");
+  no("Waiting period of 90 days applies to this benefit", "Waiting period of 30 days applies to this benefit");
+  no("Cover applies under age 65 at the date of claim", "Cover applies over age 65 at the date of claim");
+  no("Admitted before the policy anniversary date shown", "Admitted after the policy anniversary date shown");
+  no("Hospital stay of at least 24 hours in a ward", "Hospital stay of at most 24 hours in a ward");
+  no("Pays less than the sum insured for each claim", "Pays more than the sum insured for each claim");
+  no("Excludes pre-existing conditions from this cover", "Includes pre-existing conditions from this cover");
+  no("No other benefit may have been paid under this policy", "Other benefit may have been paid under this policy");
+  no("Payable if no other benefit has been paid under the policy", "Payable if other benefit has been paid under the policy");
+  no("The claim must be made within thirty days of the accident date", "The claim must not be made within thirty days of the accident date or later");
+  no("Benefit is paid when the person is employed in Singapore full time", "Benefit is paid unless the person is employed in Singapore full time");
+  no("Benefit is paid when the person is employed in Singapore full time", "Benefit is paid when the person is employed overseas full time");
 });
 test("D5 a very short condition is never merged", () => {
   assert.equal(same("Must be insured", "The insured person must be insured for at least ninety days"), false);

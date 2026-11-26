@@ -832,17 +832,23 @@ const POLICY_ONLY_WORDS = new Set(("what what's whats how much many is are does 
  * 637c547: a group scheme's hospital cash named one of the two insured people). Each card is that person's own row. */
 /** One condition says what another already says in other words (live, 26 Nov: "provided no other Benefit has been paid to the
  * Insured Person under this Policy or under any supplementary contracts" and "No other benefit may have been paid under this
- * policy", both said as separate lines). True only when the shorter one has at least four words of three letters or more, nearly
- * all of them (three in four) are in the longer one, and both carry the same negations and exceptions, so "must" and "must not"
- * or "unless" never merge. The longer one is the one kept. */
-const NEGATIONS = new Set(["not", "never", "none", "nor", "without", "unless", "except", "excluding", "excluded"]);
+ * policy", both said as separate lines). True only when the shorter one is a plain restatement: it has at least four content
+ * words, every one of them is in the longer one (only filler such as "may", "have", "been", "the", "this" may be missing), and
+ * both carry the same numbers and the same words that turn a meaning round (no, not, unless, under, over, before, after, at
+ * least, at most, less, more, include, exclude, only ...). So "30 days" and "60 days", "under 65" and "over 65", "no other
+ * benefit" and "other benefit" are never merged. The longer one is the one kept. */
+const FLIPS = new Set(("no not never none nor without unless except excluding excludes excluded exclude include includes included including only "
+  + "over under above below before after beyond within least most less more minimum maximum min max up down").split(" "));
+const FILLER = new Set("a an the this that these those to of be is are was were been being has have had may might do does did it its which who whom whose".split(" "));
 export function sameConditionInOtherWords(shorter: string, longer: string): boolean {
-  const words = (x: string) => new Set(x.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3));
-  const a = words(shorter), b = words(longer);
-  if (a.size < 4 || a.size > b.size) return false;
-  if ([...a].filter((w) => b.has(w)).length < 0.75 * a.size) return false;
-  const neg = (x: Set<string>) => [...x].filter((w) => NEGATIONS.has(w)).sort().join(",");
-  return neg(a) === neg(b);
+  const tokens = (x: string) => x.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const a = tokens(shorter), b = new Set(tokens(longer));
+  const content = a.filter((w) => !FILLER.has(w));
+  if (new Set(content).size < 4 || a.length > tokens(longer).length) return false;
+  if (!content.every((w) => b.has(w))) return false;
+  const pick = (xs: Iterable<string>, keep: (w: string) => boolean) => [...new Set([...xs].filter(keep))].sort().join(",");
+  const flip = (w: string) => FLIPS.has(w), num = (w: string) => /\d/.test(w);
+  return pick(a, flip) === pick(b, flip) && pick(a, num) === pick(b, num);
 }
 export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = [], forNobody = false, withheld: WithheldRow[] = []): { json: unknown; report: RowReport } {
   const report: RowReport = { dropped: [], labels: [], days: {}, conditionPoints: [], cards: {} };
