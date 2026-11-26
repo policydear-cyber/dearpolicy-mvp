@@ -61,6 +61,8 @@ const plainFigure=(n:number)=>n.toLocaleString("en-US",{minimumFractionDigits:Nu
  * (lib/benefit-table/cover-rows.ts): the card points there, never asks for a wording that is already on file. */
 /** shared: the cover is on a document that also covers others in the household (lib/benefit-table/shared-cover.ts). */
 const NO_BENEFITS_YET="No benefits are listed for it yet. If you have its policy wording or benefit summary, upload it on the Documents page and DearPolicy adds what it pays.";
+/** Said once for each person, not on every cover card: some figures here carry the currency set for the household. */
+const CURRENCY_NOTE_ONCE="Some amounts here use the currency from your account settings, where the document prints none.";
 function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[];reading:boolean;listedWith?:Cover|null;shared?:string|null}){
   const key=keyBenefits(rows).map(i=>rows[i]),name=benefitNames(rows);
   // A premium whose line and page state no currency claims none, never a bare "$" (Critic R374 L1).
@@ -75,7 +77,6 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
       </div>
     </header>
     {shared?<p className="muted cov-reading" data-testid="table-shared">{shared}</p>:null}
-    {cover.fromSettings||rows.some(r=>r.fromSettings)?<p className="muted cov-reading" data-testid="table-currency-note">Currency from your account settings.</p>:null}
     {!rows.length?<p className="muted cov-reading">{listedWith?`What it pays is set out with ${coverName(listedWith)}${listedWith.cover!==listedWith.product?` (${listedWith.cover})`:""}, in the same policy wording.`:reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:<>
       {/* Only its schedule's own cover line is on file: shown as printed, with the same ask for its wording. */}
       {rows.every(r=>r.coverLine)&&!listedWith?<p className="muted cov-reading" data-testid="table-cover-line">As printed on the schedule. {reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:null}
@@ -242,6 +243,7 @@ export function BenefitTableCoverage({data,reload}:{data:BenefitTableData;reload
     {listed.length>1?<nav className="cov-people" aria-label="People">{listed.map(p=><a key={p.id} href={`#person-${p.id}`} onFocus={e=>e.currentTarget.scrollIntoView({inline:"nearest",block:"nearest"})}>{p.name} <span>{p.covers.length}</span></a>)}</nav>:null}
     {listed.map(person=>!person.covers.length?<NoCoverShown key={person.id} person={person} pending={data.documents.some(d=>["waiting","stalled","held","table_unread"].includes(d.state))}/>:<section className="cov-person" id={`person-${person.id}`} key={person.id} data-testid="table-person">
       <div className="cov-person-head"><h2>{person.name}</h2><span>{plural(person.covers.length,"cover")} · {plural(person.rows.length,"benefit")}</span></div>
+      {person.covers.some(c=>c.fromSettings||rowsForCover(c,person.covers,person.rows).rows.some(r=>r.fromSettings))?<p className="muted cov-reading" data-testid="table-currency-note">{CURRENCY_NOTE_ONCE}</p>:null}
       {person.covers.map(c=>{const shown=rowsForCover(c,person.covers,person.rows);return <CoverCard key={c.coverKey+c.source.documentId+c.source.page} cover={c} rows={shown.rows} listedWith={shown.listedWith} reading={waiting.length>0} shared={sharedCoverText(data.people,person,c,shown.rows)}/>;})}
       <TellUs person={person}/>
     </section>)}
