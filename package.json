@@ -105,6 +105,7 @@
     "simple:offline-test": "node --import tsx scripts/simple-answer/offline-test.ts",
     "simple:row-cap-test": "node --import tsx scripts/simple-answer/row-cap-test.ts",
     "simple:payment-schedule-test": "node --import tsx scripts/simple-answer/payment-schedule-test.ts",
+    "format:home-load-error-test": "node --import tsx scripts/format/home-load-error-test.ts",
     "benefit-table:unplaced-note-test": "node --import tsx scripts/benefit-table/unplaced-note-test.ts",
     "chat:stale-revision-resend-test": "node --import tsx scripts/chat/stale-revision-resend-test.ts",
     "chat:no-family-send-test": "node --import tsx scripts/chat/no-family-send-test.ts",
