@@ -16,6 +16,7 @@ const rule = (css: string, selector: string) => {
   return found;
 };
 const globals = readFileSync("app/globals.css", "utf8");
+const coverage = readFileSync("components/benefit-table-coverage.tsx", "utf8");
 const plans = readFileSync("components/plan-cards.css", "utf8");
 const learn = readFileSync("components/learn/learn.css", "utf8");
 
@@ -24,14 +25,18 @@ test("T2 Coverage 'All N benefits' rows are 44px", () => { assert.match(rule(glo
 test("T3 the 'parts not in this summary' row is 44px and keeps its disclosure arrow", () => { const r = rule(globals, ".cov-unplaced summary"); assert.match(r, /min-height: 44px/); assert.doesNotMatch(r, /display: *(flex|grid)/, "a flex summary loses its arrow"); assert.doesNotMatch(r, /list-style/, "list-style removes the arrow"); });
 test("T6 the Coverage person tabs are one scrolling row at every width, so the sticky bar stays 60px and the scroll margin clears it", () => {
   const bar = rule(globals, ".cov-people");
-  assert.match(bar, /flex-wrap: nowrap; overflow-x: auto/);
-  assert.match(bar, /padding: 8px 2px; scroll-padding-inline: 2px/);
+  assert.match(bar, /flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none/);
+  assert.match(bar, /padding: 8px 4px; scroll-padding-inline: 4px/);
   assert.match(globals, /\n\.cov-people a \{ flex: none; white-space: nowrap; \}/);
   assert.doesNotMatch(rule(globals, ".cov-people"), /flex-wrap: wrap/);
   assert.match(rule(globals, ".cov-person"), /scroll-margin-top: 64px/);
 });
 test("T4 Learn shelf chips are 44px", () => { assert.match(rule(learn, ".learn-shelf-nav a"), /min-height: 44px/); });
 test("T5 the Yearly/Monthly toggle is 44px", () => { assert.match(rule(plans, ".plan-interval button"), /min-height: 44px/); });
+
+test("T7 a person tab that takes keyboard focus is scrolled fully into view", () => {
+  assert.match(coverage, /<a key=\{p\.id\} href=\{`#person-\$\{p\.id\}`\} onFocus=\{e=>e\.currentTarget\.scrollIntoView\(\{inline:"nearest",block:"nearest"\}\)\}>/);
+});
 
 console.log(`tap targets: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
