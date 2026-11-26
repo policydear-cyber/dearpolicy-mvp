@@ -105,6 +105,7 @@
     "simple:offline-test": "node --import tsx scripts/simple-answer/offline-test.ts",
     "simple:row-cap-test": "node --import tsx scripts/simple-answer/row-cap-test.ts",
     "simple:payment-schedule-test": "node --import tsx scripts/simple-answer/payment-schedule-test.ts",
+    "chat:stale-revision-resend-test": "node --import tsx scripts/chat/stale-revision-resend-test.ts",
     "chat:no-family-send-test": "node --import tsx scripts/chat/no-family-send-test.ts",
     "simple:other-person-document-test": "node --import tsx scripts/simple-answer/other-person-document-test.ts",
     "simple:person-corrections-test": "node --import tsx scripts/simple-answer/person-corrections-test.ts",
