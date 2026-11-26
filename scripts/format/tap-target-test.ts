@@ -53,6 +53,13 @@ test("T9 the footer links (Learn the basics, Sign in, Create an account) are 44p
   assert.match(rule(css, ".public-footer-links a"), /display: inline-flex; align-items: center; min-height: 44px/);
   assert.match(rule(css, ".public-footer-links"), /display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px/);
 });
+test("T10 the skip link (when focused) and 'Key terms A to Z' under the next guide are 44px: the Live tester measured them at 39px and 41px", () => {
+  const pub = readFileSync("components/public/public-site.css", "utf8");
+  assert.match(rule(pub, ".public-skip"), /display: inline-flex; align-items: center; min-height: 44px;/);
+  assert.match(rule(pub, ".public-skip"), /left: -9999px/, "still off screen until focused");
+  assert.match(pub, /\.public-skip:focus \{ left: 16px;/);
+  assert.match(rule(learn, ".learn-next .note a.text-link"), /display: inline-flex; align-items: center; min-height: 44px; padding-block: 0;/);
+});
 
 console.log(`tap targets: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }

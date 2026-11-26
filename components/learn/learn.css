@@ -56,6 +56,8 @@
 .learn-shelf-nav a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 999px; background: var(--bg-2); color: var(--ink-2); font-size: var(--fs-sm); font-weight: 600; }
 .learn-shelf-nav a:hover { background: var(--brand-tint-2); color: var(--ink); }
 .learn-shelf-nav a:focus-visible { outline: none; box-shadow: var(--focus); }
+/* "Key terms A to Z" stands alone under the next-guide card, so it is a 44px target, not an inline link (the global rule for links in notes keeps them inline at 12px padding, which measured 41px). */
+.learn-next .note a.text-link { display: inline-flex; align-items: center; min-height: 44px; padding-block: 0; }
 .learn-shelf-nav span { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
 
 .learn-shelf { margin-top: 36px; scroll-margin-top: 24px; }
