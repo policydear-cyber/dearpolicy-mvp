@@ -23,6 +23,7 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
   }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [householdName, setHouseholdName] = useState("");
   // Compulsory (DC 18 Nov): nothing is chosen for the person.
   const [currency, setCurrency] = useState("");
@@ -94,14 +95,17 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
         <label htmlFor="su-password" style={{ marginTop: 12 }}>
           Password
         </label>
-        <input
-          id="su-password" suppressHydrationWarning
-          type="password"
-          autoComplete="new-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          aria-describedby="su-password-hint"
-        />
+        <div className="password-field">
+          <input
+            id="su-password" suppressHydrationWarning
+            type={showPassword ? "text" : "password"}
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            aria-describedby="su-password-hint"
+          />
+          <button type="button" className="mini-button" aria-pressed={showPassword} aria-controls="su-password" onClick={() => setShowPassword((v) => !v)}>{showPassword ? "Hide" : "Show"}</button>
+        </div>
         <p id="su-password-hint" className={`field-hint${password && password.length < 8 ? " invalid" : ""}`} aria-live="polite">{password && password.length < 8 ? `At least 8 characters (${8 - password.length} more).` : "At least 8 characters."}</p>
         {error ? (
           <div className="alert error" role="alert">
