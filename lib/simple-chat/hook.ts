@@ -21,6 +21,7 @@ import type { ChatAnswer } from "@/types";
 import { simpleChatModel } from "./flag";
 import { appHelp } from "./app-help";
 import { loadHousehold, renderLibrary, spouseMeant, type Household } from "./library";
+import { OTHER_EXCLUSIONS_ID, otherExclusionsNote } from "./other-exclusions";
 import { LIBRARY_CACHE_WRITE_RATE, ledgerUsage, modelFromChoice, type SimpleModel, type Turn } from "./model";
 import { aboutLibrary, answerAsText, NO_ANSWER, NOTHING_SHOWN, noteCoverNotCounted, readModelAnswer, sentences as sentencesOf, verifyAnswer, type VerifyReport } from "./verify";
 import type { BenefitTable } from "@/lib/benefit-table/assemble";
@@ -519,6 +520,12 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   // An overview's bottom line that names three or more things becomes its subject and a list (DC, 18 Nov 2026).
   report.sentencesLeftOut.push(...listFromBottomLine(answer, { names: household.members.map((m) => m.name), aboutDocuments: aboutLibrary(message),
     products: household.documents.filter((d) => !d.supersededAt && !NO_COVER_READING_ROLES.includes(d.documentRole ?? "")).map((d) => d.productName ?? "") }));
+  // A question about what is not covered, answered for one policy among several: the others that print exclusions are named.
+  if (reply.model !== "no-documents" && reply.model !== "unknown-person") {
+    const text = [answer.bottomLine, answer.summary, ...(answer.statements ?? []).flatMap((st) => [st.text, st.fullText])].filter((x): x is string => typeof x === "string").join(" ");
+    const others = otherExclusionsNote(household, message, text, (d) => docLabel(household, d), subjects.people);
+    if (others) answer.statements = [...(answer.statements ?? []), { id: OTHER_EXCLUSIONS_ID, kind: "uncertainty", text: others, fullText: others, conditions: [] }];
+  }
   // How to reach the insurer, as the household's own documents print it, when the answer gives next steps or is about
   // claiming. Read by the server from the stored pages; never the model's words.
   if (reply.model !== "no-documents" && reply.model !== "unknown-person" && contactsHelp(answer, message)) {
