@@ -111,6 +111,7 @@
     "format:signup-next-step-test": "node --import tsx scripts/format/signup-next-step-test.ts",
     "format:page-error-test": "node --import tsx scripts/format/page-error-test.ts",
     "format:coverage-currency-note-test": "node --import tsx scripts/format/coverage-currency-note-test.ts",
+    "format:signup-show-password-test": "node --import tsx scripts/format/signup-show-password-test.ts",
     "benefit-table:unplaced-note-test": "node --import tsx scripts/benefit-table/unplaced-note-test.ts",
     "chat:stale-revision-resend-test": "node --import tsx scripts/chat/stale-revision-resend-test.ts",
     "chat:no-family-send-test": "node --import tsx scripts/chat/no-family-send-test.ts",
