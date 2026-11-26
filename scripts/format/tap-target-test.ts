@@ -22,8 +22,12 @@ const learn = readFileSync("components/learn/learn.css", "utf8");
 test("T1 Coverage person tabs are 44px", () => { assert.match(rule(globals, ".cov-people a"), /min-height: 44px/); });
 test("T2 Coverage 'All N benefits' rows are 44px", () => { assert.match(rule(globals, ".cov-all summary"), /min-height: 44px/); });
 test("T3 the 'parts not in this summary' row is 44px and keeps its disclosure arrow", () => { const r = rule(globals, ".cov-unplaced summary"); assert.match(r, /min-height: 44px/); assert.doesNotMatch(r, /display: *(flex|grid)/, "a flex summary loses its arrow"); assert.doesNotMatch(r, /list-style/, "list-style removes the arrow"); });
-test("T6 on a phone the Coverage person tabs are one scrolling row, so the sticky bar stays 60px and the scroll margin clears it", () => {
-  assert.match(globals, /@media \(max-width: 760px\) \{ \.cov-people \{ flex-wrap: nowrap; overflow-x: auto;/);
+test("T6 the Coverage person tabs are one scrolling row at every width, so the sticky bar stays 60px and the scroll margin clears it", () => {
+  const bar = rule(globals, ".cov-people");
+  assert.match(bar, /flex-wrap: nowrap; overflow-x: auto/);
+  assert.match(bar, /padding: 8px 2px; scroll-padding-inline: 2px/);
+  assert.match(globals, /\n\.cov-people a \{ flex: none; white-space: nowrap; \}/);
+  assert.doesNotMatch(rule(globals, ".cov-people"), /flex-wrap: wrap/);
   assert.match(rule(globals, ".cov-person"), /scroll-margin-top: 64px/);
 });
 test("T4 Learn shelf chips are 44px", () => { assert.match(rule(learn, ".learn-shelf-nav a"), /min-height: 44px/); });
