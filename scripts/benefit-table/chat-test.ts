@@ -1230,12 +1230,14 @@ test("a short document no row comes from is sent whole, unless it could not be r
   assert.ok(pagesToSend(rows, payee).has(`${TERMS}#37`));
 });
 
-test("the page that prints a policy's start date is sent with a cited document, once, and not for a document no row comes from", () => {
+test("the page that prints a policy's start date is sent with a cited document, at most two, and not for a document no row comes from", () => {
   const SCHED_PAGE = 2, WORDING = 5;
   const withStart: Household = { ...HOUSE, documents: HOUSE.documents.map((d) => d.policyId !== TERMS ? d : { ...d, pages: [...d.pages, { page: SCHED_PAGE + 40, text: "Policy Schedule\nPolicy Issue Date\t: 28/02/2024\nPolicy Effective Date\t: 11/02/2024" }, { page: WORDING + 40, text: "Policy Effective Date : 11/02/2024 appears again" }] }) };
   const sent = pagesToSend(rows, withStart);
   assert.ok(sent.has(`${TERMS}#${SCHED_PAGE + 40}`), "start page sent");
-  assert.ok(!sent.has(`${TERMS}#${WORDING + 40}`), "one start page per document");
+  assert.ok(sent.has(`${TERMS}#${WORDING + 40}`), "a second start page (a renewal or another policy) is sent too");
+  const three: Household = { ...withStart, documents: withStart.documents.map((d) => d.policyId !== TERMS ? d : { ...d, pages: [...d.pages, { page: 90, text: "Policy Start Date : 01/01/2025" }] }) };
+  assert.ok(!pagesToSend(rows, three).has(`${TERMS}#90`), "at most two start pages per document");
   const without = pagesToSend(rows, HOUSE);
   assert.ok(![...without].some((k) => k.endsWith("#42")), "no start label, nothing extra");
 });

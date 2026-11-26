@@ -633,6 +633,8 @@ export function citedPages(rows: ChatRow[]): Set<string> {
  * release-set H10). A page that prints it is sent for every document a row comes from, cited or not (Critic R113-1). */
 export const RULE_PAGE = /\bwaiting\s+period|\bexclusions?\b|pre-?\s?existing|\bwill\s+not\s+pay\b|\bdoes\s+not\s+cover\b|\bnot\s+covered\b|\bsurvival\s+period|\bnot\s+(?:be\s+)?payable\b|\bnot\s+be\s+liable\b|can\s+only\s+be\s+claimed|\beither\s+under\b|no\s+other\s+benefit\s+(?:has\s+been\s+)?paid|balance\s+of\s+the\s+sum|terminated\s+upon\s+payment|\binstead\s+of\b|\bin\s+lieu\b|\breduce[sd]?\b|\bdeducted\b|paid\s+(?:directly\s+)?to\s+the\s+(?:insured|policy\s*holder|life\s+assured|proper|estate|legal|nominee)|proper\s+claimant|legal\s+(?:personal\s+)?representatives?\b|\bnominees?\b/i;
 
+/** At most this many start-date pages are sent for one document. */
+const START_PAGES = 2;
 const START_PAGE = new RegExp(POLICY_START.source, "i");
 
 /** Documents of at most this many pages that no row comes from are sent whole (pagesToSend). */
@@ -650,10 +652,9 @@ export function pagesToSend(rows: ChatRow[], household: Household): Set<string> 
   for (const d of household.documents) {
     if (docs.has(d.policyId)) {
       for (const p of d.pages) if (RULE_PAGE.test(p.text)) sent.add(`${d.policyId}#${p.page}`);
-      // The page that prints the policy's start ("Policy Effective Date"), once for the document: a waiting period is
+      // The page that prints the policy's start ("Policy Effective Date"), at most START_PAGES for the document (a pack or a renewal can print more than one): a waiting period is
       // measured from it, and without it the answer said the date "could not be checked" (live run 26 Nov, ICU).
-      const start = d.pages.find((p) => START_PAGE.test(p.text));
-      if (start) sent.add(`${d.policyId}#${start.page}`);
+      for (const p of d.pages.filter((x) => START_PAGE.test(x.text)).slice(0, START_PAGES)) sent.add(`${d.policyId}#${p.page}`);
     }
     else if (!unreadable(d) && d.pages.length <= SHORT_DOCUMENT_PAGES && whole + d.pages.length <= SHORT_DOCUMENTS_BUDGET) {
       for (const p of d.pages) sent.add(`${d.policyId}#${p.page}`);
