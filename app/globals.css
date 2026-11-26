@@ -233,6 +233,7 @@ a.mini-button { display: inline-flex; align-items: center; text-decoration: none
 .field select:focus, .field input:focus, .chat-composer textarea:focus, .detected-row select:focus { border-color: var(--brand); box-shadow: var(--focus); }
 .alert { border-radius: var(--r-md); padding: 12px 14px; margin: 0 0 20px; display: grid; gap: 4px; font-size: var(--fs-sm); line-height: 1.5; }
 .alert:not(.error):not(.message-inline-error) { background: var(--info-tint); color: var(--info-text); border: 1px solid var(--info-line); }
+.alert .alert-retry { justify-self: start; margin-top: 6px; }
 .alert.error { background: var(--critical-tint); color: var(--critical); border: 1px solid var(--critical-line); }
 .note { margin-top: 12px; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; }
 .field small.error { color: var(--critical); font-size: var(--fs-xs); }
