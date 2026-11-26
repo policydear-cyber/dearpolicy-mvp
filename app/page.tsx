@@ -40,7 +40,7 @@ export default function DashboardPage(){
   }catch{payload={error:"unavailable"} as Dashboard;}
   if(n!==seq.current)return;
   // A quiet fetch (the reading poll, coming back to the tab) that fails keeps the page as it was; only a fetch the person asked for shows the error.
-  setData(prev=>quiet&&payload.error&&prev&&!prev.error?prev:payload);if(!want.current&&payload.activeMember?.id)want.current=payload.activeMember.id;if(!activeId&&payload.activeMember?.id)setActiveId(payload.activeMember.id);setLoading(false);} useEffect(()=>{void load();},[]); // eslint-disable-line react-hooks/exhaustive-deps
+  setData(prev=>quiet&&payload.error&&prev&&!prev.error?{...prev}:payload); /* a new object, so the reading poll arms again */if(!want.current&&payload.activeMember?.id)want.current=payload.activeMember.id;if(!activeId&&payload.activeMember?.id)setActiveId(payload.activeMember.id);setLoading(false);} useEffect(()=>{void load();},[]); // eslint-disable-line react-hooks/exhaustive-deps
  // The tiles follow the documents: while one is still being read, fetch again quietly until its cover shows (for at most
  // ten minutes), and fetch again whenever the page comes back into view, so a policy uploaded elsewhere shows here.
  const readingSince=useRef<number|null>(null);
@@ -86,7 +86,7 @@ export default function DashboardPage(){
  const people=<section className="member-strip"><div className="member-pills" role="group" aria-label="Whose cover">{data?.family?.map((m,i)=><button key={m.id} data-person={i%4} aria-pressed={m.id===(active?.id??activeId)} className={`member-pill ${m.id===(active?.id??activeId)?"active":""}`} onClick={()=>choose(m.id)}><span className="member-dot">{m.display_name.slice(0,1).toUpperCase()}</span><span><b>{m.display_name}</b><small>{m.relationship}</small></span></button>)}{canManage&&<Link className="member-pill add" href="/family"><Icon name="plus"/> Add person</Link>}</div></section>;
  return <div className="page dashboard-page">
   {/* When the page could not load, it says so once and shows nothing else about the household: no "no document on file" card, no ask box (Live tester, 26 Nov: it said both that it could not load and that no document was on file). */}
-  {data?.error&&<div className="alert error" role="alert"><strong>DearPolicy couldn&rsquo;t load your family&rsquo;s cover just now.</strong><small>Your documents are safe. Please try again in a moment.</small><button type="button" className="button secondary alert-retry" data-testid="home-try-again" onClick={()=>void load(want.current)}>Try again</button></div>}
+  {data?.error&&<div className="alert error" role="alert"><strong>DearPolicy couldn&rsquo;t load your family&rsquo;s cover just now.</strong><small>Your documents are safe. Please try again in a moment.</small><button type="button" className="button secondary alert-retry" data-testid="home-try-again" disabled={loading} onClick={()=>void load(want.current)}>{loading?"Trying…":"Try again"}</button></div>}
   {emptyPortfolio?<>
    {/* A new household gets one thing to do at a time: the steps below carry the only button, so nothing on the page sends
        them to Ask before there is a document to ask about. */}
