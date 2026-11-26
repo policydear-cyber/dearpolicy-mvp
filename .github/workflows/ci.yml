@@ -188,6 +188,8 @@ jobs:
         run: npm run benefit-table:term-dates-test
       - name: A table printed again or a flat running total is one row (negative controls)
         run: npm run benefit-table:repeated-rows-test
+      - name: A cover's age for waiting periods comes from a printed start date, never an as-of date; a recent start on any copy still holds it
+        run: npm run benefit-table:cover-start-test
       - name: Policy folders join a wording's "100% of the Sum Assured" to the same person's schedule in the same folder (negative controls)
         run: npm run simple:folder-whole-sum-test
       - name: Scanned pages mark an amount whose first digit may be a misread currency letter ($520,000 for S$20,000; negative controls)
