@@ -204,6 +204,7 @@ table { font-variant-numeric: tabular-nums; }
 /* --------------------------------------------------------------------------
    Controls
    -------------------------------------------------------------------------- */
+.auth-links a { display: inline-flex; align-items: center; min-height: 44px; }
 .button { border: 1px solid transparent; border-radius: 999px; padding: 10px 16px; font-weight: 650; font-size: var(--fs-md); display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; transition: background var(--t-hover) var(--ease), border-color var(--t-hover) var(--ease); }
 .button.primary { background: var(--accent); color: var(--accent-ink); }
 .button.primary:hover { background: var(--accent-hover); }

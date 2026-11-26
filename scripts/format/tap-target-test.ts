@@ -38,5 +38,16 @@ test("T7 a person tab that takes keyboard focus is scrolled fully into view", ()
   assert.match(coverage, /<a key=\{p\.id\} href=\{`#person-\$\{p\.id\}`\} onFocus=\{e=>e\.currentTarget\.scrollIntoView\(\{inline:"nearest",block:"nearest"\}\)\}>/);
 });
 
+const login = readFileSync("app/login/page.tsx", "utf8");
+const signup = readFileSync("app/signup/SignupForm.tsx", "utf8");
+test("T8 the Sign in and Sign up text links (Forgot your password, Create an account, Sign in) are 44px: the Live tester measured them at 19px", () => {
+  assert.match(rule(globals, ".auth-links a"), /display: inline-flex; align-items: center; min-height: 44px/);
+  assert.match(login, /<p className="auth-links"[^>]*>\s*<Link href="\/reset-password">Forgot your password\?<\/Link>/);
+  assert.match(login, /<p className="auth-links">\s*New here\? <Link[^>]*>Create an account<\/Link>/);
+  assert.match(signup, /<p className="auth-links"[^>]*>\s*Already have an account\? <Link[^>]*>Sign in<\/Link>/);
+  assert.match(readFileSync("app/reset-password/page.tsx", "utf8"), /<p className="auth-links"[^>]*>\s*<Link href="\/login">Back to sign in<\/Link>/);
+  assert.match(readFileSync("app/confirm/page.tsx", "utf8"), /<p className="auth-links"[^>]*>\s*<Link href="\/login">Go to sign in<\/Link>/);
+});
+
 console.log(`tap targets: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
