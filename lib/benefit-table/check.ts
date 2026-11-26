@@ -131,7 +131,7 @@ const premiumLineLabel = (line: string, value: number) => {
 };
 /** A policy's start date as a schedule labels it: "Policy Effective Date : 19/10/2026", "POLICY START DATE 27 JUN 2020",
  * "Commencement Date: 1 March 2026". */
-const POLICY_START = /\b(?:policy\s+(?:effective|start|commencement|inception)\s+date|(?:risk\s+)?commencement\s+date|date\s+of\s+commencement)[ \t]*[\t:][ \t:]*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{1,2}[ \t]+[A-Za-z]{3,9}\.?,?[ \t]+\d{4})/gi;
+export const POLICY_START = /\b(?:policy\s+(?:effective|start|commencement|inception)\s+date|(?:risk\s+)?commencement\s+date|date\s+of\s+commencement)[ \t]*[\t:][ \t:]*(\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{1,2}[ \t]+[A-Za-z]{3,9}\.?,?[ \t]+\d{4})/gi;
 /** A schedule cell holding a premium: a figure with cents ("269.05"), never a date or a whole sum. */
 const PREMIUM_CELL = /^(?:[A-Z]{0,3}\$|RM\s?|£|€)?\d[\d,]*\.\d{2}$/;
 const EMPTY_CELL = /^(?:-+|–+|—+|nil|n\/?a)?$/i;
