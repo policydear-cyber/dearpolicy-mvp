@@ -497,8 +497,6 @@ export default function PoliciesPage() {
 
     <section className="section">
       <div className="section-heading"><div className="icon-heading"><span className="title-icon"><Icon name="documents"/></span><h2>Documents on file</h2></div></div>
-      {/* Below the upload box, so the folders arriving a few seconds after the page does not push the box and the list down (Live tester, 26 Nov: layout shift 0.89 on Documents). */}
-      {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={refresh} onFolders={onFolders}/>}
       {forPerson.length > 0 && <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{forPerson.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Your policies <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>General wording <b>{counts.reference}</b></button></div>}
       {personId && <p className="document-person-filter" data-testid="person-filter">Showing documents linked to <b>{family.find((m) => m.id === personId)?.display_name ?? "one person"}</b>. <button type="button" className="text-link" onClick={() => { setPersonId(null); window.history.replaceState(null, "", "/policies"); }}>Show all documents</button></p>}
 
@@ -621,6 +619,8 @@ export default function PoliciesPage() {
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
         </div>;
       })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : familyKnown && !family.length ? "No documents yet. First add the people your policies cover, then upload a policy schedule, certificate, renewal notice or benefits booklet. DearPolicy reads it for you." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above, and DearPolicy reads it for you."}</div>}</div>
+      {/* After the list: the folders load a few seconds after the page and grow, so above the list they pushed the pills and every row down (Live tester, 26 Nov: layout shift 0.89 on Documents). */}
+      {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={refresh} onFolders={onFolders}/>}
     </section>
   </div>;
 }

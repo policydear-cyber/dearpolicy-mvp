@@ -12,11 +12,11 @@ function test(name: string, fn: () => void) {
 const policies = readFileSync("app/policies/page.tsx", "utf8");
 const records = readFileSync("app/records/page.tsx", "utf8");
 
-test("S1 Documents: the folders come after the upload box, not above it", () => {
-  assert.ok(policies.indexOf('className="upload-panel"') < policies.indexOf("<PolicyFolders"), "folders after the upload panel");
+test("S1 Documents: the folders come after the list, so their late arrival pushes nothing down", () => {
   assert.equal((policies.match(/<PolicyFolders/g) ?? []).length, 1);
-  assert.ok(policies.indexOf("<PolicyFolders") > policies.indexOf("<h2>Documents on file</h2>"), "inside Documents on file");
-  assert.ok(policies.indexOf("<PolicyFolders") < policies.indexOf('<div className="document-list rows">'), "above the list");
+  assert.ok(policies.indexOf("<PolicyFolders") > policies.indexOf('<div className="document-list rows">'), "after the list");
+  assert.ok(policies.indexOf("<PolicyFolders") > policies.indexOf('className="upload-panel"'), "after the upload box");
+  assert.ok(policies.indexOf("<PolicyFolders") < policies.indexOf("</section>\n  </div>;\n}"), "still inside Documents on file");
 });
 test("S2 Documents: folders still wait for the family and documents to load", () => {
   assert.match(policies, /\{loaded && familyKnown && family\.length > 0 && <PolicyFolders documents=\{policies\}/);
@@ -25,6 +25,9 @@ test("S3 Records: Payment records wait for the premiums above to load or fail", 
   assert.match(records, /\{\(people\|\|peopleFailed\)&&<section className="section">/);
   assert.ok(records.indexOf("(people||peopleFailed)") > records.indexOf("people?.map"), "after the people");
   assert.match(records, /<\/section>\}\n    <\/div>/);
+});
+test("S3b Records: a premiums request that never answers ends in the failure line, so Payment records are not held forever", () => {
+  assert.match(records, /fetch\("\/api\/premiums\/summary",\{signal:AbortSignal\.timeout\(20000\)\}\)/);
 });
 test("S4 Records: payments still load, show their loading line, failure and empty states", () => {
   assert.match(records, /Loading your payments…/);
