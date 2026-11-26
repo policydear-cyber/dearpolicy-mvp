@@ -53,6 +53,14 @@ test("U6 a repeated heading keeps every page link; two documents with one name s
   const html = renderToStaticMarkup(createElement(BenefitTableCoverage, { data: { enabled: true, people: [], documents: [], unmatchedCovers: [], illustrationCovers: [], unlinkedSections: [q("1", "Premium table", "Policy wording", "d1", 4), q("2", "Premium table", "Policy wording", "d1", 9)] } as unknown as BenefitTableData }));
   assert.match(html, /file#page=4/); assert.match(html, /file#page=9/);
 });
+test("U7 a part with no page link joins the one document of the same name; it never splits one document in two", () => {
+  const withLink = { section: { key: "1", section: "Benefits", column: null, document: "Plan A" }, source: { documentId: "d1", document: "Plan A", page: 2, excerpt: "" } };
+  const noLink = { section: { key: "2", section: "Notes", column: null, document: "Plan A" }, source: null };
+  const groups = unplacedByDocument([noLink, withLink]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].count, 2);
+  assert.equal(groups[0].id, "d1");
+});
 
 console.log(`unplaced note: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
