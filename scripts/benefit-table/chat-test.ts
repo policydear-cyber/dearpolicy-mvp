@@ -1418,6 +1418,12 @@ test("a card inside a waiting period is never shown: the model gives the period 
   assert.equal(shown(old, { applies: "yes", days: 90, from: "sometime last year" }).labels, 0);
   // No period said: a list cover that started within a year is hidden (not checked); an older one, or any other card, is not.
   assert.equal(shown(fresh, null).labels, 0);
+  // An old policy whose summary prints a recent "as of" date has no start date read, so coverSince is null (coverStart): its
+  // ICU-style card is shown, though its page prints a waiting period (live check 26 Nov). A recent printed start still hides it.
+  const noStart = ci("R952", null);
+  assert.equal(shown(noStart, null).labels, 1, "no printed start date: not judged new, the card is shown");
+  assert.deepEqual(shown(noStart, null).why, [], "and nothing is said about a recent start");
+  assert.equal(shown(fresh, null).why.length, 1, "a recent printed start still gives its reason");
   assert.equal(shown(old, null).labels, 1);
   // A cover whose document prints no waiting period with its name (a group accident plan) is not held back for a year.
   assert.equal(shown(fresh, null, "on_list", undefined, HOUSE).labels, 1);
