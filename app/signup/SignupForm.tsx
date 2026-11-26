@@ -104,7 +104,7 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
             onChange={(e) => setPassword(e.target.value)}
             aria-describedby="su-password-hint"
           />
-          <button type="button" className="mini-button" aria-pressed={showPassword} aria-controls="su-password" onClick={() => setShowPassword((v) => !v)}>{showPassword ? "Hide" : "Show"}</button>
+          <button type="button" className="mini-button" aria-label={showPassword ? "Hide password" : "Show password"} aria-controls="su-password" onClick={() => setShowPassword((v) => !v)}>{showPassword ? "Hide" : "Show"}</button>
         </div>
         <p id="su-password-hint" className={`field-hint${password && password.length < 8 ? " invalid" : ""}`} aria-live="polite">{password && password.length < 8 ? `At least 8 characters (${8 - password.length} more).` : "At least 8 characters."}</p>
         {error ? (

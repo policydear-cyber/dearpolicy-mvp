@@ -117,7 +117,7 @@ function LoginForm() {
         </label>
         <div className="password-field">
           <input id="dp-password" suppressHydrationWarning name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" required />
-          <button type="button" className="mini-button" aria-pressed={showPassword} aria-controls="dp-password" onClick={() => setShowPassword((v) => !v)}>{showPassword ? "Hide" : "Show"}</button>
+          <button type="button" className="mini-button" aria-label={showPassword ? "Hide password" : "Show password"} aria-controls="dp-password" onClick={() => setShowPassword((v) => !v)}>{showPassword ? "Hide" : "Show"}</button>
         </div>
         {error ? (
           <div className="alert error" role="alert">
