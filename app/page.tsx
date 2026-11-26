@@ -83,6 +83,7 @@ export default function DashboardPage(){
  const covered=(data?.coverages??[]).filter(c=>c.status==="covered");
  const people=<section className="member-strip"><div className="member-pills" role="group" aria-label="Whose cover">{data?.family?.map((m,i)=><button key={m.id} data-person={i%4} aria-pressed={m.id===(active?.id??activeId)} className={`member-pill ${m.id===(active?.id??activeId)?"active":""}`} onClick={()=>choose(m.id)}><span className="member-dot">{m.display_name.slice(0,1).toUpperCase()}</span><span><b>{m.display_name}</b><small>{m.relationship}</small></span></button>)}{canManage&&<Link className="member-pill add" href="/family"><Icon name="plus"/> Add person</Link>}</div></section>;
  return <div className="page dashboard-page">
+  {/* When the page could not load, it says so once and shows nothing else about the household: no "no document on file" card, no ask box (Live tester, 26 Nov: it said both that it could not load and that no document was on file). */}
   {data?.error&&<div className="alert error" role="alert"><strong>DearPolicy couldn&rsquo;t load your family&rsquo;s cover just now.</strong><small>Your documents are safe. Please refresh the page in a moment.</small></div>}
   {emptyPortfolio?<>
    {/* A new household gets one thing to do at a time: the steps below carry the only button, so nothing on the page sends
@@ -100,7 +101,7 @@ export default function DashboardPage(){
     <div className="home-cards-head"><h1 id="home-cards-title">{name?`${name}\u2019s protection`:"Your family\u2019s protection"}</h1>{canManage&&<Link href="/policies" className="text-link"><Icon name="upload"/>Upload</Link>}</div>
     {people}
     {!loading&&!!data?.reading&&<p className="summary-sub">{data.reading===1?"A document is":`${data.reading} documents are`} still being read. This page updates on its own when reading is done.</p>}
-    {loading&&!data?<div className="empty-card home-loading" role="status">Loading…</div>:personEmpty?<PersonNothingYet name={name??"This person"} paidFor={view.paidFor}/>:covered.length?<div className="coverage-grid" data-testid="home-cards" data-cols={homeGridColumns(covered.length)}>{covered.map(c=>{const source=homeCardSource(c);return <Link href={`/coverage?member=${encodeURIComponent(active?.id??"")}&category=${encodeURIComponent(c.category)}`} className="coverage-card covered" data-card={coverCard(c.category)} key={c.category}><div className="coverage-top"><span className="coverage-icon"><Icon name={coverIcon(c.category)}/></span><div className="coverage-name">{c.category}</div></div>{source&&<span className="coverage-source" title={source}>{source}</span>}<strong className="coverage-status"><Icon name="checkCircle"/>Covered</strong></Link>;})}</div>
+    {loading&&!data?<div className="empty-card home-loading" role="status">Loading…</div>:data?.error?null:personEmpty?<PersonNothingYet name={name??"This person"} paidFor={view.paidFor}/>:covered.length?<div className="coverage-grid" data-testid="home-cards" data-cols={homeGridColumns(covered.length)}>{covered.map(c=>{const source=homeCardSource(c);return <Link href={`/coverage?member=${encodeURIComponent(active?.id??"")}&category=${encodeURIComponent(c.category)}`} className="coverage-card covered" data-card={coverCard(c.category)} key={c.category}><div className="coverage-top"><span className="coverage-icon"><Icon name={coverIcon(c.category)}/></span><div className="coverage-name">{c.category}</div></div>{source&&<span className="coverage-source" title={source}>{source}</span>}<strong className="coverage-status"><Icon name="checkCircle"/>Covered</strong></Link>;})}</div>
      :<div className="empty-card" data-testid="home-no-cards">{(active?.policy_count??0)>0?<>No cover card for {name??"this person"} yet. {active!.policy_count===1?"Their document is":`Their ${active!.policy_count} documents are`} on file: <Link href={`/chat?member=${encodeURIComponent(active!.id)}`} className="text-link">ask DearPolicy what {active!.policy_count===1?"it covers":"they cover"}</Link> or <Link href="/policies" className="text-link">open Documents</Link>.</>:<>No document for {name??"this person"} is on file yet. <Link href="/policies" className="text-link">Upload a policy</Link></>}</div>}
     {/* Gaps (DC 17 Nov): the main kinds of cover with no card, once the person has a card and nothing is still being read,
         so a gap is never shown for a document DearPolicy has not finished. Never "not covered". */}
@@ -108,7 +109,7 @@ export default function DashboardPage(){
     {/* When each policy ends, as printed; a passed date asks for proof of renewal (DC 19 Nov). */}
     {!loading&&!personEmpty&&returning&&<HomePolicyDates memberId={active?.id} onChanged={()=>void load(want.current,true)}/>}
    </section>
-   <HomeAsk memberId={active?.id} name={name}/>
+   {!data?.error&&<HomeAsk memberId={active?.id} name={name}/>}
   </div>
   {!!data?.unclaimed?.length&&<section className="section unclaimed-panel"><div className="section-heading"><div><Titled icon="person"><h2>Whose {data.unclaimed.length===1?"document is this":"documents are these"}?</h2></Titled></div></div>
    <p className="unclaimed-lead">{canManage?<>Choose who {data.unclaimed.length===1?"this document belongs":"these documents belong"} to. Until you do</>:<>The household owner can choose who {data.unclaimed.length===1?"this document belongs":"these documents belong"} to. Until they do</>}, DearPolicy doesn&rsquo;t use {data.unclaimed.length===1?"it":"them"}.</p>
@@ -124,7 +125,7 @@ export default function DashboardPage(){
   </>}
   {/* Phone: Ask stays one tap away, but steps aside while Home's own ask box is on screen, and an empty household has
       nothing to ask about yet (its first step is to add people or upload), so the button never covers that box or a step. */}
-  {!emptyPortfolio&&<Link href={`/chat${active?.id?`?member=${encodeURIComponent(active.id)}`:""}`} className="home-ask-fab button primary" aria-label="Ask DearPolicy" data-hidden={askInView?"true":undefined} aria-hidden={askInView?true:undefined} tabIndex={askInView?-1:undefined}><Icon name="ask"/>Ask DearPolicy</Link>}
+  {!emptyPortfolio&&!data?.error&&<Link href={`/chat${active?.id?`?member=${encodeURIComponent(active.id)}`:""}`} className="home-ask-fab button primary" aria-label="Ask DearPolicy" data-hidden={askInView?"true":undefined} aria-hidden={askInView?true:undefined} tabIndex={askInView?-1:undefined}><Icon name="ask"/>Ask DearPolicy</Link>}
  </div>;
 }
 
