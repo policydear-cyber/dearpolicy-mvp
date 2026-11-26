@@ -44,6 +44,15 @@ test("U5 the parts are grouped per document with a count, and a heading printed 
   assert.match(html, /Premium table<small>2 times<\/small>/);
   assert.match(html, /<strong>Plan B<\/strong> <small>1 part<\/small>/);
 });
+test("U6 a repeated heading keeps every page link; two documents with one name stay two groups", () => {
+  const q = (key: string, section: string, document: string, documentId: string, page: number) => ({ section: { key, section, column: null, document }, source: { documentId, document, page, excerpt: "" } });
+  const groups = unplacedByDocument([q("1", "Premium table", "Policy wording", "d1", 4), q("2", "Premium table", "Policy wording", "d1", 9), q("3", "Premium table", "Policy wording", "d1", 9), q("4", "Premium table", "Policy wording", "d2", 4)]);
+  assert.equal(groups.length, 2, "same name, different documents");
+  assert.deepEqual(groups[0].parts[0].sources.map((x) => x.page), [4, 9], "each distinct page once");
+  assert.equal(groups[0].parts[0].times, 3);
+  const html = renderToStaticMarkup(createElement(BenefitTableCoverage, { data: { enabled: true, people: [], documents: [], unmatchedCovers: [], illustrationCovers: [], unlinkedSections: [q("1", "Premium table", "Policy wording", "d1", 4), q("2", "Premium table", "Policy wording", "d1", 9)] } as unknown as BenefitTableData }));
+  assert.match(html, /file#page=4/); assert.match(html, /file#page=9/);
+});
 
 console.log(`unplaced note: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
