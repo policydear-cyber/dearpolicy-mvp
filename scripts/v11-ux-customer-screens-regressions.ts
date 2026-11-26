@@ -190,6 +190,18 @@ test("Plan usage page: allowance only, no infrastructure", () => {
   assert.match(read("app/household/page.tsx"), /<AccountTabs/);
 });
 
+test("Plan usage page: over the allowance is said in words, and the payment line only appears when payment is open", () => {
+  const usage = read("app/usage/page.tsx");
+  assert.match(usage, /const beyond=included!=null&&used>included;/);
+  assert.match(usage, /beyond\?`\$\{used\}, \$\{included\} included`:`\$\{used\} of \$\{included\}`/);
+  assert.match(usage, /\{beyond&&over\?<small data-testid=\{testId\+"-over"\}>\{over\}<\/small>:null\}/);
+  assert.equal((usage.match(/That is more than the \$\{plan\.name\} plan includes\. Your documents and earlier answers are still here\./g) ?? []).length, 1, "documents");
+  assert.equal((usage.match(/That is more than the \$\{plan\.name\} plan includes\. Your earlier answers are still here\./g) ?? []).length, 1, "questions");
+  assert.match(usage, /aria-valuetext=\{beyond\?`\$\{used\}, \$\{included\} included`:undefined\}/);
+  assert.match(usage, /\{sub\.billingEnabled\?<p>\{PLANS\.plus\.name\} and \{PLANS\.family\.name\} are paid through Stripe&rsquo;s secure page\./);
+  assert.match(usage, /are not open for purchase yet\./);
+});
+
 test("sign-in: form values read at submit, button disabled only while busy, one navigation", () => {
   const login = read("app/login/page.tsx").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   assert.match(login, /new FormData\(e\.currentTarget\)/);

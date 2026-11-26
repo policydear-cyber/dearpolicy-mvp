@@ -16,11 +16,15 @@ import { useEffect,useState } from "react";
 type Subscription={plan:Plan;status:string|null;interval:BillingInterval|null;currentPeriodEnd:string|null;hasBillingAccount:boolean;
   documentsKept:number;questionsThisMonth:number;limitsEnforced:boolean;billingEnabled:boolean;isOwner:boolean};
 
-function Meter({label,used,included,detail,testId}:{label:string;used:number;included:number|null;detail?:string;testId:string}){
+function Meter({label,used,included,detail,over,testId}:{label:string;used:number;included:number|null;detail?:string;over?:string;testId:string}){
   const pct=included&&included>0?Math.min(100,Math.round(used/included*100)):0;
+  // More than the plan includes (a plan that was changed, or limits not enforced for this household): "15 of 5" reads
+  // like a mistake, so say it in words and say what is still true.
+  const beyond=included!=null&&used>included;
   return <div className="plan-meter" data-testid={testId}>
-    <div className="plan-meter-head"><strong>{label}</strong><span>{included==null?`${used} kept`:`${used} of ${included}`}</span></div>
-    {included!=null?<div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={included} aria-valuenow={Math.min(used,included)} aria-label={label}><div className="progress-fill" style={{width:Math.max(used?2:0,pct)+"%"}}/></div>:null}
+    <div className="plan-meter-head"><strong>{label}</strong><span>{included==null?`${used} kept`:beyond?`${used}, ${included} included`:`${used} of ${included}`}</span></div>
+    {included!=null?<div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={included} aria-valuenow={Math.min(used,included)} aria-valuetext={beyond?`${used}, ${included} included`:undefined} aria-label={label}><div className="progress-fill" style={{width:Math.max(used?2:0,pct)+"%"}}/></div>:null}
+    {beyond&&over?<small data-testid={testId+"-over"}>{over}</small>:null}
     {detail?<small>{detail}</small>:null}
   </div>;
 }
@@ -78,15 +82,17 @@ export default function PlanUsagePage(){
       {sub.isOwner&&sub.billingEnabled&&sub.hasBillingAccount?<button type="button" className="button" disabled={busy!==null} onClick={()=>void open(subscriptionAddress,"portal")} data-testid="manage-subscription">{busy==="portal"?"Opening…":"Manage subscription"}</button>:null}
       </div>
       <Meter label="Documents" used={sub.documentsKept} included={plan.unlimitedDocuments?null:plan.documents} testId="plan-documents"
+        over={`That is more than the ${plan.name} plan includes. Your documents and earlier answers are still here.`}
         detail={plan.unlimitedDocuments?`${documentsLabel(plan)}, within fair use of ${plan.documents}.`:"Documents DearPolicy couldn’t read, and older copies you replaced, don’t count."}/>
       <Meter label="Questions this month" used={sub.questionsThisMonth} included={plan.questionsPerMonth} testId="plan-questions"
+        over={`That is more than the ${plan.name} plan includes. Your earlier answers are still here.`}
         detail={`Questions start again on ${questionsResetLabel()}.`}/>
       <p>Everyone in your family is included on every plan.</p>
     </section>}
     {actionError&&<div className="alert error" role="alert"><strong>Not opened.</strong><span> {actionError}</span></div>}
     {sub&&<section className="section" aria-labelledby="plans-title">
       <div className="section-heading"><div><h3 id="plans-title">Plans</h3>
-        <p>{PLANS.plus.name} and {PLANS.family.name} are paid through Stripe&rsquo;s secure page. DearPolicy never sees your card.</p></div></div>
+        {sub.billingEnabled?<p>{PLANS.plus.name} and {PLANS.family.name} are paid through Stripe&rsquo;s secure page. DearPolicy never sees your card.</p>:<p>{PLANS.plus.name} and {PLANS.family.name} are not open for purchase yet.</p>}</div></div>
       <PlanCards current={current} action={action} headingLevel="h4"/>
     </section>}
   </div>;
