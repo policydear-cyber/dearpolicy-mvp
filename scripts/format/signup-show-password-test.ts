@@ -17,4 +17,10 @@ assert.match(field, /autoComplete="new-password"|autocomplete="new-password"/i, 
 const source = readFileSync("app/signup/SignupForm.tsx", "utf8");
 assert.match(source, /type=\{showPassword \? "text" : "password"\}/, "S6 the type follows the toggle");
 assert.match(source, /onClick=\{\(\) => setShowPassword\(\(v\) => !v\)\}/, "S7 the button flips it");
-console.log("signup show password test passed: 7 cases");
+assert.ok(html.indexOf(">Show</button>") > html.indexOf('id="su-password"'), "S8 the button comes after the field");
+assert.match(field, /class="mini-button"/, "S9 same button style as Sign in");
+assert.ok(!/<button[^>]*disabled/.test(field), "S10 the toggle is never disabled");
+assert.match(field, /id="su-password"[^>]*aria-describedby="su-password-hint"|aria-describedby="su-password-hint"[^>]*id="su-password"/, "S11 the field keeps pointing at its hint");
+assert.match(source, /\{showPassword \? "Hide" : "Show"\}<\/button>/, "S12 the label flips with the state");
+assert.equal((source.match(/showPassword \?/g) ?? []).length, 2, "S13 only the password field and the label follow the toggle");
+console.log("signup show password test passed: 13 cases");
