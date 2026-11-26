@@ -1,7 +1,7 @@
 /* Public pages (landing page and signed-out Learn). Uses the brand tokens defined in app/globals.css only: no colour
    values of its own, so the brand pass's palette applies here unchanged. Kept out of globals.css on purpose. */
 .public-shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--ink); }
-.public-skip { position: absolute; left: -9999px; top: 8px; z-index: 100; background: var(--surface); color: var(--ink); padding: 8px 12px; border-radius: var(--r-sm); }
+.public-skip { position: absolute; left: -9999px; top: 8px; z-index: 100; display: inline-flex; align-items: center; min-height: 44px; background: var(--surface); color: var(--ink); padding: 0 12px; border-radius: var(--r-sm); }
 .public-skip:focus { left: 16px; box-shadow: var(--focus); }
 .public-header { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 16px;
   /* Lines up with the page column below it (.landing: 1120px wide, centred), so the logo sits over the headline. */
