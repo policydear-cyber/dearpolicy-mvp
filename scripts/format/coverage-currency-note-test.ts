@@ -13,7 +13,8 @@ const cover = (pid: string, key: string, fromSettings: boolean, currency: string
   sumInsured: 1000, premium: null, premiumFrequency: null, startDate: null, endDate: null, currency, source: src("d" + key),
   ...(fromSettings ? { fromSettings: true } : {}),
 });
-const person = (id: string, name: string, covers: ReturnType<typeof cover>[]) => ({ id, name, covers, rows: [] });
+const row = (key: string, fromSettings: boolean) => ({ coverKey: key, source: src("d" + key), fromSettings, benefit: "Death benefit", section: "Benefits", pays: "covered", figure: { kind: "amount", amount: 1000, currency: "SGD" } as never, qualifier: null, fromDay: null, maxDays: null, conditions: [] });
+const person = (id: string, name: string, covers: ReturnType<typeof cover>[], rows: ReturnType<typeof row>[] = []) => ({ id, name, covers, rows });
 const html = (people: ReturnType<typeof person>[]) => renderToStaticMarkup(createElement(BenefitTableCoverage, {
   data: { enabled: true, people, documents: [], unmatchedCovers: [], illustrationCovers: [], unlinkedSections: [] } as never,
 }));
@@ -32,4 +33,6 @@ assert.equal(sentences(lettered), 0, "N7 and the sentence is absent");
 const two = html([person("a", "Ann", [cover("a", "1", false, "USD")]), person("b", "Bob", [cover("b", "2", true, "SGD")])]);
 assert.equal(notes(two), 1, "N8 only the person who needs it has the note");
 assert.ok(two.indexOf("table-currency-note") > two.indexOf("Bob"), "N9 and it sits under that person");
-console.log("coverage currency note test passed: 9 cases");
+assert.equal(notes(html([person("a", "Ann", [cover("a", "1", false, "USD")], [row("1", true)])])), 1, "N10 a figure on the account currency only in a row still gives the note");
+assert.equal(notes(html([person("a", "Ann", [cover("a", "1", false, "USD")], [row("1", false)])])), 0, "N11 a row that prints its own currency gives none");
+console.log("coverage currency note test passed: 11 cases");
