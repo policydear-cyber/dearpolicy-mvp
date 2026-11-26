@@ -24,7 +24,33 @@ const hh = (documents: HouseholdDocument[]): Household => ({ accountId: "a", mem
 const label = (d: HouseholdDocument) => d.productName ?? d.name;
 const Q = "What does my policy not cover?";
 
+async function turn(H: Household, q: string, family: string | null, statements: unknown[]) {
+  const model: SimpleModel = { choice: { provider: "anthropic", model: "test" }, async call() {
+    return { json: { bottomLine: "Alpha Plan does not pay for war.", question: null, nextSteps: [], statements }, stopReason: "end_turn", model: "test", usage: { input: 1, cacheWrite: 0, cacheRead: 0, output: 1 } };
+  } };
+  const context = { request: { accountId: H.accountId, familyMemberId: family, question: q, submittedQuestion: q },
+    family: [{ id: "p1", display_name: "Ana", preferred_name: null, relationship: "self" }, { id: "p2", display_name: "Ben", preferred_name: null, relationship: "spouse" }], people: [],
+    conversation: { id: "c1", account_id: H.accountId, family_member_id: family, title: "t", revision: 1, state: {} }, token: {}, holdings: [] } as unknown as ChatContext;
+  const saved: { answer: { statements?: AnswerStatement[] } }[] = [];
+  await runSimpleChat(context, {}, { model, household: async () => H, history: async () => [], save: (async (s: unknown) => { saved.push(s as never); }) as never, ledger: false, table: async () => null, today: () => new Date("2026-11-16T04:00:00Z") });
+  return (saved[0].answer.statements ?? []).find((s) => s.id === "other-exclusions");
+}
+const fact = (text: string, person: string) => ({ kind: "fact", text, person, document: "D1", quote: "We will not pay for any claim arising from war.", amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null });
+const HH2 = { accountId: "44444444-4444-4444-4444-444444444444", members: [{ name: "Ana", relationship: "self" }, { name: "Ben", relationship: "spouse" }], documents: [
+  doc("aaaaaaaa-0000-0000-0000-000000000001", "Alpha Plan", EXCL, { linkedPeople: ["Ana"] }),
+  doc("aaaaaaaa-0000-0000-0000-000000000002", "Beta Travel", EXCL, { linkedPeople: ["Ben"] }),
+  doc("aaaaaaaa-0000-0000-0000-000000000003", "Gamma Care", EXCL, { linkedPeople: ["Ana"] })] } as unknown as Household;
 async function main() {
+await t("in the chat turn: a chat for one person, or a question naming one, never names another person's policy", async () => {
+  const scoped = await turn(HH2, Q, "p1", [fact("Alpha Plan does not pay for war.", "Ana")]);
+  assert.ok(scoped); assert.match(scoped!.text, /Gamma Care/); assert.doesNotMatch(scoped!.text, /Beta Travel/);
+  const named = await turn(HH2, "What does Ana not have covered, any exclusions?", null, [fact("Alpha Plan does not pay for war.", "Ana")]);
+  assert.ok(named); assert.doesNotMatch(named!.text, /Beta Travel/);
+  assert.equal(scoped!.kind, "uncertainty"); assert.equal(scoped!.id, "other-exclusions");
+});
+await t("in the chat turn: no note beside an answer that only says it could not tell", async () => {
+  assert.equal(await turn(HH2, Q, null, [{ kind: "uncertainty", text: "The pages do not say.", person: null, document: null, quote: null, amount: null, percentOf: null, conditions: [], alternativeGroup: null, perDay: null, ofBill: null }]), undefined);
+});
 await t("asks: not covered, exclusions, doesn't cover; not an amount or a claim question", () => {
   for (const m of ["What does my policy not cover?", "what are the exclusions", "What isn't covered?", "Does it not cover dental?", "what doesn't it cover", "what won't it pay for"]) assert.ok(asksWhatIsNotCovered(m), m);
   for (const m of ["How much hospital cover do I have?", "Can I claim for my child's dental?", "When does my policy start?"]) assert.ok(!asksWhatIsNotCovered(m), m);
@@ -66,6 +92,20 @@ await t("a document linked to nobody is not named in a chat about one person", (
   const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL, { linkedPeople: [] }), doc("3", "Gamma Care", EXCL)]);
   const n = otherExclusionsNote(h, Q, "none named", label, ["Ana"])!;
   assert.doesNotMatch(n, /Beta Travel/); assert.match(n, /Gamma Care/);
+});
+await t("a page that prints no exclusion ('none', 'see the section') does not make a policy named", () => {
+  const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", "Exclusions: none apply to this schedule."), doc("3", "Gamma Care", "For what is left out, see the exclusions section of your booklet."), doc("4", "Delta Cash", "No exclusions."), doc("5", "Eps Home", EXCL)]);
+  const n = otherExclusionsNote(h, Q, "Alpha Plan: war.", label)!;
+  assert.match(n, /Eps Home/); for (const x of ["Beta Travel", "Gamma Care", "Delta Cash"]) assert.doesNotMatch(n, new RegExp(x));
+});
+await t("names are whole phrases: Plan D is not hidden by Plan Delta, War not by warranty; a bracketed label is plain; long and generic labels are not named", () => {
+  const h = hh([doc("1", "Plan Delta", EXCL), doc("2", "Plan D", EXCL), doc("3", "War", EXCL), doc("4", "X".repeat(80), EXCL), doc("5", "Alpha Plan", EXCL), doc("6", "", EXCL)]);
+  const n = otherExclusionsNote(h, Q, "Plan Delta covers a warranty claim.", (d) => d.productName ? `${d.productName} (policy schedule, file 1 of 2)` : "Insurer policy schedule")!;
+  assert.match(n, /Plan D\b(?!elta)/); assert.match(n, /War/); assert.doesNotMatch(n, /X{20}|Insurer policy schedule|\(policy schedule/); assert.match(n, /Ask “What does Plan D not cover\?”/);
+});
+await t("a why or claim question, or a benefit question, gets no note", () => {
+  const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL)]);
+  for (const m of ["Why won't it pay for my claim?", "Can I claim for dental if it is not covered?"]) assert.equal(otherExclusionsNote(h, m, "x", label), null, m);
 });
 await t("a chat about one person names only that person's policies", () => {
   const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL, { linkedPeople: ["Ben"] }), doc("3", "Gamma Care", EXCL)]);

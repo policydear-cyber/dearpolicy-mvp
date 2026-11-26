@@ -523,7 +523,12 @@ export async function runSimpleChat(context: ChatContext, opts: { check?: () => 
   // A question about what is not covered, answered for one policy among several: the others that print exclusions are named.
   if (reply.model !== "no-documents" && reply.model !== "unknown-person") {
     const text = [answer.bottomLine, answer.summary, ...(answer.statements ?? []).flatMap((st) => [st.text, st.fullText])].filter((x): x is string => typeof x === "string").join(" ");
-    const others = otherExclusionsNote(household, message, text, (d) => docLabel(household, d), subjects.people);
+    // Whose the answer is: the chat's own person, anyone the message names, anyone the turn was narrowed to; nobody means everyone.
+    const scoped = context.family.find((f) => f.id === context.conversation.family_member_id)?.display_name;
+    const people = [...new Set([...(scoped ? [scoped] : []), ...membersNamedIn(household, message), ...(subjects.people ?? [])])];
+    // Only on an answer that says something: never beside a "could not tell".
+    const says = (answer.statements ?? []).some((st) => st.kind !== "uncertainty");
+    const others = says ? otherExclusionsNote(household, message, text, (d) => docLabel(household, d), people.length ? people : null) : null;
     if (others) answer.statements = [...(answer.statements ?? []), { id: OTHER_EXCLUSIONS_ID, kind: "uncertainty", text: others, fullText: others, conditions: [] }];
   }
   // How to reach the insurer, as the household's own documents print it, when the answer gives next steps or is about
