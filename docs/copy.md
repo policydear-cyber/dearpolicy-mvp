@@ -100,7 +100,7 @@ imply that something not found means not covered.
 ### Amounts
 
 - Show the amount exactly as the document prints it, with its currency, and its conditions next to it.
-- A bare "$" doesn't tell us the currency. Say "the document doesn't say which currency".
+- A bare "$" names no currency, so the household's own currency (set at sign-up) applies to it, and the amount says so ("Currency from your account settings."). A lettered currency in a document (S$, US$) always wins. Where no currency can be settled (conflicting or unreadable pages), say "the document doesn't say which currency" and show no amount.
 - Label worked-out amounts as estimates and say the insurer decides.
 - Never drop a condition to make a sentence shorter.
 
