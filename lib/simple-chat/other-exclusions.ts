@@ -38,7 +38,7 @@ export function otherExclusionsNote(household: Household, message: string, answe
   // answer to that, and the note would say the same thing again.
   const namedInQuestion = (d: HouseholdDocument) => hasPhrase(message, plain(label(d))) || hasPhrase(message, d.productName?.trim() ?? "");
   if (household.documents.some((d) => !d.supersededAt && namedInQuestion(d))) return null;
-  const aboutThem = (d: HouseholdDocument) => !people?.length || d.linkedPeople.some((p) => people.some((q) => base(p) === base(q)));
+  const aboutThem = (d: HouseholdDocument) => !people?.length || d.linkedPeople.some((p) => people.some((q) => samePerson(p, q)));
   const withExclusions = household.documents.filter((d) => !d.supersededAt && !NO_COVER_READING_ROLES.includes(d.documentRole ?? "") && aboutThem(d)
     && !(d.unreadablePages ?? []).length && d.pages.some((p) => printsExclusion(p.text))
     // Named only by a product name the household can recognise: not a generic or file-derived label, nor an unbounded one.
@@ -60,11 +60,15 @@ export function otherExclusionsNote(household: Household, message: string, answe
   return `Your documents print exclusions for ${list}, which this answer does not list. Ask “What does ${shown[0]} not cover?” to see ${left.length === 1 ? "them" : "one policy's at a time"}.`;
 }
 
-/** The members the message names: a word of a member's name that no other member's name has, written whole (accents and
- * case folded, any length from two letters: "Zoe", "Zoë", "Al" is not "Alan", "Ann" is not "Anna"). */
-export function membersNamed(household: Household, message: string): string[] {
-  const fold = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
-  const words = (n: string) => fold(n.replace(/\s*\([^)]*\)\s*$/, "")).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2);
-  const said = new Set(fold(message).split(/[^\p{L}\p{N}]+/u).filter(Boolean));
-  return household.members.map((m) => m.name).filter((n) => words(n).filter((w) => !household.members.some((o) => o.name !== n && words(o.name).includes(w))).some((w) => said.has(w)));
+const fold = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+const tokens = (t: string) => fold(t).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+/** The members the message may be naming: any word of a member's name (two letters or more, shared or not, an ordinary
+ * word or not) written whole, accents and case folded. Deliberately loose: a name that is also a word ("Will", "May"),
+ * two members who share a name, an accent or a short name all count as named, and the note then says nothing rather than
+ * guess whose policies are meant. */
+export function membersMentioned(household: Household, message: string): string[] {
+  const said = new Set(tokens(message));
+  return household.members.map((m) => m.name).filter((n) => tokens(n.replace(/\s*\([^)]*\)\s*$/, "")).some((w) => w.length >= 2 && said.has(w)));
 }
+/** The same person written two ways (accents, case, a bracketed note). */
+export const samePerson = (a: string, b: string) => fold(plain(a)) === fold(plain(b));
