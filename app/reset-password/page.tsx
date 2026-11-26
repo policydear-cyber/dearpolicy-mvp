@@ -11,8 +11,8 @@ const LINK_ERRORS: Record<string, string> = {
 
 /** When the request itself did not go through, so no link was sent. */
 const SEND_PROBLEMS = {
-  tooMany: "You have asked for several reset links in a row, so we have paused new ones for now. Please wait a while, then try again.",
-  failed: "We could not send the link just now, so nothing has been sent. Check your connection and try again.",
+  tooMany: "Too many reset links have been asked for from this connection, so we have paused new ones for now. Please wait a while, then try again.",
+  failed: "We could not send the link just now. Please try again in a moment.",
 };
 
 export default function ResetPasswordPage() {

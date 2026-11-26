@@ -33,11 +33,18 @@ test("L6 a refused or failed request keeps the form and says no link was sent; o
   assert.match(reset, /res\.status === 429 \? SEND_PROBLEMS\.tooMany : SEND_PROBLEMS\.failed/);
   assert.match(reset, /\} catch \{\s*setProblem\(SEND_PROBLEMS\.failed\);/);
   assert.doesNotMatch(reset, /finally \{[^}]*setSent\(true\)/);
-  assert.match(reset, /nothing has been sent/);
+  assert.match(reset, /\{!sent && problem \? \(\s*<div className="alert error" role="alert">\s*\{problem\}\s*<\/div>\s*\) : null\}/);
+  assert.match(reset, /setProblem\(null\);/);
+  assert.match(reset, /We could not send the link just now\. Please try again in a moment\./);
+  assert.match(reset, /from this connection/);
 });
 test("L7 the failure lines never say whether an email has an account", () => {
   const block = /const SEND_PROBLEMS = \{[^}]*\};/.exec(reset)?.[0] ?? "";
   assert.ok(block.length > 0);
+  assert.match(block, /tooMany: "[^"]*"/);
+  assert.match(block, /failed: "[^"]*"/);
+  assert.doesNotMatch(block, /\b\d+\b|\.tsx?\b|status|error code/i, "no numbers, file names or status codes in text people read");
+  assert.doesNotMatch(block, /\b(could not find|not found|instantly|within \w+ minutes)\b/i);
   assert.doesNotMatch(block, /\b(no account|not registered|does not exist|unknown email)\b/i);
 });
 
