@@ -128,10 +128,10 @@ function LoginForm() {
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
-      <p style={{ marginTop: 16 }}>
+      <p className="auth-links" style={{ marginTop: 16 }}>
         <Link href="/reset-password">Forgot your password?</Link>
       </p>
-      <p>
+      <p className="auth-links">
         New here? <Link href={inviteNext ? `/signup?next=${encodeURIComponent(inviteNext)}` : "/signup"}>Create an account</Link>
       </p>
       {PRIVACY_NOTICE_FINAL ? (
