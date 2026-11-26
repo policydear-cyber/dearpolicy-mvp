@@ -33,7 +33,8 @@ await t("names the other policies that print exclusions and were not named", () 
   const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL), doc("3", "Gamma Care", EXCL), doc("4", "Delta Cash", NONE)]);
   const n = otherExclusionsNote(h, Q, "Alpha Plan does not cover war.", label)!;
   assert.match(n, /Beta Travel/); assert.match(n, /Gamma Care/); assert.doesNotMatch(n, /Alpha Plan\b.*which/); assert.doesNotMatch(n, /Delta Cash/);
-  assert.match(n, /also print exclusions/);
+  assert.match(n, /^Your documents print exclusions for Beta Travel, Gamma Care/);
+  assert.match(n, /Ask “What does Beta Travel not cover\?”/);
 });
 await t("nothing to say when the answer named every policy with exclusions", () => {
   const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL)]);
@@ -52,6 +53,19 @@ await t("two documents of one policy are one policy; at most four named, the res
   const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Alpha Plan", EXCL), ...["B", "C", "D", "E", "F", "G"].map((x, i) => doc(String(i + 3), `Plan ${x}`, EXCL))]);
   const n = otherExclusionsNote(h, Q, "none named", label)!;
   assert.match(n, /and 3 more/); assert.equal((n.match(/Alpha Plan/g) ?? []).length >= 1, true);
+});
+await t("the follow-up the note suggests, or any question naming a policy, gets no note", () => {
+  const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL), doc("3", "Gamma Care", EXCL)]);
+  const n = otherExclusionsNote(h, Q, "none named", label)!;
+  const follow = /“(.+?)”/.exec(n)![1];
+  assert.equal(follow, "What does Alpha Plan not cover?");
+  assert.equal(otherExclusionsNote(h, follow, "Alpha Plan: war.", label), null);
+  assert.equal(otherExclusionsNote(h, "what are the exclusions for gamma care", "Gamma Care: war.", label), null);
+});
+await t("a document linked to nobody is not named in a chat about one person", () => {
+  const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL, { linkedPeople: [] }), doc("3", "Gamma Care", EXCL)]);
+  const n = otherExclusionsNote(h, Q, "none named", label, ["Ana"])!;
+  assert.doesNotMatch(n, /Beta Travel/); assert.match(n, /Gamma Care/);
 });
 await t("a chat about one person names only that person's policies", () => {
   const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL, { linkedPeople: ["Ben"] }), doc("3", "Gamma Care", EXCL)]);
