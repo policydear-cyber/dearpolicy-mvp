@@ -24,10 +24,17 @@ import { PREMIUM } from "@/lib/coverage/table-figures";
  * shows: what a row multiple's case may not name (multipleFacts). Kept beside the rows, never on them. */
 const READ_NAMES = new WeakMap<object, string[]>();
 
-/** The date a cover began, for judging whether a waiting period could still be running: its printed start date, and nothing
+/** The date a cover began, for judging whether a waiting period could still be running: a printed start date, and nothing
  * else. A printed "as of" date is when a summary or value was produced (often this month), not when the cover began; read as
- * a start it made a 2024 policy "started recently" and hid its intensive care benefit (live check 26 Nov). */
-export function coverStart(c: { startDate?: string | null }): string | null { return c.startDate ?? null; }
+ * a start it made a 2024 policy "started recently" and hid its intensive care benefit (live check 26 Nov). Where the cover
+ * was printed on several documents, the latest start any of them prints: a recent start on a copy that was not kept still
+ * means the cover may be inside a waiting period (Test engineer, #611). */
+export function coverStart(c: { startDate?: string | null; copyStarts?: string[] }): string | null {
+  const all = [c.startDate, ...(c.copyStarts ?? [])].filter((d): d is string => !!d);
+  let latest: string | null = null, at = -Infinity;
+  for (const d of all) { const day = printedDay(d); if (day != null && day > at) { at = day; latest = d; } }
+  return latest ?? all[0] ?? null;
+}
 export type ChatRow = TableRow & { id: string; docIndex: number; baseDocIndex: number | null;
   /** The limit's own line, or the same benefit's line for the same figure in another of the person's documents, says the
    * cost is paid when it is less ("up to $10,000 of the costs ..., whichever is lesser", release-set H7). */

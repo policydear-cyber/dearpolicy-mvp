@@ -109,6 +109,9 @@ export type PersonCover = CheckedCover & { personId: string; coverKey: string;
   /** Set when another copy of this same cover (same person, cover type and sum) that was not kept prints a policy number
    * this copy does not: every number its copies print, so a reader that must not join two policies sees them all. */
   copyNumbers?: string[];
+  /** Every start date the copies of this cover print (the kept one's included), set when it was printed on more than one
+   * document: a recent start printed on a copy that was not kept still counts when judging a waiting period (lib/benefit-table/chat.ts coverStart). */
+  copyStarts?: string[];
   /** Set when this cover was printed on more than one document: every copy's document and its reading's kind, the kept
    * one included, so a reader asking what documents hold it sees them all, in whatever order they were read. */
   copyDocuments?: { documentId: string; kind: CheckedReading["kind"] | null }[];
@@ -293,6 +296,10 @@ export function coversOf(readings: CheckedReading[], family: FamilyMember[], tod
       // contract): the kept cover carries every printed number of its copies (Critic R303 H1).
       const printed = [...new Set(group.map((x) => x.policyNumber).filter((n): n is string => !!n && !!policyNumberKey(n)))];
       if (printed.some((n) => !c.policyNumber || policyNumberKey(n) !== policyNumberKey(c.policyNumber))) c.copyNumbers = printed;
+      // Only copies of this very policy: two policies of one product keep their own start dates.
+      const ofThisPolicy = numbers.size <= 1 ? group : group.filter((x) => numberOf.get(x) === numberOf.get(c));
+      const starts = [...new Set(ofThisPolicy.map((x) => x.startDate).filter((d): d is string => !!d))];
+      if (ofThisPolicy.length > 1 && starts.length) c.copyStarts = starts;
       if (group.length > 1) c.copyDocuments = group.map((x) => ({ documentId: x.source.documentId, kind: x.documentKind ?? null }));
       covers.push(c);
     }
