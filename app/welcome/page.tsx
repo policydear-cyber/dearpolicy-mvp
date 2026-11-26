@@ -28,7 +28,7 @@ const STEPS: Array<{ title: string; text: string }> = [
 ];
 
 const LIMITS: Array<{ icon: IconName; text: string }> = [
-  { icon: "documents", text: "Amounts keep the currency your document prints. A bare \u201c$\u201d is never guessed." },
+  { icon: "documents", text: "Amounts keep the currency your document prints. If it shows only \u201c$\u201d, DearPolicy reads it in the currency you choose when you sign up." },
   { icon: "fileOff", text: "Pages it couldn\u2019t read are named, so you know where to look." },
   { icon: "info", text: "It isn\u2019t financial advice and doesn\u2019t sell insurance. Your insurer decides what is paid." },
 ];

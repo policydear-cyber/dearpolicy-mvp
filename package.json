@@ -108,6 +108,7 @@
     "format:home-load-error-test": "node --import tsx scripts/format/home-load-error-test.ts",
     "format:late-section-shift-test": "node --import tsx scripts/format/late-section-shift-test.ts",
     "format:tap-target-test": "node --import tsx scripts/format/tap-target-test.ts",
+    "format:landing-copy-test": "node --import tsx scripts/format/landing-copy-test.ts",
     "format:signup-next-step-test": "node --import tsx scripts/format/signup-next-step-test.ts",
     "format:page-error-test": "node --import tsx scripts/format/page-error-test.ts",
     "format:coverage-currency-note-test": "node --import tsx scripts/format/coverage-currency-note-test.ts",
