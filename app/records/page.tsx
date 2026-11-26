@@ -70,7 +70,8 @@ export default function RecordsPage() {
       {!people && !peopleFailed && <div className="empty-card" role="status">Loading what your cover costs…</div>}
       {people?.map((person)=><PersonPremiums person={person} key={person.id}/>)}
       {people && !people.length && <div className="empty-card">Add the people your policies cover in <Link href="/family" className="text-link">Account settings</Link>, then upload their documents. Their premiums are listed here.</div>}
-      <section className="section">
+      {/* Payment records wait until the premiums above have loaded (or failed): they arrive after the page does and would push this section down (Live tester, 26 Nov: layout shift 0.48 on Records). */}
+      {(people||peopleFailed)&&<section className="section">
         <div className="section-heading"><div><div className="icon-heading"><span className="title-icon"><Icon name="receipt"/></span><h2>Payment records</h2></div></div></div>
         <div className="payment-list">
           {failed && <div className="alert error" role="alert">Your payments could not be loaded. Please refresh the page in a moment.</div>}
@@ -78,7 +79,7 @@ export default function RecordsPage() {
           {records?.map((r)=><div className="payment-row" key={r.id}><div className="payment-brand">{(r.insurer??"IN").slice(0,2).toUpperCase()}</div><div className="payment-main"><strong>{r.product_name??r.insurer??"Insurance payment"}</strong><span>{r.family_member_name??"Shared family payment"}{r.policy_number?` · ${r.policy_number}`:""}</span></div><div className="payment-amount"><strong>{money(r.amount,r.currency)}</strong><span>{r.frequency??r.payment_date??r.period_start??"payment record"}</span></div></div>)}
           {records && !records.length && <div className="empty-card">No payment records yet. Upload the latest receipt or renewal notice from an insurer on <Link href="/policies" className="text-link">Documents</Link>.</div>}
         </div>
-      </section>
+      </section>}
     </div>
   );
 }

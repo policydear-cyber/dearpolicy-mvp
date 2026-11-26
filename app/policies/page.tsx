@@ -466,7 +466,6 @@ export default function PoliciesPage() {
     {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>This usually takes under a minute. This page updates on its own, and you can keep using DearPolicy.</small></div></div>}
 
 
-    {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={refresh} onFolders={onFolders}/>}
 
     <section className="upload-panel">
       {/* On a phone the file comes first, as one large target; who it is for is optional, and a password is asked
@@ -498,6 +497,8 @@ export default function PoliciesPage() {
 
     <section className="section">
       <div className="section-heading"><div className="icon-heading"><span className="title-icon"><Icon name="documents"/></span><h2>Documents on file</h2></div></div>
+      {/* Below the upload box, so the folders arriving a few seconds after the page does not push the box and the list down (Live tester, 26 Nov: layout shift 0.89 on Documents). */}
+      {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={refresh} onFolders={onFolders}/>}
       {forPerson.length > 0 && <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{forPerson.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Your policies <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>General wording <b>{counts.reference}</b></button></div>}
       {personId && <p className="document-person-filter" data-testid="person-filter">Showing documents linked to <b>{family.find((m) => m.id === personId)?.display_name ?? "one person"}</b>. <button type="button" className="text-link" onClick={() => { setPersonId(null); window.history.replaceState(null, "", "/policies"); }}>Show all documents</button></p>}
 
