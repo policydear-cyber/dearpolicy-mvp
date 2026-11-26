@@ -62,7 +62,7 @@ const plainFigure=(n:number)=>n.toLocaleString("en-US",{minimumFractionDigits:Nu
 /** shared: the cover is on a document that also covers others in the household (lib/benefit-table/shared-cover.ts). */
 const NO_BENEFITS_YET="No benefits are listed for it yet. If you have its policy wording or benefit summary, upload it on the Documents page and DearPolicy adds what it pays.";
 /** Said once for each person, not on every cover card: some figures here carry the currency set for the household. */
-const CURRENCY_NOTE_ONCE="Where a document prints no currency, these amounts use the currency from your account settings.";
+const CURRENCY_NOTE_ONCE="Some amounts here use the currency from your account settings, where the document prints none.";
 function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[];reading:boolean;listedWith?:Cover|null;shared?:string|null}){
   const key=keyBenefits(rows).map(i=>rows[i]),name=benefitNames(rows);
   // A premium whose line and page state no currency claims none, never a bare "$" (Critic R374 L1).
