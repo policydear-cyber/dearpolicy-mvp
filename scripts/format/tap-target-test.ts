@@ -57,6 +57,7 @@ test("T10 the skip link (when focused) and 'Key terms A to Z' under the next gui
   const pub = readFileSync("components/public/public-site.css", "utf8");
   assert.match(rule(pub, ".public-skip"), /display: inline-flex; align-items: center; min-height: 44px;/);
   assert.match(rule(pub, ".public-skip"), /left: -9999px/, "still off screen until focused");
+  assert.match(rule(pub, ".public-skip"), /position: absolute;/, "a static skip link would sit visibly in the page");
   assert.match(pub, /\.public-skip:focus \{ left: 16px;/);
   assert.match(rule(learn, ".learn-next .note a.text-link"), /display: inline-flex; align-items: center; min-height: 44px; padding-block: 0;/);
 });
