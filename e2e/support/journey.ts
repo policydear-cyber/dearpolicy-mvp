@@ -156,7 +156,7 @@ export async function signUpThroughUi(page: Page, args: { email: string; passwor
   await page.getByLabel("Household name (optional)").fill(args.household);
   await page.getByLabel("Policy currency").selectOption("SGD");
   await page.getByLabel("Email").fill(args.email);
-  await page.getByLabel("Password").fill(args.password);
+  await page.getByLabel("Password", { exact: true }).fill(args.password);
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("status")).toContainText("Open the link we sent to finish creating your account");
 }
