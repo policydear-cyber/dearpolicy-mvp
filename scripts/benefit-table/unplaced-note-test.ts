@@ -18,16 +18,21 @@ test("U1 many parts: says they are missing from summary and chat, that a benefit
   const html = render(67);
   assert.match(html, /67 parts of your documents aren.t in this summary or in the chat\. Tap to see which\./);
   assert.match(html, /data-testid="table-unplaced-note"/);
-  assert.match(html, /A benefit in them may be missing from your answers\. Open the page to read them in your own document, or ask your insurer\./);
+  assert.match(html, /A benefit in them may be missing from your answers\. Use the page link beside a part to read them in your own document, or ask your insurer\./);
   assert.doesNotMatch(html, /placed under a cover/);
 });
 test("U2 one part: singular wording", () => {
   const html = render(1);
   assert.match(html, /One part of your documents isn.t in this summary or in the chat\./);
-  assert.match(html, /A benefit in it may be missing from your answers\. Open the page to read it in your own document, or ask your insurer\./);
+  assert.match(html, /A benefit in it may be missing from your answers\. Use the page link beside a part to read it in your own document, or ask your insurer\./);
 });
 test("U3 no parts: no notice", () => {
   assert.doesNotMatch(render(0), /table-unplaced/);
+});
+test("U4 an unmatched cover and no unplaced parts: the section shows but not the notice", () => {
+  const html = renderToStaticMarkup(createElement(BenefitTableCoverage, { data: { enabled: true, people: [], documents: [], unmatchedCovers: [{ person: "Someone Else", product: "Plan", cover: "Cover", plan: null, source: { documentId: "d1", page: 1 } }], illustrationCovers: [], unlinkedSections: [] } as unknown as BenefitTableData }));
+  assert.match(html, /table-also-found/);
+  assert.doesNotMatch(html, /table-unplaced/);
 });
 
 console.log(`unplaced note: ${passed} passed, ${failures.length} failed`);
