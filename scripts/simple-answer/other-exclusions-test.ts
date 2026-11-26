@@ -53,9 +53,9 @@ await t("a member may be named by any word of their name, whole, accents and cas
 });
 await t("the ending says them for one policy and one policy's at a time for several", () => {
   const one = otherExclusionsNote(hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL)]), Q, "Alpha Plan: war.", label)!;
-  assert.match(one, /to see them\.$/);
+  assert.match(one, /To see them, ask “What does Beta Travel not cover\?”$/);
   const many = otherExclusionsNote(hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL), doc("3", "Gamma Care", EXCL)]), Q, "Alpha Plan: war.", label)!;
-  assert.match(many, /to see one policy's at a time\.$/);
+  assert.match(many, /To see one policy's in full, ask “What does Beta Travel not cover\?”$/);
 });
 await t("in the chat turn: a message that may name another member (any spelling, an ordinary-word name, a shared name) gets no note; a scoped chat naming its own person still does; the note is last", async () => {
   const H = { accountId: "44444444-4444-4444-4444-444444444444", members: [{ name: "Zoë Lim", relationship: "self" }, { name: "Will Tan", relationship: "spouse" }, { name: "Zoe Lim", relationship: "x" }], documents: [
@@ -85,8 +85,8 @@ await t("names the other policies that print exclusions and were not named", () 
   const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL), doc("3", "Gamma Care", EXCL), doc("4", "Delta Cash", NONE)]);
   const n = otherExclusionsNote(h, Q, "Alpha Plan does not cover war.", label)!;
   assert.match(n, /Beta Travel/); assert.match(n, /Gamma Care/); assert.doesNotMatch(n, /Alpha Plan\b.*which/); assert.doesNotMatch(n, /Delta Cash/);
-  assert.match(n, /^Your documents print exclusions for Beta Travel, Gamma Care/);
-  assert.match(n, /Ask “What does Beta Travel not cover\?”/);
+  assert.match(n, /^Your documents print exclusions for Beta Travel, Gamma Care\./); assert.doesNotMatch(n, /does not list/);
+  assert.match(n, /ask “What does Beta Travel not cover\?”/);
 });
 await t("nothing to say when the answer named every policy with exclusions", () => {
   const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL)]);
@@ -127,7 +127,7 @@ await t("a page that prints no exclusion ('none', 'see the section') does not ma
 await t("names are whole phrases: Plan D is not hidden by Plan Delta, War not by warranty; a bracketed label is plain; long and generic labels are not named", () => {
   const h = hh([doc("1", "Plan Delta", EXCL), doc("2", "Plan D", EXCL), doc("3", "War", EXCL), doc("4", "X".repeat(80), EXCL), doc("5", "Alpha Plan", EXCL), doc("6", "", EXCL)]);
   const n = otherExclusionsNote(h, Q, "Plan Delta covers a warranty claim.", (d) => d.productName ? `${d.productName} (policy schedule, file 1 of 2)` : "Insurer policy schedule")!;
-  assert.match(n, /Plan D\b(?!elta)/); assert.match(n, /War/); assert.doesNotMatch(n, /X{20}|Insurer policy schedule|\(policy schedule/); assert.match(n, /Ask “What does Plan D not cover\?”/);
+  assert.match(n, /Plan D\b(?!elta)/); assert.match(n, /War/); assert.doesNotMatch(n, /X{20}|Insurer policy schedule|\(policy schedule/); assert.match(n, /ask “What does Plan D not cover\?”/);
 });
 await t("a why or claim question, or a benefit question, gets no note", () => {
   const h = hh([doc("1", "Alpha Plan", EXCL), doc("2", "Beta Travel", EXCL)]);
