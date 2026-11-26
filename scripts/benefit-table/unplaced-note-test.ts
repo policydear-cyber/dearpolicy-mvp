@@ -90,5 +90,18 @@ test("U10 the count is the same whichever part comes first, and identical repeat
   assert.deepEqual([b[0].times, b[0].others.map((o) => [o.title, o.times])], [1, [["Plan 1", 2]]]);
 });
 
+test("U11 plural wording and exact count for three folded headings; commas and decimals fold as one number; headings sharing only a prefix stay apart", () => {
+  const q = (key: string, section: string, page: number) => ({ section: { key, section, column: null, document: "Plan" }, source: { documentId: "d1", document: "Plan", page, excerpt: "" } });
+  const three = [q("1", "Band 1", 1), q("2", "Band 2", 2), q("3", "Band 3", 3), q("4", "Band 4", 4)];
+  const html = renderToStaticMarkup(createElement(BenefitTableCoverage, { data: { enabled: true, people: [], documents: [], unmatchedCovers: [], illustrationCovers: [], unlinkedSections: three } as unknown as BenefitTableData }));
+  assert.match(html, /3 more like this/);
+  for (const n of [1, 2, 3, 4]) assert.match(html, new RegExp(`file#page=${n}`));
+  const g = unplacedByDocument([q("1", "Limit 1,000.50 a year", 1), q("2", "Limit 25,000 a year", 2)]);
+  assert.equal(g[0].parts.length, 1);
+  assert.equal(g[0].parts[0].others.length, 1);
+  const prefix = unplacedByDocument([q("1", "Hospital cover 1", 1), q("2", "Hospital stay 2", 2), q("3", "Hospital cover", 3)]);
+  assert.equal(prefix[0].parts.length, 3, "same start, different words: not folded");
+});
+
 console.log(`unplaced note: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
