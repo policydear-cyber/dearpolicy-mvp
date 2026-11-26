@@ -48,6 +48,11 @@ test("T8 the Sign in and Sign up text links (Forgot your password, Create an acc
   assert.match(readFileSync("app/reset-password/page.tsx", "utf8"), /<p className="auth-links"[^>]*>\s*<Link href="\/login">Back to sign in<\/Link>/);
   assert.match(readFileSync("app/confirm/page.tsx", "utf8"), /<p className="auth-links"[^>]*>\s*<Link href="\/login">Go to sign in<\/Link>/);
 });
+test("T9 the footer links (Learn the basics, Sign in, Create an account) are 44px: the Live tester measured Sign in and Create an account at 41px", () => {
+  const css = readFileSync("components/public/public-site.css", "utf8");
+  assert.match(rule(css, ".public-footer-links a"), /display: inline-flex; align-items: center; min-height: 44px/);
+  assert.match(rule(css, ".public-footer-links"), /display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px/);
+});
 
 console.log(`tap targets: ${passed} passed, ${failures.length} failed`);
 if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
