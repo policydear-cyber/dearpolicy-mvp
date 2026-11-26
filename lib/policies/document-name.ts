@@ -77,6 +77,9 @@ function upperCode(base:string):boolean {return isCodeName(base)&&!/\p{Ll}/u.tes
 export function isCodeName(name:string):boolean {
   const t=name.trim();
   if(!/\s/.test(t)&&/_/.test(t))return true;
+  // A lone short abbreviation with no vowel ("Dps", "CCI"): a stored shorthand, not a name a household would call the
+  // document. The plain label (insurer and kind) is used instead (Live tester, 26 Nov: "Dps was read").
+  if(/^\p{L}{2,5}$/u.test(t)&&!/[aeiouyAEIOUY]/.test(t))return true;
   // A filing reference ("1105 CD-594 COI_SAF"): two or more number-bearing parts and no word of four letters or more.
   const tokens=t.split(/[\s_\-]+/).filter(Boolean);
   return tokens.filter(w=>/\d/.test(w)).length>=2&&!tokens.some(w=>/^\p{L}{4,}$/u.test(w));
