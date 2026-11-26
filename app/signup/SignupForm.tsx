@@ -57,7 +57,7 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
         return;
       }
       if (data.needsEmailConfirmation) {
-        setNotice("Check your email. Open the link we sent to finish creating your account.");
+        setNotice("Check your email. Open the link we sent to finish creating your account. Then add your family and upload your first policy.");
         return;
       }
       // One full-page navigation (as on sign-in): the app loads with the new session.
@@ -116,7 +116,8 @@ export default function SignupForm({ inviteOnly = false, footer = null }: { invi
           {busy ? "Creating…" : "Create account"}
         </button>
         {!busy && !email.trim() ? <p id="su-ready-hint" className="field-hint">Enter your email to continue.</p>
-          : !busy && !currency ? <p id="su-ready-hint" className="field-hint">Choose your policy currency to continue.</p> : null}
+          : !busy && !currency ? <p id="su-ready-hint" className="field-hint">Choose your policy currency to continue.</p>
+          : !busy && !inviteNext ? <p id="su-ready-hint" className="field-hint" data-testid="signup-next-step">Next: you may need to open a link we email you. Then add your family and upload your first policy.</p> : null}
       </form>
       <p style={{ marginTop: 16 }}>
         Already have an account? <Link href={inviteNext ? `/login?next=${encodeURIComponent(inviteNext)}` : "/login"}>Sign in</Link>
