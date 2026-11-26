@@ -830,6 +830,20 @@ const POLICY_ONLY_WORDS = new Set(("what what's whats how much many is are does 
  * card given for one person's row is given for every other member's own row of the same benefit and document: each
  * person the document is linked to and the table holds a row for is named, never only the one the model picked (live
  * 637c547: a group scheme's hospital cash named one of the two insured people). Each card is that person's own row. */
+/** One condition says what another already says in other words (live, 26 Nov: "provided no other Benefit has been paid to the
+ * Insured Person under this Policy or under any supplementary contracts" and "No other benefit may have been paid under this
+ * policy", both said as separate lines). True only when the shorter one has at least four words of three letters or more, nearly
+ * all of them (three in four) are in the longer one, and both carry the same negations and exceptions, so "must" and "must not"
+ * or "unless" never merge. The longer one is the one kept. */
+const NEGATIONS = new Set(["not", "never", "none", "nor", "without", "unless", "except", "excluding", "excluded"]);
+export function sameConditionInOtherWords(shorter: string, longer: string): boolean {
+  const words = (x: string) => new Set(x.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3));
+  const a = words(shorter), b = words(longer);
+  if (a.size < 4 || a.size > b.size) return false;
+  if ([...a].filter((w) => b.has(w)).length < 0.75 * a.size) return false;
+  const neg = (x: Set<string>) => [...x].filter((w) => NEGATIONS.has(w)).sort().join(",");
+  return neg(a) === neg(b);
+}
 export function amountsFromRows(json: unknown, rows: ChatRow[], household: Household, now: Date = new Date(), question = "", earlier: string[] = [], forNobody = false, withheld: WithheldRow[] = []): { json: unknown; report: RowReport } {
   const report: RowReport = { dropped: [], labels: [], days: {}, conditionPoints: [], cards: {} };
   // A condition said as a point of its own, for the rows whose cards it belongs to (dropConditionsOnCards).
@@ -1037,6 +1051,9 @@ export function amountsFromRows(json: unknown, rows: ChatRow[], household: House
       if (carried.includes(c.text)) continue;
       const text = `${names(row)} also depends on this: ${c.text}`, key = `${text}|${c.at.docIndex}`;
       const seen = away.get(key);
+      // One the answer already says in other words for the same benefit is not said again (the longer is kept).
+      if (!seen && points.some((q) => typeof q.text === "string" && q.text.startsWith(`${names(row)} also depends on this: `)
+        && sameConditionInOtherWords(c.text, q.text.slice(`${names(row)} also depends on this: `.length)))) continue;
       pointFor(text, c.text, row);
       if (seen) { if (seen.person !== baseName(row.person)) seen.person = null; continue; }
       const st: Record<string, unknown> = { kind: "fact", text, person: baseName(row.person), document: documentId(c.at.docIndex),
