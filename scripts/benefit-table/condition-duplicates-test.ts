@@ -37,6 +37,11 @@ test("D4 opposite or different wording is never merged: numbers, direction words
   no("The claim must be made within thirty days of the accident date", "The claim must not be made within thirty days of the accident date or later");
   no("Benefit is paid when the person is employed in Singapore full time", "Benefit is paid unless the person is employed in Singapore full time");
   no("Benefit is paid when the person is employed in Singapore full time", "Benefit is paid when the person is employed overseas full time");
+  // The same words in another order say another thing: who depends on whom, who is paid to whom, which age comes first.
+  no("The spouse is covered only if the insured person is covered", "The insured person is covered only if the spouse is covered");
+  no("Benefit payable on death of the insured person to the nominee", "Benefit payable on death of the nominee to the insured person");
+  no("Employee must be employed by the company and the insured child", "Employee must be employed by the insured child and the company");
+  no("Child aged 18 to 21 and in full time education", "Child aged 21 to 18 and in full time education");
 });
 test("D5 a very short condition is never merged", () => {
   assert.equal(same("Must be insured", "The insured person must be insured for at least ninety days"), false);

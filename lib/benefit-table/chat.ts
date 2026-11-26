@@ -842,10 +842,13 @@ const FLIPS = new Set(("no not never none nor without unless except excluding ex
 const FILLER = new Set("a an the this that these those to of be is are was were been being has have had may might do does did it its which who whom whose".split(" "));
 export function sameConditionInOtherWords(shorter: string, longer: string): boolean {
   const tokens = (x: string) => x.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  const a = tokens(shorter), b = new Set(tokens(longer));
+  const a = tokens(shorter), lt = tokens(longer), b = new Set(lt);
   const content = a.filter((w) => !FILLER.has(w));
-  if (new Set(content).size < 4 || a.length > tokens(longer).length) return false;
-  if (!content.every((w) => b.has(w))) return false;
+  if (new Set(content).size < 4 || a.length > lt.length) return false;
+  // Every content word is in the longer one, and in the same order: "the spouse is covered only if the insured is" is not
+  // "the insured is covered only if the spouse is".
+  let at = 0;
+  for (const w of content) { const found = lt.indexOf(w, at); if (found < 0) return false; at = found + 1; }
   const pick = (xs: Iterable<string>, keep: (w: string) => boolean) => [...new Set([...xs].filter(keep))].sort().join(",");
   const flip = (w: string) => FLIPS.has(w), num = (w: string) => /\d/.test(w);
   return pick(a, flip) === pick(b, flip) && pick(a, num) === pick(b, num);
