@@ -109,6 +109,7 @@
     "format:late-section-shift-test": "node --import tsx scripts/format/late-section-shift-test.ts",
     "format:tap-target-test": "node --import tsx scripts/format/tap-target-test.ts",
     "format:signup-next-step-test": "node --import tsx scripts/format/signup-next-step-test.ts",
+    "format:page-error-test": "node --import tsx scripts/format/page-error-test.ts",
     "benefit-table:unplaced-note-test": "node --import tsx scripts/benefit-table/unplaced-note-test.ts",
     "chat:stale-revision-resend-test": "node --import tsx scripts/chat/stale-revision-resend-test.ts",
     "chat:no-family-send-test": "node --import tsx scripts/chat/no-family-send-test.ts",
