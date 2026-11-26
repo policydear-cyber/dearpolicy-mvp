@@ -105,9 +105,13 @@ function Qualifiers({ s, point = false }: { s: AnswerStatement; point?: boolean 
   </>;
 }
 
+/** Said once above a run of printed amounts, in place of a label on each card (components/answer-cards: manyPrinted). */
+const PRINTED_NOTE_FROM = 3;
+const PRINTED_NOTE = `${TERMS_LABEL}: these are the amounts your documents print. What is paid depends on what happened and each policy\u2019s terms.`;
+
 /** An amount card: whose it is, the figure, the condition it depends on, its own basis and conditions, and where it
  * comes from as a chip. Nothing that limits the amount moves off its card. */
-function AmountCard({ s, openSource }: { s: AnswerStatement; openSource: (id: string) => void }) {
+function AmountCard({ s, openSource, quiet = false }: { s: AnswerStatement; openSource: (id: string) => void; quiet?: boolean }) {
   const a = s.amount!;
   // A benefit's printed terms are not worked out for this event: drawn quieter, never as a figure for the case.
   const printed = s.kind === "benefit_terms";
@@ -118,7 +122,7 @@ function AmountCard({ s, openSource }: { s: AnswerStatement; openSource: (id: st
       {/* Only what changes how to read this figure is labelled: a policy's terms (Critic R121-3) and a currency the
           document does not state (TE #101). "Illustration" and "printed amount" are not drawn under every figure; the
           footer says what every amount is. */}
-      {printed || !a.currencyResolved ? <small>{[printed ? TERMS_LABEL : null, a.currencyResolved ? null : "Currency not stated"].filter(Boolean).join(" · ")}</small> : null}
+      {(printed && !quiet) || !a.currencyResolved ? <small>{[printed && !quiet ? TERMS_LABEL : null, a.currencyResolved ? null : "Currency not stated"].filter(Boolean).join(" · ")}</small> : null}
     </div>
     {/* With no conditions[] from the server, the whole checked sentence stays on the card; it is never cut client-side. */}
     {!s.conditions?.length && s.fullText && norm(s.fullText) !== norm(s.text) ? <p className="answer-card-condition" data-testid="answer-card-condition">{markless(s, s.fullText)}</p> : null}
@@ -202,8 +206,14 @@ export function AnswerCards({ answer, render, sources, prose = [], after, stepsF
     const kept = sentences(full).filter((x) => !alreadyShown.has(norm(x)));
     return kept.length === sentences(full).length ? full : kept.join(" ");
   };
+  // Many printed amounts at once (a "what am I covered for?" answer): the same two words under every one of ten cards read
+  // as noise, and a flat sum looks doubtful (Live tester, 25 Nov). Say it once above them; a lone card keeps its own label.
+  // Only when every amount card is printed terms: beside a figure worked out for this case, "the amounts your documents
+  // print" would read as covering it too (Critic #595), so each printed card then keeps its own label.
+  const cardStatements = statements.filter(asCard);
+  const manyPrinted = cardStatements.length >= PRINTED_NOTE_FROM && !statements.some((s) => s.amount && (s.kind !== "benefit_terms" || s.amount.illustration));
   const one = (s: AnswerStatement) => {
-    if (asCard(s)) return <AmountCard key={s.id} openSource={openSource} s={{ ...s, text: render(s.text), fullText: render(s.fullText ?? ""), basis: s.basis ? render(s.basis) : s.basis }} />;
+    if (asCard(s)) return <AmountCard key={s.id} openSource={openSource} quiet={manyPrinted} s={{ ...s, text: render(s.text), fullText: render(s.fullText ?? ""), basis: s.basis ? render(s.basis) : s.basis }} />;
     const text = markless(s, pointText(s));
     if (!text && !s.basis && !s.conditions?.length) return null;
     return <div key={s.id} className={`answer-point${s.kind === "uncertainty" ? " caution" : ""}`}>
@@ -249,6 +259,7 @@ export function AnswerCards({ answer, render, sources, prose = [], after, stepsF
   return <div className="answer-cards">
     {bottomLine ? <p className="answer-bottom-line" data-testid="answer-bottom-line">{render(bottomLine)}</p> : null}
     {showSummary ? <p className="answer-point">{summary}</p> : null}
+    {manyPrinted ? <p className="answer-cards-foot" data-testid="answer-printed-note">{PRINTED_NOTE}</p> : null}
     {/* A question about what to do: the steps come before the amounts. */}
     {stepsFirst ? after : null}
     {blocks}

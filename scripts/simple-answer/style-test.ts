@@ -90,6 +90,29 @@ t("a figure whose currency the document does not state says so on its card; othe
   assert.doesNotMatch(card(true), /Currency not stated|illustration|printed amount/);
   assert.match(card(true, "benefit_terms"), /Depends on your case/);
 });
+const printedCards = (n: number) => renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],
+  statements: Array.from({ length: n }, (_, i) => ({ id: "p" + i, kind: "benefit_terms", personName: "Lim Ah Kow", text: "Benefit " + i + ".", fullText: "Benefit " + i + ".", conditions: [], amount: { text: "S$" + (i + 1) + ",000", currencyResolved: true, illustration: false } })) } as unknown as StructuredAnswer, render: (x: string) => x, prose: [] }));
+t("many printed amounts say 'Depends on your case' once above them, not on every card; two keep their own label", () => {
+  const many = printedCards(5);
+  assert.equal((many.match(/Depends on your case/g) ?? []).length, 1, "once");
+  assert.match(many, /data-testid="answer-printed-note"/);
+  assert.equal((many.match(/data-testid="answer-card"/g) ?? []).length, 5, "every amount stays");
+  assert.equal((printedCards(2).match(/Depends on your case/g) ?? []).length, 2, "two cards keep their own label");
+  assert.doesNotMatch(printedCards(2), /answer-printed-note/);
+  assert.match(printedCards(3), /answer-printed-note/, "exactly three printed cards get the note");
+  assert.equal((printedCards(3).match(/Depends on your case/g) ?? []).length, 1);
+  // Critic #595: a worked-out figure beside printed ones is never covered by "the amounts your documents print".
+  const mixed = renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],
+    statements: [...Array.from({ length: 3 }, (_, i) => ({ id: "m" + i, kind: "benefit_terms", personName: "Lim Ah Kow", text: "Benefit " + i + ".", fullText: "Benefit " + i + ".", conditions: [], amount: { text: "S$" + (i + 1) + ",000", currencyResolved: true, illustration: false } })),
+      { id: "m9", kind: "calculation", personName: "Lim Ah Kow", text: "For a 4-day stay.", fullText: "For a 4-day stay.", conditions: [], amount: { text: "S$400", currencyResolved: true, illustration: true } }] } as unknown as StructuredAnswer, render: (x: string) => x, prose: [] }));
+  assert.doesNotMatch(mixed, /answer-printed-note/, "no note beside a worked-out figure");
+  assert.equal((mixed.match(/Depends on your case/g) ?? []).length, 3, "each printed card keeps its own label");
+  // A worked-out figure with no person is a plain point, not a card, and still blocks the note.
+  const noPerson = renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],
+    statements: [...Array.from({ length: 3 }, (_, i) => ({ id: "q" + i, kind: "benefit_terms", personName: "Lim Ah Kow", text: "Benefit " + i + ".", fullText: "Benefit " + i + ".", conditions: [], amount: { text: "S$" + (i + 1) + ",000", currencyResolved: true, illustration: false } })),
+      { id: "q9", kind: "calculation", text: "For a 4-day stay.", fullText: "For a 4-day stay.", conditions: [], amount: { text: "S$400", currencyResolved: true, illustration: true } }] } as unknown as StructuredAnswer, render: (x: string) => x, prose: [] }));
+  assert.doesNotMatch(noPerson, /answer-printed-note/, "no note beside a worked-out figure that has no person");
+});
 t("a point's conditions are headed as its conditions, never a bare line; a card's sit under its figure (live 637c547)", () => {
   const html = (amount: unknown, conditions: string[]) => renderToStaticMarkup(createElement(AnswerCards, { answer: { summary: "", bottomLine: "x", nextSteps: [], questions: [], citations: [],
     statements: [{ id: "s2", kind: "fact", personName: "Ana Ruiz", text: "The group scheme pays a daily hospital cash amount from the 11th day of a stay.", fullText: null, conditions, amount }] } as unknown as StructuredAnswer, render: (x: string) => x, prose: [] }));
