@@ -21,7 +21,7 @@ const learn = readFileSync("components/learn/learn.css", "utf8");
 
 test("T1 Coverage person tabs are 44px", () => { assert.match(rule(globals, ".cov-people a"), /min-height: 44px/); });
 test("T2 Coverage 'All N benefits' rows are 44px", () => { assert.match(rule(globals, ".cov-all summary"), /min-height: 44px/); });
-test("T3 the 'parts not in this summary' row is 44px and centred", () => { const r = rule(globals, ".cov-unplaced summary"); assert.match(r, /min-height: 44px/); assert.match(r, /align-items: center/); });
+test("T3 the 'parts not in this summary' row is 44px and keeps its disclosure arrow", () => { const r = rule(globals, ".cov-unplaced summary"); assert.match(r, /min-height: 44px/); assert.doesNotMatch(r, /display: *(flex|grid)/, "a flex summary loses its arrow"); });
 test("T4 Learn shelf chips are 44px", () => { assert.match(rule(learn, ".learn-shelf-nav a"), /min-height: 44px/); });
 test("T5 the Yearly/Monthly toggle is 44px", () => { assert.match(rule(plans, ".plan-interval button"), /min-height: 44px/); });
 

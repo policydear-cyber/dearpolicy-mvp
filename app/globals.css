@@ -1485,7 +1485,7 @@ div.answer-point { display: grid; gap: 4px; }
   .cov-table td.b { grid-column: 1; grid-row: 1 / 3; } .cov-table td.v { grid-column: 2; grid-row: 1; max-width: 44vw; } .cov-table td.p { grid-column: 2; grid-row: 2; }
 }
 .cov-also li[data-testid="table-unplaced"] { display: block; }
-.cov-unplaced summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.cov-unplaced summary { cursor: pointer; min-height: 44px; box-sizing: border-box; padding-block: 10px; }
 .cov-unplaced-note { margin: 6px 0 0; color: var(--muted); font-size: var(--fs-sm); }
 .cov-unplaced ul { list-style: none; margin: 6px 0 0; padding: 0; }
 .cov-unplaced li { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid var(--line); }
