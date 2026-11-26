@@ -1485,8 +1485,10 @@ div.answer-point { display: grid; gap: 4px; }
 }
 .cov-also li[data-testid="table-unplaced"] { display: block; }
 .cov-unplaced summary { cursor: pointer; min-height: 24px; }
+.cov-unplaced-note { margin: 6px 0 0; color: var(--muted); font-size: var(--fs-sm); }
 .cov-unplaced ul { list-style: none; margin: 6px 0 0; padding: 0; }
 .cov-unplaced li { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.cov-unplaced li > span { min-width: 0; overflow-wrap: anywhere; }
 .cov-unplaced small { color: var(--muted); font-size: var(--fs-xs); margin-left: 6px; }
 
 /* Account settings: Household, People and Plan usage as tabs under one title. */
