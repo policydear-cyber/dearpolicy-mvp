@@ -23,7 +23,7 @@ function Meter({label,used,included,detail,over,testId}:{label:string;used:numbe
   const beyond=included!=null&&used>included;
   return <div className="plan-meter" data-testid={testId}>
     <div className="plan-meter-head"><strong>{label}</strong><span>{included==null?`${used} kept`:beyond?`${used}, ${included} included`:`${used} of ${included}`}</span></div>
-    {included!=null?<div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={included} aria-valuenow={Math.min(used,included)} aria-label={label}><div className="progress-fill" style={{width:Math.max(used?2:0,pct)+"%"}}/></div>:null}
+    {included!=null?<div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={included} aria-valuenow={Math.min(used,included)} aria-valuetext={beyond?`${used}, ${included} included`:undefined} aria-label={label}><div className="progress-fill" style={{width:Math.max(used?2:0,pct)+"%"}}/></div>:null}
     {beyond&&over?<small data-testid={testId+"-over"}>{over}</small>:null}
     {detail?<small>{detail}</small>:null}
   </div>;
@@ -85,7 +85,7 @@ export default function PlanUsagePage(){
         over={`That is more than the ${plan.name} plan includes. Your documents and earlier answers are still here.`}
         detail={plan.unlimitedDocuments?`${documentsLabel(plan)}, within fair use of ${plan.documents}.`:"Documents DearPolicy couldn’t read, and older copies you replaced, don’t count."}/>
       <Meter label="Questions this month" used={sub.questionsThisMonth} included={plan.questionsPerMonth} testId="plan-questions"
-        over={`That is more than the ${plan.name} plan includes. Your documents and earlier answers are still here.`}
+        over={`That is more than the ${plan.name} plan includes. Your earlier answers are still here.`}
         detail={`Questions start again on ${questionsResetLabel()}.`}/>
       <p>Everyone in your family is included on every plan.</p>
     </section>}
