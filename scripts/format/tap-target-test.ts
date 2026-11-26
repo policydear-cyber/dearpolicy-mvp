@@ -51,7 +51,7 @@ test("T8 the Sign in and Sign up text links (Forgot your password, Create an acc
 test("T9 the footer links (Learn the basics, Sign in, Create an account) are 44px: the Live tester measured Sign in and Create an account at 41px", () => {
   const css = readFileSync("components/public/public-site.css", "utf8");
   assert.match(rule(css, ".public-footer-links a"), /display: inline-flex; align-items: center; min-height: 44px/);
-  assert.match(rule(css, ".public-footer-links"), /display: flex; flex-wrap: wrap; align-items: center/);
+  assert.match(rule(css, ".public-footer-links"), /display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px/);
 });
 
 console.log(`tap targets: ${passed} passed, ${failures.length} failed`);
