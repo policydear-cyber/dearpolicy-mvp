@@ -19,7 +19,7 @@ import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } fr
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
 import { coversPlanPrompt } from "@/lib/policies/plan-choice";
 import { documentCardTitle } from "@/lib/policies/document-name";
-import { authorityLabel, isOwnDocument, plainAuthority, readAsPolicyDocument } from "@/lib/policies/document-filter";
+import { authorityLabel, cardKindLabel, isOwnDocument, plainAuthority, readAsPolicyDocument } from "@/lib/policies/document-filter";
 import { uploadOverrideLine } from "@/lib/policies/upload-override";
 import { PolicyFolders } from "@/components/policy-folders";
 import type { FolderView } from "@/lib/policies/folder-view";
@@ -551,7 +551,7 @@ export default function PoliciesPage() {
           <div className="document-main">
           <div className="document-head">
             <div className="policy-logo">{(shownInsurer(policy.insurer) ?? documentName(policy)).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong>{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage, waitedMinutes).eta : [shownInsurer(policy.insurer) ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
+            <div className="document-title"><strong>{documentName(policy)}</strong>{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage, waitedMinutes).eta : [shownInsurer(policy.insurer) ?? "Insurer not known yet", cardKindLabel(readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role), authorityLabel(policy)), authorityLabel(policy), ...numbers].filter(Boolean).join(" · ")}</span>}
               {/* Its numbers sit with what it is, so the actions stand alone. */}
               {!!numbers.length && (processing || policy.processing_status === "failed") && <small className="document-numbers">{numbers.join(" · ")}</small>}</div>
               {!processing && !quarantineHeld && !scanRejected && (() => {

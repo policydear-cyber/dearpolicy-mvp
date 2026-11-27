@@ -382,6 +382,7 @@ test("Documents: a slogan or sentence stored as the insurer is never shown as th
   assert.match(page, /\[shownInsurer\(policy\.insurer\) \?\? "Insurer not known yet",/);
   assert.match(page, /\(shownInsurer\(policy\.insurer\) \?\? documentName\(policy\)\)/);
   assert.match(page, /showValue\(shownInsurer\(d\.insurer\)\)/);
+  assert.match(page, /cardKindLabel\(readAsPolicyDocument\(policy\) \? "Policy document" : roleLabel\(policy\.document_role\), authorityLabel\(policy\)\)[^\n]*\.filter\(Boolean\)\.join\(" · "\)/, "a card never says 'Policy wording · General wording'");
 });
 
 test("Documents: a long reading never promises a minute, keeps checking for an hour, and says it is still working", () => {
