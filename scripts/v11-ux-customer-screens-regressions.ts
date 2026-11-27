@@ -251,4 +251,14 @@ test("'not found in the uploaded documents' never becomes 'not covered' on house
   assert.ok(!/x\.currency\?\?"SGD"/.test(read("app/coverage/page.tsx")), "no assumed currency");
 });
 
+test("the empty Ask screen shows how to say what happened, and counts only documents already read", () => {
+  const page = read("app/chat/page.tsx");
+  assert.match(page, /If something happened, say who and what, for example &ldquo;my daughter was admitted to hospital last night&rdquo;\./);
+  // Ready means finished reading and not rejected: a document still being read or unreadable is never counted.
+  assert.match(page, /ready:policies\.filter\(p=>p\.processing_status==="ready"&&\(p\.quarantine_status\?\?"clean"\)!=="rejected"\)\.length/);
+  assert.match(page, /ready>0\?<p className="chat-library-note" data-testid="chat-ready-note">Answers use the \{ready===1\?"one document":`\$\{ready\} documents`\} DearPolicy has read so far\./);
+  const welcome = page.slice(page.indexOf("function ChatWelcome"), page.indexOf("function ChatContent"));
+  assert.ok(!/S\$|\$\d|covered|not covered/i.test(welcome.replace(/Answers use|say who and what/g, "")), "the welcome promises no amount or verdict");
+});
+
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);
