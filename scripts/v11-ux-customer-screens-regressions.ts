@@ -390,6 +390,8 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.equal(printedDay("2022-02-31"), "31/02/2022", "a day the calendar lacks keeps the document's digits, never rolls to another date");
   assert.equal(printedDay("2024-02-29"), "29 Feb 2024");
   assert.equal(printedDay("garbage"), "garbage");
+  for (const [iso, digits] of [["2022-13-06", "06/13/2022"], ["2022-10-00", "00/10/2022"], ["2022-12-32", "32/12/2022"], ["2022-00-10", "10/00/2022"]]) assert.equal(printedDay(iso), digits, `${iso} never throws and keeps the digits`);
+  assert.match(verify, /!Number\.isNaN\(t\.getTime\(\)\)/);
   assert.match(verify, /return real \? sgDay\(iso\) : iso\.split\("-"\)\.reverse\(\)\.join\("\/"\);/);
   const family = read("app/family/page.tsx");
   // Help on the two required fields, and the spouse option names partners; both stay required (DC 17 Nov rule).

@@ -3271,7 +3271,8 @@ function onlyNotATotal(sentence: string, docNames: string[] = [], differOk = fal
 /** A base figure's printed date in the answer's style ("6 Oct 2022"). A day the calendar does not have (31/02/2022) would
  * roll over to another date, so it keeps the document's own digits instead. */
 export function printedDay(iso: string): string {
-  const real = /^\d{4}-\d{2}-\d{2}$/.test(iso) && new Date(`${iso}T00:00:00Z`).toISOString().slice(0, 10) === iso;
+  const t = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00Z`) : null;
+  const real = !!t && !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === iso; // an impossible date is an Invalid Date, and toISOString() on it throws
   return real ? sgDay(iso) : iso.split("-").reverse().join("/");
 }
 
