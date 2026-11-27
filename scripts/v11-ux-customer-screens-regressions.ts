@@ -382,6 +382,10 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.match(page, / · amount not yet confirmed against the page<\/small>/);
   assert.doesNotMatch(page, /source-verified|Cover this document confirms/);
   // A new household is told it can start with one person (Live tester, 27 Nov).
+  // One date style in a chat answer: the base's printed date is written like the neighbouring "As printed 6 Oct 2022", never "06/10/2022" (Live tester, 27 Nov).
+  const verify = read("lib/simple-chat/verify.ts");
+  assert.match(verify, /, as of \$\{sgDay\(c\.base\.asOf\)\}/);
+  assert.doesNotMatch(verify, /\.split\("-"\)\.reverse\(\)\.join\("\/"\)/);
   const family = read("app/family/page.tsx");
   // Help on the two required fields, and the spouse option names partners; both stay required (DC 17 Nov rule).
   assert.match(family, /Used to work out which age limits apply\./);

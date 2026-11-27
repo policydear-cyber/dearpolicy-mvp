@@ -3274,7 +3274,7 @@ function basisOf(household: Household, c: Checked): string {
   if (!c.base) return `${po.percent}% of ${po.baseAmount}`;
   const bdoc = household.documents[c.base.found.docIndex];
   const cover = c.base.cover.replace(/\b\w/g, (x) => x.toUpperCase());
-  const asOf = c.base.asOf ? `, as of ${c.base.asOf.split("-").reverse().join("/")}` : "";
+  const asOf = c.base.asOf ? `, as of ${sgDay(c.base.asOf)}` : "";
   return `${po.percent}% of ${c.person}'s ${cover ? cover + " " : ""}sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc, c.base.found.page).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
 }
 
