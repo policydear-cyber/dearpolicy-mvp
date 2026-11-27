@@ -18,7 +18,8 @@ globalThis.fetch = (async () => { throw new TypeError("fetch failed"); }) as typ
 import * as errors from "@/lib/documents/processing-errors";
 import { ACCEPTED_FORMATS_MESSAGE, NOT_A_REAL_PDF_MESSAGE, validateDocumentUpload } from "@/lib/documents/formats";
 import { failedDocumentAdvice, unreadablePagesAdvice, notReadPagesAdvice } from "@/lib/documents/failure-advice";
-import { UPLOAD_COPY, documentReadLabel, isReadingNotice, pageList, readingNotice, readingFinishedSummary, readingWaitCopy, unreadPageNumbers, uploadFailureMessage } from "@/lib/documents/upload-problems";
+import { POLL_LIMIT_MS, pollDelay } from "@/lib/documents/poll-schedule";
+import { LONG_WAIT_MINUTES, UPLOAD_COPY, documentReadLabel, isReadingNotice, pageList, readingNotice, readingFinishedSummary, readingWaitCopy, unreadPageNumbers, uploadFailureMessage } from "@/lib/documents/upload-problems";
 import { customerError, customerMessage } from "@/components/customer-text";
 import { UploadError, uploadPolicyDocument } from "@/components/upload-document";
 
@@ -346,7 +347,16 @@ test("OCR timeout or retries exhausted: our side, nothing wrong with the file, a
   }
   assert.match(scheduled.note, /tries again on its own/);
   assert.match(readingWaitCopy("ocr").eta, /few minutes/);
-  assert.equal(readingWaitCopy("reading_pdf").eta, "Usually ready in under a minute");
+  // A normal reading promises no time (a 70-page booklet takes many minutes); once a page has watched it for a while it says it is still working.
+  assert.equal(readingWaitCopy("reading_pdf").eta, "Reading now");
+  assert.doesNotMatch(readingWaitCopy("reading_pdf").note + readingWaitCopy("reading_pdf").eta, /under a minute|usually/i);
+  assert.match(readingWaitCopy("reading_pdf").note, /long one[^.]*many minutes/);
+  assert.match(readingWaitCopy("reading_pdf", LONG_WAIT_MINUTES).title, /^Still reading/);
+  assert.match(readingWaitCopy("reading_pdf", LONG_WAIT_MINUTES).note, /nothing is wrong[^.]*\.[^.]*don't need to wait/i);
+  assert.equal(readingWaitCopy("reading_pdf", LONG_WAIT_MINUTES - 1).title, "Reading this document…");
+  // The retry and scanned-page notes keep their own wording however long it has waited.
+  assert.equal(readingWaitCopy("retrying", 30).eta, "Taking a little longer than usual");
+  assert.equal(readingWaitCopy("ocr", 30).eta, "Can take a few minutes");
   // Every attempt used up, with no readable text layer to fall back on: the document failed for a service reason.
   const advice = failedDocumentAdvice(errors.DOCUMENT_READING_SERVICE_MESSAGE, { hasPages: false });
   assert.equal(advice.kind, "service");
@@ -478,4 +488,17 @@ test("every Read again and Try reading it again button asks first: the first pre
   const advice = failedDocumentAdvice(errors.UNREADABLE_DOCUMENT_MESSAGE, { hasPages: true });
   assert.equal(advice.nextStep, "read_again");
   assert.equal(advice.uploadAction, "Upload a clearer copy");
+});
+
+test("checking on a long reading: fast, then slower, backs off after a failed check, and stops only after an hour", () => {
+  assert.equal(pollDelay(0, 0), 1400);
+  assert.equal(pollDelay(60_000, 0), 1400);
+  assert.equal(pollDelay(61_000, 0), 5000);
+  assert.equal(pollDelay(10 * 60_000, 0), 5000);
+  assert.equal(pollDelay(10 * 60_000 + 1, 0), 15_000);
+  // A failed check doubles the wait, at most eight times, and a good one resets it.
+  assert.deepEqual([1, 2, 3, 4, 9].map((m) => pollDelay(0, m)), [2800, 5600, 11_200, 11_200, 11_200].map((_, i) => 1400 * [2, 4, 8, 8, 8][i]));
+  assert.equal(pollDelay(0, 0), 1400);
+  assert.equal(pollDelay(20 * 60_000, 9), 120_000);
+  assert.equal(POLL_LIMIT_MS, 3_600_000);
 });

@@ -12,7 +12,8 @@ import { coverReadingPending, failedDocumentAdvice, notReadPagesAdvice, readInPa
 import { MAX_UPLOAD_LABEL, UploadError, uploadPolicyDocument } from "@/components/upload-document";
 import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-role";
 import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
-import { CONFIRM_READ_AGAIN, documentReadLabel, isReadingNotice, pressReadAgain, readingFinishedSummary, readingNotice, readingWaitCopy } from "@/lib/documents/upload-problems";
+import { POLL_LIMIT_MS, pollDelay } from "@/lib/documents/poll-schedule";
+import { CONFIRM_READ_AGAIN, LONG_WAIT_MINUTES, documentReadLabel, isReadingNotice, pressReadAgain, readingFinishedSummary, readingNotice, readingWaitCopy } from "@/lib/documents/upload-problems";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
@@ -229,11 +230,14 @@ export default function PoliciesPage() {
   // being read, or could not be read, for Coverage (reading.documents). Neither is needed for the page to work.
   const [found, setFound] = useState<Record<string, string[]>>({});
   const [benefitReading, setBenefitReading] = useState<Record<string, ReadingDocument>>({});
-  async function refresh() {
+  /** `polling`: a background check that gets no list back (an error, offline) keeps what is shown, so a hiccup in a long
+   * reading never empties the library or ends the polling as if every document had finished. Returns whether it got one. */
+  async function refresh(polling = false): Promise<boolean> {
     const [f, p] = await Promise.all([
       fetch("/api/family", { cache: "no-store" }).then(async (r) => r.ok ? r.json() : null).catch(() => null) as Promise<{ family?: Member[] } | null>,
-      fetch("/api/policies", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/policies", { cache: "no-store" }).then((r) => r.json()).catch((err) => { if (!polling) throw err; return null; }),
     ]);
+    if (polling && !Array.isArray(p?.policies)) return false;
     // What each document was found to pay for. A household on the benefit table: from its table rows (documentTableKinds),
     // never from its Coverage rows, which stopped updating; the table not loaded (an error, offline): no Found line.
     // Otherwise from the Coverage rows; what only a plan type suggests is never shown as cover.
@@ -256,24 +260,45 @@ export default function PoliciesPage() {
     setPlanChoice(p.planChoice !== false);
     setLoaded(true);
     if (p.documentSafetyMode === "not_scanned_prototype" || p.documentSafetyMode === "malware_scan") setDocumentSafetyMode(p.documentSafetyMode);
+    return true;
   }
 
   useEffect(() => { void refresh(); }, []);
 
   const activeCount = policies.filter(isProcessing).length;
-  // Bounded polling: fast for the first minute, then relaxed, and never
-  // infinite -- after ten minutes of continuous activity it stops and asks
-  // the person to refresh, instead of hammering the server forever.
+  // Bounded polling: fast for the first minute, relaxed up to ten minutes, slower after that, and never infinite --
+  // a long document can take half an hour or more, so the page keeps checking for an hour before it asks the person
+  // to check again. How long it has watched is kept (in minutes) so the wait copy can say it is still working.
   const pollingSince = useRef<number | null>(null);
   const [pollingPaused, setPollingPaused] = useState(false);
+  const [waitedMinutes, setWaitedMinutes] = useState(0);
+  // A document being read that the page had not seen before (an upload) while it had stopped checking starts the checking
+  // again from the beginning. Ids, not a count: another document may have finished meanwhile.
+  const activeIds = policies.filter(isProcessing).map((p) => p.id).join(",");
+  const lastActive = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!activeCount) { pollingSince.current = null; setPollingPaused(false); return; }
+    const now = new Set(activeIds ? activeIds.split(",") : []);
+    if (pollingPaused && [...now].some((id) => !lastActive.current.has(id))) { pollingSince.current = Date.now(); setPollingPaused(false); }
+    lastActive.current = now;
+  }, [activeIds, pollingPaused]);
+  useEffect(() => {
+    if (!activeCount) { pollingSince.current = null; setPollingPaused(false); setWaitedMinutes(0); return; }
     pollingSince.current ??= Date.now();
-    const elapsed = Date.now() - pollingSince.current;
-    if (elapsed > 10 * 60_000) { setPollingPaused(true); return; }
-    const timer = window.setInterval(() => { void refresh(); }, elapsed > 60_000 ? 5000 : 1400);
-    return () => window.clearInterval(timer);
-  }, [activeCount]);
+    let timer: number | undefined, stopped = false, misses = 0;
+    const tick = () => {
+      const elapsed = Date.now() - (pollingSince.current ?? Date.now());
+      setWaitedMinutes(Math.floor(elapsed / 60_000));
+      if (elapsed > POLL_LIMIT_MS) { setPollingPaused(true); return; }
+      // Slower after a failed check, and no checks at all while the tab is hidden: a long reading needs neither.
+      const wait = pollDelay(elapsed, misses);
+      timer = window.setTimeout(() => {
+        const check = document.hidden ? Promise.resolve(true) : refresh(true).catch(() => false);
+        void check.then((got) => { misses = got ? 0 : misses + 1; if (!stopped) tick(); });
+      }, wait);
+    };
+    tick();
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [activeCount, pollingPaused]); // "Check again" clears the pause, so the loop starts again even when the count is the same
 
   // The documents that were being read, so the line said when they finish is about them: a failed one, or one with a
   // page not read, is named, and "ready" is never said of a document with a page missing (lib/documents/upload-problems.ts).
@@ -464,8 +489,8 @@ export default function PoliciesPage() {
     <UpgradePrompt place="documents"/>
 
 
-    {pollingPaused && <div className="processing-banner"><div><strong>Still reading in the background.</strong><small> This page stopped checking on its own after ten minutes. <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
-    {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>This usually takes under a minute. This page updates on its own, and you can keep using DearPolicy.</small></div></div>}
+    {pollingPaused && <div className="processing-banner"><div><strong>Still reading in the background.</strong><small> This page stopped checking on its own after an hour. <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(true).catch(() => false); }}>Check again</button></small></div></div>}
+    {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>{waitedMinutes >= LONG_WAIT_MINUTES ? "Still working. A long document can take a good while, and nothing is wrong. " : "A long document can take many minutes. "}This page updates on its own, and you can keep using DearPolicy.</small></div></div>}
 
 
 
@@ -524,7 +549,7 @@ export default function PoliciesPage() {
           <div className="document-main">
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? documentName(policy)).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong>{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage).eta : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
+            <div className="document-title"><strong>{documentName(policy)}</strong>{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage, waitedMinutes).eta : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
               {/* Its numbers sit with what it is, so the actions stand alone. */}
               {!!numbers.length && (processing || policy.processing_status === "failed") && <small className="document-numbers">{numbers.join(" · ")}</small>}</div>
               {!processing && !quarantineHeld && !scanRejected && (() => {
@@ -548,12 +573,12 @@ export default function PoliciesPage() {
           </div>}
 
           {processing && <div className="document-progress" aria-live="polite">
-            <div className="document-progress-copy"><strong>{policy.processing_stalled ? "Taking longer than usual" : readingWaitCopy(policy.processing_stage).title}</strong></div>
+            <div className="document-progress-copy"><strong>{policy.processing_stalled ? "Taking longer than usual" : readingWaitCopy(policy.processing_stage, waitedMinutes).title}</strong></div>
             <div className="progress-track"><div className="progress-fill" style={{ width: `${Math.max(4, pct)}%` }}/></div>
             {/* Stalled means nothing is reading it now: say so and offer to start it, never "will keep trying" (25 Oct). */}
             {policy.processing_stalled
               ? <><small>Reading has not started. Nothing is lost, and you do not need to upload it again.</small>{canManage && <div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try again"}</button></div>}</>
-              : <small>{readingWaitCopy(policy.processing_stage).note}</small>}
+              : <small>{readingWaitCopy(policy.processing_stage, waitedMinutes).note}</small>}
           </div>}
 
           {/* Read in part: which pages, and the next step that can work (lib/documents/failure-advice.ts). It already says
@@ -622,7 +647,7 @@ export default function PoliciesPage() {
         </div>;
       })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : familyKnown && !family.length ? "No documents yet. First add the people your policies cover, then upload a policy schedule, certificate, renewal notice or benefits booklet. DearPolicy reads it for you." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above, and DearPolicy reads it for you."}</div>}</div>
       {/* After the list: the folders load a few seconds after the page and grow, so above the list they pushed the pills and every row down (Live tester, 26 Nov: layout shift 0.89 on Documents). */}
-      {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={refresh} onFolders={onFolders}/>}
+      {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={async () => { await refresh(); }} onFolders={onFolders}/>}
     </section>
   </div>;
 }
