@@ -188,7 +188,7 @@ test.describe.serial("document ingestion in prototype document-safety mode", () 
     await expect(panel).toBeVisible();
     await expect(panel.locator('[data-testid="detail-insurer"]')).toHaveText("Synthetic Test Insurer");
     await expect(panel.locator('[data-testid="detail-policy-number"]')).toHaveText(`${PREFIX}-PN-001`);
-    await expect(panel.locator('[data-testid="detail-expiry"]')).toContainText("2027-01-01");
+    await expect(panel.locator('[data-testid="detail-expiry"]')).toContainText("1 January 2027");
     const coverage = panel.locator('[data-testid="detail-coverage"]').first();
     await expect(coverage).toContainText("Critical Illness");
     await expect(coverage).toContainText("page 1");
