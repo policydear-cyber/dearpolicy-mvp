@@ -18,7 +18,7 @@ type Member = {
 
 const RELATIONSHIPS = ["self","spouse","parent","child","sibling","grandparent","dependant","other"];
 /** How a relationship reads on screen ("self" is the person using DearPolicy). */
-const relationshipLabel = (r: string) => r === "self" ? "Me" : r.charAt(0).toUpperCase() + r.slice(1);
+const relationshipLabel = (r: string) => r === "self" ? "Me" : r === "spouse" ? "Spouse or partner" : r.charAt(0).toUpperCase() + r.slice(1);
 const SEXES: [string, string][] = [["female", "Female"], ["male", "Male"], ["unspecified", "Prefer not to say"]];
 const sexLabel = (s: string | null | undefined) => SEXES.find(([v]) => v === s)?.[1] ?? null;
 /** Whole years old today, from a YYYY-MM-DD date of birth (null when there is none). */
@@ -218,9 +218,9 @@ export default function FamilyPage() {
         <form onSubmit={add} noValidate className="profile-add-grid" onChange={() => { if (status) { setStatus(""); setStatusFor(null); } }}>
           <div className="field wide"><label htmlFor="fm-new-name">Full name, as on their policies <Req /></label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen" autoComplete="off" required {...invalid("fm-new-name", newShows("name"))} /><Missing id="fm-new-name" show={newShows("name")} /></div>
           <div className="field"><label htmlFor="fm-new-relationship">Relationship to you <Req /></label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required {...invalid("fm-new-relationship", newShows("relationship"))}><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select><Missing id="fm-new-relationship" show={newShows("relationship")} /></div>
-          <div className="field"><label htmlFor="fm-new-dob">Date of birth <Req /></label><input id="fm-new-dob" type="date" min="1900-01-01" max={today} value={dob} onChange={(e) => setDob(e.target.value)} required {...invalid("fm-new-dob", newShows("dob"))} /><Missing id="fm-new-dob" show={newShows("dob")} /></div>
+          <div className="field"><label htmlFor="fm-new-dob">Date of birth <Req /></label><input id="fm-new-dob" type="date" min="1900-01-01" max={today} value={dob} onChange={(e) => setDob(e.target.value)} required aria-describedby="fm-new-dob-note" {...invalid("fm-new-dob", newShows("dob"))} /><small id="fm-new-dob-note" className="field-note">Used only for the age limits in policies.</small><Missing id="fm-new-dob" show={newShows("dob")} /></div>
           {sexField ? <div className="field"><label htmlFor="fm-new-sex">Sex <Req /></label><select id="fm-new-sex" value={sex} onChange={(e) => setSex(e.target.value)} required {...invalid("fm-new-sex", newShows("sex"))}><option value="" disabled>Choose…</option>{SEXES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select><Missing id="fm-new-sex" show={newShows("sex")} /></div> : null}
-          <div className="field"><label htmlFor="fm-new-preferred">Preferred name <Req /></label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="For example, Alex" autoComplete="off" required {...invalid("fm-new-preferred", newShows("preferred"))} /><Missing id="fm-new-preferred" show={newShows("preferred")} /></div>
+          <div className="field"><label htmlFor="fm-new-preferred">Preferred name <Req /></label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="For example, Alex" autoComplete="off" required aria-describedby="fm-new-preferred-note" {...invalid("fm-new-preferred", newShows("preferred"))} /><small id="fm-new-preferred-note" className="field-note">If they have no other name, use their full name again.</small><Missing id="fm-new-preferred" show={newShows("preferred")} /></div>
           {/* Never disabled once loaded: pressing Add with a field empty marks each empty field "Required". */}
           <button className="button primary" type="submit" disabled={!loaded}>+ Add person</button>
         </form>

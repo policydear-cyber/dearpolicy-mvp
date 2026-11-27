@@ -383,6 +383,12 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.doesNotMatch(page, /source-verified|Cover this document confirms/);
   // A new household is told it can start with one person (Live tester, 27 Nov).
   const family = read("app/family/page.tsx");
+  // Help on the two required fields, and the spouse option names partners; both stay required (DC 17 Nov rule).
+  assert.match(family, /Used only for the age limits in policies\./);
+  assert.match(family, /If they have no other name, use their full name again\./);
+  assert.match(family, /r === "spouse" \? "Spouse or partner"/);
+  assert.match(family, /id="fm-new-dob" type="date"[^\n]*? required /);
+  assert.match(family, /id="fm-new-preferred"[^\n]*? required /);
   assert.match(family, /\{family\.length \? <h3>Add a family member<\/h3> : loaded && listKnown \? <p className="field-note" data-testid="family-start-note">Start with yourself\. One person is enough to upload your first document, and you can add the rest of your family any time\.<\/p> : null\}/);
   // The note needs a real list: set from Array.isArray, after the fetch, and never before it (TE, #640).
   assert.match(family, /setListKnown\(Array\.isArray\(data\.family\)\);\s*setLoaded\(true\);/);
