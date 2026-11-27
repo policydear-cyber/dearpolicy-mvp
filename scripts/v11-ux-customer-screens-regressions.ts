@@ -384,7 +384,16 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   // A new household is told it can start with one person (Live tester, 27 Nov).
   const family = read("app/family/page.tsx");
   // Help on the two required fields, and the spouse option names partners; both stay required (DC 17 Nov rule).
-  assert.match(family, /Used only for the age limits in policies\./);
+  assert.match(family, /Used to work out which age limits apply\./);
+  assert.doesNotMatch(family, /Used only for/); // the date also drives the card's age, life stages, chat sums and the export
+  assert.equal((family.match(/If they have no other name, use their full name again\./g) ?? []).length, 2, "add and edit forms");
+  assert.equal((family.match(/Used to work out which age limits apply\./g) ?? []).length, 2, "add and edit forms");
+  assert.match(family, /newShows\("dob"\) \? "fm-new-dob-error fm-new-dob-note" : "fm-new-dob-note"/);
+  assert.match(family, /newShows\("preferred"\) \? "fm-new-preferred-error fm-new-preferred-note" : "fm-new-preferred-note"/);
+  assert.match(family, /id="fm-new-dob-note"/);
+  assert.match(family, /id="fm-new-preferred-note"/);
+  assert.match(family, /RELATIONSHIPS\.map\(\(r\) => <option key=\{r\} value=\{r\}>\{relationshipLabel\(r\)\}/);
+  assert.match(family, /\["dob", !dob\], \["sex", sexField && !sex\], \["preferred", !preferred\.trim\(\)\]/);
   assert.match(family, /If they have no other name, use their full name again\./);
   assert.match(family, /r === "spouse" \? "Spouse or partner"/);
   assert.match(family, /id="fm-new-dob" type="date"[^\n]*? required /);
