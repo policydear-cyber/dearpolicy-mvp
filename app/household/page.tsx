@@ -140,7 +140,7 @@ export default function HouseholdPage() {
 
           <section className="section" data-testid="household-currency">
             <div className="section-heading"><div><h2>Policy currency</h2></div></div>
-            <p className="lead">When a document prints amounts without any currency, DearPolicy shows them in the currency you choose here. A currency printed in the document always comes first, and amounts printed with only a $ sign are left as they are. Until you choose, DearPolicy doesn't assume a currency for them.</p>
+            <p className="lead">When a document prints an amount without a currency, or with only a “$”, DearPolicy reads it in the currency you choose here. A currency written in the document, such as S$ or US$, always comes first. Until you choose, DearPolicy doesn't assume a currency for these amounts.</p>
             <form onSubmit={saveCurrency} className="profile-add-grid">
               <div className="field"><label htmlFor="hh-currency">Currency</label>
                 <select id="hh-currency" value={currencyInput} onChange={(e) => setCurrencyInput(e.target.value)} disabled={!isOwner}>
