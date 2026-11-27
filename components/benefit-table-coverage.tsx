@@ -4,7 +4,7 @@ import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { useState } from "react";
 import { useCanManageHousehold } from "@/components/household-role";
-import { benefitNames, bySection, keyBenefits, money, noSumText, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
+import { benefitNames, bySection, keyBenefits, money, noSumText, shortFigure, splitRowDetail, type SummaryRow } from "@/lib/benefit-table/headline";
 import { rowsForCover } from "@/lib/benefit-table/cover-rows";
 import { waitingNote } from "@/lib/benefit-table/waiting-note";
 import { sharedCoverText } from "@/lib/benefit-table/shared-cover";
@@ -48,8 +48,8 @@ function PageLink({source}:{source:Source}){
 
 /** A benefit's name with its detail line, and what it pays: the cells of a key-benefit row or of a table row. */
 function benefitParts(row:Row,name:(r:Row)=>string){
-  const f=shortFigure(row),detail=[rowDetail(row),f.note].filter(Boolean).join(" · ");
-  return {name:<>{name(row)}{detail?<small>{detail}</small>:null}</>,pays:f.text};
+  const f=shortFigure(row),split=splitRowDetail(row),detail=[split.line,f.note].filter(Boolean).join(" · ");
+  return {name:<>{name(row)}{detail?<small>{detail}</small>:null}{split.long.length?<details className="cov-long" data-testid="table-long-conditions"><summary>{plural(split.long.length,"longer condition")}</summary>{split.long.map((c,i)=><p key={i}>{c}</p>)}</details>:null}</>,pays:f.text};
 }
 
 /** A figure with no currency, in one fixed format so server and browser renders agree (Critic R376 L2). */
@@ -82,7 +82,7 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
       {/* Only its schedule's own cover line is on file: shown as printed, with the same ask for its wording. */}
       {rows.every(r=>r.coverLine)&&!listedWith?<p className="muted cov-reading" data-testid="table-cover-line">As printed on the schedule. {reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:null}
       <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,name);
-        return <li key={i} data-testid="table-row"><span className="b">{b.name}</span><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
+        return <li key={i} data-testid="table-row"><div className="b">{b.name}</div><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
       {waitingNote(cover,rows)?<p className="muted cov-reading" data-testid="table-waiting">{waitingNote(cover,rows)} <Link className="text-link" href="/chat">Ask a question</Link></p>:null}
       {rows.length>key.length?<details className="cov-all"><summary>All {plural(rows.length,"benefit")}</summary>
         <table className="cov-table"><tbody>{bySection(rows).map(g=>[
