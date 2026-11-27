@@ -372,8 +372,9 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.doesNotMatch(page, /usually takes under a minute|after ten minutes/i);
   assert.match(page, /elapsed > POLL_LIMIT_MS\) \{ setPollingPaused\(true\)/);
   // A first-timer is told what types work, that it is one file at a time, and what happens after upload (no time promise).
-  assert.match(page, /A PDF, Word file, scan or photo, up to \{MAX_UPLOAD_LABEL\}\. One file at a time\./);
-  assert.match(page, /data-testid="upload-next-note"[^>]*>Choose a file first\. Once uploaded, DearPolicy reads it and it appears under Documents on file below\./);
+  assert.match(page, /A PDF, Word \(\.docx\), scan or photo, up to \{MAX_UPLOAD_LABEL\}\. One file at a time\./);
+  // The note shows only before a file is chosen, never while uploading or after a result (it would sit beside "Uploaded").
+  assert.match(page, /\{!file && !busy && !status \? <small className="field-note" data-testid="upload-next-note">Then DearPolicy reads it\. A long document can take many minutes, and you can leave this page\./);
   assert.match(page, /waitedMinutes >= LONG_WAIT_MINUTES \? "Still working\./);
   assert.match(page, /\}, \[activeCount, pollingPaused\]\);/);
   assert.match(page, /if \(polling && !Array\.isArray\(p\?\.policies\)\) return false;/);
