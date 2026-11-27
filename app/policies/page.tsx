@@ -511,12 +511,13 @@ export default function PoliciesPage() {
             <span className="upload-drop-title"><Icon name="upload"/> Insurance document</span>
             {file
               ? <><span className="upload-drop-file">{file.name}</span><span className="upload-drop-hint">{fileSize(file.size)} · choose another</span></>
-              : <><span className="upload-drop-cta"><Icon name="camera"/> Choose a file or take a photo</span><span className="upload-drop-hint">A PDF, a scan or a photo, up to {MAX_UPLOAD_LABEL}</span></>}
+              : <><span className="upload-drop-cta"><Icon name="camera"/> Choose a file or take a photo</span><span className="upload-drop-hint">A PDF, Word (.docx), scan or photo, up to {MAX_UPLOAD_LABEL}. One file at a time.</span></>}
           </label>
         </div>
         <div className="field"><label htmlFor="up-profile">Who is this for? <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure: DearPolicy checks names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
         {file && isPdf(file) ? <div className="field"><label htmlFor="up-password">PDF password <span>(only if it asks for one)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required" aria-describedby="up-password-note"/><small id="up-password-note" className="field-note">Used only to read this file, and not stored.</small></div> : null}
         <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : <><Icon name="upload"/>Upload and read</>}</button>
+        {!file && !busy && !status ? <small className="field-note" data-testid="upload-next-note">Then DearPolicy reads it. A long document can take many minutes, and you can leave this page.</small> : null}
         {status && <div ref={statusBox} className={`upload-status${statusIsError ? " error" : ""}`} role={statusIsError ? "alert" : "status"}>{statusIsError && !/^Finished/.test(status) && <strong>Not uploaded. </strong>}{status}{/^Your documents are ready/.test(status) && <> <Link className="text-link" href="/chat">Ask anything about them →</Link></>}{statusIsError && atDocumentLimit && <> <UpgradeLink/></>}</div>}
       </form>}
     </section>
