@@ -272,12 +272,15 @@ export default function PoliciesPage() {
   const pollingSince = useRef<number | null>(null);
   const [pollingPaused, setPollingPaused] = useState(false);
   const [waitedMinutes, setWaitedMinutes] = useState(0);
-  // A document added while the page had stopped checking (an upload) starts the checking again from the beginning.
-  const lastActive = useRef(0);
+  // A document being read that the page had not seen before (an upload) while it had stopped checking starts the checking
+  // again from the beginning. Ids, not a count: another document may have finished meanwhile.
+  const activeIds = policies.filter(isProcessing).map((p) => p.id).join(",");
+  const lastActive = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (activeCount > lastActive.current && pollingPaused) { pollingSince.current = Date.now(); setPollingPaused(false); }
-    lastActive.current = activeCount;
-  }, [activeCount, pollingPaused]);
+    const now = new Set(activeIds ? activeIds.split(",") : []);
+    if (pollingPaused && [...now].some((id) => !lastActive.current.has(id))) { pollingSince.current = Date.now(); setPollingPaused(false); }
+    lastActive.current = now;
+  }, [activeIds, pollingPaused]);
   useEffect(() => {
     if (!activeCount) { pollingSince.current = null; setPollingPaused(false); setWaitedMinutes(0); return; }
     pollingSince.current ??= Date.now();
