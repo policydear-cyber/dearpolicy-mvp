@@ -392,6 +392,8 @@ test("Coverage: a benefit's long clauses sit behind a control, never in the row'
   assert.match(css, /\.cov-long summary \{[^}]*cursor: pointer[^}]*var\(--brand-ink\)[^}]*min-height: 32px/);
   assert.match(css, /\.cov-long p \{ margin: 4px 0 0;/);
   assert.match(cov, /<div className="b">\{b\.name\}<\/div>/);
+  assert.match(cov, /split\.long\.length\?<details className="cov-long"/, "the control shows only when a row has long clauses, and always then");
+  assert.match(cov, /const plural=\(n:number,one:string,many=one\+"s"\)=>`\$\{n\} \$\{n===1\?one:many\}`/);
   assert.match(cov, /<details className="cov-long" data-testid="table-long-conditions"><summary>\{plural\(split\.long\.length,"longer condition"\)\}<\/summary>\{split\.long\.map\(\(c,i\)=><p key=\{i\}>\{c\}<\/p>\)\}<\/details>/);
   assert.doesNotMatch(cov, /\browDetail\(/, "the page no longer joins every clause into the line");
 });

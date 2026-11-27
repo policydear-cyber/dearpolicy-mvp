@@ -73,12 +73,16 @@ test("every condition is shown, so none is hidden when all of a cover's rows are
 });
 test("long clauses leave the detail line but are never cut or dropped (Live tester 27 Nov: Coverage ran clause text into rows)", () => {
   const long = "the Company may at its sole discretion pay an advance payment if the Insured Person's death is highly probable within twelve months";
-  const exact = "x".repeat(LONG_CONDITION), over = "x".repeat(LONG_CONDITION + 1);
+  const exact = "x".repeat(100), over = "x".repeat(101);
+  assert.equal(LONG_CONDITION, 100);
   assert.ok(long.length > LONG_CONDITION);
   const r = row("Advance Payment Benefit", { qualifier: "child", conditions: ["Only 1 claim", long, "max 6 claims"] });
   assert.deepEqual(splitRowDetail(r), { line: "for child · Only 1 claim · max 6 claims", long: [long] });
   assert.deepEqual(splitRowDetail(row("x", { conditions: [exact, over] })), { line: exact, long: [over] }, "the limit is 100 characters: 100 stays in the line, 101 goes behind the control");
   assert.deepEqual(splitRowDetail(row("x")), { line: "", long: [] });
+  // A missing or blank condition never throws and never makes an empty paragraph; emoji count once, not twice.
+  assert.deepEqual(splitRowDetail(row("x", { conditions: [null, undefined, "  ", " ".repeat(150), "Only 1 claim"] as any })), { line: "Only 1 claim", long: [] });
+  assert.deepEqual(splitRowDetail(row("x", { conditions: ["😀".repeat(100)] })), { line: "😀".repeat(100), long: [] });
   // Nothing is lost: every condition is in the line or the long list.
   const all = ["a", long, "b", over];
   const sp = splitRowDetail(row("x", { conditions: all }));

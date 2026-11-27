@@ -65,8 +65,9 @@ export function rowDetail(r: SummaryRow): string {
  * ones stay in the line; each long one is returned whole, never cut or dropped, for the page to show behind a control. */
 export const LONG_CONDITION = 100;
 export function splitRowDetail(r: SummaryRow): { line: string; long: string[] } {
-  const long = r.conditions.filter((c) => c.length > LONG_CONDITION);
-  return { line: rowDetail({ ...r, conditions: r.conditions.filter((c) => c.length <= LONG_CONDITION) }), long };
+  const all = (r.conditions as unknown[]).filter((c): c is string => typeof c === "string").map((c) => c.trim()).filter(Boolean);
+  const isLong = (c: string) => [...c].length > LONG_CONDITION;
+  return { line: rowDetail({ ...r, conditions: all.filter((c) => !isLong(c)) }), long: all.filter(isLong) };
 }
 
 /** A benefit's name without the row letter or number its table prints before it ("J, ", "D. ", "(a) "): that is the
