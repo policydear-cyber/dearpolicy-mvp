@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatMoney } from "@/lib/format/currency";
 import type { LifeStages, LifePolicy, LifeStage, LifeValue } from "@/lib/policies/life-stages";
+import { shownInsurer } from "@/lib/policies/insurer-name";
 
 /** Life stages: one person's policies from now on, as their documents print them (lib/policies/life-stages.ts). A timeline
  * shows each policy to its printed end, when premiums stop and when it matures; a table shows what stays in place at each
@@ -105,7 +106,7 @@ function Timeline({ policies, age }: { policies: LifePolicy[]; age: number | nul
 
 function PolicyCard({ p }: { p: LifePolicy }) {
   return <li className="life-policy">
-    <div className="life-policy-head"><strong>{p.name}</strong>{p.insurer ? <span className="muted">{p.insurer}</span> : null}</div>
+    <div className="life-policy-head"><strong>{p.name}</strong>{shownInsurer(p.insurer) ? <span className="muted">{shownInsurer(p.insurer)}</span> : null}</div>
     <dl>
       <div><dt>Cover</dt><dd>{endWords(p)}</dd></div>
       <div><dt>Premiums</dt><dd>{p.premiumsEnd ? `Stop ${p.premiumsEnd.onText}${p.premiumsEnd.age != null ? ` (age ${p.premiumsEnd.age})` : ""}` : p.premiumTerm ? termWords(p.premiumTerm) : "End not printed"}</dd></div>
