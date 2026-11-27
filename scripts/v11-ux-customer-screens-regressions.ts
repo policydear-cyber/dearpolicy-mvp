@@ -381,6 +381,15 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.match(page, / · confirmed against the page<\/small>/);
   assert.match(page, / · amount not yet confirmed against the page<\/small>/);
   assert.doesNotMatch(page, /source-verified|Cover this document confirms/);
+  // A new household is told it can start with one person (Live tester, 27 Nov).
+  const family = read("app/family/page.tsx");
+  assert.match(family, /\{family\.length \? <h3>Add a family member<\/h3> : loaded && listKnown \? <p className="field-note" data-testid="family-start-note">Start with yourself\. One person is enough to upload your first document, and you can add the rest of your family any time\.<\/p> : null\}/);
+  // The note needs a real list: set from Array.isArray, after the fetch, and never before it (TE, #640).
+  assert.match(family, /setListKnown\(Array\.isArray\(data\.family\)\);\s*setLoaded\(true\);/);
+  assert.equal((family.match(/setLoaded\(true\)/g) ?? []).length, 1);
+  assert.equal((family.match(/setListKnown\(/g) ?? []).length, 1);
+  assert.ok(family.indexOf("await fetch(\"/api/family\")") < family.indexOf("setListKnown("), "the list flag is set only after the fetch");
+  assert.ok(family.indexOf('<section className="profile-add-panel"') > 0 && family.indexOf('<section className="profile-add-panel"') < family.indexOf("family-start-note"), "the note sits in the owner's add panel, not the owner-only branch");
   assert.match(page, /waitedMinutes >= LONG_WAIT_MINUTES \? "Still working\./);
   assert.match(page, /\}, \[activeCount, pollingPaused\]\);/);
   assert.match(page, /if \(polling && !Array\.isArray\(p\?\.policies\)\) return false;/);
