@@ -261,4 +261,12 @@ test("the appearance toggle keeps one name; its pressed state says which appeara
   assert.ok(!/Switch to (light|dark) appearance/.test(shell), "the name does not flip with the state");
 });
 
+test("a folder's Remove button says it takes the document out of the policy, not off file", () => {
+  const folders = read("components/policy-folders.tsx");
+  // Beside a document's own Delete, a bare "Remove" reads as the same thing (Live tester pass 14): the idle button names what it does.
+  assert.match(folders, /aria-label=\{`Remove \$\{docName\(d\.policyId\)\} from this policy`\} onClick=\{\(\) => setArmed\(d\.policyId\)\}>Remove from policy<\/button>/);
+  assert.ok(!/>Remove<\/button>/.test(folders.slice(0, folders.indexOf("function useChoice"))), "no bare Remove button on a folder's documents");
+  assert.match(folders, /Removed it from \$\{title\}\. It is still on file\./);
+});
+
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);

@@ -169,7 +169,7 @@ function Folder({ folder, title, allFolders, titleOf, docs, documents, family, n
       <span className="folder-doc-name"><DocLine doc={docs.get(d.policyId)} name={name}/></span>
       {canManage && (armed === d.policyId
         ? <span className="folder-doc-actions"><button type="button" className="mini-button danger" disabled={busy} autoFocus aria-label={`Remove ${docName(d.policyId)} from this policy`} onClick={() => void patch({ remove: [d.policyId] }, `Removed it from ${title}. It is still on file.`)}>Remove from this policy</button><button type="button" className="mini-button" onClick={() => setArmed(null)}>Keep</button></span>
-        : <button type="button" className="mini-button" disabled={busy} aria-label={`Remove ${docName(d.policyId)}`} onClick={() => setArmed(d.policyId)}>Remove</button>)}
+        : <button type="button" className="mini-button" disabled={busy} aria-label={`Remove ${docName(d.policyId)} from this policy`} onClick={() => setArmed(d.policyId)}>Remove from policy</button>)}
     </li>)}</ul> : <p className="muted" data-testid="folder-empty">No documents in it yet.</p>}
 
     {canManage && (folder.replacements ?? []).map((r) => { const copy = docs.get(r.by); return copy ? <div className="folder-suggestion" key={r.by} data-testid="folder-replacement">
