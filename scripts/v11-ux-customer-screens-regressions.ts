@@ -375,6 +375,11 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.match(page, /A PDF, Word \(\.docx\), scan or photo, up to \{MAX_UPLOAD_LABEL\}\. One file at a time\./);
   // The note shows only before a file is chosen, never while uploading or after a result (it would sit beside "Uploaded").
   assert.match(page, /\{!file && !busy && !status \? <small className="field-note" data-testid="upload-next-note">Then DearPolicy reads it\. A long document can take many minutes, and you can leave this page\./);
+  // The Details panel uses plain words, not the internal ones (Live tester, 27 Nov).
+  assert.match(page, /plainAuthority\(d\.authorityLabel\)/);
+  assert.match(page, /<b>Cover this document shows<\/b>/);
+  assert.match(page, / · confirmed against the page<\/small>/);
+  assert.doesNotMatch(page, /source-verified|Cover this document confirms/);
   assert.match(page, /waitedMinutes >= LONG_WAIT_MINUTES \? "Still working\./);
   assert.match(page, /\}, \[activeCount, pollingPaused\]\);/);
   assert.match(page, /if \(polling && !Array\.isArray\(p\?\.policies\)\) return false;/);

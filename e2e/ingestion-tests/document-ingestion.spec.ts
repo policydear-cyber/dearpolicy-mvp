@@ -192,7 +192,7 @@ test.describe.serial("document ingestion in prototype document-safety mode", () 
     const coverage = panel.locator('[data-testid="detail-coverage"]').first();
     await expect(coverage).toContainText("Critical Illness");
     await expect(coverage).toContainText("page 1");
-    await expect(coverage).toContainText("source-verified");
+    await expect(coverage).toContainText("confirmed against the page");
     const panelText = await panel.innerText();
     expect(panelText).not.toMatch(SCAN_CLAIMS);
     expect(panelText).not.toMatch(/storage[_ ]key|\.e2e-storage|stack trace/i);

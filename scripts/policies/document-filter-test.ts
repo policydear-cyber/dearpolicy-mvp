@@ -4,7 +4,7 @@
  * Made-up rows only. Pure: no database, no network, no model.
  *   node --import tsx scripts/policies/document-filter-test.ts */
 import assert from "node:assert/strict";
-import { authorityLabel, isOwnDocument, readAsPolicyDocument } from "@/lib/policies/document-filter";
+import { authorityLabel, isOwnDocument, plainAuthority, readAsPolicyDocument } from "@/lib/policies/document-filter";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
@@ -47,6 +47,11 @@ test("the badge always agrees with the filter the card sits under", () => {
   const card = (o: Partial<Row> & { document_authority_label?: string | null }) => ({ document_authority_label: null, ...doc(o), ...o });
   assert.equal(authorityLabel(card({ document_role: "brochure", document_authority_label: "Reference information" })), "General wording");
   assert.equal(authorityLabel(card({ document_role: "policy_wording", document_authority_label: "Contract wording", linked_people: chosen })), "General wording");
+  assert.equal(plainAuthority("Personal proof"), "Your own policy");
+  assert.equal(plainAuthority("Personal amendment"), "A change to your policy");
+  assert.equal(plainAuthority("Current account record"), "A statement from your insurer");
+  assert.equal(plainAuthority("Supporting document"), "Supporting document");
+  assert.equal(plainAuthority(null), null);
   assert.equal(authorityLabel(card({ document_role: "personal_schedule", document_authority_label: "Supporting document", linked_people: chosen })), "Linked to your cover");
   assert.equal(authorityLabel(card({ document_role: "personal_schedule", personal_coverage_confirmed: true, document_authority_label: "Personal proof" })), "Your own policy");
   assert.equal(authorityLabel(card({ document_role: "premium_receipt", document_authority_label: "Current account record" })), "Current account record");

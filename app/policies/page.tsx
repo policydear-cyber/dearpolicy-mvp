@@ -19,7 +19,7 @@ import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } fr
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
 import { coversPlanPrompt } from "@/lib/policies/plan-choice";
 import { documentCardTitle } from "@/lib/policies/document-name";
-import { authorityLabel, isOwnDocument, readAsPolicyDocument } from "@/lib/policies/document-filter";
+import { authorityLabel, isOwnDocument, plainAuthority, readAsPolicyDocument } from "@/lib/policies/document-filter";
 import { uploadOverrideLine } from "@/lib/policies/upload-override";
 import { PolicyFolders } from "@/components/policy-folders";
 import type { FolderView } from "@/lib/policies/folder-view";
@@ -874,10 +874,10 @@ function PolicyDetailsPanel({ policyId }: { policyId: string; onCorrected?: () =
         <div><label>Policy number</label><span data-testid="detail-policy-number">{showValue(d.policyNumber)}</span></div>
         <div><label>Effective date</label><span data-testid="detail-effective">{detailDate(d.effectiveDate)}</span></div>
         <div><label>Expiry / renewal</label><span data-testid="detail-expiry">{detailDate(d.renewalOrExpiryDate)}</span></div>
-        <div><label>What it is</label><span>{showValue(d.authorityLabel ?? d.documentRole)}</span></div>
+        <div><label>What it is</label><span>{showValue(plainAuthority(d.authorityLabel) ?? d.documentRole)}</span></div>
       </div>
       {!!data.linkedMembers.length && <div className="detail-section"><b>Whose cover</b>{[...new Map(data.linkedMembers.map((m) => [m.id, m] as const)).values()].map((m) => <div key={m.id}>{m.display_name}</div>)}</div>}
-      {!!data.coverages.length && <div className="detail-section"><b>Cover this document confirms</b>{data.coverages.map((c, i) => <div key={i} data-testid="detail-coverage">{c.member_name}: {c.category} · {coverFigure(c)}{c.source_page ? <small> · page {c.source_page}</small> : null}{c.evidence_verified ? <small className="matched"> · source-verified</small> : <small className="muted"> · amount not yet confirmed against the page</small>}</div>)}</div>}
+      {!!data.coverages.length && <div className="detail-section"><b>Cover this document shows</b>{data.coverages.map((c, i) => <div key={i} data-testid="detail-coverage">{c.member_name}: {c.category} · {coverFigure(c)}{c.source_page ? <small> · page {c.source_page}</small> : null}{c.evidence_verified ? <small className="matched"> · confirmed against the page</small> : <small className="muted"> · amount not yet confirmed against the page</small>}</div>)}</div>}
       {!!data.referenceCoverages.length && <div className="detail-section"><b>Benefits it describes</b>{data.referenceCoverages.map((c, i) => <div key={i}>{c.category}{c.product_name && c.product_name.trim().toLowerCase() !== c.category.trim().toLowerCase() ? ` · ${c.product_name}` : ""}{c.source_page ? <small> · page {c.source_page}</small> : null}</div>)}</div>}
       {!!data.premiums.length && <div className="detail-section"><b>Premiums</b>{data.premiums.map((p, i) => <div key={i}>{reviewAmount(p.amount, p.currency)}{p.frequency ? ` · ${p.frequency}` : ""}{p.payment_date ? ` · ${detailDate(p.payment_date)}` : ""}{p.source_page ? <small> · page {p.source_page}</small> : null}</div>)}</div>}
       {!!data.extracted.riders.length && <div className="detail-section"><b>Riders</b>{data.extracted.riders.map((w, i) => <div key={i}>{w}</div>)}</div>}

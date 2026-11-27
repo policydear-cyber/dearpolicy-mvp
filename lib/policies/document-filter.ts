@@ -40,3 +40,16 @@ export function authorityLabel(policy: Parameters<typeof isOwnDocument>[0] & { d
   if (label && !GENERAL_LABELS.has(label)) return label;
   return policy.linked_people.some((l) => l.source !== "scheme_reference_match") ? "Linked to your cover" : "Your document";
 }
+
+/** The Details panel shows the stored reading label; the household sees these words, not the internal ones (Live tester, 27 Nov). */
+const PLAIN_AUTHORITY: Record<string, string> = {
+  "Personal proof": "Your own policy",
+  "Personal amendment": "A change to your policy",
+  "Current account record": "A statement from your insurer",
+  "Contract wording": "General wording",
+  "Reference information": "General information",
+};
+export function plainAuthority(label: unknown): string | null {
+  if (typeof label !== "string" || !label) return null;
+  return PLAIN_AUTHORITY[label] ?? label;
+}
