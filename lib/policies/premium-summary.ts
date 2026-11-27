@@ -194,8 +194,10 @@ export function summariseRecords(rows: PremiumRecordRow[]): PremiumItem[] {
   // payer (two people paying the same amount on one number are two premiums), and the documents differ. The newest is kept;
   // anything else is counted as before (Critic #628 M1, M2).
   const figureOf = (row: PremiumRecordRow) => {
-    const number = normalizedIdentifier(row.policy_number);
-    return number ? [number, Number(row.amount), (row.currency ?? "").toUpperCase(), (row.frequency ?? "").toLowerCase()].join("|") : null;
+    // A real policy number (six or more letters and digits, at least one digit: never "N/A", "TBA", "1") and the insurer
+    // that issued it: the same number at two insurers is two policies (TE #628 V10, V11, V6d).
+    const number = normalizedIdentifier(row.policy_number), insurer = (row.insurer ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    return number && number.length >= 6 && /\d/.test(number) && insurer ? [insurer, number, Number(row.amount), (row.currency ?? "").toUpperCase(), (row.frequency ?? "").toLowerCase()].join("|") : null;
   };
   const groups = new Map<string, PremiumRecordRow[]>();
   for (const row of latest.values()) { const k = figureOf(row); if (k && row.policy_id) groups.set(k, [...(groups.get(k) ?? []), row]); }

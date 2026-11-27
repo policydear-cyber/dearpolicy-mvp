@@ -114,6 +114,15 @@ test("one policy filed in two documents under two product names is one premium; 
   // A re-issue naming only the plan differently never swallows the older document's rider (Critic #628 M2): rows come newest
   // first. Which of the equal rows is the plan is not known, so none is merged (as before this change).
   assert.equal(total([row("n", "doc-b", "Total CI Plan", "50.00"), row("a", "doc-a", "Example Total CI Plan", "50.00"), row("r", "doc-a", "Health Extra", "50.00")]), 150);
+  // Two insurers with the same number, or a placeholder / short number, are never merged (TE #628 V10, V11).
+  assert.equal(total([row("a", "doc-a", "Example Total CI Plan", "50.00", "EX-1001"), { ...row("b", "doc-b", "Total CI Plan", "50.00", "EX-1001"), insurer: "Another Insurer" }]), 100);
+  assert.equal(total([row("a", "doc-a", "Example Total CI Plan", "50.00", "N/A"), row("b", "doc-b", "Total CI Plan", "50.00", "N/A")]), 100);
+  assert.equal(total([row("a", "doc-a", "Example Total CI Plan", "50.00", "1"), row("b", "doc-b", "Total CI Plan", "50.00", "1")]), 100);
+  assert.equal(total([row("a", "doc-a", "Example Total CI Plan", "50.00", "EX1001"), row("b", "doc-b", "Total CI Plan", "50.00", "EX1001")]), 50, "control: a real number at one insurer merges");
+  // Currency and frequency are part of the figure; a record with no member is never merged; the newest row is the one kept.
+  assert.equal(total([row("a", "doc-a", "Example Total CI Plan", "50.00"), { ...row("b", "doc-b", "Total CI Plan", "50.00"), currency: "USD" }]), 100);
+  assert.equal(total([{ ...row("a", "doc-a", "Example Total CI Plan", "50.00"), family_member_id: null }, { ...row("b", "doc-b", "Total CI Plan", "50.00"), family_member_id: null }]), 100);
+  assert.deepEqual(summariseRecords([row("new", "doc-b", "Total CI Plan", "470.85"), row("old", "doc-a", "Example Total CI Plan", "470.85")]).map((i) => i.id), ["new"]);
   // No policy number: nothing is merged on a guess.
   assert.equal(summariseRecords([row("a", "doc-a", "Example Total CI Plan", "470.85", ""), row("b", "doc-b", "Total CI Plan", "470.85", "")]).length, 2);
 });
