@@ -37,7 +37,7 @@ export function authorityLabel(policy: Parameters<typeof isOwnDocument>[0] & { d
   if (!isOwnDocument(policy)) return "General wording";
   const label = readAsPolicyDocument(policy) ? null : policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : null);
   if (label === "Personal proof") return "Your own policy";
-  if (label && !GENERAL_LABELS.has(label)) return label;
+  if (label && !GENERAL_LABELS.has(label)) return plainAuthority(label) ?? label;
   return policy.linked_people.some((l) => l.source !== "scheme_reference_match") ? "Linked to your cover" : "Your document";
 }
 
