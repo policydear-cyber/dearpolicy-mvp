@@ -367,4 +367,12 @@ test("a recent cover whose benefit is 'subject to the waiting period' says so on
   assert.match(card, /<Link className="text-link" href="\/chat">Ask a question<\/Link>/);
 });
 
+test("Documents: a long reading never promises a minute, keeps checking for an hour, and says it is still working", () => {
+  const page = read("app/policies/page.tsx");
+  assert.doesNotMatch(page, /usually takes under a minute|after ten minutes/i);
+  assert.match(page, /elapsed > 60 \* 60_000\) \{ setPollingPaused\(true\)/);
+  assert.match(page, /waitedMinutes >= LONG_WAIT_MINUTES \? "Still working\./);
+  assert.equal((page.match(/readingWaitCopy\(policy\.processing_stage, waitedMinutes\)/g) ?? []).length, 3);
+});
+
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);

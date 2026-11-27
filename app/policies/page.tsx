@@ -12,7 +12,7 @@ import { coverReadingPending, failedDocumentAdvice, notReadPagesAdvice, readInPa
 import { MAX_UPLOAD_LABEL, UploadError, uploadPolicyDocument } from "@/components/upload-document";
 import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-role";
 import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
-import { CONFIRM_READ_AGAIN, documentReadLabel, isReadingNotice, pressReadAgain, readingFinishedSummary, readingNotice, readingWaitCopy } from "@/lib/documents/upload-problems";
+import { CONFIRM_READ_AGAIN, LONG_WAIT_MINUTES, documentReadLabel, isReadingNotice, pressReadAgain, readingFinishedSummary, readingNotice, readingWaitCopy } from "@/lib/documents/upload-problems";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
 import { NOT_FAMILY_KEY } from "@/components/device-memory";
@@ -261,18 +261,24 @@ export default function PoliciesPage() {
   useEffect(() => { void refresh(); }, []);
 
   const activeCount = policies.filter(isProcessing).length;
-  // Bounded polling: fast for the first minute, then relaxed, and never
-  // infinite -- after ten minutes of continuous activity it stops and asks
-  // the person to refresh, instead of hammering the server forever.
+  // Bounded polling: fast for the first minute, relaxed up to ten minutes, slower after that, and never infinite --
+  // a long document can take half an hour or more, so the page keeps checking for an hour before it asks the person
+  // to check again. How long it has watched is kept (in minutes) so the wait copy can say it is still working.
   const pollingSince = useRef<number | null>(null);
   const [pollingPaused, setPollingPaused] = useState(false);
+  const [waitedMinutes, setWaitedMinutes] = useState(0);
   useEffect(() => {
-    if (!activeCount) { pollingSince.current = null; setPollingPaused(false); return; }
+    if (!activeCount) { pollingSince.current = null; setPollingPaused(false); setWaitedMinutes(0); return; }
     pollingSince.current ??= Date.now();
-    const elapsed = Date.now() - pollingSince.current;
-    if (elapsed > 10 * 60_000) { setPollingPaused(true); return; }
-    const timer = window.setInterval(() => { void refresh(); }, elapsed > 60_000 ? 5000 : 1400);
-    return () => window.clearInterval(timer);
+    let timer: number | undefined, stopped = false;
+    const tick = () => {
+      const elapsed = Date.now() - (pollingSince.current ?? Date.now());
+      setWaitedMinutes(Math.floor(elapsed / 60_000));
+      if (elapsed > 60 * 60_000) { setPollingPaused(true); return; }
+      timer = window.setTimeout(() => { void Promise.resolve(refresh()).finally(() => { if (!stopped) tick(); }); }, elapsed > 10 * 60_000 ? 15_000 : elapsed > 60_000 ? 5000 : 1400);
+    };
+    tick();
+    return () => { stopped = true; window.clearTimeout(timer); };
   }, [activeCount]);
 
   // The documents that were being read, so the line said when they finish is about them: a failed one, or one with a
@@ -464,8 +470,8 @@ export default function PoliciesPage() {
     <UpgradePrompt place="documents"/>
 
 
-    {pollingPaused && <div className="processing-banner"><div><strong>Still reading in the background.</strong><small> This page stopped checking on its own after ten minutes. <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
-    {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>This usually takes under a minute. This page updates on its own, and you can keep using DearPolicy.</small></div></div>}
+    {pollingPaused && <div className="processing-banner"><div><strong>Still reading in the background.</strong><small> This page stopped checking on its own after an hour. <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
+    {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>{waitedMinutes >= LONG_WAIT_MINUTES ? "Still working. A long document can take a good while, and nothing is wrong. " : "A long document can take many minutes. "}This page updates on its own, and you can keep using DearPolicy.</small></div></div>}
 
 
 
@@ -524,7 +530,7 @@ export default function PoliciesPage() {
           <div className="document-main">
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? documentName(policy)).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong>{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage).eta : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
+            <div className="document-title"><strong>{documentName(policy)}</strong>{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage, waitedMinutes).eta : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
               {/* Its numbers sit with what it is, so the actions stand alone. */}
               {!!numbers.length && (processing || policy.processing_status === "failed") && <small className="document-numbers">{numbers.join(" · ")}</small>}</div>
               {!processing && !quarantineHeld && !scanRejected && (() => {
@@ -548,12 +554,12 @@ export default function PoliciesPage() {
           </div>}
 
           {processing && <div className="document-progress" aria-live="polite">
-            <div className="document-progress-copy"><strong>{policy.processing_stalled ? "Taking longer than usual" : readingWaitCopy(policy.processing_stage).title}</strong></div>
+            <div className="document-progress-copy"><strong>{policy.processing_stalled ? "Taking longer than usual" : readingWaitCopy(policy.processing_stage, waitedMinutes).title}</strong></div>
             <div className="progress-track"><div className="progress-fill" style={{ width: `${Math.max(4, pct)}%` }}/></div>
             {/* Stalled means nothing is reading it now: say so and offer to start it, never "will keep trying" (25 Oct). */}
             {policy.processing_stalled
               ? <><small>Reading has not started. Nothing is lost, and you do not need to upload it again.</small>{canManage && <div className="row-error-actions"><button type="button" className="mini-button" disabled={busy || !!deletingId || retryingId === policy.id} onClick={() => void retryReading(policy)}>{retryingId === policy.id ? "Starting…" : "Try again"}</button></div>}</>
-              : <small>{readingWaitCopy(policy.processing_stage).note}</small>}
+              : <small>{readingWaitCopy(policy.processing_stage, waitedMinutes).note}</small>}
           </div>}
 
           {/* Read in part: which pages, and the next step that can work (lib/documents/failure-advice.ts). It already says

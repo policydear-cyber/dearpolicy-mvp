@@ -100,13 +100,20 @@ export const isReadingNotice = (notice: string) => /^Reading .+ (?:again|with th
 /** What a document card says while it is still being read, by the stage the reading stored. A reading that is waiting
  * on our side (a retry after a dropped connection, the one later re-read, scanned pages still with the reader) says so
  * and that the file is fine, instead of "usually ready in under a minute". */
-export function readingWaitCopy(stage: string | null | undefined): { title: string; note: string; eta: string } {
+/** Minutes of watching one document being read before the page says it is still working on a long one. */
+export const LONG_WAIT_MINUTES = 2;
+export function readingWaitCopy(stage: string | null | undefined, waitedMinutes = 0): { title: string; note: string; eta: string } {
   if (stage === "retrying") return { title: "Still reading",
     note: "A connection on our side dropped, so DearPolicy is trying again on its own. Nothing is wrong with your file.", eta: "Taking a little longer than usual" };
   if (stage === "retry_scheduled") return { title: "Reading paused for now",
     note: "We couldn't finish reading it just now because of a connection problem on our side. DearPolicy tries again on its own within about 30 minutes. Nothing is wrong with your file, and you don't need to upload it again.", eta: "Trying again soon" };
   if (stage === "ocr") return { title: "Reading scanned pages…", note: "Scanned pages can take a few minutes. You can keep using DearPolicy while this finishes.", eta: "Can take a few minutes" };
-  return { title: "Reading this document…", note: "You can keep using the app while this finishes.", eta: "Usually ready in under a minute" };
+  // No promise about time: a long document (a full policy booklet) takes many minutes, and a page that has watched it
+  // for a while says it is still working, so a long wait never looks like a frozen app.
+  if (waitedMinutes >= LONG_WAIT_MINUTES) return { title: "Still reading this document…",
+    note: "A long document can take a good while, and nothing is wrong. You don't need to wait here or upload it again. You can keep using the app, and this page updates on its own.", eta: "Still reading, longer documents take longer" };
+  return { title: "Reading this document…",
+    note: "A short document is quick. A long one, such as a full policy booklet, can take many minutes. You can keep using the app, and this page updates on its own.", eta: "Reading now" };
 }
 
 /** Every "Read again" and "Try reading it again" button on the Documents page: a re-read is a full paid reading (a
