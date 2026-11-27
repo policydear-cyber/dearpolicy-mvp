@@ -229,6 +229,9 @@ export default function PoliciesPage() {
   // What each document was found to pay for (benefit table or Coverage rows by document), and documents whose benefits are still
   // being read, or could not be read, for Coverage (reading.documents). Neither is needed for the page to work.
   const [found, setFound] = useState<Record<string, string[]>>({});
+  // Whether the Coverage lookups have answered (or failed). Until they do, each ready card keeps one blank line where its
+  // "Found ..." line will go, so the cards below it do not jump down when it arrives.
+  const [foundKnown, setFoundKnown] = useState(false);
   const [benefitReading, setBenefitReading] = useState<Record<string, ReadingDocument>>({});
   /** `polling`: a background check that gets no list back (an error, offline) keeps what is shown, so a hiccup in a long
    * reading never empties the library or ends the polling as if every document had finished. Returns whether it got one. */
@@ -253,7 +256,7 @@ export default function PoliciesPage() {
       }
       if (l) setBenefitReading(Object.fromEntries((l.reading?.documents ?? []).map((d) => [d.policyId, d])));
       if (t && l) setFound(documentFoundLabels(l.rows ?? []));
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => setFoundKnown(true));
     setFamily(f?.family ?? []);
     setFamilyKnown(!!f && Array.isArray(f.family));
     setPolicies(p.policies ?? []);
@@ -625,7 +628,7 @@ export default function PoliciesPage() {
             // Only cover whose kind nothing names: said in words, never "Found Other".
             if (labels.length === 1 && labels[0] === OTHER_LABEL) return <p className="document-found" data-testid="document-found"><b>Found</b> its cover, but not yet what kind of cover it is. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
             if (labels.length) return <p className="document-found" data-testid="document-found"><b>Found</b> {foundLine(labels)}. <Link className="text-link" href="/ledger">See in Coverage →</Link></p>;
-            return null;
+            return foundKnown ? null : <p className="document-found" data-testid="document-found-wait" aria-hidden="true">&nbsp;</p>;
           })()}
           {!processing && !policy.processing_error && passwordFor === policy.id && <LockedPdf policy={policy} wrong={false} rereading onUnlock={(password) => unlock(policy, password)} />}
           {/* Why, and the one next step that can work for this kind of failure (lib/documents/failure-advice.ts). */}

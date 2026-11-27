@@ -381,4 +381,11 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.equal((page.match(/readingWaitCopy\(policy\.processing_stage, waitedMinutes\)/g) ?? []).length, 3);
 });
 
+test("Documents: a ready card keeps one blank line for its Found line until Coverage has answered, so cards do not jump down", () => {
+  const page = read("app/policies/page.tsx");
+  assert.match(page, /const \[foundKnown, setFoundKnown\] = useState\(false\);/);
+  assert.match(page, /\}\)\.catch\(\(\) => undefined\)\.finally\(\(\) => setFoundKnown\(true\)\);/);
+  assert.match(page, /return foundKnown \? null : <p className="document-found" data-testid="document-found-wait" aria-hidden="true">&nbsp;<\/p>;/);
+});
+
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);
