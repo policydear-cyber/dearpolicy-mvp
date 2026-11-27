@@ -405,11 +405,11 @@ test("middleware: only the webhook path skips the session and Origin checks", as
 
 test("landing page: pricing before sign-up, every card starts free; Plan usage upgrades through the owner only", () => {
   const landing = readFileSync("app/welcome/page.tsx", "utf8");
-  assert.match(landing, /<PricingSection billingOpen=\{purchaseOpen\(\)\} \/>/);
+  assert.match(landing, /<PricingSection \/>/);
   const pricing = readFileSync("components/public/pricing-section.tsx", "utf8");
   assert.match(pricing, /href="\/signup"/);
   assert.match(pricing, /Start free/);
-  assert.match(pricing, /plan\.priceMonthlySgd > 0 && !billingOpen\s*\? <small data-testid=\{"pricing-soon-" \+ plan\.id\}>Coming soon<\/small>/, "while purchase is not open, Plus and Family say Coming soon, not Start free");
+  assert.match(pricing, /plan\.priceMonthlySgd > 0\s*\? <small data-testid=\{"pricing-soon-" \+ plan\.id\}>Coming soon<\/small>/, "Plus and Family say Coming soon, not Start free (static page: remove when billing is switched on)");
   assert.ok(!/fetch\(|@\/lib\/db|@\/lib\/auth/.test(pricing + readFileSync("components/plan-cards.tsx", "utf8")), "static: no session, household or service");
   const usage = readFileSync("app/usage/page.tsx", "utf8");
   assert.match(usage, /!sub\.isOwner\)return <small>The household&rsquo;s owner can upgrade/);
