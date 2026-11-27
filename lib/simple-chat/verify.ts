@@ -3268,13 +3268,23 @@ function onlyNotATotal(sentence: string, docNames: string[] = [], differOk = fal
   return !/[a-z]{3,}/i.test(rest);
 }
 
+/** A base figure's printed date in the answer's style ("6 Oct 2022"). A day the calendar does not have (31/02/2022) would
+ * roll over to another date, so it keeps the document's own digits instead. */
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export function printedDay(iso: string): string {
+  const t = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00Z`) : null;
+  const real = !!t && !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === iso; // an impossible date is an Invalid Date, and toISOString() on it throws
+  // Written from the digits, not through the runtime's locale data (newer ICU prints "Sept"; the answer card's chip prints "Sep").
+  return real ? `${Number(iso.slice(8, 10))} ${SHORT_MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}` : iso.split("-").reverse().join("/");
+}
+
 /** How an illustration was worked out, in plain words with its sources. */
 function basisOf(household: Household, c: Checked): string {
   const po = c.s.percentOf!;
   if (!c.base) return `${po.percent}% of ${po.baseAmount}`;
   const bdoc = household.documents[c.base.found.docIndex];
   const cover = c.base.cover.replace(/\b\w/g, (x) => x.toUpperCase());
-  const asOf = c.base.asOf ? `, as of ${c.base.asOf.split("-").reverse().join("/")}` : "";
+  const asOf = c.base.asOf ? `, as of ${printedDay(c.base.asOf)}` : "";
   return `${po.percent}% of ${c.person}'s ${cover ? cover + " " : ""}sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc, c.base.found.page).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
 }
 

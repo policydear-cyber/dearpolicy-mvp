@@ -609,7 +609,7 @@ async function main() {
     const { answer } = verifyAnswer(SI_HOUSE, { bottomLine: "", nextSteps: [], question: null, statements: [pctSI("Mei Ling", "S$400,000", "Tan Mei Ling\tS$400,000\tAs of 06/10/2022")] });
     const card = answer.statements!.find((x) => x.amount)!;
     assert.deepEqual([card.amount!.text, card.amount!.illustration, card.kind, card.personName, card.asOf, card.source!.page, card.source!.citationIds.length], ["S$80,000", true, "calculation", "Tan Mei Ling", "2022-10-06", 8, 2]);
-    assert.match(card.basis!, /20% of Tan Mei Ling's Personal Accident sum insured of S\$400,000 \(Test Scheme Certificate, page 1, as of 06\/10\/2022\)/);
+    assert.match(card.basis!, /20% of Tan Mei Ling's Personal Accident sum insured of S\$400,000 \(Test Scheme Certificate, page 1, as of 6 Oct 2022\)/);
   });
 
   await check("sum insured: another person's, another cover's or an unquoted sum insured keeps the percentage as a fact", () => {
