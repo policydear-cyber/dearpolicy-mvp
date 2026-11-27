@@ -201,6 +201,12 @@ jobs:
       - name: Upload and reading failures say what happened and what to do, and name every unread page (mocked OCR, offline)
         run: npm run documents:upload-failure-paths-test
 
+      - name: Documents that are read in part, failed or have unread pages say so in a household's words, with the pages and the next step (offline)
+        run: npm run documents:failed-advice-test
+
+      - name: Pages not read and pages that could not be read are named, and the card never says the rest is used when it is not (offline)
+        run: npm run documents:pages-not-read-test
+
       - name: A scanned page read as only placeholders or noise ("[illegible]") is named as not read; real, short and numbers-only pages are read (mocked OCR, offline)
         run: npm run documents:illegible-page-test
 

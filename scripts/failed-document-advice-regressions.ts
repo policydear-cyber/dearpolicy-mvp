@@ -221,7 +221,11 @@ async function main() {
     assert.equal(readInPartAdvice("Read in part. Page 2 was sideways. " + uncheckedPagesNote([4])!.replace(/^Read in part\.\s*/, ""))!.what, plain);
     assert.equal(readInPartAdvice(uncheckedPagesNote([4])!.replace(/\.$/, " and call 91234567."))!.what, plain);
     assert.equal(readInPartAdvice(uncheckedPagesNote([4])! + "Call us.")!.what, plain);
-    assert.match(readInPartAdvice(uncheckedPagesNote([4]))!.next, /once it shows as read, delete this one/);
+    assert.equal(readInPartAdvice(uncheckedPagesNote([4]))!.next, "Everything else in it is used, and you can still ask about it. Read again reads the document once more and may confirm them. If it doesn't, and you only have a scan or photo, the insurer's original PDF usually fixes this: upload it, and once it shows as read, delete this one.");
+    // Whole pages, plural: "them", and the two forms read as the household's words, exactly.
+    assert.equal(readInPartAdvice(uncheckedPagesNote([2, 9, 14], []))!.what, "Pages 2, 9 and 14 couldn’t be confirmed against the page itself, so no amount on them is used.");
+    assert.equal(readInPartAdvice(uncheckedPagesNote([3], []))!.what, "Page 3 couldn’t be confirmed against the page itself, so no amount on it is used.");
+    assert.equal(readInPartAdvice(uncheckedPagesNote([], [8, 9]))!.what, "Some amounts on pages 8 and 9 couldn’t be confirmed against the page itself, so they are left out of answers. The rest of those pages were confirmed and are used.");
     // The older count-only note (lib/rag/ingest.ts) is shown as written, not replaced by the generic "not used" line.
     const count = "2 cover amounts could not be checked word for word against the document's pages, so they are not shown as confirmed.";
     assert.equal(readInPartAdvice("Read in part. " + count)!.what, count);
