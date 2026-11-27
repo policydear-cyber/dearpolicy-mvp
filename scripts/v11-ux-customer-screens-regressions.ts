@@ -291,4 +291,18 @@ test("a folder's Remove button says it takes the document out of the policy, not
   assert.match(read("app/globals.css"), /@media \(max-width: 400px\) \{\s*\.folder-docs li \{ grid-template-columns: 1fr; \}/);
 });
 
+test("a document's Details panel writes dates and amounts as the rest of the site does, and never repeats a benefit's name (27 Nov live check)", () => {
+  const page = read("app/policies/page.tsx");
+  // Dates: "19 October 2026", never "2026-10-19"; anything that is not a date is shown as written.
+  assert.match(page, /function detailDate\(value: unknown\): string \{/);
+  assert.match(page, /data-testid="detail-expiry">\{detailDate\(d\.renewalOrExpiryDate\)\}/);
+  assert.match(page, /data-testid="detail-effective">\{detailDate\(d\.effectiveDate\)\}/);
+  assert.doesNotMatch(page, /\{showValue\(d\.(?:effectiveDate|renewalOrExpiryDate)\)\}/);
+  // Amounts: the one money format (S$300,000), which says so when no currency is stated.
+  assert.match(page, /function reviewAmount\([^)]*\): string \{\s*if \(amount == null\) return "—";[\s\S]*?return formatMoney\(Number\(amount\), currency\);/);
+  assert.doesNotMatch(page, /\$\{currency\} \$\{numeric\.toLocaleString\(\)\}/);
+  // A benefit whose product name is its own category is named once.
+  assert.match(page, /c\.product_name && c\.product_name\.trim\(\)\.toLowerCase\(\) !== c\.category\.trim\(\)\.toLowerCase\(\)/);
+});
+
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);

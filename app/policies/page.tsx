@@ -3,6 +3,7 @@
 import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { lineFigure, linePeriodWords } from "@/lib/coverage/line-period";
+import { formatMoney } from "@/lib/format/currency";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { customerError } from "@/components/customer-text";
@@ -801,8 +802,14 @@ type PolicyDetailsPayload = {
  * currency is never rendered as SGD. */
 function reviewAmount(amount: number | string | null, currency: string | null): string {
   if (amount == null) return "—";
-  const numeric = Number(amount);
-  return currency ? `${currency} ${numeric.toLocaleString()}` : `${numeric.toLocaleString()} (currency not stated)`;
+  // The same figure as Home, Coverage and Premiums print: S$300,000, never "SGD 300,000"; no currency stated says so.
+  return formatMoney(Number(amount), currency);
+}
+const DETAIL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+/** A date the document prints, as the rest of the site writes it: "19 October 2026", never "2026-10-19". Anything that is not a date is shown as written. */
+function detailDate(value: unknown): string {
+  const m = typeof value === "string" ? value.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/) : null;
+  return m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${Number(m[3])} ${DETAIL_MONTHS[Number(m[2]) - 1]} ${m[1]}` : showValue(value);
 }
 /** A cover line's figure: a figure paid per period carries its printed period, and a periodic cover's figure with none
  * is not shown (lib/coverage/line-period.ts), as on Home and Coverage. */
@@ -840,13 +847,13 @@ function PolicyDetailsPanel({ policyId }: { policyId: string; onCorrected?: () =
         <div><label>Insurer</label><span data-testid="detail-insurer">{showValue(d.insurer)}</span></div>
         <div><label>Product</label><span data-testid="detail-product">{showValue(d.productName)}</span></div>
         <div><label>Policy number</label><span data-testid="detail-policy-number">{showValue(d.policyNumber)}</span></div>
-        <div><label>Effective date</label><span>{showValue(d.effectiveDate)}</span></div>
-        <div><label>Expiry / renewal</label><span data-testid="detail-expiry">{showValue(d.renewalOrExpiryDate)}</span></div>
+        <div><label>Effective date</label><span data-testid="detail-effective">{detailDate(d.effectiveDate)}</span></div>
+        <div><label>Expiry / renewal</label><span data-testid="detail-expiry">{detailDate(d.renewalOrExpiryDate)}</span></div>
         <div><label>What it is</label><span>{showValue(d.authorityLabel ?? d.documentRole)}</span></div>
       </div>
       {!!data.linkedMembers.length && <div className="detail-section"><b>Whose cover</b>{[...new Map(data.linkedMembers.map((m) => [m.id, m] as const)).values()].map((m) => <div key={m.id}>{m.display_name}</div>)}</div>}
       {!!data.coverages.length && <div className="detail-section"><b>Cover this document confirms</b>{data.coverages.map((c, i) => <div key={i} data-testid="detail-coverage">{c.member_name}: {c.category} · {coverFigure(c)}{c.source_page ? <small> · page {c.source_page}</small> : null}{c.evidence_verified ? <small className="matched"> · source-verified</small> : <small className="muted"> · amount not yet confirmed against the page</small>}</div>)}</div>}
-      {!!data.referenceCoverages.length && <div className="detail-section"><b>Benefits it describes</b>{data.referenceCoverages.map((c, i) => <div key={i}>{c.category}{c.product_name ? ` · ${c.product_name}` : ""}{c.source_page ? <small> · page {c.source_page}</small> : null}</div>)}</div>}
+      {!!data.referenceCoverages.length && <div className="detail-section"><b>Benefits it describes</b>{data.referenceCoverages.map((c, i) => <div key={i}>{c.category}{c.product_name && c.product_name.trim().toLowerCase() !== c.category.trim().toLowerCase() ? ` · ${c.product_name}` : ""}{c.source_page ? <small> · page {c.source_page}</small> : null}</div>)}</div>}
       {!!data.premiums.length && <div className="detail-section"><b>Premiums</b>{data.premiums.map((p, i) => <div key={i}>{reviewAmount(p.amount, p.currency)}{p.frequency ? ` · ${p.frequency}` : ""}{p.payment_date ? ` · ${p.payment_date}` : ""}{p.source_page ? <small> · page {p.source_page}</small> : null}</div>)}</div>}
       {!!data.extracted.riders.length && <div className="detail-section"><b>Riders</b>{data.extracted.riders.map((w, i) => <div key={i}>{w}</div>)}</div>}
       {!!conditions.length && <details className="detail-section source-details"><summary>Waiting periods, exclusions and deductibles</summary>{conditions.map((w, i) => <div key={i}>{w}</div>)}</details>}
