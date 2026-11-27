@@ -392,7 +392,8 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.equal(printedDay("garbage"), "garbage");
   for (const [iso, digits] of [["2022-13-06", "06/13/2022"], ["2022-10-00", "00/10/2022"], ["2022-12-32", "32/12/2022"], ["2022-00-10", "10/00/2022"]]) assert.equal(printedDay(iso), digits, `${iso} never throws and keeps the digits`);
   assert.match(verify, /!Number\.isNaN\(t\.getTime\(\)\)/);
-  assert.match(verify, /return real \? sgDay\(iso\) : iso\.split\("-"\)\.reverse\(\)\.join\("\/"\);/);
+  assert.equal(printedDay("2022-09-06"), "6 Sep 2022", "September is Sep, as the answer card's chip writes it, on every Node/ICU");
+  assert.match(verify, /: iso\.split\("-"\)\.reverse\(\)\.join\("\/"\);/);
   const family = read("app/family/page.tsx");
   // Help on the two required fields, and the spouse option names partners; both stay required (DC 17 Nov rule).
   assert.match(family, /Used to work out which age limits apply\./);

@@ -3270,10 +3270,12 @@ function onlyNotATotal(sentence: string, docNames: string[] = [], differOk = fal
 
 /** A base figure's printed date in the answer's style ("6 Oct 2022"). A day the calendar does not have (31/02/2022) would
  * roll over to another date, so it keeps the document's own digits instead. */
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export function printedDay(iso: string): string {
   const t = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00Z`) : null;
   const real = !!t && !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === iso; // an impossible date is an Invalid Date, and toISOString() on it throws
-  return real ? sgDay(iso) : iso.split("-").reverse().join("/");
+  // Written from the digits, not through the runtime's locale data (newer ICU prints "Sept"; the answer card's chip prints "Sep").
+  return real ? `${Number(iso.slice(8, 10))} ${SHORT_MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}` : iso.split("-").reverse().join("/");
 }
 
 /** How an illustration was worked out, in plain words with its sources. */
