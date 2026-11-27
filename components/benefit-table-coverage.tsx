@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useCanManageHousehold } from "@/components/household-role";
 import { benefitNames, bySection, keyBenefits, money, noSumText, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
 import { rowsForCover } from "@/lib/benefit-table/cover-rows";
+import { waitingNote } from "@/lib/benefit-table/waiting-note";
 import { sharedCoverText } from "@/lib/benefit-table/shared-cover";
 
 /** Coverage from the benefit table (lib/benefit-table), as a summary to read, with nothing to confirm: for each person,
@@ -82,6 +83,7 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
       {rows.every(r=>r.coverLine)&&!listedWith?<p className="muted cov-reading" data-testid="table-cover-line">As printed on the schedule. {reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:null}
       <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,name);
         return <li key={i} data-testid="table-row"><span className="b">{b.name}</span><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
+      {waitingNote(cover,rows)?<p className="muted cov-reading" data-testid="table-waiting">{waitingNote(cover,rows)} <Link className="text-link" href="/chat">Ask a question</Link></p>:null}
       {rows.length>key.length?<details className="cov-all"><summary>All {plural(rows.length,"benefit")}</summary>
         <table className="cov-table"><tbody>{bySection(rows).map(g=>[
           <tr className="sec" key={"s"+g.section}><th colSpan={3} scope="colgroup">{g.section}</th></tr>,
