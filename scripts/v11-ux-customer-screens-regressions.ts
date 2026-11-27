@@ -284,6 +284,8 @@ test("a folder's Remove button says it takes the document out of the policy, not
   assert.match(folders, /aria-label=\{`Remove from this policy: \$\{docName\(d\.policyId\)\}`\} onClick=\{\(\) => void patch\(\{ remove: \[d\.policyId\] \}[^\n]*>Remove from this policy<\/button>/);
   assert.ok(!/>Remove<\/button>/.test(folders.slice(0, folders.indexOf("function useChoice"))), "no bare Remove button on a folder's documents");
   assert.match(folders, /Removed it from \$\{title\}\. It is still on file\./);
+  // The longer label must not squeeze a long title on a narrow phone: below 400px the action sits under the title.
+  assert.match(read("app/globals.css"), /@media \(max-width: 400px\) \{\s*\.folder-docs li \{ grid-template-columns: 1fr; \}/);
 });
 
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);

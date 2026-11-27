@@ -1963,6 +1963,11 @@ h2 { font-weight: 650; letter-spacing: -.015em; }
   .folder-docs li { grid-template-columns: 1fr auto; }
   .folder-doc-kind { grid-column: 1 / -1; }
 }
+/* On a narrow phone the action goes under the title, so a long title keeps its width instead of breaking mid-word. */
+@media (max-width: 400px) {
+  .folder-docs li { grid-template-columns: 1fr; }
+  .folder-doc-kind { grid-column: auto; }
+}
 
 /* ==========================================================================
    Admin console (/admin): the owner's view across households. Wallet look:
