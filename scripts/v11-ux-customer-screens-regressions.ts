@@ -318,4 +318,11 @@ test("isoDateWords writes the document's own day, never through a Date, and leav
   for (const v of ["19/10/2026", "10/19/2026", "2026-13-01", "2026-10", "garbage", "", null, undefined, 20261019]) assert.equal(isoDateWords(v), null, String(v));
 });
 
+test("the Policy currency text says a bare $ is read in the household's currency, as the sign-up line and docs/copy.md do (27 Nov live check)", () => {
+  const page = read("app/household/page.tsx");
+  assert.match(page, /When a document prints an amount without a currency, or with only a “\$”, DearPolicy reads it in the currency you choose here\. A currency written in the document, such as S\$ or US\$, always comes first\./);
+  assert.doesNotMatch(page, /left as they are/, "a bare $ is never said to be left alone");
+  assert.match(read("app/welcome/page.tsx"), /If it shows only \\u201c\$\\u201d, DearPolicy reads it in the currency you choose when you sign up/);
+});
+
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);
