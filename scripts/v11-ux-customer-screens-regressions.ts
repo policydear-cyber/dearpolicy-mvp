@@ -266,4 +266,14 @@ test("the empty Ask screen shows how to say what happened, and counts only docum
   assert.ok(!/S\$|\$\d|covered|not covered/i.test(welcome.replace(/Answers use|say who and what/g, "")), "the welcome promises no amount or verdict");
 });
 
+test("the appearance toggle keeps one name; its pressed state says which appearance is on", () => {
+  const shell = read("components/AppShell.tsx");
+  const button = shell.match(/<button[^>]*className="theme-toggle icon-only"[^>]*>/)?.[0] ?? "";
+  assert.ok(button, "theme toggle button found");
+  // A pressed toggle whose name flips ("Switch to light" while pressed) reads as a contradiction to a screen reader.
+  assert.match(button, /aria-pressed=\{dark\}/);
+  assert.match(button, /aria-label="Dark appearance"/);
+  assert.ok(!/Switch to (light|dark) appearance/.test(shell), "the name does not flip with the state");
+});
+
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);
