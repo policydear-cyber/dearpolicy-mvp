@@ -280,7 +280,11 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
   // schedule's basic plan and rider each carried the page's first-year premium, and Home counted it twice). Grouped by
   // document, page, figure and currency; settled after the loop (sharedFirstYear).
   const firstYear = new Map<string, { item: PremiumItem; name: string; later: number; frequency: string; perYear: number; anniversary: number; number: string | null }[]>();
-  const noStart: { key: string; name: string; number: string | null; frequency: string }[] = [];
+  const noStart: { key: string; name: string; number: string | null; frequency: string; cover: TablePremiumCover; documentId: string; currency: string; perYear: number }[] = [];
+  // Rows whose first policy year has ended (today is on or past the anniversary): they count their own later premium, and a
+  // plan row of the same page that carries the same first-year line but prints no start of its own is part of that one
+  // policy, so it counts its own later premium too (a rider dropped after the first anniversary, a 27 Nov trace).
+  const pastAnniversary = new Map<string, { number: string | null; frequency: string }>();
   for (const c of covers) {
     if (c.premium == null || !(c.premium > 0) || c.ended) continue;
     const documentId = c.source?.documentId;
@@ -310,10 +314,11 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
       // A plan row that carries the page's first-year line but prints no start of its own is part of that one first-year
       // premium when another row of the same page counts it: settled after the loop, never named as left out while the
       // same premium is in the total (live check #560: a rider row on a critical-illness schedule).
-      if (c.firstYearPremium != null && start == null) { noStart.push({ key: [documentId, page, c.firstYearPremium, currency].join("|"), name, number: c.policyNumber ? numberKey(c.policyNumber) : null, frequency: c.premiumFrequency }); continue; }
+      if (c.firstYearPremium != null && start == null) { noStart.push({ key: [documentId, page, c.firstYearPremium, currency].join("|"), name, number: c.policyNumber ? numberKey(c.policyNumber) : null, frequency: c.premiumFrequency, cover: c, documentId, currency, perYear }); continue; }
       if (c.firstYearPremium == null || start == null) { leftOut.push({ name, why: "not_current" }); continue; }
       const next = new Date(start * 86_400_000); next.setUTCFullYear(next.getUTCFullYear() + 1);
       const anniversary = next.getTime() / 86_400_000;
+      if (today >= anniversary) pastAnniversary.set([documentId, page, c.firstYearPremium, currency].join("|"), { number: c.policyNumber ? numberKey(c.policyNumber) : null, frequency: c.premiumFrequency });
       if (today < anniversary) { amount = c.firstYearPremium; detail = "first policy year; " + formatMoney(c.premium, currency) + " " + c.premiumFrequency.toLowerCase() + " from " + longDate(isoOfDay(anniversary)); }
     }
     const annual = amount * perYear;
@@ -350,7 +355,20 @@ export function tablePremiumItems(covers: TablePremiumCover[], records: RecordKe
   // is printed per plan with no start, so no later figure is said for the policy (it would leave that plan out).
   for (const n of noStart) {
     const counted = (firstYear.get(n.key) ?? []).find((g) => !dropped.has(g.item));
-    if (!counted) { leftOut.push({ name: n.name, why: "not_current" }); continue; }
+    if (!counted) {
+      // Its sibling's first year has ended: this plan's own later premium is part of the policy's premium now, once, for one
+      // policy number and one frequency; anything less certain is left out and named.
+      const past = pastAnniversary.get(n.key);
+      if (past && !((n.number && past.number && n.number !== past.number) || n.frequency.toLowerCase() !== past.frequency.toLowerCase())) {
+        const c = n.cover, amount = c.premium as number, annual = amount * n.perYear, doc = documents.get(n.documentId);
+        found.push({ cover: c, name: n.name, item: { id: "table:" + n.documentId + ":" + productKey(c.product), policy_id: n.documentId, family_member_id: member.id, insurer: doc?.insurer ?? null, product_name: c.product,
+          policy_number: c.policyNumber ?? null, frequency: c.premiumFrequency as string, payment_date: null, period_start: null, period_end: null, created_at: "", notes: null,
+          amount, currency: n.currency, currencyStated: true, shared: false, cash: null, medisave: null, total: amount, annual, monthly: annual / 12, cashAnnual: null, medisaveAnnual: null,
+          oneOff: false, shortPeriod: false, fromTable: true, detail: null } });
+        continue;
+      }
+      leftOut.push({ name: n.name, why: "not_current" }); continue;
+    }
     // As for rows with a start: one policy number and one frequency, or whose and how often is not known (Critic #563 MED-1).
     if ((n.number && counted.number && n.number !== counted.number) || n.frequency.toLowerCase() !== counted.frequency.toLowerCase()) { leftOut.push({ name: n.name, why: "unclear" }); continue; }
     counted.item.detail = "first policy year";

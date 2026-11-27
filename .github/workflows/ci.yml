@@ -219,6 +219,24 @@ jobs:
       - name: Round 5 answers (Shield plan, portfolio cost, currentness, deletion privacy, empty portfolio)
         run: npm run r5:answer-test
 
+      - name: Premium totals from the benefit table (first policy year, riders, renewals)
+        run: npm run premium:table-test
+
+      - name: Premium source captions
+        run: npm run premium:source-caption-test
+
+      - name: Premium rows
+        run: npm run policies:premium-row-test
+
+      - name: Premium counted elsewhere
+        run: npm run policies:premium-elsewhere-test
+
+      - name: Home premium note
+        run: npm run policies:home-premium-note-test
+
+      - name: Coverage page premium
+        run: npm run benefit-table:coverage-premium-test
+
       - name: Round 5 claims (member tier, message facts, claim interviews)
         run: npm run r5:claims-test
 

@@ -498,3 +498,21 @@ test("a page's one first-year premium is counted once, however many plans on it 
   assert.equal(run([{ ...plans[0], policyNumber: "P-111" }, { ...plans[1], policyNumber: "P111" }], day("03/11/2026")).items.length, 1);
   assert.equal(run([{ ...plans[0], policyNumber: "P-111" }, plans[1]], day("03/11/2026")).items.length, 1);
 });
+
+test("after the first policy year, a plan row with no start of its own counts its own later premium with its sibling's (27 Nov trace)", () => {
+  const note = "the page prints a different premium for the first policy year";
+  const plan = cover({ product: "Example Total CI Plan", cover: "Critical Illness Benefit", policyNumber: "EX-1001", premium: 269.05, firstYearPremium: 376.68, premiumNote: note, startDate: "19/10/2026", premiumCurrency: undefined });
+  const rider = cover({ product: "Example Total CI Plan", cover: "Health Extra", policyNumber: "EX-1001", premium: 201.8, firstYearPremium: 376.68, premiumNote: note, startDate: null, documentPeriodFrom: null, premiumCurrency: undefined });
+  const total = (covers: TablePremiumCover[], today: number) => Math.round(run(covers, today).items.reduce((s, i) => s + i.monthly, 0) * 100) / 100;
+  assert.equal(total([plan, rider], day("28/10/2026")), 376.68, "first year: the page's one first-year premium, once");
+  assert.equal(total([plan, rider], day("19/10/2027")), 470.85, "on the anniversary: plan + rider, nothing dropped");
+  assert.equal(total([plan, rider], day("20/10/2028")), 470.85);
+  assert.deepEqual(run([plan, rider], day("20/10/2027")).leftOut, [], "nothing named as left out");
+  // Not known to be the same policy or paid the same way: still left out and named, never added.
+  const after = day("20/10/2027");
+  assert.deepEqual(run([plan, cover({ ...rider, policyNumber: "EX-2002" })], after).leftOut, [{ name: "Example Total CI Plan", why: "not_current" }]);
+  assert.equal(run([plan, cover({ ...rider, policyNumber: "EX-2002" })], after).items.length, 1);
+  assert.deepEqual(run([plan, cover({ ...rider, premiumFrequency: "Annual" })], after).leftOut, [{ name: "Example Total CI Plan", why: "not_current" }]);
+  assert.deepEqual(run([plan, cover({ ...rider, firstYearPremium: 90 })], after).leftOut, [{ name: "Example Total CI Plan", why: "not_current" }]);
+  assert.deepEqual(run([rider], after).items, [], "a rider alone is still not counted");
+});
