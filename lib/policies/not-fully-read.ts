@@ -96,11 +96,11 @@ export function notFullyReadNote(n: Pick<NotFullyRead, "count"> & Partial<Pick<N
   const missing = Number.isInteger(unknown) && unknown! >= 0 ? Math.min(unknown!, n.count) : n.count;
   const amountsOnly = n.count - missing;
   if (missing === 0) {
-    const head = `Some amounts in ${n.count === 1 ? "one" : n.count} of ${person}’s documents could not be checked`;
-    return short ? head + "." : `${head}, so they show as not checked. Documents shows which.`;
+    const head = `Some amounts in ${n.count === 1 ? "one" : n.count} of ${person}’s documents couldn’t be confirmed against the page itself`;
+    return short ? head + "." : `${head}, so they are left out of answers. Documents shows which.`;
   }
   const head = `${missing === 1 ? "One" : missing} of ${person}’s documents ${missing === 1 ? "was" : "were"} not fully read`;
   if (short) return head + ".";
-  const more = amountsOnly > 0 ? ` Some amounts in ${amountsOnly === 1 ? "one other document" : `${amountsOnly} other documents`} could not be checked.` : "";
+  const more = amountsOnly > 0 ? ` Some amounts in ${amountsOnly === 1 ? "one other document" : `${amountsOnly} other documents`} couldn’t be confirmed against the page itself.` : "";
   return `${head}, so cover in ${missing === 1 ? "it" : "them"} may be missing here. Documents shows which and what to do.${more}`;
 }
