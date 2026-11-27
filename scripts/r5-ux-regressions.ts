@@ -159,6 +159,12 @@ async function main() {
     assert.match(read("app/family/page.tsx"), /A date of birth can't be in the future\./);
     for (const r of ["app/api/family/route.ts", "app/api/family/[id]/route.ts"]) assert.match(read(r), /can't be in the future/);
   });
+  await test("Family page says why date of birth and sex are asked, and that Prefer not to say is fine", () => {
+    const page = read("app/family/page.tsx");
+    assert.match(page, /Date of birth tells it which age limits apply to a person\./);
+    assert.match(page, /Sex helps it read &ldquo;she&rdquo; or &ldquo;he&rdquo; in your questions, and &ldquo;Prefer not to say&rdquo; is fine\./);
+    assert.match(page, /const SEXES[^\n]*"Prefer not to say"/);
+  });
   await test("locked PDFs: password entered on the card; a wrong password is named as such", () => {
     const page = read("app/policies/page.tsx");
     assert.match(page, /function LockedPdf/);

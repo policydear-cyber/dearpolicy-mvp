@@ -159,7 +159,7 @@ export default function FamilyPage() {
     <div className="page">
       <header className="page-header compact"><div><h1><span className="title-icon"><Icon name="family"/></span>Account settings</h1></div></header>
       <AccountTabs />
-      <div className="section-heading"><div><h2>Your family</h2><p>The people your policies cover. Use each person&rsquo;s full name as their documents print it. DearPolicy uses it to match each document to the people it covers.</p></div></div>
+      <div className="section-heading"><div><h2>Your family</h2><p>The people your policies cover. Use each person&rsquo;s full name as their documents print it. DearPolicy uses it to match each document to the people it covers. Date of birth tells it which age limits apply to a person. Sex helps it read &ldquo;she&rdquo; or &ldquo;he&rdquo; in your questions, and &ldquo;Prefer not to say&rdquo; is fine.</p></div></div>
 
       <section className="section">
         <div className="profile-list">
