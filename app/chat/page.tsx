@@ -93,12 +93,14 @@ class StoppedWaiting extends Error{}
 /** What the household's library is like right now, so an empty chat says what a first question will be answered from:
  * nothing uploaded yet, documents still being read, or documents that could not be read. */
 type Library={total:number;ready:number;reading:number;failed:{id:string;name:string;plain:boolean}[]};
+// The scan results a document can be answered from: the same two /api/policies treats as clean (app/api/policies/route.ts).
+const READABLE_SCANS=new Set(["scan_clean","not_scanned_prototype"]);
 const READING_STATUSES=new Set(["queued","uploaded","extracting","indexing"]);
 type LibraryPolicy={id:string;original_filename?:string|null;product_name?:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null;processing_status?:string;quarantine_status?:string};
 function libraryOf(policies:LibraryPolicy[]):Library{
   return {total:policies.length,
-    ready:policies.filter(p=>p.processing_status==="ready"&&(p.quarantine_status??"clean")!=="rejected").length,
-    reading:policies.filter(p=>READING_STATUSES.has(p.processing_status??"")&&(p.quarantine_status??"clean")!=="rejected").length,
+    ready:policies.filter(p=>p.processing_status==="ready"&&READABLE_SCANS.has(p.quarantine_status??"")).length,
+    reading:policies.filter(p=>READING_STATUSES.has(p.processing_status??"")&&(p.quarantine_status??"scan_clean")!=="scan_rejected").length,
     failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:documentCardTitle({product_name:p.product_name??null,original_filename:p.original_filename??null,insurer:p.insurer,document_role:p.document_role,policy_number:p.policy_number}),plain:!p.product_name?.trim()&&!p.insurer?.trim()}))};
 }
 
