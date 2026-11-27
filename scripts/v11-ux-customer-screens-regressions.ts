@@ -373,6 +373,8 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.match(page, /elapsed > 60 \* 60_000\) \{ setPollingPaused\(true\)/);
   assert.match(page, /waitedMinutes >= LONG_WAIT_MINUTES \? "Still working\./);
   assert.match(page, /\}, \[activeCount, pollingPaused\]\);/);
+  assert.match(page, /if \(polling && !Array\.isArray\(p\?\.policies\)\) return false;/);
+  assert.match(page, /document\.hidden \? Promise\.resolve\(true\) : refresh\(true\)\.catch\(\(\) => false\)/);
   assert.equal((page.match(/readingWaitCopy\(policy\.processing_stage, waitedMinutes\)/g) ?? []).length, 3);
 });
 

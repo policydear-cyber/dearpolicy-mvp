@@ -229,11 +229,14 @@ export default function PoliciesPage() {
   // being read, or could not be read, for Coverage (reading.documents). Neither is needed for the page to work.
   const [found, setFound] = useState<Record<string, string[]>>({});
   const [benefitReading, setBenefitReading] = useState<Record<string, ReadingDocument>>({});
-  async function refresh() {
+  /** `polling`: a background check that gets no list back (an error, offline) keeps what is shown, so a hiccup in a long
+   * reading never empties the library or ends the polling as if every document had finished. Returns whether it got one. */
+  async function refresh(polling = false): Promise<boolean> {
     const [f, p] = await Promise.all([
       fetch("/api/family", { cache: "no-store" }).then(async (r) => r.ok ? r.json() : null).catch(() => null) as Promise<{ family?: Member[] } | null>,
-      fetch("/api/policies", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/policies", { cache: "no-store" }).then((r) => r.json()).catch((err) => { if (!polling) throw err; return null; }),
     ]);
+    if (polling && !Array.isArray(p?.policies)) return false;
     // What each document was found to pay for. A household on the benefit table: from its table rows (documentTableKinds),
     // never from its Coverage rows, which stopped updating; the table not loaded (an error, offline): no Found line.
     // Otherwise from the Coverage rows; what only a plan type suggests is never shown as cover.
@@ -256,6 +259,7 @@ export default function PoliciesPage() {
     setPlanChoice(p.planChoice !== false);
     setLoaded(true);
     if (p.documentSafetyMode === "not_scanned_prototype" || p.documentSafetyMode === "malware_scan") setDocumentSafetyMode(p.documentSafetyMode);
+    return true;
   }
 
   useEffect(() => { void refresh(); }, []);
@@ -270,12 +274,17 @@ export default function PoliciesPage() {
   useEffect(() => {
     if (!activeCount) { pollingSince.current = null; setPollingPaused(false); setWaitedMinutes(0); return; }
     pollingSince.current ??= Date.now();
-    let timer: number | undefined, stopped = false;
+    let timer: number | undefined, stopped = false, misses = 0;
     const tick = () => {
       const elapsed = Date.now() - (pollingSince.current ?? Date.now());
       setWaitedMinutes(Math.floor(elapsed / 60_000));
       if (elapsed > 60 * 60_000) { setPollingPaused(true); return; }
-      timer = window.setTimeout(() => { void Promise.resolve(refresh()).finally(() => { if (!stopped) tick(); }); }, elapsed > 10 * 60_000 ? 15_000 : elapsed > 60_000 ? 5000 : 1400);
+      // Slower after a failed check, and no checks at all while the tab is hidden: a long reading needs neither.
+      const wait = (elapsed > 10 * 60_000 ? 15_000 : elapsed > 60_000 ? 5000 : 1400) * (misses ? Math.min(2 ** misses, 8) : 1);
+      timer = window.setTimeout(() => {
+        const check = document.hidden ? Promise.resolve(true) : refresh(true).catch(() => false);
+        void check.then((got) => { misses = got ? 0 : misses + 1; if (!stopped) tick(); });
+      }, wait);
     };
     tick();
     return () => { stopped = true; window.clearTimeout(timer); };
@@ -628,7 +637,7 @@ export default function PoliciesPage() {
         </div>;
       })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : familyKnown && !family.length ? "No documents yet. First add the people your policies cover, then upload a policy schedule, certificate, renewal notice or benefits booklet. DearPolicy reads it for you." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above, and DearPolicy reads it for you."}</div>}</div>
       {/* After the list: the folders load a few seconds after the page and grow, so above the list they pushed the pills and every row down (Live tester, 26 Nov: layout shift 0.89 on Documents). */}
-      {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={refresh} onFolders={onFolders}/>}
+      {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={async () => { await refresh(); }} onFolders={onFolders}/>}
     </section>
   </div>;
 }
