@@ -64,7 +64,8 @@ test("the badge always agrees with the filter the card sits under", () => {
   assert.equal(plainAuthority(null), null);
   assert.equal(authorityLabel(card({ document_role: "personal_schedule", document_authority_label: "Supporting document", linked_people: chosen })), "Linked to your cover");
   assert.equal(authorityLabel(card({ document_role: "personal_schedule", personal_coverage_confirmed: true, document_authority_label: "Personal proof" })), "Your own policy");
-  assert.equal(authorityLabel(card({ document_role: "premium_receipt", document_authority_label: "Current account record" })), "Current account record");
+  assert.equal(authorityLabel(card({ document_role: "premium_receipt", document_authority_label: "Current account record" })), "A statement or receipt from your insurer", "the card says it in the Details panel's plain words");
+  assert.equal(authorityLabel(card({ document_role: "endorsement", personal_coverage_confirmed: true, document_authority_label: "Personal amendment" })), "A change to your policy");
   assert.equal(authorityLabel(card({ document_role: null })), "Your document");
   for (const role of ["policy_wording", "brochure", "premium_receipt", "personal_schedule", null]) for (const linked_people of [[], chosen, schemeOnly]) for (const label of [null, "Reference", "Contract wording", "Supporting document"]) {
     const c = card({ document_role: role, linked_people, document_authority_label: label });
