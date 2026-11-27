@@ -385,6 +385,13 @@ test("Documents: a slogan or sentence stored as the insurer is never shown as th
   assert.match(page, /cardKindLabel\(readAsPolicyDocument\(policy\) \? "Policy document" : roleLabel\(policy\.document_role\), authorityLabel\(policy\)\)[^\n]*\.filter\(Boolean\)\.join\(" · "\)/, "a card never says 'Policy wording · General wording'");
 });
 
+test("Coverage: a benefit's long clauses sit behind a control, never in the row's line (Live tester 27 Nov)", () => {
+  const cov = read("components/benefit-table-coverage.tsx");
+  assert.match(cov, /splitRowDetail\(row\)/);
+  assert.match(cov, /<details className="cov-long" data-testid="table-long-conditions"><summary>\{plural\(split\.long\.length,"longer condition"\)\}<\/summary>\{split\.long\.map\(\(c,i\)=><p key=\{i\}>\{c\}<\/p>\)\}<\/details>/);
+  assert.doesNotMatch(cov, /\browDetail\(/, "the page no longer joins every clause into the line");
+});
+
 test("Documents: a long reading never promises a minute, keeps checking for an hour, and says it is still working", () => {
   const page = read("app/policies/page.tsx");
   assert.doesNotMatch(page, /usually takes under a minute|after ten minutes/i);

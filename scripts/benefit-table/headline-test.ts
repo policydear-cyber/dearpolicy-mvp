@@ -3,7 +3,7 @@
  *   npm run benefit-table:headline-test */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { bySection, keyBenefits, MAX_KEY, MAX_KEY_AS_CHARGED, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
+import { bySection, keyBenefits, LONG_CONDITION, MAX_KEY, MAX_KEY_AS_CHARGED, rowDetail, shortFigure, splitRowDetail, type SummaryRow } from "@/lib/benefit-table/headline";
 import { kindsOfTable } from "@/components/cover-kinds";
 
 let passed = 0;
@@ -70,6 +70,19 @@ test("who the figure is for is always shown with it (Critic R89-1), with its day
 test("every condition is shown, so none is hidden when all of a cover's rows are key rows (TE #99)", () => {
   assert.equal(rowDetail(row("Death", { conditions: ["Only 1 claim", "The death benefit is paid only once."] })), "Only 1 claim · The death benefit is paid only once.");
   assert.equal(rowDetail(row("x")), "");
+});
+test("long clauses leave the detail line but are never cut or dropped (Live tester 27 Nov: Coverage ran clause text into rows)", () => {
+  const long = "the Company may at its sole discretion pay an advance payment if the Insured Person's death is highly probable within twelve months";
+  const exact = "x".repeat(LONG_CONDITION), over = "x".repeat(LONG_CONDITION + 1);
+  assert.ok(long.length > LONG_CONDITION);
+  const r = row("Advance Payment Benefit", { qualifier: "child", conditions: ["Only 1 claim", long, "max 6 claims"] });
+  assert.deepEqual(splitRowDetail(r), { line: "for child · Only 1 claim · max 6 claims", long: [long] });
+  assert.deepEqual(splitRowDetail(row("x", { conditions: [exact, over] })), { line: exact, long: [over] }, "the limit is 100 characters: 100 stays in the line, 101 goes behind the control");
+  assert.deepEqual(splitRowDetail(row("x")), { line: "", long: [] });
+  // Nothing is lost: every condition is in the line or the long list.
+  const all = ["a", long, "b", over];
+  const sp = splitRowDetail(row("x", { conditions: all }));
+  assert.deepEqual([...sp.line.split(" · "), ...sp.long].sort(), [...all].sort());
 });
 test("a worked-out amount's note is short when the row carries its percentage and base", () => {
   const f = { kind: "worked_out" as const, amount: 1000000, currency: "SGD", how: "100% of S$1,000,000 (GROUP TERM LIFE, Certificate.pdf p1, as of 06/10/2022)" };

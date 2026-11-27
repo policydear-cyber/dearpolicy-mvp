@@ -4,7 +4,7 @@ import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { useState } from "react";
 import { useCanManageHousehold } from "@/components/household-role";
-import { benefitNames, bySection, keyBenefits, money, noSumText, rowDetail, shortFigure, type SummaryRow } from "@/lib/benefit-table/headline";
+import { benefitNames, bySection, keyBenefits, money, noSumText, shortFigure, splitRowDetail, type SummaryRow } from "@/lib/benefit-table/headline";
 import { rowsForCover } from "@/lib/benefit-table/cover-rows";
 import { waitingNote } from "@/lib/benefit-table/waiting-note";
 import { sharedCoverText } from "@/lib/benefit-table/shared-cover";
@@ -48,8 +48,8 @@ function PageLink({source}:{source:Source}){
 
 /** A benefit's name with its detail line, and what it pays: the cells of a key-benefit row or of a table row. */
 function benefitParts(row:Row,name:(r:Row)=>string){
-  const f=shortFigure(row),detail=[rowDetail(row),f.note].filter(Boolean).join(" · ");
-  return {name:<>{name(row)}{detail?<small>{detail}</small>:null}</>,pays:f.text};
+  const f=shortFigure(row),split=splitRowDetail(row),detail=[split.line,f.note].filter(Boolean).join(" · ");
+  return {name:<>{name(row)}{detail?<small>{detail}</small>:null}{split.long.length?<details className="cov-long" data-testid="table-long-conditions"><summary>{plural(split.long.length,"longer condition")}</summary>{split.long.map((c,i)=><p key={i}>{c}</p>)}</details>:null}</>,pays:f.text};
 }
 
 /** A figure with no currency, in one fixed format so server and browser renders agree (Critic R376 L2). */

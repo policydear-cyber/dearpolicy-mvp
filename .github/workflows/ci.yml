@@ -246,6 +246,9 @@ jobs:
       - name: Coverage page premium
         run: npm run benefit-table:coverage-premium-test
 
+      - name: Benefit rows - figures, detail lines and long clauses behind a control (offline)
+        run: npm run benefit-table:headline-test
+
       - name: Round 5 claims (member tier, message facts, claim interviews)
         run: npm run r5:claims-test
 

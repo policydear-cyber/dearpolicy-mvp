@@ -60,6 +60,15 @@ export function rowDetail(r: SummaryRow): string {
     .filter(Boolean).join(" · ");
 }
 
+/** rowDetail with the long clauses taken out of the line: a policy's own sentences ("the Company may at its sole discretion pay an
+ * advance payment ... provided no other Benefit has been paid ...") run to several lines and bury the short facts. The short
+ * ones stay in the line; each long one is returned whole, never cut or dropped, for the page to show behind a control. */
+export const LONG_CONDITION = 100;
+export function splitRowDetail(r: SummaryRow): { line: string; long: string[] } {
+  const long = r.conditions.filter((c) => c.length > LONG_CONDITION);
+  return { line: rowDetail({ ...r, conditions: r.conditions.filter((c) => c.length <= LONG_CONDITION) }), long };
+}
+
 /** A benefit's name without the row letter or number its table prints before it ("J, ", "D. ", "(a) "): that is the
  * document's layout, not the benefit's name. A letter followed by a comma is a row letter only when a word follows it,
  * not another single letter ("D, E and F Benefit" is a list, TE #101). Use benefitNames for a set of rows. */
