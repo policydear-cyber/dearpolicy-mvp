@@ -64,25 +64,25 @@ export function nextPlanUp(id: PlanId): PlanId | null {
 export type LimitCheck = { allowed: true } | { allowed: false; message: string; code: "document_limit" | "question_limit" };
 
 /** Whether one more document may be kept. `kept` is the household's current count. */
-export function checkDocumentLimit(planId: PlanId, kept: number): LimitCheck {
+export function checkDocumentLimit(planId: PlanId, kept: number, canBuy = true): LimitCheck {
   const plan = PLANS[planId];
   if (kept < plan.documents) return { allowed: true };
   const up = nextPlanUp(planId);
   const message = plan.unlimitedDocuments
     ? `Your household keeps ${kept} documents, the most a Family plan holds. Delete a document you no longer need, then upload this one again.`
     : `Your ${plan.name} plan keeps up to ${plan.documents} documents, and your household has ${kept}. ` +
-      (up ? `Upgrade to ${PLANS[up].name} for ${documentsLabel(PLANS[up]).toLowerCase()}, or delete a document you no longer need.` : "Delete a document you no longer need, then upload this one again.");
+      (up ? (canBuy ? `Upgrade to ${PLANS[up].name} for ${documentsLabel(PLANS[up]).toLowerCase()}, or delete a document you no longer need.` : `${PLANS[up].name} is coming soon. For now, delete a document you no longer need.`) : "Delete a document you no longer need, then upload this one again.");
   return { allowed: false, message, code: "document_limit" };
 }
 
 /** Whether one more question may be asked this month. `asked` is this month's count for the household. */
-export function checkQuestionLimit(planId: PlanId, asked: number, now: Date = new Date()): LimitCheck {
+export function checkQuestionLimit(planId: PlanId, asked: number, now: Date = new Date(), canBuy = true): LimitCheck {
   const plan = PLANS[planId];
   if (asked < plan.questionsPerMonth) return { allowed: true };
   const up = nextPlanUp(planId);
   const message = `Your household has asked this month’s ${plan.questionsPerMonth} questions on the ${plan.name} plan. ` +
     `Questions start again on ${questionsResetLabel(now)}.` +
-    (up ? ` Upgrade to ${PLANS[up].name} for ${PLANS[up].questionsPerMonth} questions a month.` : "") +
+    (up ? (canBuy ? ` Upgrade to ${PLANS[up].name} for ${PLANS[up].questionsPerMonth} questions a month.` : ` ${PLANS[up].name} is coming soon.`) : "") +
     " Your documents and earlier answers are still here.";
   return { allowed: false, message, code: "question_limit" };
 }
