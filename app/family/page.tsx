@@ -211,7 +211,7 @@ export default function FamilyPage() {
       {/* The people come first: a returning household opens this page to see or change them, and adds someone rarely. */}
       {!canManage ? <OwnerOnlyNote>Only the household owner can add, change or remove family members.</OwnerOnlyNote> :
       <section className="profile-add-panel" aria-label="Add a family member">
-        {family.length ? <h3>Add a family member</h3> : null}
+        {family.length ? <h3>Add a family member</h3> : <p className="field-note" data-testid="family-start-note">Start with yourself. One person is enough to upload your first document, and you can add the rest of your family any time.</p>}
         <form onSubmit={add} noValidate className="profile-add-grid" onChange={() => { if (status) { setStatus(""); setStatusFor(null); } }}>
           <div className="field wide"><label htmlFor="fm-new-name">Full name, as on their policies <Req /></label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="For example, Alex Chen" autoComplete="off" required {...invalid("fm-new-name", newShows("name"))} /><Missing id="fm-new-name" show={newShows("name")} /></div>
           <div className="field"><label htmlFor="fm-new-relationship">Relationship to you <Req /></label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)} required {...invalid("fm-new-relationship", newShows("relationship"))}><option value="" disabled>Choose…</option>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{relationshipLabel(r)}</option>)}</select><Missing id="fm-new-relationship" show={newShows("relationship")} /></div>

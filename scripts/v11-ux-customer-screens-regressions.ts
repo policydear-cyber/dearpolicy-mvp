@@ -381,6 +381,9 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.match(page, / · confirmed against the page<\/small>/);
   assert.match(page, / · amount not yet confirmed against the page<\/small>/);
   assert.doesNotMatch(page, /source-verified|Cover this document confirms/);
+  // A new household is told it can start with one person (Live tester, 27 Nov).
+  const family = read("app/family/page.tsx");
+  assert.match(family, /\{family\.length \? <h3>Add a family member<\/h3> : <p className="field-note" data-testid="family-start-note">Start with yourself\. One person is enough to upload your first document, and you can add the rest of your family any time\.<\/p>\}/);
   assert.match(page, /waitedMinutes >= LONG_WAIT_MINUTES \? "Still working\./);
   assert.match(page, /\}, \[activeCount, pollingPaused\]\);/);
   assert.match(page, /if \(polling && !Array\.isArray\(p\?\.policies\)\) return false;/);
