@@ -109,6 +109,11 @@ test("one policy filed in two documents under two product names is one premium; 
   assert.equal(total([row("a", "doc-a", "Example Total CI Plan", "470.85"), row("b", "doc-b", "Total CI Plan", "500.00")]), 970.85);
   assert.equal(total([row("a", "doc-a", "Example Total CI Plan", "470.85"), row("b", "doc-b", "Total CI Plan", "470.85", "EX-2002")]), 941.7);
   assert.equal(summariseRecords([row("a", "doc-a", "Example Total CI Plan", "100.00"), row("b", "doc-b", "Total CI Plan", "1200.00", "EX-1001", "Yearly")]).length, 2);
+  // Two members each paying the same amount on one number are two premiums (Critic #628 M1).
+  assert.equal(total([{ ...row("a", "doc-a", "Example Total CI Plan", "100.00"), family_member_id: "m1" }, { ...row("b", "doc-b", "Total CI Plan", "100.00"), family_member_id: "m2" }]), 200);
+  // A re-issue naming only the plan differently never swallows the older document's rider (Critic #628 M2): rows come newest
+  // first. Which of the equal rows is the plan is not known, so none is merged (as before this change).
+  assert.equal(total([row("n", "doc-b", "Total CI Plan", "50.00"), row("a", "doc-a", "Example Total CI Plan", "50.00"), row("r", "doc-a", "Health Extra", "50.00")]), 150);
   // No policy number: nothing is merged on a guess.
   assert.equal(summariseRecords([row("a", "doc-a", "Example Total CI Plan", "470.85", ""), row("b", "doc-b", "Total CI Plan", "470.85", "")]).length, 2);
 });

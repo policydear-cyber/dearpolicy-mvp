@@ -188,17 +188,26 @@ export function summariseRecords(rows: PremiumRecordRow[]): PremiumItem[] {
   const latest = new Map<string, PremiumRecordRow>();
   for (const row of rows) if (!latest.has(component(row))) latest.set(component(row), row);
   // One policy filed in two documents under two product names with the same policy number, amount, currency and frequency
-  // is one premium, counted once (27 Nov trace: such a policy's premium was shown twice). Only across different documents: two premiums of one document (a plan and a rider that happen to cost the
-  // same) are different premiums. The newest record is kept.
-  const sameFigure = new Set<string>(), once = [...latest.values()].filter((row) => {
+  // is one premium, counted once (27 Nov trace: such a policy's premium was shown twice). Only when it is certain: each of
+  // the documents carries exactly ONE row of that figure (a plan and a rider that cost the same are two premiums, and a
+  // re-issue showing only the plan must not swallow the older document's rider), all the rows are for the same member and
+  // payer (two people paying the same amount on one number are two premiums), and the documents differ. The newest is kept;
+  // anything else is counted as before (Critic #628 M1, M2).
+  const figureOf = (row: PremiumRecordRow) => {
     const number = normalizedIdentifier(row.policy_number);
-    if (!number || !row.policy_id) return true;
-    const key = [number, Number(row.amount), (row.currency ?? "").toUpperCase(), (row.frequency ?? "").toLowerCase()].join("|");
-    const seenIn = [...sameFigure].find((k) => k.startsWith(key + "|"));
-    if (seenIn && seenIn !== key + "|" + row.policy_id) return false;
-    sameFigure.add(key + "|" + row.policy_id);
-    return true;
-  });
+    return number ? [number, Number(row.amount), (row.currency ?? "").toUpperCase(), (row.frequency ?? "").toLowerCase()].join("|") : null;
+  };
+  const groups = new Map<string, PremiumRecordRow[]>();
+  for (const row of latest.values()) { const k = figureOf(row); if (k && row.policy_id) groups.set(k, [...(groups.get(k) ?? []), row]); }
+  const dropped = new Set<PremiumRecordRow>();
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const documents = new Set(group.map((r) => r.policy_id));
+    const sameOwner = group.every((r) => r.family_member_id != null && r.family_member_id === group[0].family_member_id && (r.payer_id ?? null) === (group[0].payer_id ?? null));
+    if (documents.size !== group.length || !sameOwner) continue;
+    for (const row of group.slice(1)) dropped.add(row);
+  }
+  const once = [...latest.values()].filter((row) => !dropped.has(row));
   return once.map((row) => {
     const amount = Number(row.amount), split = premiumSplit(amount, row.notes);
     // A frequency no closed list reads is never multiplied: its item is left out of the totals (readFrequency).
