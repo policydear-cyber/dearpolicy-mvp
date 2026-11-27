@@ -1,3 +1,4 @@
+import { shownInsurer } from "@/lib/policies/insurer-name";
 /** How DearPolicy names a document for a household, everywhere it is shown: in sentences, on the Documents page and in
  * citations. Pure (no db, no server imports) so client components can use it; lib/policies/inventory.ts re-exports it. */
 import { maskIdentityText } from "@/lib/chat/identity-numbers";
@@ -61,7 +62,7 @@ export function documentName(doc:{product_name:string|null;original_filename:str
   // An ID number in the file name is masked before the name is made readable: spacing splits it ("S7712345D" ->
   // "S7712345 D") into a shape no mask knows (TE pr181 F2).
   if(!isMachineFilename(doc.original_filename)&&!upperCode(doc.original_filename.replace(/\.[a-zA-Z0-9]{1,5}$/,""))&&!isCodeName(prettifyFilename(doc.original_filename)))return prettifyFilename(maskIdentityText(doc.original_filename));
-  const kind=documentKind(doc.document_role),insurer=doc.insurer?.trim()?insurerShortName(doc.insurer):"";
+  const kind=documentKind(doc.document_role),insurer=shownInsurer(doc.insurer)?insurerShortName(shownInsurer(doc.insurer)!):"";
   // Two policies named by insurer and kind alone are told apart by their numbers, whatever other documents are named with
   // them: code groups and matches documents by name (who is covered, which card's policy, a premium notice's plan), and
   // the same document gets the same name everywhere (Critic R285 H1, TE P159 G3).

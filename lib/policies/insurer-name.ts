@@ -12,3 +12,14 @@ export function canonicalInsurer(value: string | null | undefined): string | nul
   const name = words.filter((w, i) => !LEGAL_FORM.has(w) && !(w === "private" && /^(?:limited|ltd)$/.test(words[i + 1] ?? ""))).join("") || words.join("");
   return REBRANDS[name] ?? name;
 }
+
+/** The insurer as a household should see it, or null when the stored value is not a name. A reading can pick up a slogan or a
+ * sentence from a cover page ("Protecting what matters most to you!"); naming that as the insurer is worse than saying the
+ * insurer is not known yet. Only what no company name looks like is dropped: a question or exclamation mark, a semicolon, or
+ * nine or more words. Legal-form words and full stops ("Co. Ltd.") stay a name. */
+export function shownInsurer(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const name = value.replace(/\s+/g, " ").trim();
+  if (!name || /[!?;]/.test(name) || name.split(" ").length > 8) return null;
+  return name;
+}
