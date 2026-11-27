@@ -28,7 +28,7 @@ export function shownInsurer(value: unknown): string | null {
   // Sentences: "Better Protection. For All. For Life." is a slogan. Full stops that end an abbreviation ("Co.", "Ltd.", "S.A.") or an
   // initial ("J. P. Morgan") belong to real names and are not counted; a name that closes a sentence ("... Company Limited.")
   // has one. Two or more sentence ends left is not a name.
-  const bare = outside.replace(/\b[a-z]\./gi, " ").replace(/\b(?:co|ltd|pte|pvt|inc|corp|bhd|sdn|plc|llc|no|reg|ag|sa|nv)\./gi, " ").replace(/\s+/g, " ").trim();
+  const bare = outside.replace(/\b[a-z]\./gi, " ").replace(/\b(?:co|ltd|pte|pty|pvt|inc|corp|bhd|sdn|plc|llc|ltda|no|reg|ag|sa|nv|ins|assn|assoc|natl|intl|mut|gen|cia|fed|dr|st|mr|mrs|jr|sr|bros|mfg|mgmt|fin|svcs|zrt|kft|gmbh)\./gi, " ").replace(/\s+/g, " ").trim();
   if ((bare.match(/[a-z0-9)]\.(?=\s|$)/gi) ?? []).length >= 2) return null;
   if (/!$/.test(name) && outside.split(" ").length > 2) return null;
   return name;
