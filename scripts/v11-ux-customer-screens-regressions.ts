@@ -28,6 +28,8 @@ import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { isoDateWords } from "@/lib/format/detail-date";
 import { waitingNote } from "@/lib/benefit-table/waiting-note";
 import { printedDay } from "@/lib/simple-chat/verify";
+import { shownInsurer } from "@/lib/policies/insurer-name";
+import { documentName } from "@/lib/policies/document-name";
 import path from "node:path";
 import { customerAnswerText, customerError, customerMessage, ANSWER_UNAVAILABLE } from "../components/customer-text";
 
@@ -366,6 +368,20 @@ test("a recent cover whose benefit is 'subject to the waiting period' says so on
   const card = read("components/benefit-table-coverage.tsx");
   assert.match(card, /waitingNote\(cover,rows\)\?<p className="muted cov-reading" data-testid="table-waiting">/);
   assert.match(card, /<Link className="text-link" href="\/chat">Ask a question<\/Link>/);
+});
+
+test("Documents: a slogan or sentence stored as the insurer is never shown as the insurer's name (Live tester 27 Nov)", () => {
+  for (const name of ["Singlife", "AIA Singapore Private Limited", "Great Eastern Life Assurance Co. Ltd.", "Prudential Assurance Company Singapore (Pte) Limited", "  NTUC   Income  ", "Aviva Ltd (trading as Singlife with Aviva), Singapore Branch", "Income Insurance Limited (formerly NTUC Income Insurance Co-operative Limited)", "Prudential Assurance Company Singapore (Pte) Limited (Reg. No. 199902028N)", "Yahoo! Insurance", "Yahoo!", "Compañía Española de Seguros de Crédito a la Exportación", "The Hartford Steam Boiler Inspection and Insurance Company of Connecticut", "Mapfre Vida, S.A. de Seguros y Reaseguros sobre la Vida Humana", "Allianz Insurance Company of Singapore Pte. Ltd., Hong Kong Branch", "one two three four five six seven eight nine ten eleven twelve"]) assert.ok(shownInsurer(name), `${name} is a name`);
+  assert.equal(shownInsurer("  NTUC   Income  "), "NTUC Income");
+  for (const slogan of ["Protecting what matters most to you!", "Why wait? Get covered today", "Plans for life; peace of mind", "We help you and your family live well, plan ahead and stay protected every day", "", "   ", null, undefined, 7, "N/A", "Not applicable", "Unknown", "undefined", "null", "-", "one two three four five six seven eight nine ten eleven twelve thirteen"]) assert.equal(shownInsurer(slogan), null, `${String(slogan)} is not a name`);
+  for (const [file, re] of [["app/page.tsx", /shownInsurer\(doc\.insurer\)/], ["app/ledger/page.tsx", /shownInsurer\(l\.insurer\)/], ["app/ledger/page.tsx", /shownInsurer\(row\.insurer\)/], ["app/life-stages/page.tsx", /shownInsurer\(p\.insurer\)/], ["components/source-list.tsx", /shownInsurer\(doc\.insurer\)/], ["app/coverage/page.tsx", /shownInsurer\(x\.insurer\)/], ["app/records/page.tsx", /shownInsurer\(r\.insurer\)/], ["app/records/page.tsx", /shownInsurer\(item\.insurer\)/], ["app/schedule/page.tsx", /shownInsurer\(rows\[0\]\.insurer\)/]] as const) assert.match(read(file), re, `${file} shows the insurer through shownInsurer`);
+  const base = { product_name: null, original_filename: "", document_role: "policy_wording", policy_number: null };
+  assert.ok(!/matters most/.test(documentName({ ...base, insurer: "Protecting what matters most to you!" })), "a slogan never names the document");
+  assert.match(documentName({ ...base, insurer: "Singlife" }), /^Singlife /);
+  const page = read("app/policies/page.tsx");
+  assert.match(page, /\[shownInsurer\(policy\.insurer\) \?\? "Insurer not known yet",/);
+  assert.match(page, /\(shownInsurer\(policy\.insurer\) \?\? documentName\(policy\)\)/);
+  assert.match(page, /showValue\(shownInsurer\(d\.insurer\)\)/);
 });
 
 test("Documents: a long reading never promises a minute, keeps checking for an hour, and says it is still working", () => {

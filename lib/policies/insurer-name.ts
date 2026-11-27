@@ -12,3 +12,19 @@ export function canonicalInsurer(value: string | null | undefined): string | nul
   const name = words.filter((w, i) => !LEGAL_FORM.has(w) && !(w === "private" && /^(?:limited|ltd)$/.test(words[i + 1] ?? ""))).join("") || words.join("");
   return REBRANDS[name] ?? name;
 }
+
+/** The insurer as a household should see it, or null when the stored value is not a name. A reading can pick up a slogan, a
+ * sentence or a placeholder from a cover page ("Protecting what matters most to you!", "N/A"); naming that as the insurer is
+ * worse than saying the insurer is not known yet. Only what no company name looks like is dropped: a placeholder, a question
+ * mark, a semicolon, a closing exclamation mark after three or more words, or thirteen or more words outside brackets and a
+ * ", ... Branch" clause. Bracketed clauses ("(formerly ...)", "(Reg. No. ...)"), a branch clause, a one- or two-word brand
+ * ending in "!" ("Yahoo!") and a mid-name "!" ("Yahoo! Insurance") are part of real names and stay. */
+const PLACEHOLDER = /^(?:n\/?a|none|nil|null|undefined|unknown|not (?:applicable|stated|known|available|provided)|[-–—.?]+)$/i;
+export function shownInsurer(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const name = value.replace(/\s+/g, " ").trim();
+  const outside = name.replace(/\([^)]*\)?/g, " ").replace(/,[^,]*\bbranch\b[^,]*$/i, " ").replace(/\s+/g, " ").trim();
+  if (!outside || PLACEHOLDER.test(outside) || /[?;]/.test(name) || outside.split(" ").length > 12) return null;
+  if (/!$/.test(name) && outside.split(" ").length > 2) return null;
+  return name;
+}

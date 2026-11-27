@@ -7,6 +7,7 @@ import { StuckDocuments,canRetryNow,stuckDocuments,stuckTitle,type ReadingDocume
 import { coveragePersonKinds,isToConfirm,kindOfName,listOf,type ScheduleLine } from "@/components/cover-kinds";
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
 import { BenefitTableCoverage,type BenefitTableData } from "@/components/benefit-table-coverage";
+import { shownInsurer } from "@/lib/policies/insurer-name";
 
 /** Coverage: what each plan pays, for each person, as the documents state it.
  *
@@ -199,7 +200,7 @@ function LedgerCoveragePage(){
             {row.hasFigure&&isToConfirm(row)?<p className="coverage-unconfirmed" data-testid="coverage-to-confirm">To confirm: the schedule prints this amount, but its wording hasn&rsquo;t been read to confirm what it pays for.</p>:null}
             {alt?<AlternativeAmountsBlock alternatives={alt} rowId={plans.length>1?"":row.id}/>:null}
             {!alt&&glance.lines.length?<p className="coverage-conditions">{glance.lines.join(" · ")}{glance.more?` · ${glance.more} more condition${glance.more===1?"":"s"} below`:""}</p>:null}
-            <p className="coverage-plan">{plans.join(" or ")}{!alt&&row.insurer?` · ${row.insurer}`:""}</p>
+            <p className="coverage-plan">{plans.join(" or ")}{!alt&&shownInsurer(row.insurer)?` · ${shownInsurer(row.insurer)}`:""}</p>
             <details className="source-details"><summary>{row.conditions.length?"Conditions and source":"Source"}</summary>
               <p className="muted">{sourceLabel(row)}</p>
               {row.conditions.length?<ul>{row.conditions.map((c,i)=><li key={i}>{c}</li>)}</ul>:null}
@@ -211,7 +212,7 @@ function LedgerCoveragePage(){
               <div className="benefit-head"><strong>{l.category}</strong></div>
               <p className="muted-cell">Listed on your schedule or certificate. The amount isn&rsquo;t shown here; see {l.sourcePage?`page ${l.sourcePage}`:"the document"}.</p>
             </div>
-            <p className="coverage-plan">{l.planName??"Your plan"}{l.insurer?` · ${l.insurer}`:""}</p>
+            <p className="coverage-plan">{l.planName??"Your plan"}{shownInsurer(l.insurer)?` · ${shownInsurer(l.insurer)}`:""}</p>
           </li>)}</ul>
       </div>)}
       {!person.kinds.length?<p className="empty-row">{unreadable?`No cover for ${person.name} was found in the documents read so far. ${unreadableNote} them.`:stillReading?`Nothing for ${person.name} yet. Documents are still being read.`:`No cover for ${person.name} was found in your uploaded documents. A plan you haven’t uploaded may still cover them.`}</p>:null}

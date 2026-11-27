@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { formatMoney } from "@/lib/format/currency";
 import { premiumRowDetail, premiumSourceCaption } from "@/lib/format/premium-source";
 import type { CountedPremium, CountedPremiums } from "@/lib/policies/counted-premiums";
+import { shownInsurer } from "@/lib/policies/insurer-name";
 
 type RecordRow = { id: string; family_member_name: string | null; insurer: string | null; product_name: string | null; policy_number: string | null; amount: string; currency: string; frequency: string | null; payment_date: string | null; period_start: string | null; notes: string | null };
 type Person = { id: string; display_name: string; relationship: string; premiums: CountedPremiums };
@@ -15,7 +16,7 @@ function money(amount: string, currency: string) { return formatMoney(amount,cur
 const premiumMoney=(i:CountedPremium,v:number)=>formatMoney(v,i.currencyStated===false?null:i.currency);
 
 function PremiumRow({ item, once }: { item: CountedPremium; once?: boolean }) {
-  return <div className="premium-breakdown-row"><div className="payment-brand">{(item.insurer??"IN").slice(0,2).toUpperCase()}</div><div><strong>{item.product_name??item.insurer??"Insurance policy"}</strong><span>{premiumRowDetail(item)}</span></div>
+  return <div className="premium-breakdown-row"><div className="payment-brand">{(shownInsurer(item.insurer)??"IN").slice(0,2).toUpperCase()}</div><div><strong>{item.product_name??shownInsurer(item.insurer)??"Insurance policy"}</strong><span>{premiumRowDetail(item)}</span></div>
     <div className="premium-breakdown-value">{once?<><strong>{premiumMoney(item,item.amount)}</strong><span>paid once</span></>:<><strong>{premiumMoney(item,item.monthly)}<small>/mo</small></strong><span>{premiumMoney(item,item.annual)} / year</span></>}</div></div>;
 }
 
@@ -76,7 +77,7 @@ export default function RecordsPage() {
         <div className="payment-list">
           {failed && <div className="alert error" role="alert">Your payments could not be loaded. Please refresh the page in a moment.</div>}
           {!records && !failed && <div className="empty-card" role="status">Loading your payments…</div>}
-          {records?.map((r)=><div className="payment-row" key={r.id}><div className="payment-brand">{(r.insurer??"IN").slice(0,2).toUpperCase()}</div><div className="payment-main"><strong>{r.product_name??r.insurer??"Insurance payment"}</strong><span>{r.family_member_name??"Shared family payment"}{r.policy_number?` · ${r.policy_number}`:""}</span></div><div className="payment-amount"><strong>{money(r.amount,r.currency)}</strong><span>{r.frequency??r.payment_date??r.period_start??"payment record"}</span></div></div>)}
+          {records?.map((r)=><div className="payment-row" key={r.id}><div className="payment-brand">{(shownInsurer(r.insurer)??"IN").slice(0,2).toUpperCase()}</div><div className="payment-main"><strong>{r.product_name??shownInsurer(r.insurer)??"Insurance payment"}</strong><span>{r.family_member_name??"Shared family payment"}{r.policy_number?` · ${r.policy_number}`:""}</span></div><div className="payment-amount"><strong>{money(r.amount,r.currency)}</strong><span>{r.frequency??r.payment_date??r.period_start??"payment record"}</span></div></div>)}
           {records && !records.length && <div className="empty-card">No payment records yet. Upload the latest receipt or renewal notice from an insurer on <Link href="/policies" className="text-link">Documents</Link>.</div>}
         </div>
       </section>}

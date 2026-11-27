@@ -12,6 +12,7 @@ import { sharedPolicyNote,sharedPolicyText } from "@/lib/policies/shared-policy"
 import { pointsToScheduleSum,SCHEDULE_SUM_POINTER } from "@/lib/policies/no-amount-pointer";
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
 import { CurrencyPicker } from "@/components/currency-picker";
+import { shownInsurer } from "@/lib/policies/insurer-name";
 
 /** Benefits: what the household's documents say each policy pays.
  *
@@ -177,7 +178,7 @@ export default function BenefitsPage(){
       :!visible.length?<div className="empty-card">No benefit matches that search. Try another word.</div>
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>
-          <div className="section-heading"><div><div className="eyebrow">{rows[0].insurer??"POLICY"}</div><h2>{groupHeading(groups,product)}</h2></div>
+          <div className="section-heading"><div><div className="eyebrow">{shownInsurer(rows[0].insurer)??"POLICY"}</div><h2>{groupHeading(groups,product)}</h2></div>
             <small>{shared(rows)?`${selectedPerson!.name} · shared policy`:(rows[0].documentOwners??rows[0].owners).length?(rows[0].documentOwners??rows[0].owners).join(" · "):<Link className="text-link" href="/">Whose policy is this? →</Link>}</small></div>
           {(()=>{const note=shared(rows);return note?<p className="muted" data-testid="shared-policy">{sharedPolicyText(note,selectedPerson!.name)}</p>:null;})()}
           {(()=>{const k=[...new Set(rows.map(r=>r.policyId))].map(id=>docKinds[id]).filter(Boolean);

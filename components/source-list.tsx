@@ -1,4 +1,5 @@
 import type { ChatCitation } from "@/types";
+import { shownInsurer } from "@/lib/policies/insurer-name";
 
 /** One row per document, not per passage: the same page cited by several
  * statements is listed once, and a document's pages read as one line
@@ -33,7 +34,7 @@ export function SourceList({ citations }: { citations: ChatCitation[] }) {
   return <div className="source-list">{groupSources(citations).map((doc) => {
     const pages = doc.pages.length ? `${doc.pages.length > 1 || doc.pages[0].includes("–") ? "pages" : "page"} ${doc.pages.join(", ")}` : "page not recorded";
     const head = <>
-      <span className="source-name">{doc.insurer ? doc.insurer + " · " : ""}{doc.name}<small>{[doc.label ?? roleWord(doc.role) ?? "Your uploaded document", doc.documentDate ? `dated ${doc.documentDate}` : null].filter(Boolean).join(" · ")}</small></span>
+      <span className="source-name">{shownInsurer(doc.insurer) ? shownInsurer(doc.insurer) + " · " : ""}{doc.name}<small>{[doc.label ?? roleWord(doc.role) ?? "Your uploaded document", doc.documentDate ? `dated ${doc.documentDate}` : null].filter(Boolean).join(" · ")}</small></span>
       <b>{pages}</b>
     </>;
     return doc.excerpts.length

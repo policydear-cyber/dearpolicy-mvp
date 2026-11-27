@@ -23,6 +23,7 @@ import { authorityLabel, isOwnDocument, plainAuthority, readAsPolicyDocument } f
 import { uploadOverrideLine } from "@/lib/policies/upload-override";
 import { PolicyFolders } from "@/components/policy-folders";
 import type { FolderView } from "@/lib/policies/folder-view";
+import { shownInsurer } from "@/lib/policies/insurer-name";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -549,8 +550,8 @@ export default function PoliciesPage() {
           {/* One document per row: what it is, whose it is and what was found on the left; its actions on the right (phone: underneath). */}
           <div className="document-main">
           <div className="document-head">
-            <div className="policy-logo">{(policy.insurer ?? documentName(policy)).slice(0, 2).toUpperCase()}</div>
-            <div className="document-title"><strong>{documentName(policy)}</strong>{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage, waitedMinutes).eta : [policy.insurer ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
+            <div className="policy-logo">{(shownInsurer(policy.insurer) ?? documentName(policy)).slice(0, 2).toUpperCase()}</div>
+            <div className="document-title"><strong>{documentName(policy)}</strong>{(policy.processing_status === "failed" && !processing) || (processing && policy.processing_stalled) ? null : <span>{processing ? readingWaitCopy(policy.processing_stage, waitedMinutes).eta : [shownInsurer(policy.insurer) ?? "Insurer not known yet", (readAsPolicyDocument(policy) ? "Policy document" : roleLabel(policy.document_role)), authorityLabel(policy), ...numbers].join(" · ")}</span>}
               {/* Its numbers sit with what it is, so the actions stand alone. */}
               {!!numbers.length && (processing || policy.processing_status === "failed") && <small className="document-numbers">{numbers.join(" · ")}</small>}</div>
               {!processing && !quarantineHeld && !scanRejected && (() => {
@@ -869,7 +870,7 @@ function PolicyDetailsPanel({ policyId }: { policyId: string; onCorrected?: () =
   return (
     <div className="detail-panel" data-testid="policy-details">
       <div className="detail-grid">
-        <div><label>Insurer</label><span data-testid="detail-insurer">{showValue(d.insurer)}</span></div>
+        <div><label>Insurer</label><span data-testid="detail-insurer">{showValue(shownInsurer(d.insurer))}</span></div>
         <div><label>Product</label><span data-testid="detail-product">{showValue(d.productName)}</span></div>
         <div><label>Policy number</label><span data-testid="detail-policy-number">{showValue(d.policyNumber)}</span></div>
         <div><label>Effective date</label><span data-testid="detail-effective">{detailDate(d.effectiveDate)}</span></div>
