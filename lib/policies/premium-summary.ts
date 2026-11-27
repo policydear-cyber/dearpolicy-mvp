@@ -187,7 +187,19 @@ export function summariseRecords(rows: PremiumRecordRow[]): PremiumItem[] {
   // rows arrive newest first: the latest record of each premium component.
   const latest = new Map<string, PremiumRecordRow>();
   for (const row of rows) if (!latest.has(component(row))) latest.set(component(row), row);
-  return [...latest.values()].map((row) => {
+  // One policy filed in two documents under two product names with the same policy number, amount, currency and frequency
+  // is one premium, counted once (27 Nov trace: such a policy's premium was shown twice). Only across different documents: two premiums of one document (a plan and a rider that happen to cost the
+  // same) are different premiums. The newest record is kept.
+  const sameFigure = new Set<string>(), once = [...latest.values()].filter((row) => {
+    const number = normalizedIdentifier(row.policy_number);
+    if (!number || !row.policy_id) return true;
+    const key = [number, Number(row.amount), (row.currency ?? "").toUpperCase(), (row.frequency ?? "").toLowerCase()].join("|");
+    const seenIn = [...sameFigure].find((k) => k.startsWith(key + "|"));
+    if (seenIn && seenIn !== key + "|" + row.policy_id) return false;
+    sameFigure.add(key + "|" + row.policy_id);
+    return true;
+  });
+  return once.map((row) => {
     const amount = Number(row.amount), split = premiumSplit(amount, row.notes);
     // A frequency no closed list reads is never multiplied: its item is left out of the totals (readFrequency).
     const perYear = paymentsPerYear(row.frequency) ?? 1;
