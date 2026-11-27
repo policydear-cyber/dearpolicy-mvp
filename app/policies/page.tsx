@@ -801,7 +801,7 @@ type PolicyDetailsPayload = {
  * when the document stated one, otherwise honestly without one -- a missing
  * currency is never rendered as SGD. */
 function reviewAmount(amount: number | string | null, currency: string | null): string {
-  if (amount == null) return "—";
+  if (amount == null || !Number.isFinite(Number(amount))) return "—";
   // The same figure as Home, Coverage and Premiums print: S$300,000, never "SGD 300,000"; no currency stated says so.
   return formatMoney(Number(amount), currency);
 }
@@ -854,7 +854,7 @@ function PolicyDetailsPanel({ policyId }: { policyId: string; onCorrected?: () =
       {!!data.linkedMembers.length && <div className="detail-section"><b>Whose cover</b>{[...new Map(data.linkedMembers.map((m) => [m.id, m] as const)).values()].map((m) => <div key={m.id}>{m.display_name}</div>)}</div>}
       {!!data.coverages.length && <div className="detail-section"><b>Cover this document confirms</b>{data.coverages.map((c, i) => <div key={i} data-testid="detail-coverage">{c.member_name}: {c.category} · {coverFigure(c)}{c.source_page ? <small> · page {c.source_page}</small> : null}{c.evidence_verified ? <small className="matched"> · source-verified</small> : <small className="muted"> · amount not yet confirmed against the page</small>}</div>)}</div>}
       {!!data.referenceCoverages.length && <div className="detail-section"><b>Benefits it describes</b>{data.referenceCoverages.map((c, i) => <div key={i}>{c.category}{c.product_name && c.product_name.trim().toLowerCase() !== c.category.trim().toLowerCase() ? ` · ${c.product_name}` : ""}{c.source_page ? <small> · page {c.source_page}</small> : null}</div>)}</div>}
-      {!!data.premiums.length && <div className="detail-section"><b>Premiums</b>{data.premiums.map((p, i) => <div key={i}>{reviewAmount(p.amount, p.currency)}{p.frequency ? ` · ${p.frequency}` : ""}{p.payment_date ? ` · ${p.payment_date}` : ""}{p.source_page ? <small> · page {p.source_page}</small> : null}</div>)}</div>}
+      {!!data.premiums.length && <div className="detail-section"><b>Premiums</b>{data.premiums.map((p, i) => <div key={i}>{reviewAmount(p.amount, p.currency)}{p.frequency ? ` · ${p.frequency}` : ""}{p.payment_date ? ` · ${detailDate(p.payment_date)}` : ""}{p.source_page ? <small> · page {p.source_page}</small> : null}</div>)}</div>}
       {!!data.extracted.riders.length && <div className="detail-section"><b>Riders</b>{data.extracted.riders.map((w, i) => <div key={i}>{w}</div>)}</div>}
       {!!conditions.length && <details className="detail-section source-details"><summary>Waiting periods, exclusions and deductibles</summary>{conditions.map((w, i) => <div key={i}>{w}</div>)}</details>}
     </div>

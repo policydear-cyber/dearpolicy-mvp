@@ -299,8 +299,11 @@ test("a document's Details panel writes dates and amounts as the rest of the sit
   assert.match(page, /data-testid="detail-effective">\{detailDate\(d\.effectiveDate\)\}/);
   assert.doesNotMatch(page, /\{showValue\(d\.(?:effectiveDate|renewalOrExpiryDate)\)\}/);
   // Amounts: the one money format (S$300,000), which says so when no currency is stated.
-  assert.match(page, /function reviewAmount\([^)]*\): string \{\s*if \(amount == null\) return "—";[\s\S]*?return formatMoney\(Number\(amount\), currency\);/);
+  assert.match(page, /function reviewAmount\([^)]*\): string \{\s*if \(amount == null \|\| !Number\.isFinite\(Number\(amount\)\)\) return "—";[\s\S]*?return formatMoney\(Number\(amount\), currency\);/);
   assert.doesNotMatch(page, /\$\{currency\} \$\{numeric\.toLocaleString\(\)\}/);
+  assert.match(page, /amount == null \|\| !Number\.isFinite\(Number\(amount\)\)\) return "—"/, "an unreadable amount is a dash, never S$0.00");
+  assert.match(page, /\$\{detailDate\(p\.payment_date\)\}/, "the premium list's dates are written the same way");
+  assert.match(read("e2e/ingestion-tests/document-ingestion.spec.ts"), /detail-expiry"\]'\)\)\.toContainText\("1 January 2027"\)/);
   // A benefit whose product name is its own category is named once.
   assert.match(page, /c\.product_name && c\.product_name\.trim\(\)\.toLowerCase\(\) !== c\.category\.trim\(\)\.toLowerCase\(\)/);
 });
