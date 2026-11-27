@@ -388,6 +388,10 @@ test("Documents: a slogan or sentence stored as the insurer is never shown as th
 test("Coverage: a benefit's long clauses sit behind a control, never in the row's line (Live tester 27 Nov)", () => {
   const cov = read("components/benefit-table-coverage.tsx");
   assert.match(cov, /splitRowDetail\(row\)/);
+  const css = read("app/globals.css");
+  assert.match(css, /\.cov-long summary \{[^}]*cursor: pointer[^}]*var\(--brand-ink\)[^}]*min-height: 32px/);
+  assert.match(css, /\.cov-long p \{ margin: 4px 0 0;/);
+  assert.match(cov, /<div className="b">\{b\.name\}<\/div>/);
   assert.match(cov, /<details className="cov-long" data-testid="table-long-conditions"><summary>\{plural\(split\.long\.length,"longer condition"\)\}<\/summary>\{split\.long\.map\(\(c,i\)=><p key=\{i\}>\{c\}<\/p>\)\}<\/details>/);
   assert.doesNotMatch(cov, /\browDetail\(/, "the page no longer joins every clause into the line");
 });

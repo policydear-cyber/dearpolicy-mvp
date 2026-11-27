@@ -82,7 +82,7 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
       {/* Only its schedule's own cover line is on file: shown as printed, with the same ask for its wording. */}
       {rows.every(r=>r.coverLine)&&!listedWith?<p className="muted cov-reading" data-testid="table-cover-line">As printed on the schedule. {reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:null}
       <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,name);
-        return <li key={i} data-testid="table-row"><span className="b">{b.name}</span><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
+        return <li key={i} data-testid="table-row"><div className="b">{b.name}</div><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
       {waitingNote(cover,rows)?<p className="muted cov-reading" data-testid="table-waiting">{waitingNote(cover,rows)} <Link className="text-link" href="/chat">Ask a question</Link></p>:null}
       {rows.length>key.length?<details className="cov-all"><summary>All {plural(rows.length,"benefit")}</summary>
         <table className="cov-table"><tbody>{bySection(rows).map(g=>[
