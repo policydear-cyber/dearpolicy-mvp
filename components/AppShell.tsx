@@ -77,7 +77,7 @@ type Theme = "light" | "dark";
 function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }) {
   const dark = theme === "dark";
   return (
-    <button type="button" className="theme-toggle icon-only" onClick={onToggle} aria-pressed={dark} aria-label={dark ? "Switch to light appearance" : "Switch to dark appearance"} data-tip={dark ? "Dark" : "Light"}>
+    <button type="button" className="theme-toggle icon-only" onClick={onToggle} aria-pressed={dark} aria-label="Dark appearance" data-tip={dark ? "Dark" : "Light"}>
       <Icon name={dark ? "moon" : "sun"} />
     </button>
   );
