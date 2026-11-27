@@ -352,6 +352,15 @@ test("a recent cover whose benefit is 'subject to the waiting period' says so on
     assert.equal(waitingNote({ startDate: "19/10/2026" }, [{ benefit: "Death", conditions: [denied] }], now), null, denied);
   for (const applies of ["This benefit is subject to the waiting period as stated in Clause 8.", "A 90 day waiting period applies.", "Payable after the waiting period of 90 days."])
     assert.notEqual(waitingNote({ startDate: "19/10/2026" }, [{ benefit: "CI", conditions: [applies] }], now), null, applies);
+  const at = (c: string) => waitingNote({ startDate: "19/10/2026" }, [{ benefit: "X", conditions: [c] }], now);
+  for (const zero of ["A waiting period of 0 days applies.", "0-day waiting period applies.", "Zero waiting period applies.", "There is no 30 day waiting period.", "Not applicable: the waiting period applies."]) assert.equal(at(zero), null, zero);
+  for (const w of ["nil", "none", "without", "waived", "waiver", "exempt", "n/a", "nor", "never", "does not", "doesn't", "not", "no"]) assert.equal(at(`The waiting period applies, ${w}.`), null, `negation word: ${w}`);
+  for (const a of ["Waiting period will apply to illness.", "Excluded during the waiting period.", "Claims within the waiting period are excluded.", "Payable before the waiting period ends.", "The waiting period runs until January.", "The waiting period must be served.", "The waiting period has elapsed.", "On completion of the waiting period."]) assert.notEqual(at(a), null, a);
+  assert.notEqual(at("30 days; subject to the waiting period."), null, "a figure beside an applying phrase");
+  assert.notEqual(at("No waiting period applies to accidents. A waiting period applies to illness."), null, "each sentence judged alone");
+  assert.notEqual(waitingNote({ startDate: "19/10/2026" }, [{ benefit: "A", conditions: ["No waiting period applies."] }, { benefit: "B", conditions: ["Subject to the waiting period."] }], now), null, "any row, not every row");
+  assert.notEqual(waitingNote({ startDate: "27/11/2026" }, [row], now), null, "a cover that began today");
+  assert.notEqual(waitingNote({ startDate: "27/11/2026" }, [row], new Date("2026-11-26T17:00:00Z")), null, "the Singapore day, not the UTC day, is today");
   assert.notEqual(waitingNote({ startDate: "19/10/2026" }, [{ benefit: "CI", conditions: ["Covers adults only.", "This benefit is subject to the waiting period as stated in Clause 8."] }], now), null, "one of several conditions");
   const card = read("components/benefit-table-coverage.tsx");
   assert.match(card, /waitingNote\(cover,rows\)\?<p className="muted cov-reading" data-testid="table-waiting">/);

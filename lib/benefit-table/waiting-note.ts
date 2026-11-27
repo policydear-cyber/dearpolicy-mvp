@@ -3,7 +3,7 @@ import { printedDay, singaporeDay } from "./dates";
 /** One condition sentence that says a waiting period applies to the benefit ("This benefit is subject to the waiting period as
  * stated in Clause 8"). A sentence that denies, waives or empties it ("No waiting period applies", "Waiting period: nil", "waived
  * for accidents", "Not subject to any waiting period") says nothing: when unsure, nothing is shown (Critic #633). */
-const NEGATION = /\b(?:no|nil|none|not|without|waive[sd]?|waiver|exempt(?:ed)?|n\/a|nor|never)\b|\bdoes(?:n['’]t|\s+not)\b/i;
+const NEGATION = /\b(?:no|nil|none|not|without|waive[sd]?|waiver|exempt(?:ed)?|n\/a|nor|never)\b|\bdoes(?:n['’]t|\s+not)\b|\bzero\b|\b0(?:[\s-]*days?)?\b(?![\d.])/i;
 const APPLIES = /\b(?:subject\s+to|applies|apply|after|during|within|before|until|served|elapsed?|completion\s+of)\b/i;
 export function sayingWaitingApplies(text: string): boolean {
   return text.split(/(?<=[.;])\s+/).some((sentence) => /\bwaiting\s+period/i.test(sentence) && !NEGATION.test(sentence) && APPLIES.test(sentence));
