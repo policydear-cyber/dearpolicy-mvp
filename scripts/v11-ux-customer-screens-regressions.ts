@@ -27,6 +27,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { isoDateWords } from "@/lib/format/detail-date";
 import { waitingNote } from "@/lib/benefit-table/waiting-note";
+import { printedDay } from "@/lib/simple-chat/verify";
 import path from "node:path";
 import { customerAnswerText, customerError, customerMessage, ANSWER_UNAVAILABLE } from "../components/customer-text";
 
@@ -384,8 +385,12 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   // A new household is told it can start with one person (Live tester, 27 Nov).
   // One date style in a chat answer: the base's printed date is written like the neighbouring "As printed 6 Oct 2022", never "06/10/2022" (Live tester, 27 Nov).
   const verify = read("lib/simple-chat/verify.ts");
-  assert.match(verify, /, as of \$\{sgDay\(c\.base\.asOf\)\}/);
-  assert.doesNotMatch(verify, /\.split\("-"\)\.reverse\(\)\.join\("\/"\)/);
+  assert.match(verify, /, as of \$\{printedDay\(c\.base\.asOf\)\}/);
+  assert.equal(printedDay("2022-10-06"), "6 Oct 2022");
+  assert.equal(printedDay("2022-02-31"), "31/02/2022", "a day the calendar lacks keeps the document's digits, never rolls to another date");
+  assert.equal(printedDay("2024-02-29"), "29 Feb 2024");
+  assert.equal(printedDay("garbage"), "garbage");
+  assert.match(verify, /return real \? sgDay\(iso\) : iso\.split\("-"\)\.reverse\(\)\.join\("\/"\);/);
   const family = read("app/family/page.tsx");
   // Help on the two required fields, and the spouse option names partners; both stay required (DC 17 Nov rule).
   assert.match(family, /Used to work out which age limits apply\./);

@@ -3268,13 +3268,20 @@ function onlyNotATotal(sentence: string, docNames: string[] = [], differOk = fal
   return !/[a-z]{3,}/i.test(rest);
 }
 
+/** A base figure's printed date in the answer's style ("6 Oct 2022"). A day the calendar does not have (31/02/2022) would
+ * roll over to another date, so it keeps the document's own digits instead. */
+export function printedDay(iso: string): string {
+  const real = /^\d{4}-\d{2}-\d{2}$/.test(iso) && new Date(`${iso}T00:00:00Z`).toISOString().slice(0, 10) === iso;
+  return real ? sgDay(iso) : iso.split("-").reverse().join("/");
+}
+
 /** How an illustration was worked out, in plain words with its sources. */
 function basisOf(household: Household, c: Checked): string {
   const po = c.s.percentOf!;
   if (!c.base) return `${po.percent}% of ${po.baseAmount}`;
   const bdoc = household.documents[c.base.found.docIndex];
   const cover = c.base.cover.replace(/\b\w/g, (x) => x.toUpperCase());
-  const asOf = c.base.asOf ? `, as of ${sgDay(c.base.asOf)}` : "";
+  const asOf = c.base.asOf ? `, as of ${printedDay(c.base.asOf)}` : "";
   return `${po.percent}% of ${c.person}'s ${cover ? cover + " " : ""}sum insured of ${formatMoney(currencyOf(po.baseAmount, c.base.found.excerpt, bdoc, c.base.found.page).sign, moneyFiguresIn(po.baseAmount)[0].value)} (${docLabel(household, bdoc)}, page ${c.base.found.page}${asOf})`;
 }
 
