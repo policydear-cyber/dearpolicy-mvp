@@ -262,6 +262,9 @@ test("the empty Ask screen shows how to say what happened, and counts only docum
   assert.match(page, /\?\?"scan_clean"\)!=="scan_rejected"/);
   assert.ok(!/!=="rejected"/.test(page), "no comparison against a status no document has");
   assert.match(page, /ready>0\?<p className="chat-library-note" data-testid="chat-ready-note">Answers use the \{ready===1\?"one document":`\$\{ready\} documents`\} DearPolicy has read so far\./);
+  assert.match(page, /import \{ documentReadLabel \} from "@\/lib\/documents\/upload-problems"/);
+  assert.match(page, /partly:policies\.filter\(p=>p\.processing_status==="ready"&&READABLE_SCANS\.has\(p\.quarantine_status\?\?""\)&&!documentReadLabel\(/);
+  assert.match(page, /only partly read\. <Link className="text-link" href="\/policies">See Documents<\/Link>/);
   const welcome = page.slice(page.indexOf("function ChatWelcome"), page.indexOf("function ChatContent"));
   assert.ok(!/S\$|\$\d|covered|not covered/i.test(welcome.replace(/Answers use|say who and what/g, "")), "the welcome promises no amount or verdict");
 });

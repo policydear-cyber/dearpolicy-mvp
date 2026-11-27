@@ -9,6 +9,7 @@ import type { ChatAnswer,ClaimItem } from "@/types";
 import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESSMENT_NOTICE } from "@/lib/chat/monetary-boundary";
 import { formatMoney } from "@/lib/format/currency";
 import { documentCardTitle } from "@/lib/policies/document-name";
+import { documentReadLabel } from "@/lib/documents/upload-problems";
 import { customerAnswerText,customerError,customerMessage } from "@/components/customer-text";
 import { answerText,codeWords } from "@/components/answer-text";
 import { uniqueSteps } from "@/components/next-steps";
@@ -92,14 +93,16 @@ class StoppedWaiting extends Error{}
 
 /** What the household's library is like right now, so an empty chat says what a first question will be answered from:
  * nothing uploaded yet, documents still being read, or documents that could not be read. */
-type Library={total:number;ready:number;reading:number;failed:{id:string;name:string;plain:boolean}[]};
+type Library={total:number;ready:number;partly:number;reading:number;failed:{id:string;name:string;plain:boolean}[]};
 // The scan results a document can be answered from: the same two /api/policies treats as clean (app/api/policies/route.ts).
 const READABLE_SCANS=new Set(["scan_clean","not_scanned_prototype"]);
 const READING_STATUSES=new Set(["queued","uploaded","extracting","indexing"]);
-type LibraryPolicy={id:string;original_filename?:string|null;product_name?:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null;processing_status?:string;quarantine_status?:string};
+type LibraryPolicy={id:string;original_filename?:string|null;product_name?:string|null;insurer?:string|null;document_role?:string|null;policy_number?:string|null;processing_status?:string;processing_message?:string|null;quarantine_status?:string};
 function libraryOf(policies:LibraryPolicy[]):Library{
   return {total:policies.length,
     ready:policies.filter(p=>p.processing_status==="ready"&&READABLE_SCANS.has(p.quarantine_status??"")).length,
+    // Of those, the ones the Documents page labels anything but plain "Ready": a page not read, amounts not used, a cover reading not finished.
+    partly:policies.filter(p=>p.processing_status==="ready"&&READABLE_SCANS.has(p.quarantine_status??"")&&!documentReadLabel({processing_status:"ready",processing_message:p.processing_message??null}).fullyRead).length,
     reading:policies.filter(p=>READING_STATUSES.has(p.processing_status??"")&&(p.quarantine_status??"scan_clean")!=="scan_rejected").length,
     failed:policies.filter(p=>p.processing_status==="failed").map(p=>({id:p.id,name:documentCardTitle({product_name:p.product_name??null,original_filename:p.original_filename??null,insurer:p.insurer,document_role:p.document_role,policy_number:p.policy_number}),plain:!p.product_name?.trim()&&!p.insurer?.trim()}))};
 }
@@ -107,14 +110,14 @@ function libraryOf(policies:LibraryPolicy[]):Library{
 /** The empty chat: an open invitation to ask anything in your own words (no fixed list of questions), plus what the
  * answer can draw on today. */
 function ChatWelcome({library}:{library:Library|null}){
-  const ready=library?.ready??0; // documents DearPolicy has finished reading, from the server's document list
+  const ready=library?.ready??0, partly=library?.partly??0; // documents DearPolicy has finished reading, from the server's document list
   return <div className="chat-empty" data-testid="chat-welcome">
     {library&&library.total===0?<>
       <p><strong>Upload a policy first.</strong> DearPolicy answers only from the documents you upload, so there is nothing to answer from yet.</p>
       <Link className="button primary" href="/policies"><Icon name="upload"/>Upload a document</Link>
     </>:<>
       <p><strong>Ask anything about your policies, in your own words.</strong> If something happened, say who and what, for example &ldquo;my daughter was admitted to hospital last night&rdquo;.</p>
-      {ready>0?<p className="chat-library-note" data-testid="chat-ready-note">Answers use the {ready===1?"one document":`${ready} documents`} DearPolicy has read so far.</p>:null}
+      {ready>0?<p className="chat-library-note" data-testid="chat-ready-note">Answers use the {ready===1?"one document":`${ready} documents`} DearPolicy has read so far.{partly>0?<> {partly===1?"One is":`${partly} are`} only partly read. <Link className="text-link" href="/policies">See Documents</Link></>:null}</p>:null}
       {library&&library.reading>0?<p className="chat-library-note" role="status">{library.reading===1?"One document is":`${library.reading} documents are`} still being read. You can ask now; answers use {library.reading===1?"it":"them"} once {library.reading===1?"it is":"they are"} ready.</p>:null}
       {library&&library.failed.length?<p className="chat-library-note">{library.failed.length===1?<>{library.failed[0].plain?"One document":<>&ldquo;{library.failed[0].name}&rdquo;</>} couldn&rsquo;t be read, so answers can&rsquo;t use it.</>:<>{library.failed.length} documents couldn&rsquo;t be read, so answers can&rsquo;t use them.</>} <Link className="text-link" href={library.failed.length===1?`/policies#doc-${library.failed[0].id}`:"/policies"}>See Documents →</Link></p>:null}
     </>}
