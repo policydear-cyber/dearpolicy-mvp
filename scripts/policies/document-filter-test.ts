@@ -4,7 +4,7 @@
  * Made-up rows only. Pure: no database, no network, no model.
  *   node --import tsx scripts/policies/document-filter-test.ts */
 import assert from "node:assert/strict";
-import { authorityLabel, isOwnDocument, plainAuthority, readAsPolicyDocument } from "@/lib/policies/document-filter";
+import { authorityLabel, cardKindLabel, isOwnDocument, plainAuthority, readAsPolicyDocument } from "@/lib/policies/document-filter";
 
 for (const k of Object.keys(process.env)) if (/ANTHROPIC|OPENAI|_KEY$|PROXY/i.test(k)) delete process.env[k];
 globalThis.fetch = (async () => { throw new Error("no network"); }) as typeof fetch;
@@ -32,6 +32,13 @@ test("a file whose kind is not known stays with their own documents", () => {
   assert.ok(isOwnDocument(doc({ document_role: null })));
   assert.ok(isOwnDocument(doc({ document_role: "unknown" })));
 });
+test("a general policy wording's card names it once, not 'Policy wording · General wording'", () => {
+  assert.equal(cardKindLabel("Policy wording", "General wording"), null);
+  assert.equal(cardKindLabel("Brochure", "General wording"), "Brochure");
+  assert.equal(cardKindLabel("Policy wording", "Your document"), "Policy wording");
+  assert.equal(cardKindLabel("Policy document", "General wording"), "Policy document");
+});
+
 test("general product documents with nobody linked are General wording", () => {
   for (const role of ["policy_wording", "product_summary", "benefit_guide", "brochure", "policy_illustration", "claim_form"]) assert.ok(!isOwnDocument(doc({ document_role: role })), role);
 });

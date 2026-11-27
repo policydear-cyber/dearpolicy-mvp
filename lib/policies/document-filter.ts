@@ -53,3 +53,9 @@ export function plainAuthority(label: unknown): string | null {
   if (typeof label !== "string" || !label) return null;
   return PLAIN_AUTHORITY[label] ?? label;
 }
+
+/** The kind a card names beside its badge, without saying the same thing twice: a policy wording that is general reads
+ * "General wording", not "Policy wording · General wording" (Live tester, 27 Nov). Any other kind keeps its own word. */
+export function cardKindLabel(kind: string, badge: string): string | null {
+  return kind === "Policy wording" && badge === "General wording" ? null : kind;
+}
