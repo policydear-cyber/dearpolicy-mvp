@@ -25,6 +25,7 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { isoDateWords } from "@/lib/format/detail-date";
 import path from "node:path";
 import { customerAnswerText, customerError, customerMessage, ANSWER_UNAVAILABLE } from "../components/customer-text";
 
@@ -294,18 +295,27 @@ test("a folder's Remove button says it takes the document out of the policy, not
 test("a document's Details panel writes dates and amounts as the rest of the site does, and never repeats a benefit's name (27 Nov live check)", () => {
   const page = read("app/policies/page.tsx");
   // Dates: "19 October 2026", never "2026-10-19"; anything that is not a date is shown as written.
-  assert.match(page, /function detailDate\(value: unknown\): string \{/);
+  assert.match(page, /const detailDate = \(value: unknown\): string => isoDateWords\(value\) \?\? showValue\(value\);/);
   assert.match(page, /data-testid="detail-expiry">\{detailDate\(d\.renewalOrExpiryDate\)\}/);
   assert.match(page, /data-testid="detail-effective">\{detailDate\(d\.effectiveDate\)\}/);
   assert.doesNotMatch(page, /\{showValue\(d\.(?:effectiveDate|renewalOrExpiryDate)\)\}/);
   // Amounts: the one money format (S$300,000), which says so when no currency is stated.
-  assert.match(page, /function reviewAmount\([^)]*\): string \{\s*if \(amount == null \|\| !Number\.isFinite\(Number\(amount\)\)\) return "—";[\s\S]*?return formatMoney\(Number\(amount\), currency\);/);
+  assert.match(page, /function reviewAmount\([^)]*\): string \{\s*if \(amount == null \|\| \(typeof amount === "string" && amount\.trim\(\) === ""\) \|\| !Number\.isFinite\(Number\(amount\)\)\) return "—";[\s\S]*?formatMoney\(numeric, currency\);/);
   assert.doesNotMatch(page, /\$\{currency\} \$\{numeric\.toLocaleString\(\)\}/);
-  assert.match(page, /amount == null \|\| !Number\.isFinite\(Number\(amount\)\)\) return "—"/, "an unreadable amount is a dash, never S$0.00");
+  assert.match(page, /\(typeof amount === "string" && amount\.trim\(\) === ""\)/, "an empty amount is a dash too");
+  assert.match(page, /numeric < 0 \? "-" \+ formatMoney\(-numeric, currency\)/, "a refund keeps its currency mark");
   assert.match(page, /\$\{detailDate\(p\.payment_date\)\}/, "the premium list's dates are written the same way");
   assert.match(read("e2e/ingestion-tests/document-ingestion.spec.ts"), /detail-expiry"\]'\)\)\.toContainText\("1 January 2027"\)/);
   // A benefit whose product name is its own category is named once.
   assert.match(page, /c\.product_name && c\.product_name\.trim\(\)\.toLowerCase\(\) !== c\.category\.trim\(\)\.toLowerCase\(\)/);
+});
+
+test("isoDateWords writes the document's own day, never through a Date, and leaves anything else to the caller (TE #630)", () => {
+  assert.equal(isoDateWords("2026-10-19"), "19 October 2026");
+  assert.equal(isoDateWords("2026-10-19T23:30:00-05:00"), "19 October 2026");
+  assert.equal(isoDateWords("2028-02-29"), "29 February 2028");
+  assert.equal(isoDateWords("2026-01-05"), "5 January 2026", "no leading zero");
+  for (const v of ["19/10/2026", "10/19/2026", "2026-13-01", "2026-10", "garbage", "", null, undefined, 20261019]) assert.equal(isoDateWords(v), null, String(v));
 });
 
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);

@@ -4,6 +4,7 @@ import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { lineFigure, linePeriodWords } from "@/lib/coverage/line-period";
 import { formatMoney } from "@/lib/format/currency";
+import { isoDateWords } from "@/lib/format/detail-date";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 import { customerError } from "@/components/customer-text";
@@ -801,16 +802,14 @@ type PolicyDetailsPayload = {
  * when the document stated one, otherwise honestly without one -- a missing
  * currency is never rendered as SGD. */
 function reviewAmount(amount: number | string | null, currency: string | null): string {
-  if (amount == null || !Number.isFinite(Number(amount))) return "—";
+  if (amount == null || (typeof amount === "string" && amount.trim() === "") || !Number.isFinite(Number(amount))) return "—";
   // The same figure as Home, Coverage and Premiums print: S$300,000, never "SGD 300,000"; no currency stated says so.
-  return formatMoney(Number(amount), currency);
+  // A negative amount (a refund) keeps its currency mark: "-S$50.00", never a bare "-$50.00".
+  const numeric = Number(amount);
+  return numeric < 0 ? "-" + formatMoney(-numeric, currency) : formatMoney(numeric, currency);
 }
-const DETAIL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-/** A date the document prints, as the rest of the site writes it: "19 October 2026", never "2026-10-19". Anything that is not a date is shown as written. */
-function detailDate(value: unknown): string {
-  const m = typeof value === "string" ? value.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/) : null;
-  return m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${Number(m[3])} ${DETAIL_MONTHS[Number(m[2]) - 1]} ${m[1]}` : showValue(value);
-}
+/** A date the document prints, as the rest of the site writes it ("19 October 2026"); anything else is shown as written. */
+const detailDate = (value: unknown): string => isoDateWords(value) ?? showValue(value);
 /** A cover line's figure: a figure paid per period carries its printed period, and a periodic cover's figure with none
  * is not shown (lib/coverage/line-period.ts), as on Home and Coverage. */
 function coverFigure(c: { category: string; amount: number | string | null; currency: string | null; evidence_text: string | null }): string {
