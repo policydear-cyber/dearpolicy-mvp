@@ -207,6 +207,9 @@ jobs:
       - name: Pages not read and pages that could not be read are named, and the card never says the rest is used when it is not (offline)
         run: npm run documents:pages-not-read-test
 
+      - name: A document card and the Details panel say whose document it is in plain words, and a general document never reads as the household's own (offline)
+        run: npm run policies:document-filter-test
+
       - name: A scanned page read as only placeholders or noise ("[illegible]") is named as not read; real, short and numbers-only pages are read (mocked OCR, offline)
         run: npm run documents:illegible-page-test
 
