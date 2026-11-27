@@ -325,4 +325,10 @@ test("the Policy currency text says a bare $ is read in the household's currency
   assert.match(read("app/welcome/page.tsx"), /If it shows only \\u201c\$\\u201d, DearPolicy reads it in the currency you choose when you sign up/);
 });
 
+test("the pricing section does not promise an upgrade the app cannot sell yet (DC 27 Nov)", () => {
+  const pricing = read("components/public/pricing-section.tsx");
+  assert.match(pricing, /Every account starts on Free, with no card needed\. Plus and Family are coming soon\./);
+  assert.doesNotMatch(pricing, /Upgrade any time/);
+});
+
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);
