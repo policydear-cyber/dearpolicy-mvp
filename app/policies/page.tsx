@@ -279,7 +279,7 @@ export default function PoliciesPage() {
     };
     tick();
     return () => { stopped = true; window.clearTimeout(timer); };
-  }, [activeCount]);
+  }, [activeCount, pollingPaused]); // "Check again" clears the pause, so the loop starts again even when the count is the same
 
   // The documents that were being read, so the line said when they finish is about them: a failed one, or one with a
   // page not read, is named, and "ready" is never said of a document with a page missing (lib/documents/upload-problems.ts).

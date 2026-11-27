@@ -372,6 +372,7 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.doesNotMatch(page, /usually takes under a minute|after ten minutes/i);
   assert.match(page, /elapsed > 60 \* 60_000\) \{ setPollingPaused\(true\)/);
   assert.match(page, /waitedMinutes >= LONG_WAIT_MINUTES \? "Still working\./);
+  assert.match(page, /\}, \[activeCount, pollingPaused\]\);/);
   assert.equal((page.match(/readingWaitCopy\(policy\.processing_stage, waitedMinutes\)/g) ?? []).length, 3);
 });
 
