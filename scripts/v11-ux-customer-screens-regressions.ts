@@ -264,7 +264,9 @@ test("the appearance toggle keeps one name; its pressed state says which appeara
 test("a folder's Remove button says it takes the document out of the policy, not off file", () => {
   const folders = read("components/policy-folders.tsx");
   // Beside a document's own Delete, a bare "Remove" reads as the same thing (Live tester pass 14): the idle button names what it does.
-  assert.match(folders, /aria-label=\{`Remove \$\{docName\(d\.policyId\)\} from this policy`\} onClick=\{\(\) => setArmed\(d\.policyId\)\}>Remove from policy<\/button>/);
+  // Each accessible name begins with its visible words (WCAG 2.5.3), the document after it.
+  assert.match(folders, /aria-label=\{`Remove from policy: \$\{docName\(d\.policyId\)\}`\} onClick=\{\(\) => setArmed\(d\.policyId\)\}>Remove from policy<\/button>/);
+  assert.match(folders, /aria-label=\{`Remove from this policy: \$\{docName\(d\.policyId\)\}`\} onClick=\{\(\) => void patch\(\{ remove: \[d\.policyId\] \}[^\n]*>Remove from this policy<\/button>/);
   assert.ok(!/>Remove<\/button>/.test(folders.slice(0, folders.indexOf("function useChoice"))), "no bare Remove button on a folder's documents");
   assert.match(folders, /Removed it from \$\{title\}\. It is still on file\./);
 });
