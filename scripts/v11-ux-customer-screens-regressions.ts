@@ -370,11 +370,14 @@ test("a recent cover whose benefit is 'subject to the waiting period' says so on
 test("Documents: a long reading never promises a minute, keeps checking for an hour, and says it is still working", () => {
   const page = read("app/policies/page.tsx");
   assert.doesNotMatch(page, /usually takes under a minute|after ten minutes/i);
-  assert.match(page, /elapsed > 60 \* 60_000\) \{ setPollingPaused\(true\)/);
+  assert.match(page, /elapsed > POLL_LIMIT_MS\) \{ setPollingPaused\(true\)/);
   assert.match(page, /waitedMinutes >= LONG_WAIT_MINUTES \? "Still working\./);
   assert.match(page, /\}, \[activeCount, pollingPaused\]\);/);
   assert.match(page, /if \(polling && !Array\.isArray\(p\?\.policies\)\) return false;/);
   assert.match(page, /document\.hidden \? Promise\.resolve\(true\) : refresh\(true\)\.catch\(\(\) => false\)/);
+  assert.match(page, /refresh\(true\)\.catch\(\(\) => false\); \}\}>Check again/);
+  assert.match(page, /activeCount > lastActive\.current && pollingPaused\) \{ pollingSince\.current = Date\.now\(\); setPollingPaused\(false\)/);
+  assert.match(page, /pollDelay\(elapsed, misses\)/);
   assert.equal((page.match(/readingWaitCopy\(policy\.processing_stage, waitedMinutes\)/g) ?? []).length, 3);
 });
 

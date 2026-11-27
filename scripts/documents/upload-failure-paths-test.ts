@@ -18,6 +18,7 @@ globalThis.fetch = (async () => { throw new TypeError("fetch failed"); }) as typ
 import * as errors from "@/lib/documents/processing-errors";
 import { ACCEPTED_FORMATS_MESSAGE, NOT_A_REAL_PDF_MESSAGE, validateDocumentUpload } from "@/lib/documents/formats";
 import { failedDocumentAdvice, unreadablePagesAdvice, notReadPagesAdvice } from "@/lib/documents/failure-advice";
+import { POLL_LIMIT_MS, pollDelay } from "@/lib/documents/poll-schedule";
 import { LONG_WAIT_MINUTES, UPLOAD_COPY, documentReadLabel, isReadingNotice, pageList, readingNotice, readingFinishedSummary, readingWaitCopy, unreadPageNumbers, uploadFailureMessage } from "@/lib/documents/upload-problems";
 import { customerError, customerMessage } from "@/components/customer-text";
 import { UploadError, uploadPolicyDocument } from "@/components/upload-document";
@@ -487,4 +488,17 @@ test("every Read again and Try reading it again button asks first: the first pre
   const advice = failedDocumentAdvice(errors.UNREADABLE_DOCUMENT_MESSAGE, { hasPages: true });
   assert.equal(advice.nextStep, "read_again");
   assert.equal(advice.uploadAction, "Upload a clearer copy");
+});
+
+test("checking on a long reading: fast, then slower, backs off after a failed check, and stops only after an hour", () => {
+  assert.equal(pollDelay(0, 0), 1400);
+  assert.equal(pollDelay(60_000, 0), 1400);
+  assert.equal(pollDelay(61_000, 0), 5000);
+  assert.equal(pollDelay(10 * 60_000, 0), 5000);
+  assert.equal(pollDelay(10 * 60_000 + 1, 0), 15_000);
+  // A failed check doubles the wait, at most eight times, and a good one resets it.
+  assert.deepEqual([1, 2, 3, 4, 9].map((m) => pollDelay(0, m)), [2800, 5600, 11_200, 11_200, 11_200].map((_, i) => 1400 * [2, 4, 8, 8, 8][i]));
+  assert.equal(pollDelay(0, 0), 1400);
+  assert.equal(pollDelay(20 * 60_000, 9), 120_000);
+  assert.equal(POLL_LIMIT_MS, 3_600_000);
 });

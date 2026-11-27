@@ -12,6 +12,7 @@ import { coverReadingPending, failedDocumentAdvice, notReadPagesAdvice, readInPa
 import { MAX_UPLOAD_LABEL, UploadError, uploadPolicyDocument } from "@/components/upload-document";
 import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-role";
 import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
+import { POLL_LIMIT_MS, pollDelay } from "@/lib/documents/poll-schedule";
 import { CONFIRM_READ_AGAIN, LONG_WAIT_MINUTES, documentReadLabel, isReadingNotice, pressReadAgain, readingFinishedSummary, readingNotice, readingWaitCopy } from "@/lib/documents/upload-problems";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
@@ -271,6 +272,12 @@ export default function PoliciesPage() {
   const pollingSince = useRef<number | null>(null);
   const [pollingPaused, setPollingPaused] = useState(false);
   const [waitedMinutes, setWaitedMinutes] = useState(0);
+  // A document added while the page had stopped checking (an upload) starts the checking again from the beginning.
+  const lastActive = useRef(0);
+  useEffect(() => {
+    if (activeCount > lastActive.current && pollingPaused) { pollingSince.current = Date.now(); setPollingPaused(false); }
+    lastActive.current = activeCount;
+  }, [activeCount, pollingPaused]);
   useEffect(() => {
     if (!activeCount) { pollingSince.current = null; setPollingPaused(false); setWaitedMinutes(0); return; }
     pollingSince.current ??= Date.now();
@@ -278,9 +285,9 @@ export default function PoliciesPage() {
     const tick = () => {
       const elapsed = Date.now() - (pollingSince.current ?? Date.now());
       setWaitedMinutes(Math.floor(elapsed / 60_000));
-      if (elapsed > 60 * 60_000) { setPollingPaused(true); return; }
+      if (elapsed > POLL_LIMIT_MS) { setPollingPaused(true); return; }
       // Slower after a failed check, and no checks at all while the tab is hidden: a long reading needs neither.
-      const wait = (elapsed > 10 * 60_000 ? 15_000 : elapsed > 60_000 ? 5000 : 1400) * (misses ? Math.min(2 ** misses, 8) : 1);
+      const wait = pollDelay(elapsed, misses);
       timer = window.setTimeout(() => {
         const check = document.hidden ? Promise.resolve(true) : refresh(true).catch(() => false);
         void check.then((got) => { misses = got ? 0 : misses + 1; if (!stopped) tick(); });
@@ -479,7 +486,7 @@ export default function PoliciesPage() {
     <UpgradePrompt place="documents"/>
 
 
-    {pollingPaused && <div className="processing-banner"><div><strong>Still reading in the background.</strong><small> This page stopped checking on its own after an hour. <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
+    {pollingPaused && <div className="processing-banner"><div><strong>Still reading in the background.</strong><small> This page stopped checking on its own after an hour. <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(true).catch(() => false); }}>Check again</button></small></div></div>}
     {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>{waitedMinutes >= LONG_WAIT_MINUTES ? "Still working. A long document can take a good while, and nothing is wrong. " : "A long document can take many minutes. "}This page updates on its own, and you can keep using DearPolicy.</small></div></div>}
 
 
