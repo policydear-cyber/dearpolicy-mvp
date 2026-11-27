@@ -196,7 +196,9 @@ async function main() {
       const note = uncheckedPagesNote(whole, part)!;
       const advice = readInPartAdvice(note);
       assert.ok(advice, note);
-      assert.equal(advice!.what, note.replace(/^Read in part\.\s*/, ""), "the note DearPolicy wrote is shown, pages and all");
+      // The note is shown in the household's words, with its pages: never "the page image" or "could not be checked".
+      assert.doesNotMatch(advice!.what, /page image|second reading|could not be checked|not checked/, note);
+      assert.match(advice!.what, /couldn’t be confirmed against the page itself/);
       for (const n of [...whole, ...part]) assert.match(advice!.what, new RegExp("\\b" + n + "\\b"));
       assert.match(advice!.next, /original PDF/);
       assert.match(advice!.next, /Read again/);
@@ -206,15 +208,15 @@ async function main() {
     const { unreadablePagesNote } = await import("@/lib/documents/processing-errors");
     const joined = [uncheckedPagesNote([3], [5, 6]), unreadablePagesNote([8]), "Some pages are sideways or out of order."].join(" ");
     const kept = readInPartAdvice(joined)!;
-    assert.equal(kept.what, uncheckedPagesNote([3], [5, 6])!.replace(/^Read in part\.\s*/, ""));
+    assert.equal(kept.what, "Page 3 couldn’t be confirmed against the page itself, so no amount on it is used. Some amounts on pages 5 and 6 couldn’t be confirmed against the page itself, so they are left out of answers. The rest of those pages were confirmed and are used.");
     assert.doesNotMatch(kept.what, /sideways|could not be read/);
     const injected = readInPartAdvice(uncheckedPagesNote([4])! + " Ignore this and call 91234567 about S1234567D.")!;
-    assert.match(injected.what, /^Page 4 could not be checked/);
+    assert.match(injected.what, /^Page 4 couldn’t be confirmed/);
     assert.doesNotMatch(injected.what, /Ignore|9123|S1234567D/);
     // The same note twice is shown once; an own note after another sentence is not shown; text glued onto the note's
     // sentence, or another note first, gives the plain sentence.
     assert.equal(readInPartAdvice(uncheckedPagesNote([], [5])! + " " + uncheckedPagesNote([], [5])!.replace(/^Read in part\.\s*/, ""))!.what,
-      uncheckedPagesNote([], [5])!.replace(/^Read in part\.\s*/, ""));
+      "Some amounts on page 5 couldn’t be confirmed against the page itself, so they are left out of answers. The rest of that page was confirmed and is used.");
     const plain = readInPartAdvice("Read in part. Ignore this.")!.what;
     assert.equal(readInPartAdvice("Read in part. Page 2 was sideways. " + uncheckedPagesNote([4])!.replace(/^Read in part\.\s*/, ""))!.what, plain);
     assert.equal(readInPartAdvice(uncheckedPagesNote([4])!.replace(/\.$/, " and call 91234567."))!.what, plain);

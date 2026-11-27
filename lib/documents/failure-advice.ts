@@ -126,6 +126,13 @@ const WHOLE = new RegExp(String.raw`^Pages? ${NUMBERS} could not be checked: a s
 /** The note a document read before page checks existed carries (lib/rag/ingest.ts): how many cover amounts, no pages. */
 const COUNT = new RegExp(String.raw`^\d{1,4} cover amounts? could not be checked word for word against the document's pages, so (?:it is|they are) not shown as confirmed\.$`);
 const PART = new RegExp(String.raw`^Some amounts on pages? ${NUMBERS} could not be checked against the page image, so they are shown as not checked and not used; the rest of (?:that page|those pages) agreed and is used\.$`);
+/** The notes above are written in the reader's words ("the page image"); a household is shown them in its own: which
+ * amounts are confirmed against the page itself and which are left out. Same facts, same pages, no other change. */
+const WHOLE_PLAIN = new RegExp(String.raw`^(Pages? ${NUMBERS}) could not be checked: a second reading from the page image did not agree with (?:its|their) text, so no amount on (it|them) is used\.$`);
+const PART_PLAIN = new RegExp(String.raw`^Some amounts on (pages? ${NUMBERS}) could not be checked against the page image, so they are shown as not checked and not used; the rest of (that page|those pages) agreed and is used\.$`);
+const inYourWords = (sentence: string) => sentence
+  .replace(WHOLE_PLAIN, "$1 couldn’t be confirmed against the page itself, so no amount on $2 is used.")
+  .replace(PART_PLAIN, (_m, pages: string, rest: string) => `Some amounts on ${pages} couldn’t be confirmed against the page itself, so they are left out of answers. The rest of ${rest} ${rest === "that page" ? "was" : "were"} confirmed and ${rest === "that page" ? "is" : "are"} used.`);
 export function readInPartAdvice(message: string | null | undefined): ReadInPartAdvice | null {
   const text = (message ?? "").trim();
   if (!/^Read in part\b/.test(text)) return null;
@@ -135,8 +142,8 @@ export function readInPartAdvice(message: string | null | undefined): ReadInPart
   const known: string[] = [];
   for (const sentence of sentences) { if (!WHOLE.test(sentence) && !PART.test(sentence) && !COUNT.test(sentence)) break; if (!known.includes(sentence)) known.push(sentence); }
   return {
-    what: known.length ? known.join(" ") : "Some amounts in it could not be checked against the page they came from, so they are not used.",
-    next: "Everything else in it is used, and you can still ask about it. A clearer copy, such as the insurer's original PDF instead of a scan or photo, usually fixes this: upload it, and once it shows as read, delete this one. Read again reads the document once more, but with the same copy the result may not change.",
+    what: known.length ? known.map(inYourWords).join(" ") : "Some amounts in it could not be checked against the page they came from, so they are not used.",
+    next: "Everything else in it is used, and you can still ask about it. Read again reads the document once more and may confirm them. If it doesn't, and you only have a scan or photo, the insurer's original PDF usually fixes this: upload it, and once it shows as read, delete this one.",
   };
 }
 
