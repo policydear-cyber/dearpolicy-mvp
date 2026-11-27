@@ -17,6 +17,7 @@
 import { pool, query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { PLANS, checkDocumentLimit, checkQuestionLimit, isPlanId, type BillingInterval, type LimitCheck, type PlanId } from "@/lib/plans/catalogue";
+import { billingEnabled } from "@/lib/billing/stripe";
 
 /** Stripe subscription statuses that keep a paid plan, plus 'complimentary' (a plan given without payment). A failed
  * renewal (past_due) keeps the plan while Stripe retries; anything else (canceled, unpaid, incomplete...) is Free. */
@@ -149,7 +150,7 @@ export async function mayAddDocument(householdId: string, opts: { replacingPolic
     && !(opts.replacingPolicyId && await alreadyReplaced(householdId, opts.replacingPolicyId, db))) return { allowed: true };
   const plan = await readHouseholdPlan(householdId, db);
   const kept = await keptDocumentCount(householdId, db);
-  return checkDocumentLimit(plan.planId, kept);
+  return checkDocumentLimit(plan.planId, kept, billingEnabled());
 }
 
 /** Takes one of this month's questions for the household, or refuses when they are used up. One statement counts and
@@ -170,7 +171,7 @@ export async function takeQuestion(householdId: string): Promise<LimitCheck> {
   } catch (error) {
     throw new PlanCheckUnavailable(error);
   }
-  return taken == null ? checkQuestionLimit(plan.planId, limit) : { allowed: true };
+  return taken == null ? checkQuestionLimit(plan.planId, limit, new Date(), billingEnabled()) : { allowed: true };
 }
 
 type Executor = { query: (text: string, params?: unknown[]) => Promise<unknown> };

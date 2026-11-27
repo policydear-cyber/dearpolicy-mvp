@@ -327,8 +327,8 @@ test("the Policy currency text says a bare $ is read in the household's currency
 
 test("the pricing section does not promise an upgrade the app cannot sell yet (DC 27 Nov)", () => {
   const pricing = read("components/public/pricing-section.tsx");
-  assert.match(pricing, /Every account starts on Free, with no card needed\. Plus and Family are coming soon\./);
-  assert.doesNotMatch(pricing, /Upgrade any time/);
+  assert.match(pricing, /Every account starts on Free, with no card needed\. \{billingOpen \? "Upgrade any time\." : "Plus and Family are coming soon\."\}/);
+  assert.match(pricing, /billingOpen = false/, "coming soon is the default; the offer needs billing on");
 });
 
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);

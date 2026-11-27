@@ -14,7 +14,7 @@ import { test } from "node:test";
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
-import { PLANS, checkDocumentLimit, checkQuestionLimit, documentsLabel, formatSgd, questionsResetLabel } from "@/lib/plans/catalogue";
+import { PLANS, checkDocumentLimit, checkQuestionLimit, documentsLabel, formatSgd, limitForMember, questionsResetLabel } from "@/lib/plans/catalogue";
 
 const A = "00000000-0000-0000-0000-0000000b1a00", B = "00000000-0000-0000-0000-0000000b1b00";
 const PERSON_A = "61000000-0000-4000-8000-000000000001", PERSON_B = "61000000-0000-4000-8000-000000000002";
@@ -51,6 +51,26 @@ test("limit checks: allowed below the limit, a plain message with the next plan 
   }
   const top = checkQuestionLimit("family", 150);
   assert.ok(!top.allowed && !/Upgrade/.test(top.message));
+});
+
+test("limit checks while purchase is not open: the limit is said, Plus is coming soon, nobody is told to upgrade (DC 27 Nov)", () => {
+  const doc = checkDocumentLimit("free", 5, false);
+  assert.ok(!doc.allowed);
+  if (!doc.allowed) {
+    assert.match(doc.message, /Free plan keeps up to 5 documents, and your household has 5\. Plus is coming soon\. For now, delete a document you no longer need\./);
+    assert.ok(!/upgrade/i.test(doc.message));
+  }
+  const q = checkQuestionLimit("free", 10, new Date("2026-11-18T05:00:00Z"), false);
+  assert.ok(!q.allowed);
+  if (!q.allowed) {
+    assert.match(q.message, /Questions start again on 1 December\. Plus is coming soon\. Your documents and earlier answers are still here\./);
+    assert.ok(!/upgrade/i.test(q.message));
+  }
+  const member = limitForMember(doc);
+  assert.ok(!member.allowed && !/upgrade/i.test(member.message), "a member is not pointed at an upgrade either");
+  const household = readFileSync("lib/billing/household-plan.ts", "utf8");
+  assert.match(household, /checkDocumentLimit\(plan\.planId, kept, billingEnabled\(\)\)/);
+  assert.match(household, /checkQuestionLimit\(plan\.planId, limit, new Date\(\), billingEnabled\(\)\)/);
 });
 
 const STRIPE_ENV = {
@@ -385,10 +405,11 @@ test("middleware: only the webhook path skips the session and Origin checks", as
 
 test("landing page: pricing before sign-up, every card starts free; Plan usage upgrades through the owner only", () => {
   const landing = readFileSync("app/welcome/page.tsx", "utf8");
-  assert.match(landing, /<PricingSection \/>/);
+  assert.match(landing, /<PricingSection billingOpen=\{purchaseOpen\(\)\} \/>/);
   const pricing = readFileSync("components/public/pricing-section.tsx", "utf8");
   assert.match(pricing, /href="\/signup"/);
   assert.match(pricing, /Start free/);
+  assert.match(pricing, /plan\.priceMonthlySgd > 0 && !billingOpen\s*\? <small data-testid=\{"pricing-soon-" \+ plan\.id\}>Coming soon<\/small>/, "while purchase is not open, Plus and Family say Coming soon, not Start free");
   assert.ok(!/fetch\(|@\/lib\/db|@\/lib\/auth/.test(pricing + readFileSync("components/plan-cards.tsx", "utf8")), "static: no session, household or service");
   const usage = readFileSync("app/usage/page.tsx", "utf8");
   assert.match(usage, /!sub\.isOwner\)return <small>The household&rsquo;s owner can upgrade/);
