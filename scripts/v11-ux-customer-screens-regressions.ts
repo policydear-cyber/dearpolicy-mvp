@@ -291,4 +291,11 @@ test("a folder's Remove button says it takes the document out of the policy, not
   assert.match(read("app/globals.css"), /@media \(max-width: 400px\) \{\s*\.folder-docs li \{ grid-template-columns: 1fr; \}/);
 });
 
+test("the Policy currency text says a bare $ is read in the household's currency, as the sign-up line and docs/copy.md do (27 Nov live check)", () => {
+  const page = read("app/household/page.tsx");
+  assert.match(page, /When a document prints an amount without a currency, or with only a “\$”, DearPolicy reads it in the currency you choose here\. A currency written in the document, such as S\$ or US\$, always comes first\./);
+  assert.doesNotMatch(page, /left as they are/, "a bare $ is never said to be left alone");
+  assert.match(read("app/welcome/page.tsx"), /If it shows only \\u201c\$\\u201d, DearPolicy reads it in the currency you choose when you sign up/);
+});
+
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);
