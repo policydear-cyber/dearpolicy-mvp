@@ -379,6 +379,7 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.match(page, /plainAuthority\(d\.authorityLabel\)/);
   assert.match(page, /<b>Cover this document shows<\/b>/);
   assert.match(page, / · confirmed against the page<\/small>/);
+  assert.match(page, / · amount not yet confirmed against the page<\/small>/);
   assert.doesNotMatch(page, /source-verified|Cover this document confirms/);
   assert.match(page, /waitedMinutes >= LONG_WAIT_MINUTES \? "Still working\./);
   assert.match(page, /\}, \[activeCount, pollingPaused\]\);/);

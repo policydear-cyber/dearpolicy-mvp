@@ -45,8 +45,8 @@ export function authorityLabel(policy: Parameters<typeof isOwnDocument>[0] & { d
 const PLAIN_AUTHORITY: Record<string, string> = {
   "Personal proof": "Your own policy",
   "Personal amendment": "A change to your policy",
-  "Current account record": "A statement from your insurer",
-  "Contract wording": "General wording",
+  "Current account record": "A statement or receipt from your insurer",
+  "Contract wording": "Policy wording",
   "Reference information": "General information",
 };
 export function plainAuthority(label: unknown): string | null {

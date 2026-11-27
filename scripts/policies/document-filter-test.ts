@@ -49,7 +49,10 @@ test("the badge always agrees with the filter the card sits under", () => {
   assert.equal(authorityLabel(card({ document_role: "policy_wording", document_authority_label: "Contract wording", linked_people: chosen })), "General wording");
   assert.equal(plainAuthority("Personal proof"), "Your own policy");
   assert.equal(plainAuthority("Personal amendment"), "A change to your policy");
-  assert.equal(plainAuthority("Current account record"), "A statement from your insurer");
+  assert.equal(plainAuthority("Current account record"), "A statement or receipt from your insurer");
+  assert.equal(plainAuthority("Contract wording"), "Policy wording");
+  assert.equal(plainAuthority("Reference information"), "General information");
+  assert.equal(plainAuthority(42), null);
   assert.equal(plainAuthority("Supporting document"), "Supporting document");
   assert.equal(plainAuthority(null), null);
   assert.equal(authorityLabel(card({ document_role: "personal_schedule", document_authority_label: "Supporting document", linked_people: chosen })), "Linked to your cover");
