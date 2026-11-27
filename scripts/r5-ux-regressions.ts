@@ -161,8 +161,9 @@ async function main() {
   });
   await test("Family page says why date of birth and sex are asked, and that Prefer not to say is fine", () => {
     const page = read("app/family/page.tsx");
-    assert.match(page, /Date of birth tells it which age limits apply to a person\./);
-    assert.match(page, /Sex helps it read &ldquo;she&rdquo; or &ldquo;he&rdquo; in your questions, and &ldquo;Prefer not to say&rdquo; is fine\./);
+    assert.match(page, /Date of birth tells DearPolicy which age limits apply\./);
+    // The sex sentence shows only where the Sex field does (sexField), so it never explains a field that is not on screen.
+    assert.match(page, /\{sexField \? <> Sex helps DearPolicy read &ldquo;she&rdquo; or &ldquo;he&rdquo; in your questions, and &ldquo;Prefer not to say&rdquo; is fine\.<\/> : null\}/);
     assert.match(page, /const SEXES[^\n]*"Prefer not to say"/);
   });
   await test("locked PDFs: password entered on the card; a wrong password is named as such", () => {
