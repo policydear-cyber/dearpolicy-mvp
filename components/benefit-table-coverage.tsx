@@ -79,7 +79,7 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
         <small>{premium?<>Premium {premium} </>:null}<PageLink source={premium&&cover.premiumSource?cover.premiumSource:cover.source}/></small>
       </div>
     </header>
-    {premium&&cover.premiumNote?<p className="muted cov-reading" data-testid="table-first-year">The page also prints a different premium for the first policy year{cover.firstYearPremium!=null?` (${premiumCode?money(cover.firstYearPremium,premiumCode):plainFigure(cover.firstYearPremium)}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""})`:""}, so the premium above is not what is charged in that year.</p>:null}
+    {premium&&cover.premiumNote?<p className="muted cov-reading" data-testid="table-first-year">The page also prints a different premium for the first policy year{cover.firstYearPremium!=null?` (${premiumCode?money(cover.firstYearPremium,premiumCode):plainFigure(cover.firstYearPremium)}, for the policy as a whole)`:""}, so the premium above is not what is charged in that year.</p>:null}
     {shared?<p className="muted cov-reading" data-testid="table-shared">{shared}</p>:null}
     {!rows.length?<p className="muted cov-reading">{listedWith?`What it pays is set out with ${coverName(listedWith)}${listedWith.cover!==listedWith.product?` (${listedWith.cover})`:""}, in the same policy wording.`:reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:<>
       {/* Only its schedule's own cover line is on file: shown as printed, with the same ask for its wording. */}

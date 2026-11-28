@@ -423,7 +423,9 @@ test("Coverage: a benefit's long clauses sit behind a control, never in the row'
   assert.doesNotMatch(cov, /\browDetail\(/, "the page no longer joins every clause into the line");
   // A premium the page prints a first-year premium beside is said not to be what is charged that year, with the first-year figure only when the server read it (28 Nov: Coverage S$269.05 + S$201.80 vs Premiums S$376.68).
   assert.match(cov, /premium&&cover\.premiumNote\?<p className="muted cov-reading" data-testid="table-first-year">The page also prints a different premium for the first policy year\{cover\.firstYearPremium!=null\?/);
-  assert.match(cov, /so the premium above is not what is charged in that year\./);
+  // The first-year figure belongs to the policy as a whole (the plan and its rider carry the same one, Premiums counts it once): said so, and no frequency is borrowed for it (TE #652).
+  assert.match(cov, /, for the policy as a whole\)`:""\}, so the premium above is not what is charged in that year\./);
+  assert.doesNotMatch(cov, /firstYearPremium,premiumCode\)[^\n]*premiumFrequency/, "the first-year figure borrows no frequency");
 });
 
 test("Documents: a long reading never promises a minute, keeps checking for an hour, and says it is still working", () => {
