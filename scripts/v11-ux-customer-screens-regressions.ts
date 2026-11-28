@@ -568,6 +568,11 @@ test("Coverage: the same group card under a second person folds only its benefit
   assert.equal(same.get("b:0"), null, "two people with one name are never folded");
   const src = read("components/benefit-table-coverage.tsx");
   assert.match(src, /sameAs\?<details className="cov-repeat" data-testid="table-repeat">/);
+  assert.match(src, /repeatedCards\(listed,\(p,c\)=>rowsForCover\(c as Cover,\(listed\.find\(x=>x\.id===p\.id\) as Person\)\.covers,\(listed\.find\(x=>x\.id===p\.id\) as Person\)\.rows\)\.rows\)/, "the rows compared are the rows each card shows");
+  assert.match(src, /person\.covers\.map\(\(c,ci\)=>/);
+  assert.match(src, /sameAs=\{repeats\.get\(`\$\{person\.id\}:\$\{ci\}`\)\}/, "each card looks up its own person and place");
+  assert.match(src, /\{sameAs\?<details className="cov-repeat" data-testid="table-repeat"><summary>Same \{plural\(rows\.length,"benefit"\)\} as in \{sameAs\}&rsquo;s card above<\/summary>\{list\}<\/details>:list\}/);
+  assert.match(read("app/globals.css"), /\.cov-repeat summary,\n\.schedule-more summary,\n\.schedule-held summary \{[^}]*min-height: 44px/, "the summary is a 44px target");
   assert.match(src, /<header className="cov-cover-head">[\s\S]*?<\/header>[\s\S]*?\{sameAs\?/, "the header stays outside the fold");
 });
 

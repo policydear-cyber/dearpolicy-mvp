@@ -7,10 +7,14 @@
  */
 export type RepeatCover = { personId: string; [key: string]: unknown };
 
+/** Whose a card or row is: the id and the name printed beside them. Neither is shown inside the folded list, and they
+ * are the only fields that differ between one person's copy of a shared certificate and another's. */
+const WHOSE = new Set(["personId", "person"]);
+
 export function cardSignature(cover: RepeatCover, rows: unknown[]): string | null {
   if (!rows.length) return null;
-  const { personId: _personId, ...rest } = cover;
-  return JSON.stringify([rest, rows]);
+  // Every other field counts, in order and exactly as stored: an amount, a sum, a source page, a row's place or a letter's case.
+  return JSON.stringify([cover, rows], (key, value) => (WHOSE.has(key) ? undefined : value));
 }
 
 /** For each person's covers in order: the name of the person whose identical card is shown earlier, or null. */
