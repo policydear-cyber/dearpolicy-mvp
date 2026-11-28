@@ -57,6 +57,10 @@ function PersonPremiums({ person }: { person: Person }) {
 export default function RecordsPage() {
   const [records,setRecords] = useState<RecordRow[]|null>(null); const [failed,setFailed] = useState(false);
   const [people,setPeople] = useState<Person[]|null>(null); const [peopleFailed,setPeopleFailed] = useState(false);
+  // The premiums are added up on the server, which takes longer for a household with many documents: after a few seconds the
+  // page says it is still working, so a long wait never looks frozen (Live tester 28 Nov: a blank wait of 14 seconds).
+  const [slow,setSlow] = useState(false);
+  useEffect(()=>{ const t=setTimeout(()=>setSlow(true),4000); return ()=>clearTimeout(t); },[]);
 
   // Nothing is said about payments until they have loaded: "No payments found yet" before the list arrives is wrong.
   useEffect(()=>{
@@ -68,7 +72,7 @@ export default function RecordsPage() {
     <div className="page">
       <header className="page-header compact"><div><h1><span className="title-icon"><Icon name="payments"/></span>Premiums</h1><p className="lead">What each person&apos;s cover costs, from policy schedules, renewal notices, receipts and statements.</p></div></header>
       {peopleFailed && <div className="alert error" role="alert">What your cover costs could not be loaded. Please refresh the page in a moment.</div>}
-      {!people && !peopleFailed && <div className="empty-card" role="status">Loading what your cover costs…</div>}
+      {!people && !peopleFailed && <div className="empty-card" role="status" data-testid="premiums-loading">Loading what your cover costs…{slow?" Still working: a household with many documents takes longer.":""}</div>}
       {people?.map((person)=><PersonPremiums person={person} key={person.id}/>)}
       {people && !people.length && <div className="empty-card">Add the people your policies cover in <Link href="/family" className="text-link">Account settings</Link>, then upload their documents. Their premiums are listed here.</div>}
       {/* Payment records wait until the premiums above have loaded (or failed): they arrive after the page does and would push this section down (Live tester, 26 Nov: layout shift 0.48 on Records). */}
