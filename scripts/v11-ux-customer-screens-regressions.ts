@@ -630,15 +630,14 @@ test("Documents: a long library folds the documents after the first eight, and o
 });
 
 test("Documents fold: only a card with nothing to answer folds (canFold)", () => {
-  const ok = { busy: false, notReadyLabel: false, needsReview: false, ready: true, hasProcessingError: false, asksWho: false, whoIsThisBlock: false, coveredCount: 1, referenceLinkCount: 0, planMissing: false, benefitState: false };
+  const ok = { busy: false, notReadyLabel: false, needsReview: false, ready: true, hasProcessingError: false, asksWho: false, coveredCount: 1, referenceLinkCount: 0, planMissing: false, benefitState: false };
   assert.equal(canFold(ok), true, "a read, placed, settled document folds");
   assert.equal(canFold({ ...ok, coveredCount: 0, referenceLinkCount: 2 }), true, "a reference document used as wording folds");
-  assert.equal(canFold({ ...ok, coveredCount: 0, whoIsThisBlock: true }), true, "a confirmed personal document with every name placed folds");
+  assert.equal(canFold({ ...ok, coveredCount: 0, referenceLinkCount: 0 }), false, "used for nobody never folds, whatever else is settled");
   assert.equal(canFold({ ...ok, coveredCount: 0 }), false, "applies to nobody yet asks");
   assert.equal(canFold({ ...ok, planMissing: true }), false, "plan not chosen asks");
   assert.equal(canFold({ ...ok, benefitState: true }), false, "benefits reading failed, backed off or running stays in view");
   assert.equal(canFold({ ...ok, asksWho: true }), false, "unmatched, by-part or overridden names ask");
-  assert.equal(canFold({ ...ok, whoIsThisBlock: true, asksWho: true }), false);
   for (const k of ["busy", "notReadyLabel", "needsReview", "hasProcessingError"] as const) assert.equal(canFold({ ...ok, [k]: true }), false, k);
   assert.equal(canFold({ ...ok, ready: false }), false, "not ready never folds");
 });

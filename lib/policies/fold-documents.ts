@@ -12,8 +12,6 @@ export type FoldFacts = {
   hasProcessingError: boolean;
   /** An unplaced printed name, a name matched only by part, or an upload choice overridden by the names printed in it. */
   asksWho: boolean;
-  /** The "who is this" block is shown instead of the Covers picker. */
-  whoIsThisBlock: boolean;
   coveredCount: number;
   referenceLinkCount: number;
   planMissing: boolean;
@@ -24,6 +22,5 @@ export type FoldFacts = {
 export function canFold(f: FoldFacts): boolean {
   if (!f.ready || f.busy || f.notReadyLabel || f.needsReview || f.hasProcessingError) return false;
   if (f.asksWho || f.benefitState) return false;
-  if (f.whoIsThisBlock) return true;
   return (f.coveredCount > 0 || f.referenceLinkCount > 0) && !f.planMissing;
 }

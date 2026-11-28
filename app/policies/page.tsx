@@ -94,7 +94,6 @@ function foldable(policy: Policy, family: Member[], notFamily: string[], planCho
     ready: policy.processing_status === "ready",
     hasProcessingError: !!policy.processing_error,
     asksWho: asksTheOwner(policy, family, notFamily),
-    whoIsThisBlock: !!policy.personal_coverage_confirmed,
     coveredCount: covered.length,
     referenceLinkCount,
     planMissing: coversPlanPrompt({ tierOptions: policy.tier_options ?? [], covered, planChoice }).planMissing,
