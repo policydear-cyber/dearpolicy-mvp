@@ -173,8 +173,12 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
     assert.deepEqual(open, [1, 3, 5]); assert.deepEqual(folded, [2, 4, 6]);
     assert.deepEqual([...open, ...folded].sort(), rows, "every row once");
     assert.deepEqual(splitHeld([], () => true), { open: [], folded: [] });
+    const many = Array.from({ length: 150 }, (_, i) => i), before = [...many], sp = splitHeld(many, (n) => n % 3 === 0);
+    assert.equal(sp.open.length + sp.folded.length, 150, "a long list loses no row");
+    assert.deepEqual(many, before, "the input is not changed");
   }
   assert.match(read("app/globals.css"), /\.schedule-held summary \{[^}]*var\(--brand-ink\)[^}]*min-height: 44px/);
+  assert.match(read("app/policies/page.tsx"), /same = who\.trim\(\)\.toLowerCase\(\) === p\.name\.trim\(\)\.toLowerCase\(\)[^\n]*same && !p\.byPart \? ""/, "Documents: a name matched to a person of the same name is shown once, never 'Name (Name)' (Live tester 28 Nov)");
   assert.ok(!/schedule-summary/.test(benefits) && !/schedule-summary/.test(coverage), "no internal counts summary");
   // The one clarification: an unreadable amount, only for simple amounts.
   assert.match(benefits, /attention==="unreadable"&&CLARIFIABLE\.has/);
