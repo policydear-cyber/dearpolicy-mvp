@@ -23,6 +23,7 @@
  *    endowment defect fixture: a raw OpenAI quota error with an organisation
  *    identifier) and keep plain messages.
  */
+import { repeatedCards, cardSignature } from "@/lib/benefit-table/repeat-card";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { sameName } from "@/lib/policies/document-name";
@@ -545,6 +546,53 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.match(page, /pollingPaused && \[\.\.\.now\]\.some\(\(id\) => !lastActive\.current\.has\(id\)\)\) \{ pollingSince\.current = Date\.now\(\); setPollingPaused\(false\)/);
   assert.match(page, /pollDelay\(elapsed, misses\)/);
   assert.equal((page.match(/readingWaitCopy\(policy\.processing_stage, waitedMinutes\)/g) ?? []).length, 3);
+});
+
+test("Coverage: the same group card under a second person folds only its benefit list, never a different card (Live tester 28 Nov)", () => {
+  const rows = [{ benefit: "Death", pays: "S$1,000,000" }, { benefit: "Advance Payment Benefit", pays: "Up to S$400,000" }];
+  const cover = (personId: string, extra: Record<string, unknown> = {}) => ({ personId, coverKey: "gtl", sumInsured: 1000000, premium: null, ...extra });
+  const people = [
+    { id: "a", name: "Ana", covers: [cover("a"), cover("a", { coverKey: "pa" })] },
+    { id: "b", name: "Ben", covers: [cover("b"), cover("b", { sumInsured: 500000 }), cover("b", { coverKey: "pa" })] },
+  ];
+  const rowsOf = (_p: { id: string }, c: { personId: string; [k: string]: unknown }) => (c.coverKey === "pa" ? [...rows, { benefit: "Hospital", pays: "S$200 a day" }] : rows);
+  const out = repeatedCards(people, rowsOf);
+  assert.equal(out.get("a:0"), null);
+  assert.equal(out.get("b:0"), "Ana");
+  assert.equal(out.get("b:1"), null, "a different sum is never folded");
+  assert.equal(out.get("b:2"), "Ana", "the same second card folds to the first copy");
+  const differs = repeatedCards(people, (p, c) => (p.id === "b" && c.coverKey === "gtl" ? [...rows, { benefit: "Extra", pays: "S$1" }] : rows));
+  assert.equal(differs.get("b:0"), null, "one different row means the card is shown in full");
+  assert.equal(cardSignature(cover("a"), []), null, "an empty card is never folded");
+  const same = repeatedCards([{ id: "a", name: "Sam", covers: [cover("a")] }, { id: "b", name: "Sam", covers: [cover("b")] }], () => rows);
+  assert.equal(same.get("b:0"), null, "two people with one name are never folded");
+  // Real assembled data carries whose it is on the cover and on every row (TE #655): those fields never keep a copy apart.
+  const real = (id: string, name: string, over: Record<string, unknown> = {}) => ({ personId: id, person: name, coverKey: "gtl", sumInsured: 1000000, premium: 120, source: { documentId: "d", page: 4 }, life: { household: id === "a" ? "self" : "spouse", householdBirth: id === "a" ? "1980-01-01" : null }, ...over });
+  const realRows = (id: string, name: string, pays = "S$1,000,000", benefit = "Death", page = 4) => [
+    { personId: id, person: name, benefit, pays, figure: 1000000, conditions: null, source: { documentId: "d", page } },
+    { personId: id, person: name, benefit: "Advance Payment Benefit", pays: "Up to S$400,000", figure: 400000, conditions: null, source: { documentId: "d", page: 5 } },
+  ];
+  const pair = (rowsB: unknown[], coverB = real("b", "BEN LEE")) => repeatedCards(
+    [{ id: "a", name: "Ana", covers: [real("a", "ANA TAN")] }, { id: "b", name: "Ben", covers: [coverB] }],
+    (p) => (p.id === "a" ? realRows("a", "ANA TAN") : rowsB));
+  assert.equal(pair(realRows("b", "BEN LEE")).get("b:0"), "Ana", "different ids, printed names and household facts still fold");
+  assert.equal(pair(realRows("b", "BEN LEE", "S$900,000")).get("b:0"), null, "the same number of rows with a different amount is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE", "S$1,000,000", "death")).get("b:0"), null, "a different letter case is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE", "S$1,000,000", "Death", 6)).get("b:0"), null, "a different page is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE").reverse()).get("b:0"), null, "the same rows in another order are shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE"), real("b", "BEN LEE", { sumInsured: 500000 })).get("b:0"), null, "a different sum is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE"), real("b", "BEN LEE", { premium: 99 })).get("b:0"), null, "a different premium is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE"), real("b", "BEN LEE", { source: { documentId: "d", page: 6 } })).get("b:0"), null, "a different cover page is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE").slice(0, 1)).get("b:0"), null, "a row fewer is shown in full");
+  assert.equal(pair(realRows("b", " BEN LEE", " S$1,000,000")).get("b:0"), null, "whitespace in an amount is shown in full");
+  const src = read("components/benefit-table-coverage.tsx");
+  assert.match(src, /sameAs\?<details className="cov-repeat" data-testid="table-repeat">/);
+  assert.match(src, /repeatedCards\(listed,\(p,c\)=>rowsForCover\(c as Cover,\(listed\.find\(x=>x\.id===p\.id\) as Person\)\.covers,\(listed\.find\(x=>x\.id===p\.id\) as Person\)\.rows\)\.rows\)/, "the rows compared are the rows each card shows");
+  assert.match(src, /person\.covers\.map\(\(c,ci\)=>/);
+  assert.match(src, /sameAs=\{repeats\.get\(`\$\{person\.id\}:\$\{ci\}`\)\}/, "each card looks up its own person and place");
+  assert.match(src, /\{sameAs\?<details className="cov-repeat" data-testid="table-repeat"><summary>Same \{plural\(rows\.length,"benefit"\)\} as in \{sameAs\}&rsquo;s card above<\/summary>\{list\}<\/details>:list\}/);
+  assert.match(read("app/globals.css"), /\.cov-repeat summary,\n\.schedule-more summary,\n\.schedule-held summary \{[^}]*min-height: 44px/, "the summary is a 44px target");
+  assert.match(src, /<header className="cov-cover-head">[\s\S]*?<\/header>[\s\S]*?\{sameAs\?/, "the header stays outside the fold");
 });
 
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);

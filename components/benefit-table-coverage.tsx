@@ -9,6 +9,7 @@ import { benefitNames, bySection, keyBenefits, money, noSumText, shortFigure, sp
 import { rowsForCover } from "@/lib/benefit-table/cover-rows";
 import { waitingNote } from "@/lib/benefit-table/waiting-note";
 import { sharedCoverText } from "@/lib/benefit-table/shared-cover";
+import { repeatedCards } from "@/lib/benefit-table/repeat-card";
 
 /** Coverage from the benefit table (lib/benefit-table), as a summary to read, with nothing to confirm: for each person,
  * one card per cover with its sum insured, premium and a few key benefits, and every other benefit in a collapsed list
@@ -65,11 +66,22 @@ function benefitParts(row:Row,name:(r:Row)=>string){
 const NO_BENEFITS_YET="No benefits are listed for it yet. If you have its policy wording or benefit summary, upload it on the Documents page and DearPolicy adds what it pays.";
 /** Said once for each person, not on every cover card: some figures here carry the currency set for the household. */
 const CURRENCY_NOTE_ONCE="Some amounts here use the currency from your account settings, where the document prints none.";
-function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[];reading:boolean;listedWith?:Cover|null;shared?:string|null}){
+function CoverCard({cover,rows,reading,listedWith,shared,sameAs}:{cover:Cover;rows:Row[];reading:boolean;listedWith?:Cover|null;shared?:string|null;sameAs?:string|null}){
   const key=keyBenefits(rows).map(i=>rows[i]),name=benefitNames(rows);
   // A premium whose line and page state no currency claims none, never a bare "$" (Critic R374 L1).
   const premiumCode=cover.premiumCurrency===undefined?cover.currency:cover.premiumCurrency;
   const premium=cover.premium!=null?`${premiumFigure(cover.premium,premiumCode)}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""}`:null;
+  const list=<>
+      <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,name);
+        return <li key={i} data-testid="table-row"><div className="b">{b.name}</div><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
+      {waitingNote(cover,rows)?<p className="muted cov-reading" data-testid="table-waiting">{waitingNote(cover,rows)} <Link className="text-link" href="/chat">Ask a question</Link></p>:null}
+      {rows.length>key.length?<details className="cov-all"><summary>All {plural(rows.length,"benefit")}</summary>
+        <table className="cov-table"><tbody>{bySection(rows).map(g=>[
+          <tr className="sec" key={"s"+g.section}><th colSpan={3} scope="colgroup">{g.section}</th></tr>,
+          ...g.rows.map((r,i)=>{const b=benefitParts(r,name);
+            return <tr key={g.section+i}><td className="b">{b.name}</td><td className="v">{b.pays}</td><td className="p"><PageLink source={r.source}/></td></tr>;})])}
+        </tbody></table></details>:null}
+  </>;
   return <article className="cov-cover" data-testid="table-cover">
     <header className="cov-cover-head">
       <div className="cov-cover-name"><strong>{coverName(cover)}</strong>{coverLine(cover)?<small>{coverLine(cover)}</small>:null}</div>
@@ -83,15 +95,7 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
     {!rows.length?<p className="muted cov-reading">{listedWith?`What it pays is set out with ${coverName(listedWith)}${listedWith.cover!==listedWith.product?` (${listedWith.cover})`:""}, in the same policy wording.`:reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:<>
       {/* Only its schedule's own cover line is on file: shown as printed, with the same ask for its wording. */}
       {rows.every(r=>r.coverLine)&&!listedWith?<p className="muted cov-reading" data-testid="table-cover-line">As printed on the schedule. {reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:null}
-      <ul className="cov-key" data-testid="table-key">{key.map((r,i)=>{const b=benefitParts(r,name);
-        return <li key={i} data-testid="table-row"><div className="b">{b.name}</div><span className="v">{b.pays}</span><PageLink source={r.source}/></li>;})}</ul>
-      {waitingNote(cover,rows)?<p className="muted cov-reading" data-testid="table-waiting">{waitingNote(cover,rows)} <Link className="text-link" href="/chat">Ask a question</Link></p>:null}
-      {rows.length>key.length?<details className="cov-all"><summary>All {plural(rows.length,"benefit")}</summary>
-        <table className="cov-table"><tbody>{bySection(rows).map(g=>[
-          <tr className="sec" key={"s"+g.section}><th colSpan={3} scope="colgroup">{g.section}</th></tr>,
-          ...g.rows.map((r,i)=>{const b=benefitParts(r,name);
-            return <tr key={g.section+i}><td className="b">{b.name}</td><td className="v">{b.pays}</td><td className="p"><PageLink source={r.source}/></td></tr>;})])}
-        </tbody></table></details>:null}
+      {sameAs?<details className="cov-repeat" data-testid="table-repeat"><summary>Same {plural(rows.length,"benefit")} as in {sameAs}&rsquo;s card above</summary>{list}</details>:list}
     </>}
   </article>;
 }
@@ -245,12 +249,12 @@ export function BenefitTableCoverage({data,reload}:{data:BenefitTableData;reload
         in this table is never told to upload a schedule. */}
     {!people.length?<div className="empty-card">{data.documents.some(d=>["waiting","stalled","held","table_unread"].includes(d.state))?"No covers are shown from your documents yet.":"No covers yet. Upload a certificate, schedule or policy wording on the Documents page and DearPolicy reads it for you."}</div>:null}
     {listed.length>1?<nav className="cov-people" aria-label="People">{listed.map(p=><a key={p.id} href={`#person-${p.id}`} onFocus={e=>e.currentTarget.scrollIntoView({inline:"nearest",block:"nearest"})}>{p.name} <span>{p.covers.length}</span></a>)}</nav>:null}
-    {listed.map(person=>!person.covers.length?<NoCoverShown key={person.id} person={person} pending={data.documents.some(d=>["waiting","stalled","held","table_unread"].includes(d.state))}/>:<section className="cov-person" id={`person-${person.id}`} key={person.id} data-testid="table-person">
+    {(()=>{const repeats=repeatedCards(listed,(p,c)=>rowsForCover(c as Cover,(listed.find(x=>x.id===p.id) as Person).covers,(listed.find(x=>x.id===p.id) as Person).rows).rows);return listed.map(person=>!person.covers.length?<NoCoverShown key={person.id} person={person} pending={data.documents.some(d=>["waiting","stalled","held","table_unread"].includes(d.state))}/>:<section className="cov-person" id={`person-${person.id}`} key={person.id} data-testid="table-person">
       <div className="cov-person-head"><h2>{person.name}</h2><span>{plural(person.covers.length,"cover")} · {plural(person.rows.length,"benefit")}</span></div>
       {person.covers.some(c=>c.fromSettings||rowsForCover(c,person.covers,person.rows).rows.some(r=>r.fromSettings))?<p className="muted cov-reading" data-testid="table-currency-note">{CURRENCY_NOTE_ONCE}</p>:null}
-      {person.covers.map(c=>{const shown=rowsForCover(c,person.covers,person.rows);return <CoverCard key={c.coverKey+c.source.documentId+c.source.page} cover={c} rows={shown.rows} listedWith={shown.listedWith} reading={waiting.length>0} shared={sharedCoverText(data.people,person,c,shown.rows)}/>;})}
+      {person.covers.map((c,ci)=>{const shown=rowsForCover(c,person.covers,person.rows);return <CoverCard key={c.coverKey+c.source.documentId+c.source.page} cover={c} rows={shown.rows} listedWith={shown.listedWith} reading={waiting.length>0} shared={sharedCoverText(data.people,person,c,shown.rows)} sameAs={repeats.get(`${person.id}:${ci}`)}/>;})}
       <TellUs person={person}/>
-    </section>)}
+    </section>);})()}
     {data.unmatchedCovers.length||data.illustrationCovers.length||data.unlinkedSections.length||data.ambiguousCovers?.length?<section className="cov-person" data-testid="table-also-found">
       <div className="cov-person-head"><h2>Also in your documents</h2></div>
       <ul className="cov-also">
