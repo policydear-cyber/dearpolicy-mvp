@@ -25,6 +25,7 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { sameName } from "@/lib/policies/document-name";
 import { splitHeld } from "@/lib/policies/held-rows";
 import { isoDateWords } from "@/lib/format/detail-date";
 import { waitingNote } from "@/lib/benefit-table/waiting-note";
@@ -178,7 +179,9 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
     assert.deepEqual(many, before, "the input is not changed");
   }
   assert.match(read("app/globals.css"), /\.schedule-held summary \{[^}]*var\(--brand-ink\)[^}]*min-height: 44px/);
-  assert.match(read("app/policies/page.tsx"), /same = who\.trim\(\)\.toLowerCase\(\) === p\.name\.trim\(\)\.toLowerCase\(\)[^\n]*same && !p\.byPart \? ""/, "Documents: a name matched to a person of the same name is shown once, never 'Name (Name)' (Live tester 28 Nov)");
+  assert.match(read("app/policies/page.tsx"), /same = sameName\(who, p\.name\)[^\n]*same && !p\.byPart \? ""/, "Documents: a name matched to a person of the same name is shown once, never 'Name (Name)' (Live tester 28 Nov)");
+  assert.ok(sameName("Tan Yi Chuen, Desmond", "Tan Yi Chuen Desmond") && sameName("ONG PEI LIN CHARMAINE", "Ong Pei Lin Charmaine") && sameName(" José  Garcia ", "jose garcia".replace("jose", "josé")));
+  assert.ok(!sameName("Tan Desmond", "Desmond Tan") && !sameName("Aisha", "Aisha Tan") && !sameName("", "") && !sameName("Bob Lim", "Aisha Tan"), "other words, another order or an empty name are not the same name");
   assert.ok(!/schedule-summary/.test(benefits) && !/schedule-summary/.test(coverage), "no internal counts summary");
   // The one clarification: an unreadable amount, only for simple amounts.
   assert.match(benefits, /attention==="unreadable"&&CLARIFIABLE\.has/);
