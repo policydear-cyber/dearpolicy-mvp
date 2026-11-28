@@ -567,15 +567,16 @@ test("Coverage: the same group card under a second person folds only its benefit
   const same = repeatedCards([{ id: "a", name: "Sam", covers: [cover("a")] }, { id: "b", name: "Sam", covers: [cover("b")] }], () => rows);
   assert.equal(same.get("b:0"), null, "two people with one name are never folded");
   // Real assembled data carries whose it is on the cover and on every row (TE #655): those fields never keep a copy apart.
-  const real = (id: string, name: string, over: Record<string, unknown> = {}) => ({ personId: id, person: name, coverKey: "gtl", sumInsured: 1000000, premium: 120, source: { documentId: "d", page: 4 }, life: { household: id === "a" ? "self" : "spouse", householdBirth: id === "a" ? "1980-01-01" : null }, ...over });
+  const real = (id: string, name: string, over: Record<string, unknown> = {}) => ({ personId: id, person: name, coverKey: "gtl", sumInsured: 1000000, premium: 120, source: { documentId: "d", page: 4, excerpt: id === "a" ? "ANA TAN S1234567A S$1,000,000" : "BEN LEE S7654321B S$1,000,000" }, quote: id === "a" ? "ANA TAN" : "BEN LEE", life: { household: id === "a" ? "self" : "spouse", householdBirth: id === "a" ? "1980-01-01" : null }, ...over });
   const realRows = (id: string, name: string, pays = "S$1,000,000", benefit = "Death", page = 4) => [
-    { personId: id, person: name, benefit, pays, figure: 1000000, conditions: null, source: { documentId: "d", page } },
+    { personId: id, person: name, benefit, pays, figure: 1000000, conditions: null, source: { documentId: "d", page }, baseSource: { documentId: "d", page: 1, excerpt: `${name} masked` } },
     { personId: id, person: name, benefit: "Advance Payment Benefit", pays: "Up to S$400,000", figure: 400000, conditions: null, source: { documentId: "d", page: 5 } },
   ];
   const pair = (rowsB: unknown[], coverB = real("b", "BEN LEE")) => repeatedCards(
     [{ id: "a", name: "Ana", covers: [real("a", "ANA TAN")] }, { id: "b", name: "Ben", covers: [coverB] }],
     (p) => (p.id === "a" ? realRows("a", "ANA TAN") : rowsB));
   assert.equal(pair(realRows("b", "BEN LEE")).get("b:0"), "Ana", "different ids, printed names and household facts still fold");
+  assert.equal(pair(realRows("b", "BEN LEE", "S$1,000,000", "Death", 5)).get("b:0"), null, "a different page is shown in full even when the quoted line also differs");
   assert.equal(pair(realRows("b", "BEN LEE", "S$900,000")).get("b:0"), null, "the same number of rows with a different amount is shown in full");
   assert.equal(pair(realRows("b", "BEN LEE", "S$1,000,000", "death")).get("b:0"), null, "a different letter case is shown in full");
   assert.equal(pair(realRows("b", "BEN LEE", "S$1,000,000", "Death", 6)).get("b:0"), null, "a different page is shown in full");
@@ -585,6 +586,21 @@ test("Coverage: the same group card under a second person folds only its benefit
   assert.equal(pair(realRows("b", "BEN LEE"), real("b", "BEN LEE", { source: { documentId: "d", page: 6 } })).get("b:0"), null, "a different cover page is shown in full");
   assert.equal(pair(realRows("b", "BEN LEE").slice(0, 1)).get("b:0"), null, "a row fewer is shown in full");
   assert.equal(pair(realRows("b", " BEN LEE", " S$1,000,000")).get("b:0"), null, "whitespace in an amount is shown in full");
+  // Every field a card or row carries, changed one at a time, keeps the copy open: only whose-it-is fields may differ (TE #656).
+  const fullRow = (id: string, name: string) => ({ ...realRows(id, name)[0], section: "Life", column: "Sum", figureText: "S$1,000,000", fromDay: 1, maxDays: 30, qualifier: "per event", percent: 100, percentOf: "sum insured", base: 1000000, baseCorrected: false, combinedLimit: null, coverEnded: false, childLimit: 100000, confirmation: "confirmed", why: "worked out", document: "Certificate", currency: "SGD", linkWhy: "same wording", capSource: { documentId: "d", page: 4 } });
+  const fullCover = (id: string, name: string) => real(id, name, { document: "Certificate", currency: "SGD", startDate: "2022-10-06", endDate: "2027-10-05", plan: "Plan A", policyNumber: "G007500", premiumFrequency: "yearly", confirmation: "confirmed", ended: false });
+  const base = (cover: Record<string, unknown>, row: Record<string, unknown>) => repeatedCards(
+    [{ id: "a", name: "Ana", covers: [fullCover("a", "ANA TAN")] }, { id: "b", name: "Ben", covers: [cover as { personId: string }] }],
+    (p) => (p.id === "a" ? [fullRow("a", "ANA TAN")] : [row])).get("b:0");
+  assert.equal(base(fullCover("b", "BEN LEE"), fullRow("b", "BEN LEE")), "Ana", "the full-shaped pair folds");
+  const changed: Record<string, unknown> = { figure: 2, figureText: "S$2", fromDay: 2, maxDays: 31, qualifier: "per year", percent: 50, percentOf: "other", base: 2, baseCorrected: true, combinedLimit: 5, coverEnded: true, childLimit: 5, confirmation: "unconfirmed", why: "other", document: "Other", currency: "USD", linkWhy: "other", conditions: "waiting period", section: "Other", column: "Other", capSource: { documentId: "d", page: 9 } };
+  for (const [key, value] of Object.entries(changed)) {
+    assert.equal(base(fullCover("b", "BEN LEE"), { ...fullRow("b", "BEN LEE"), [key]: value }), null, `a different row ${key} is shown in full`);
+  }
+  for (const [key, value] of Object.entries({ document: "Other", currency: "USD", startDate: "2023-01-01", endDate: "2030-01-01", plan: "Plan B", policyNumber: "X1", premiumFrequency: "monthly", confirmation: "unconfirmed", ended: true, coverKey: "other" })) {
+    assert.equal(base({ ...fullCover("b", "BEN LEE"), [key]: value }, fullRow("b", "BEN LEE")), null, `a different cover ${key} is shown in full`);
+  }
+  assert.equal(base(fullCover("b", "BEN LEE"), { ...fullRow("b", "BEN LEE"), person: "SOMEONE ELSE", personId: "z", quote: "x", baseSource: { documentId: "d", page: 1, excerpt: "y" } }), "Ana", "only whose-it-is fields and quoted lines may differ");
   const src = read("components/benefit-table-coverage.tsx");
   assert.match(src, /sameAs\?<details className="cov-repeat" data-testid="table-repeat">/);
   assert.match(src, /repeatedCards\(listed,\(p,c\)=>rowsForCover\(c as Cover,\(listed\.find\(x=>x\.id===p\.id\) as Person\)\.covers,\(listed\.find\(x=>x\.id===p\.id\) as Person\)\.rows\)\.rows\)/, "the rows compared are the rows each card shows");
