@@ -26,6 +26,8 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { sameName } from "@/lib/policies/document-name";
+import { readInPartAdvice } from "@/lib/documents/failure-advice";
+import { uncheckedPagesNote } from "@/lib/documents/layout-check";
 import { firstYearNote, premiumFigure } from "@/lib/benefit-table/first-year-note";
 import { splitAfter, splitHeld } from "@/lib/policies/held-rows";
 import { isoDateWords } from "@/lib/format/detail-date";
@@ -202,6 +204,19 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
     assert.equal(ask.first.length + ask.rest.length, 150);
     assert.deepEqual(splitAfter([1, 2, 3], 0, (n) => n === 2), { first: [2], rest: [1, 3] });
     assert.deepEqual(rows.length, 150, "the input is not changed");
+  }
+  {
+    // Documents: the next step of a partly read file opens with "Everything else in it is used…" once, on the first card that says it; later cards carry the rest (Live tester 28 Nov: said three times).
+    const advice = readInPartAdvice(uncheckedPagesNote([4]))!;
+    const used = "Everything else in it is used, and you can still ask about it. ";
+    assert.equal(advice.next, used + advice.again, "the first card says all of it, unchanged");
+    assert.ok(advice.again.startsWith("Read again reads the document once more and may confirm them."));
+    assert.ok(!advice.again.includes("Everything else in it is used"));
+    assert.match(advice.again, /upload it, and once it shows as read, delete this one\.$/, "a later card still names the next step that can work");
+    const policies = read("app/policies/page.tsx");
+    assert.match(policies, /const firstReadInPartId = shown\.find\(\(p\) => p\.processing_status === "ready" && !isProcessing\(p\) && readInPartAdvice\(p\.processing_message\)\)\?\.id \?\? null;/);
+    assert.match(policies, /\{canManage \? \(policy\.id === firstReadInPartId \? part\.next : part\.again\) : OWNER_NEXT\}/);
+    assert.match(policies, /<details className="warning-next" open><summary>What can I do\?/, "the next step stays open on every card");
   }
   assert.match(read("app/globals.css"), /\.schedule-more summary,\n\.schedule-held summary \{[^}]*min-height: 44px/);
   assert.match(read("app/globals.css"), /\.schedule-held summary \{[^}]*var\(--brand-ink\)[^}]*min-height: 44px/);

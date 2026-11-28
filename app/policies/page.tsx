@@ -478,6 +478,8 @@ export default function PoliciesPage() {
     () => forPerson.filter((p) => filter === "all" || filter === "personal" && isOwnDocument(p) || filter === "reference" && !isOwnDocument(p) || false),
     [forPerson, filter],
   );
+  // The first card shown that says "Read in part": it carries the whole next step; later ones carry the part that differs.
+  const firstReadInPartId = shown.find((p) => p.processing_status === "ready" && !isProcessing(p) && readInPartAdvice(p.processing_message))?.id ?? null;
   const counts = {
     personal: forPerson.filter(isOwnDocument).length,
     reference: forPerson.filter((p) => !isOwnDocument(p)).length,
@@ -530,6 +532,7 @@ export default function PoliciesPage() {
       {personId && <p className="document-person-filter" data-testid="person-filter">Showing documents linked to <b>{family.find((m) => m.id === personId)?.display_name ?? "one person"}</b>. <button type="button" className="text-link" onClick={() => { setPersonId(null); window.history.replaceState(null, "", "/policies"); }}>Show all documents</button></p>}
 
       {libraryNotice && <div className="upload-status library-notice" role="status" data-testid="library-notice">{libraryNotice}{undoNotFamily?.notice === libraryNotice && <button type="button" className="mini-button" onClick={undoMarkNotFamily}>Undo</button>}<button type="button" className="mini-button" onClick={() => { setLibraryNotice(""); setUndoNotFamily(null); }} aria-label="Dismiss">✕</button></div>}
+      {/* The sentence "Everything else in it is used…" opens the next step once, on the first card that says it; the others carry the rest (Live tester 28 Nov: said three times). */}
       <div className="document-list rows">{shown.map((policy) => {
         const quarantineHeld = isQuarantineHeld(policy);
         const scanRejected = isScanRejected(policy);
@@ -599,7 +602,7 @@ export default function PoliciesPage() {
             return <>
               {missing && <div className="accuracy-warning" data-testid="pages-not-read"><b>{missing.title}</b><span>{missing.what}</span><small>{canManage ? missing.next : OWNER_NEXT}</small>{readAgainButton}</div>}
               {unread && <div className="accuracy-warning" data-testid="pages-not-read-yet"><b>{unread.title}</b><span>{unread.what}</span><small>{canManage ? unread.next : OWNER_NEXT}</small>{!missing && readAgainButton}</div>}
-              {part && <div className="accuracy-warning compact partial" data-testid="read-in-part"><span>{part.what}</span><details className="warning-next" open><summary>What can I do?</summary><small>{canManage ? part.next : OWNER_NEXT}</small></details></div>}
+              {part && <div className="accuracy-warning compact partial" data-testid="read-in-part"><span>{part.what}</span><details className="warning-next" open><summary>What can I do?</summary><small>{canManage ? (policy.id === firstReadInPartId ? part.next : part.again) : OWNER_NEXT}</small></details></div>}
               {pending && <div className="accuracy-warning" data-testid="cover-reading-pending"><b>Not fully read yet</b><span>{pending.what}</span><small>{canManage ? pending.next : OWNER_NEXT}</small>{!missing && !unread && /Read again/.test(pending.next) && readAgainButton}</div>}
               {!part && !pending && !processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Some details not used yet</b><span>DearPolicy couldn&rsquo;t find the page some details in this document came from, so it doesn&rsquo;t use those details in answers yet.</span></div>}
             </>;
