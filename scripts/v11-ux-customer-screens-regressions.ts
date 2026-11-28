@@ -26,6 +26,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { sameName } from "@/lib/policies/document-name";
+import { firstYearNote, premiumFigure } from "@/lib/benefit-table/first-year-note";
 import { splitAfter, splitHeld } from "@/lib/policies/held-rows";
 import { isoDateWords } from "@/lib/format/detail-date";
 import { waitingNote } from "@/lib/benefit-table/waiting-note";
@@ -446,6 +447,29 @@ test("Coverage: a benefit's long clauses sit behind a control, never in the row'
   assert.match(cov, /const plural=\(n:number,one:string,many=one\+"s"\)=>`\$\{n\} \$\{n===1\?one:many\}`/);
   assert.match(cov, /<details className="cov-long" data-testid="table-long-conditions"><summary>\{plural\(split\.long\.length,"longer condition"\)\}<\/summary>\{split\.long\.map\(\(c,i\)=><p key=\{i\}>\{c\}<\/p>\)\}<\/details>/);
   assert.doesNotMatch(cov, /\browDetail\(/, "the page no longer joins every clause into the line");
+  // A premium the page prints a first-year premium beside is said not to be what is charged that year, with the first-year figure only when the server read it (28 Nov: Coverage S$269.05 + S$201.80 vs Premiums S$376.68).
+  // A premium the page prints a first-year premium beside is said not to be what is charged that year (28 Nov: Coverage S$269.05 + S$201.80 vs Premiums S$376.68). The card renders only firstYearNote's text, and the premium line uses the same figure helper.
+  assert.match(cov, /\{firstYearNote\(cover\)\?<p className="muted cov-reading" data-testid="table-first-year">\{firstYearNote\(cover\)\}<\/p>:null\}/);
+  assert.match(cov, /\$\{premiumFigure\(cover\.premium,premiumCode\)\}/);
+  {
+    // The text itself, with exact figures and currencies (TE #652: a swap of the first-year and later premium must fail).
+    const base = { premium: 269.05, premiumNote: "the page prints a different premium for the first policy year", firstYearPremium: 376.68, currency: "SGD" as string | null };
+    const tail = ", so the premium above is not what is charged in that year.", head = "The page also prints a different premium for the first policy year";
+    assert.equal(firstYearNote(base), `${head} (S$376.68, for the policy as a whole)${tail}`, "the first-year figure, never the later premium, in the premium's currency, for the whole policy, with no frequency");
+    assert.equal(firstYearNote({ ...base, premium: 201.8 }), `${head} (S$376.68, for the policy as a whole)${tail}`, "a rider card says the same whole-policy figure");
+    assert.equal(firstYearNote({ ...base, currency: "USD" }), `${head} (USD 376.68, for the policy as a whole)${tail}`);
+    assert.equal(firstYearNote({ ...base, currency: "SGD", premiumCurrency: "MYR" }), `${head} (MYR 376.68, for the policy as a whole)${tail}`, "the premium's own currency wins over the cover's");
+    assert.equal(firstYearNote({ ...base, currency: "SGD", premiumCurrency: null }), `${head} (376.68 (currency not stated), for the policy as a whole)${tail}`, "no currency is said, never a bare $");
+    assert.equal(firstYearNote({ ...base, currency: null }), `${head} (376.68 (currency not stated), for the policy as a whole)${tail}`);
+    assert.equal(firstYearNote({ ...base, firstYearPremium: null }), `${head}${tail}`, "no figure unless the server read one");
+    assert.equal(firstYearNote({ ...base, firstYearPremium: undefined }), `${head}${tail}`);
+    assert.equal(firstYearNote({ ...base, premium: null }), null, "no premium on the card, no note");
+    assert.equal(firstYearNote({ ...base, premiumNote: null }), null, "the page prints no first-year premium, no note");
+    assert.equal(firstYearNote({ ...base, premiumNote: "" }), null);
+    assert.equal(premiumFigure(269.05, "SGD"), "S$269.05");
+    assert.equal(premiumFigure(80, null), "80 (currency not stated)");
+    assert.equal(premiumFigure(80, undefined), "80 (currency not stated)");
+  }
 });
 
 test("Documents: a long reading never promises a minute, keeps checking for an hour, and says it is still working", () => {
