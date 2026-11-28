@@ -163,6 +163,7 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
     assert.ok(!/method:"PATCH"[\s\S]*needsReview:false|markCorrect|rereadAll|readAll\(|action:"read"\}\)\}\)\.then\(\(\)=>load/.test(src) || src === coverage, "no confirm/re-read flows");
     assert.ok(!/method:"DELETE"/.test(src), "no row deletion");
   }
+  assert.match(read("app/policies/page.tsx"), /same = who\.trim\(\)\.toLowerCase\(\) === p\.name\.trim\(\)\.toLowerCase\(\)[^\n]*same && !p\.byPart \? ""/, "Documents: a name matched to a person of the same name is shown once, never 'Name (Name)' (Live tester 28 Nov)");
   assert.ok(!/schedule-summary/.test(benefits) && !/schedule-summary/.test(coverage), "no internal counts summary");
   // The one clarification: an unreadable amount, only for simple amounts.
   assert.match(benefits, /attention==="unreadable"&&CLARIFIABLE\.has/);

@@ -696,7 +696,7 @@ function MatchedNames({ policy, family, onMove, readOnly = false }: { policy: Po
     named: policy.detected_people.map((p) => ({ name: p.name, memberId: p.matchedFamilyMemberId })) }, family);
   return <div className="matched-names">
     {override && <p className="document-override" data-testid="upload-override">{override}</p>}
-    <p className="document-names">Named in it: {shown.map((p, i) => <span key={p.name}>{i ? ", " : ""}{p.name} ({p.member?.display_name ?? "matched"}{p.byPart ? ", matched by part of the name" : ""})</span>)}{" "}
+    <p className="document-names">Named in it: {shown.map((p, i) => <span key={p.name}>{i ? ", " : ""}{p.name}{(() => { const who = p.member?.display_name ?? "matched", same = who.trim().toLowerCase() === p.name.trim().toLowerCase(); return same && !p.byPart ? "" : ` (${same ? "matched" : who}${p.byPart ? ", matched by part of the name" : ""})`; })()}</span>)}{" "}
       {!readOnly && <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Done" : anyByPart ? "Not them? Change" : "Change"}</button>}</p>
     {open && !readOnly && <div className="detected-block">{shown.map((p) => <div className="detected-row" key={p.name}>
       <label htmlFor={`is-${policy.id}-${p.name}`}>&ldquo;{p.name}&rdquo; is</label>
