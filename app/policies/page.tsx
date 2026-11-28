@@ -75,6 +75,13 @@ type Filter = "all" | "personal" | "reference";
 const ACTIVE_STATUSES = new Set(["queued", "uploaded", "extracting", "indexing"]);
 function isProcessing(policy: Policy) { return ACTIVE_STATUSES.has(policy.processing_status); }
 const DOCUMENTS_SHOWN_FIRST = 8;
+/** A question for the owner on the card: a printed name not yet placed, a name matched only by part of it, or the upload choice
+ * overridden by the names printed in it. Who a document is for is where a wrong amount starts, so these stay in view. */
+function asksTheOwner(policy: Policy, family: Member[], notFamily: string[]) {
+  if (policy.detected_people.some((p) => !p.matchedFamilyMemberId && !notFamily.includes(`${policy.id}:${p.name}`))) return true;
+  if (policy.detected_people.some((p) => { const m = p.matchedFamilyMemberId ? family.find((f) => f.id === p.matchedFamilyMemberId) : null; return !!m && matchedByPart(m.display_name, p.name); })) return true;
+  return !!uploadOverrideLine({ uploadChoice: policy.upload_choice, linkedIds: policy.linked_people.map((l) => l.id), named: policy.detected_people.map((p) => ({ name: p.name, memberId: p.matchedFamilyMemberId })) }, family);
+}
 /** Not simply read: still reading, held or rejected by the scan, failed, read in part, or flagged for review. Such a document stays in view. */
 function needsAttention(policy: Policy) {
   return isProcessing(policy) || isQuarantineHeld(policy) || isScanRejected(policy) || policy.needs_review || documentReadLabel(policy).tone !== "ready";
@@ -671,7 +678,7 @@ export default function PoliciesPage() {
         </div>;
       };
       // A long library shows its first documents and the rest behind one tap; a document that needs the household's attention is never behind it.
-      const { first, rest } = splitAfter(shown, DOCUMENTS_SHOWN_FIRST, (p) => needsAttention(p) || detailsId === p.id || deletingId === p.id);
+      const { first, rest } = splitAfter(shown, DOCUMENTS_SHOWN_FIRST, (p) => needsAttention(p) || asksTheOwner(p, family, notFamily) || detailsId === p.id || deletingId === p.id);
       return <>{first.map(card)}{rest.length > 0 && <details className="documents-more" data-testid="documents-more"><summary>{rest.length === 1 ? "1 more document" : `${rest.length} more documents`}</summary><div className="document-list rows">{rest.map(card)}</div></details>}</>; })()}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : familyKnown && !family.length ? "No documents yet. First add the people your policies cover, then upload a policy schedule, certificate, renewal notice or benefits booklet. DearPolicy reads it for you." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above, and DearPolicy reads it for you."}</div>}</div>
       {/* After the list: the folders load a few seconds after the page and grow, so above the list they pushed the pills and every row down (Live tester, 26 Nov: layout shift 0.89 on Documents). */}
       {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={async () => { await refresh(); }} onFolders={onFolders}/>}

@@ -615,7 +615,9 @@ test("Documents: a long library folds the documents after the first eight, and o
   const page = read("app/policies/page.tsx");
   assert.match(page, /const DOCUMENTS_SHOWN_FIRST = 8;/);
   assert.match(page, /function needsAttention\(policy: Policy\) \{\n  return isProcessing\(policy\) \|\| isQuarantineHeld\(policy\) \|\| isScanRejected\(policy\) \|\| policy\.needs_review \|\| documentReadLabel\(policy\)\.tone !== "ready";\n\}/);
-  assert.match(page, /splitAfter\(shown, DOCUMENTS_SHOWN_FIRST, \(p\) => needsAttention\(p\) \|\| detailsId === p\.id \|\| deletingId === p\.id\)/);
+  assert.match(page, /splitAfter\(shown, DOCUMENTS_SHOWN_FIRST, \(p\) => needsAttention\(p\) \|\| asksTheOwner\(p, family, notFamily\) \|\| detailsId === p\.id \|\| deletingId === p\.id\)/);
+  assert.match(page, /function asksTheOwner\(policy: Policy, family: Member\[\], notFamily: string\[\]\) \{\n  if \(policy\.detected_people\.some\(\(p\) => !p\.matchedFamilyMemberId && !notFamily\.includes\(`\$\{policy\.id\}:\$\{p\.name\}`\)\)\) return true;/);
+  assert.match(page, /matchedByPart\(m\.display_name, p\.name\); \}\)\) return true;\n  return !!uploadOverrideLine\(/);
   assert.match(page, /\{first\.map\(card\)\}\{rest\.length > 0 && <details className="documents-more" data-testid="documents-more"><summary>\{rest\.length === 1 \? "1 more document" : `\$\{rest\.length\} more documents`\}<\/summary><div className="document-list rows">\{rest\.map\(card\)\}<\/div><\/details>\}/);
   assert.doesNotMatch(page, /\{shown\.map\(\(policy\)/, "every card renders through first or rest");
   // A link to #doc-<id> (chat source, Home, a folder) opens the fold that holds the card before it scrolls there.
