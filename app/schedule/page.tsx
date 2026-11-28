@@ -1,5 +1,6 @@
 "use client";
 
+import { splitHeld } from "@/lib/policies/held-rows";
 import { Icon } from "@/components/icons";
 import { useCanManageHousehold } from "@/components/household-role";
 import Link from "next/link";
@@ -205,10 +206,10 @@ export default function BenefitsPage(){
             // A row with no amount used and nothing the household can answer (a plan not known, a page not matched, a clause in words) sits
             // behind one control: it stays on the page, whole, but does not bury the figures above it (Live tester 28 Nov: 57,664px).
             const held=(b:Benefit)=>!paysLine(b).established&&!(b.attention==="unreadable"&&CLARIFIABLE.has(b.formulaKind));
-            const open=rows.filter(b=>!held(b)),folded=rows.filter(held);
+            const {open,folded}=splitHeld(rows,held);
             return <>
               {open.length>0&&<ul className="benefit-list">{open.map(item)}</ul>}
-              {folded.length>0&&<details className="schedule-held" data-testid="schedule-held"><summary>{folded.length===1?"1 benefit":`${folded.length} benefits`} with no amount used yet</summary><ul className="benefit-list">{folded.map(item)}</ul></details>}
+              {folded.length>0&&<details className="schedule-held" data-testid="schedule-held" open={search.trim()!==""}><summary>{folded.length===1?"1 benefit":`${folded.length} benefits`} with no amount we can use yet</summary><ul className="benefit-list">{folded.map(item)}</ul></details>}
             </>;
           })()}
         </section>)}
