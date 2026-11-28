@@ -13,6 +13,8 @@ import { MAX_UPLOAD_LABEL, UploadError, uploadPolicyDocument } from "@/component
 import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-role";
 import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
 import { POLL_LIMIT_MS, pollDelay } from "@/lib/documents/poll-schedule";
+import { splitAfter } from "@/lib/policies/held-rows";
+import { canFold } from "@/lib/policies/fold-documents";
 import { CONFIRM_READ_AGAIN, LONG_WAIT_MINUTES, documentReadLabel, isReadingNotice, pressReadAgain, readingFinishedSummary, readingNotice, readingWaitCopy } from "@/lib/documents/upload-problems";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
@@ -73,6 +75,31 @@ type Filter = "all" | "personal" | "reference";
 
 const ACTIVE_STATUSES = new Set(["queued", "uploaded", "extracting", "indexing"]);
 function isProcessing(policy: Policy) { return ACTIVE_STATUSES.has(policy.processing_status); }
+const DOCUMENTS_SHOWN_FIRST = 8;
+/** A question for the owner on the card: a printed name not yet placed, a name matched only by part of it, or the upload choice
+ * overridden by the names printed in it. Who a document is for is where a wrong amount starts, so these stay in view. */
+function asksTheOwner(policy: Policy, family: Member[], notFamily: string[]) {
+  if (policy.detected_people.some((p) => !p.matchedFamilyMemberId && !notFamily.includes(`${policy.id}:${p.name}`))) return true;
+  if (policy.detected_people.some((p) => { const m = p.matchedFamilyMemberId ? family.find((f) => f.id === p.matchedFamilyMemberId) : null; return !!m && matchedByPart(m.display_name, p.name); })) return true;
+  return !!uploadOverrideLine({ uploadChoice: policy.upload_choice, linkedIds: policy.linked_people.map((l) => l.id), named: policy.detected_people.map((p) => ({ name: p.name, memberId: p.matchedFamilyMemberId })) }, family);
+}
+/** A card behind the fold has nothing to answer (lib/policies/fold-documents.ts): read, placed, plan settled, benefits read. */
+function foldable(policy: Policy, family: Member[], notFamily: string[], planChoice: boolean, benefitState: boolean) {
+  const covered = policy.linked_people.filter((p) => p.source !== "scheme_reference_match");
+  const referenceLinkCount = policy.linked_people.length - covered.length;
+  return canFold({
+    busy: isProcessing(policy) || isQuarantineHeld(policy) || isScanRejected(policy),
+    notReadyLabel: documentReadLabel(policy).tone !== "ready",
+    needsReview: !!policy.needs_review,
+    ready: policy.processing_status === "ready",
+    hasProcessingError: !!policy.processing_error,
+    asksWho: asksTheOwner(policy, family, notFamily),
+    coveredCount: covered.length,
+    referenceLinkCount,
+    planMissing: coversPlanPrompt({ tierOptions: policy.tier_options ?? [], covered, planChoice }).planMissing,
+    benefitState,
+  });
+}
 const isQuarantineHeld = isPolicyQuarantineHeld;
 const isScanRejected = isPolicyScanRejected;
 const quarantineLabel = policyQuarantineLabel;
@@ -221,11 +248,24 @@ export default function PoliciesPage() {
     if (!id.startsWith("doc-")) return;
     const card = document.getElementById(id);
     if (!card) return;
+    // A document behind "N more documents" is opened first, so the link never lands on something hidden.
+    const more = card.closest("details.documents-more") as HTMLDetailsElement | null;
+    if (more) more.open = true;
     card.scrollIntoView({ block: "center" });
     card.classList.add("focused");
     const timer = setTimeout(() => card.classList.remove("focused"), 2400);
     return () => clearTimeout(timer);
   }, [loaded]);
+  // The same for a link on this page (a folder's document list): open the fold that holds it.
+  useEffect(() => {
+    const onHash = () => {
+      const card = document.getElementById(window.location.hash.slice(1));
+      const more = card?.closest("details.documents-more") as HTMLDetailsElement | null;
+      if (card && more && !more.open) { more.open = true; card.scrollIntoView({ block: "center" }); }
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   // What each document was found to pay for (benefit table or Coverage rows by document), and documents whose benefits are still
   // being read, or could not be read, for Coverage (reading.documents). Neither is needed for the page to work.
@@ -533,7 +573,7 @@ export default function PoliciesPage() {
 
       {libraryNotice && <div className="upload-status library-notice" role="status" data-testid="library-notice">{libraryNotice}{undoNotFamily?.notice === libraryNotice && <button type="button" className="mini-button" onClick={undoMarkNotFamily}>Undo</button>}<button type="button" className="mini-button" onClick={() => { setLibraryNotice(""); setUndoNotFamily(null); }} aria-label="Dismiss">✕</button></div>}
       {/* The sentence "Everything else in it is used…" opens the next step once, on the first card that says it; the others carry the rest (Live tester 28 Nov: said three times). */}
-      <div className="document-list rows">{shown.map((policy) => {
+      <div className="document-list rows">{(() => { const card = (policy: Policy) => {
         const quarantineHeld = isQuarantineHeld(policy);
         const scanRejected = isScanRejected(policy);
         // A document held in quarantine (or rejected outright) still sits at
@@ -650,7 +690,10 @@ export default function PoliciesPage() {
 
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
         </div>;
-      })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : familyKnown && !family.length ? "No documents yet. First add the people your policies cover, then upload a policy schedule, certificate, renewal notice or benefits booklet. DearPolicy reads it for you." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above, and DearPolicy reads it for you."}</div>}</div>
+      };
+      // A long library shows its first documents and the rest behind one tap; a document that needs the household's attention is never behind it.
+      const { first, rest } = splitAfter(shown, DOCUMENTS_SHOWN_FIRST, (p) => !foldable(p, family, notFamily, planChoice, !!benefitReading[p.id]));
+      return <>{first.map(card)}{rest.length > 0 && <details className="documents-more" data-testid="documents-more"><summary>{rest.length === 1 ? "1 more document" : `${rest.length} more documents`}</summary><div className="document-list rows">{rest.map(card)}</div></details>}</>; })()}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : familyKnown && !family.length ? "No documents yet. First add the people your policies cover, then upload a policy schedule, certificate, renewal notice or benefits booklet. DearPolicy reads it for you." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above, and DearPolicy reads it for you."}</div>}</div>
       {/* After the list: the folders load a few seconds after the page and grow, so above the list they pushed the pills and every row down (Live tester, 26 Nov: layout shift 0.89 on Documents). */}
       {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={async () => { await refresh(); }} onFolders={onFolders}/>}
     </section>

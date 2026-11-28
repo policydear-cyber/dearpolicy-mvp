@@ -189,6 +189,13 @@ async function uploadDoc(page: Page, d: RenderedDoc, profileLabel: string, super
 }
 
 // ======================================================================================
+/** A long library folds its documents after the first eight behind "N more documents": open it so a card there can be reached. */
+async function openMoreDocuments(page: Page) {
+  await page.locator(".document-card").first().waitFor();
+  const more = page.getByTestId("documents-more");
+  if ((await more.count()) && !(await more.evaluate((d) => (d as HTMLDetailsElement).open))) await more.locator("summary").click();
+}
+
 test.describe.serial("V1.1 release journey", () => {
   test.setTimeout(Number(process.env.V11_JOURNEY_TIMEOUT_MS ?? 90 * 60_000));
   let owner: Page;
@@ -266,6 +273,7 @@ test.describe.serial("V1.1 release journey", () => {
       let ownerAction = "none";
       if (!linked && r.p) {
         await owner.goto("/policies");
+        await openMoreDocuments(owner);
         const card = owner.locator(`.document-card[data-policy-id="${r.p.id}"]`);
         // PR #77: open the one-line "Covers" picker first ("Choose" when nobody is linked yet). Was: the chips were shown open.
         const opener = card.getByTestId("covers-picker").getByRole("button", { name: /^(?:Change|Choose)$/ });
@@ -450,6 +458,7 @@ test.describe.serial("V1.1 release journey", () => {
     // ---------------- 7. deletion and post-deletion question
     await timed("delete AccidentGuard-M", async () => {
       await owner.goto("/policies");
+      await openMoreDocuments(owner);
       const p = (await policies(owner)).find((x) => x.id === ids["policy:accidentMarcus"]);
       const card = owner.locator(`.document-card[data-policy-id="${ids["policy:accidentMarcus"]}"]`);
       await card.getByRole("button", { name: "Delete" }).click();

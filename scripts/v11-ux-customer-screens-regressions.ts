@@ -37,6 +37,7 @@ import { printedDay } from "@/lib/simple-chat/verify";
 import { shownInsurer } from "@/lib/policies/insurer-name";
 import { documentName } from "@/lib/policies/document-name";
 import path from "node:path";
+import { canFold } from "../lib/policies/fold-documents";
 import { customerAnswerText, customerError, customerMessage, ANSWER_UNAVAILABLE } from "../components/customer-text";
 
 let passed = 0;
@@ -609,6 +610,36 @@ test("Coverage: the same group card under a second person folds only its benefit
   assert.match(src, /\{sameAs\?<details className="cov-repeat" data-testid="table-repeat"><summary>Same \{plural\(rows\.length,"benefit"\)\} as in \{sameAs\}&rsquo;s card above<\/summary>\{list\}<\/details>:list\}/);
   assert.match(read("app/globals.css"), /\.cov-repeat summary,\n\.schedule-more summary,\n\.schedule-held summary \{[^}]*min-height: 44px/, "the summary is a 44px target");
   assert.match(src, /<header className="cov-cover-head">[\s\S]*?<\/header>[\s\S]*?\{sameAs\?/, "the header stays outside the fold");
+});
+
+test("Documents: a long library folds the documents after the first eight, and one that needs attention or is linked to is never behind the fold (Live tester 28 Nov)", () => {
+  const page = read("app/policies/page.tsx");
+  assert.match(page, /const DOCUMENTS_SHOWN_FIRST = 8;/);
+  assert.match(page, /function foldable\(policy: Policy, family: Member\[\], notFamily: string\[\], planChoice: boolean, benefitState: boolean\) \{/);
+  assert.doesNotMatch(page, /needsAttention/);
+  assert.match(page, /splitAfter\(shown, DOCUMENTS_SHOWN_FIRST, \(p\) => !foldable\(p, family, notFamily, planChoice, !!benefitReading\[p\.id\]\)\)/, "a card that asks anything stays; opening details or deleting never moves a card");
+  assert.doesNotMatch(page, /detailsId === p\.id \|\| deletingId === p\.id/);
+  assert.match(page, /function asksTheOwner\(policy: Policy, family: Member\[\], notFamily: string\[\]\) \{\n  if \(policy\.detected_people\.some\(\(p\) => !p\.matchedFamilyMemberId && !notFamily\.includes\(`\$\{policy\.id\}:\$\{p\.name\}`\)\)\) return true;/);
+  assert.match(page, /matchedByPart\(m\.display_name, p\.name\); \}\)\) return true;\n  return !!uploadOverrideLine\(/);
+  assert.match(page, /\{first\.map\(card\)\}\{rest\.length > 0 && <details className="documents-more" data-testid="documents-more"><summary>\{rest\.length === 1 \? "1 more document" : `\$\{rest\.length\} more documents`\}<\/summary><div className="document-list rows">\{rest\.map\(card\)\}<\/div><\/details>\}/);
+  assert.doesNotMatch(page, /\{shown\.map\(\(policy\)/, "every card renders through first or rest");
+  // A link to #doc-<id> (chat source, Home, a folder) opens the fold that holds the card before it scrolls there.
+  assert.match(page, /card\.closest\("details\.documents-more"\)[\s\S]*?more\.open = true;[\s\S]*?card\.scrollIntoView\(\{ block: "center" \}\);/);
+  assert.match(page, /addEventListener\("hashchange", onHash\)/);
+  assert.match(read("app/globals.css"), /\.documents-more summary,\n\.cov-repeat summary,\n\.schedule-more summary,\n\.schedule-held summary \{[^}]*min-height: 44px/);
+});
+
+test("Documents fold: only a card with nothing to answer folds (canFold)", () => {
+  const ok = { busy: false, notReadyLabel: false, needsReview: false, ready: true, hasProcessingError: false, asksWho: false, coveredCount: 1, referenceLinkCount: 0, planMissing: false, benefitState: false };
+  assert.equal(canFold(ok), true, "a read, placed, settled document folds");
+  assert.equal(canFold({ ...ok, coveredCount: 0, referenceLinkCount: 2 }), true, "a reference document used as wording folds");
+  assert.equal(canFold({ ...ok, coveredCount: 0, referenceLinkCount: 0 }), false, "used for nobody never folds, whatever else is settled");
+  assert.equal(canFold({ ...ok, coveredCount: 0 }), false, "applies to nobody yet asks");
+  assert.equal(canFold({ ...ok, planMissing: true }), false, "plan not chosen asks");
+  assert.equal(canFold({ ...ok, benefitState: true }), false, "benefits reading failed, backed off or running stays in view");
+  assert.equal(canFold({ ...ok, asksWho: true }), false, "unmatched, by-part or overridden names ask");
+  for (const k of ["busy", "notReadyLabel", "needsReview", "hasProcessingError"] as const) assert.equal(canFold({ ...ok, [k]: true }), false, k);
+  assert.equal(canFold({ ...ok, ready: false }), false, "not ready never folds");
 });
 
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);
