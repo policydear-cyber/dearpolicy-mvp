@@ -23,6 +23,7 @@
  *    endowment defect fixture: a raw OpenAI quota error with an organisation
  *    identifier) and keep plain messages.
  */
+import { repeatedCards, cardSignature } from "@/lib/benefit-table/repeat-card";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { sameName } from "@/lib/policies/document-name";
@@ -548,3 +549,26 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
 });
 
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);
+
+test("Coverage: the same group card under a second person folds only its benefit list, never a different card (Live tester 28 Nov)", () => {
+  const rows = [{ benefit: "Death", pays: "S$1,000,000" }, { benefit: "Advance Payment Benefit", pays: "Up to S$400,000" }];
+  const cover = (personId: string, extra: Record<string, unknown> = {}) => ({ personId, coverKey: "gtl", sumInsured: 1000000, premium: null, ...extra });
+  const people = [
+    { id: "a", name: "Ana", covers: [cover("a"), cover("a", { coverKey: "pa" })] },
+    { id: "b", name: "Ben", covers: [cover("b"), cover("b", { sumInsured: 500000 }), cover("b", { coverKey: "pa" })] },
+  ];
+  const rowsOf = (_p: { id: string }, c: { personId: string; [k: string]: unknown }) => (c.coverKey === "pa" ? [...rows, { benefit: "Hospital", pays: "S$200 a day" }] : rows);
+  const out = repeatedCards(people, rowsOf);
+  assert.equal(out.get("a:0"), null);
+  assert.equal(out.get("b:0"), "Ana");
+  assert.equal(out.get("b:1"), null, "a different sum is never folded");
+  assert.equal(out.get("b:2"), "Ana", "the same second card folds to the first copy");
+  const differs = repeatedCards(people, (p, c) => (p.id === "b" && c.coverKey === "gtl" ? [...rows, { benefit: "Extra", pays: "S$1" }] : rows));
+  assert.equal(differs.get("b:0"), null, "one different row means the card is shown in full");
+  assert.equal(cardSignature(cover("a"), []), null, "an empty card is never folded");
+  const same = repeatedCards([{ id: "a", name: "Sam", covers: [cover("a")] }, { id: "b", name: "Sam", covers: [cover("b")] }], () => rows);
+  assert.equal(same.get("b:0"), null, "two people with one name are never folded");
+  const src = read("components/benefit-table-coverage.tsx");
+  assert.match(src, /sameAs\?<details className="cov-repeat" data-testid="table-repeat">/);
+  assert.match(src, /<header className="cov-cover-head">[\s\S]*?<\/header>[\s\S]*?\{sameAs\?/, "the header stays outside the fold");
+});
