@@ -4,6 +4,7 @@ import { Icon } from "@/components/icons";
 import Link from "next/link";
 import { useState } from "react";
 import { useCanManageHousehold } from "@/components/household-role";
+import { firstYearNote, plainFigure, premiumFigure } from "@/lib/benefit-table/first-year-note";
 import { benefitNames, bySection, keyBenefits, money, noSumText, shortFigure, splitRowDetail, type SummaryRow } from "@/lib/benefit-table/headline";
 import { rowsForCover } from "@/lib/benefit-table/cover-rows";
 import { waitingNote } from "@/lib/benefit-table/waiting-note";
@@ -54,8 +55,6 @@ function benefitParts(row:Row,name:(r:Row)=>string){
   return {name:<>{name(row)}{detail?<small>{detail}</small>:null}{split.long.length?<details className="cov-long" data-testid="table-long-conditions"><summary>{plural(split.long.length,"longer condition")}</summary>{split.long.map((c,i)=><p key={i}>{c}</p>)}</details>:null}</>,pays:f.text};
 }
 
-/** A figure with no currency, in one fixed format so server and browser renders agree (Critic R376 L2). */
-const plainFigure=(n:number)=>n.toLocaleString("en-US",{minimumFractionDigits:Number.isInteger(n)?0:2,maximumFractionDigits:2});
 
 /** reading: some document of the household is still being read, so benefits may yet arrive. With nothing being read, a
  * cover with no benefit rows is never said to be "still being read": its schedule was read, and what it pays is in a
@@ -70,7 +69,7 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
   const key=keyBenefits(rows).map(i=>rows[i]),name=benefitNames(rows);
   // A premium whose line and page state no currency claims none, never a bare "$" (Critic R374 L1).
   const premiumCode=cover.premiumCurrency===undefined?cover.currency:cover.premiumCurrency;
-  const premium=cover.premium!=null?`${premiumCode?money(cover.premium,premiumCode):`${plainFigure(Number(cover.premium))} (currency not stated)`}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""}`:null;
+  const premium=cover.premium!=null?`${premiumFigure(cover.premium,premiumCode)}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""}`:null;
   return <article className="cov-cover" data-testid="table-cover">
     <header className="cov-cover-head">
       <div className="cov-cover-name"><strong>{coverName(cover)}</strong>{coverLine(cover)?<small>{coverLine(cover)}</small>:null}</div>
@@ -79,7 +78,7 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
         <small>{premium?<>Premium {premium} </>:null}<PageLink source={premium&&cover.premiumSource?cover.premiumSource:cover.source}/></small>
       </div>
     </header>
-    {premium&&cover.premiumNote?<p className="muted cov-reading" data-testid="table-first-year">The page also prints a different premium for the first policy year{cover.firstYearPremium!=null?` (${premiumCode?money(cover.firstYearPremium,premiumCode):plainFigure(cover.firstYearPremium)}, for the policy as a whole)`:""}, so the premium above is not what is charged in that year.</p>:null}
+    {firstYearNote(cover)?<p className="muted cov-reading" data-testid="table-first-year">{firstYearNote(cover)}</p>:null}
     {shared?<p className="muted cov-reading" data-testid="table-shared">{shared}</p>:null}
     {!rows.length?<p className="muted cov-reading">{listedWith?`What it pays is set out with ${coverName(listedWith)}${listedWith.cover!==listedWith.product?` (${listedWith.cover})`:""}, in the same policy wording.`:reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:<>
       {/* Only its schedule's own cover line is on file: shown as printed, with the same ask for its wording. */}
