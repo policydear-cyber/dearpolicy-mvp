@@ -1,6 +1,6 @@
 "use client";
 
-import { splitHeld } from "@/lib/policies/held-rows";
+import { splitAfter, splitHeld } from "@/lib/policies/held-rows";
 import { Icon } from "@/components/icons";
 import { useCanManageHousehold } from "@/components/household-role";
 import Link from "next/link";
@@ -14,6 +14,9 @@ import { pointsToScheduleSum,SCHEDULE_SUM_POINTER } from "@/lib/policies/no-amou
 import { AlternativeAmountsBlock,hasAlternatives,type AlternativeAmounts } from "@/components/alternative-amounts";
 import { CurrencyPicker } from "@/components/currency-picker";
 import { shownInsurer } from "@/lib/policies/insurer-name";
+
+/** Benefits of one policy shown before "N more benefits" (Live tester 28 Nov: 33,330px at 390px). */
+const SHOWN_FIRST=12;
 
 /** Benefits: what the household's documents say each policy pays.
  *
@@ -207,8 +210,11 @@ export default function BenefitsPage(){
             // behind one control: it stays on the page, whole, but does not bury the figures above it (Live tester 28 Nov: 57,664px).
             const held=(b:Benefit)=>!paysLine(b).established&&!(b.attention==="unreadable"&&CLARIFIABLE.has(b.formulaKind));
             const {open,folded}=splitHeld(rows,held);
+            // A long policy shows its first benefits and keeps the rest, whole and in order, behind one control that opens while searching.
+            const {first,rest}=splitAfter(open,SHOWN_FIRST);
             return <>
-              {open.length>0&&<ul className="benefit-list">{open.map(item)}</ul>}
+              {first.length>0&&<ul className="benefit-list">{first.map(item)}</ul>}
+              {rest.length>0&&<details className="schedule-more" data-testid="schedule-more" open={search.trim()!==""}><summary>{rest.length===1?"1 more benefit":`${rest.length} more benefits`}</summary><ul className="benefit-list">{rest.map(item)}</ul></details>}
               {folded.length>0&&<details className="schedule-held" data-testid="schedule-held" open={search.trim()!==""}><summary>{folded.length===1?"1 benefit":`${folded.length} benefits`} with no amount we can use yet</summary><ul className="benefit-list">{folded.map(item)}</ul></details>}
             </>;
           })()}

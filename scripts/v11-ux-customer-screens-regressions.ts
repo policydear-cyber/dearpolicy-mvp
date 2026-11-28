@@ -26,7 +26,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { sameName } from "@/lib/policies/document-name";
-import { splitHeld } from "@/lib/policies/held-rows";
+import { splitAfter, splitHeld } from "@/lib/policies/held-rows";
 import { isoDateWords } from "@/lib/format/detail-date";
 import { waitingNote } from "@/lib/benefit-table/waiting-note";
 import { printedDay } from "@/lib/simple-chat/verify";
@@ -167,7 +167,8 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
   }
   assert.match(benefits, /const held=\(b:Benefit\)=>!paysLine\(b\)\.established&&!\(b\.attention==="unreadable"&&CLARIFIABLE\.has\(b\.formulaKind\)\)/, "only rows with no amount used and nothing to answer are folded; an amount or a question stays open");
   assert.match(benefits, /const \{open,folded\}=splitHeld\(rows,held\);/, "one split, so each row is in exactly one list");
-  assert.match(benefits, /\{open\.length>0&&<ul className="benefit-list">\{open\.map\(item\)\}<\/ul>\}/);
+  // The open rows are shown as the first 12 and the rest (pinned below): no other path renders them, so none is dropped.
+  assert.doesNotMatch(benefits, /\{open\.map\(item\)\}/);
   assert.match(benefits, /\{folded\.length>0&&<details className="schedule-held" data-testid="schedule-held" open=\{search\.trim\(\)!==""\}><summary>\{folded\.length===1\?"1 benefit":`\$\{folded\.length\} benefits`\} with no amount we can use yet<\/summary><ul className="benefit-list">\{folded\.map\(item\)\}<\/ul><\/details>\}/, "folded rows stay whole behind one control per policy, open while a search is typed");
   {
     const rows = [1, 2, 3, 4, 5, 6], { open, folded } = splitHeld(rows, (n) => n % 2 === 0);
@@ -178,6 +179,24 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
     assert.equal(sp.open.length + sp.folded.length, 150, "a long list loses no row");
     assert.deepEqual(many, before, "the input is not changed");
   }
+  // A long policy: the first 12 benefits open, the rest whole and in order behind one control that opens while searching (Live tester 28 Nov: 33,330px).
+  assert.match(benefits, /^const SHOWN_FIRST=12;$/m);
+  assert.match(benefits, /const \{first,rest\}=splitAfter\(open,SHOWN_FIRST\);/);
+  assert.match(benefits, /\{first\.length>0&&<ul className="benefit-list">\{first\.map\(item\)\}<\/ul>\}/);
+  assert.match(benefits, /\{rest\.length>0&&<details className="schedule-more" data-testid="schedule-more" open=\{search\.trim\(\)!==""\}><summary>\{rest\.length===1\?"1 more benefit":`\$\{rest\.length\} more benefits`\}<\/summary><ul className="benefit-list">\{rest\.map\(item\)\}<\/ul><\/details>\}/);
+  {
+    const rows = Array.from({ length: 150 }, (_, i) => i), a = splitAfter(rows, 12);
+    assert.deepEqual([...a.first, ...a.rest], rows, "no row lost or repeated, order kept");
+    assert.equal(a.first.length, 12);
+    assert.deepEqual(splitAfter([1, 2, 3], 12), { first: [1, 2, 3], rest: [] }, "a short policy has no control");
+    assert.deepEqual(splitAfter([1, 2, 3, 4], 3), { first: [1, 2, 3], rest: [4] });
+    assert.deepEqual(splitAfter([1, 2], 0), { first: [], rest: [1, 2] });
+    assert.deepEqual(splitAfter([1, 2], -3), { first: [], rest: [1, 2] });
+    assert.deepEqual(splitAfter([1, 2], Number.NaN), { first: [], rest: [1, 2] });
+    assert.deepEqual(splitAfter([], 12), { first: [], rest: [] });
+    assert.deepEqual(rows.length, 150, "the input is not changed");
+  }
+  assert.match(read("app/globals.css"), /\.schedule-more summary,\n\.schedule-held summary \{[^}]*min-height: 44px/);
   assert.match(read("app/globals.css"), /\.schedule-held summary \{[^}]*var\(--brand-ink\)[^}]*min-height: 44px/);
   assert.match(read("app/policies/page.tsx"), /same = sameName\(who, p\.name\)[^\n]*same && !p\.byPart \? ""/, "Documents: a name matched to a person of the same name is shown once, never 'Name (Name)' (Live tester 28 Nov)");
   assert.ok(sameName("Tan Yi Chuen, Desmond", "Tan Yi Chuen Desmond") && sameName("ONG PEI LIN CHARMAINE", "Ong Pei Lin Charmaine") && sameName(" José  Garcia ", "jose garcia".replace("jose", "josé")));
