@@ -120,7 +120,8 @@ export function failedDocumentChatAdvice(error: string | null | undefined, { has
  * uncheckedPagesNote): which pages, what that means, and the next step that can work. The status said only "Read in
  * part", with no next step (live review on 4103e10, finding 5). Allow-list: only the note DearPolicy writes is shown,
  * page numbers and all; any other text gets the plain sentence. */
-export type ReadInPartAdvice = { what: string; next: string };
+/** `again` is the same next step without its opening sentence ("Everything else in it is used, and you can still ask about it."), for the second and later cards of a page that says it more than once. */
+export type ReadInPartAdvice = { what: string; next: string; again: string };
 const NUMBERS = String.raw`\d{1,4}(?:(?:, | and )\d{1,4})*`;
 const WHOLE = new RegExp(String.raw`^Pages? ${NUMBERS} could not be checked: a second reading from the page image did not agree with (?:its|their) text, so no amount on (?:it|them) is used\.$`);
 /** The note a document read before page checks existed carries (lib/rag/ingest.ts): how many cover amounts, no pages. */
@@ -133,6 +134,8 @@ const PART_PLAIN = new RegExp(String.raw`^Some amounts on (pages? ${NUMBERS}) co
 const inYourWords = (sentence: string) => sentence
   .replace(WHOLE_PLAIN, "$1 couldn’t be confirmed against the page itself, so no amount on $2 is used.")
   .replace(PART_PLAIN, (_m, pages: string, rest: string) => `Some amounts on ${pages} couldn’t be confirmed against the page itself, so they are left out of answers. The rest of ${rest} ${rest === "that page" ? "was" : "were"} confirmed and ${rest === "that page" ? "is" : "are"} used.`);
+const READ_IN_PART_USED = "Everything else in it is used, and you can still ask about it. ";
+const READ_IN_PART_AGAIN = "Read again reads the document once more and may confirm them. If it doesn't, and you only have a scan or photo, the insurer's original PDF usually fixes this: upload it, and once it shows as read, delete this one.";
 export function readInPartAdvice(message: string | null | undefined): ReadInPartAdvice | null {
   const text = (message ?? "").trim();
   if (!/^Read in part\b/.test(text)) return null;
@@ -143,7 +146,8 @@ export function readInPartAdvice(message: string | null | undefined): ReadInPart
   for (const sentence of sentences) { if (!WHOLE.test(sentence) && !PART.test(sentence) && !COUNT.test(sentence)) break; if (!known.includes(sentence)) known.push(sentence); }
   return {
     what: known.length ? known.map(inYourWords).join(" ") : "Some amounts in it could not be checked against the page they came from, so they are not used.",
-    next: "Everything else in it is used, and you can still ask about it. Read again reads the document once more and may confirm them. If it doesn't, and you only have a scan or photo, the insurer's original PDF usually fixes this: upload it, and once it shows as read, delete this one.",
+    next: READ_IN_PART_USED + READ_IN_PART_AGAIN,
+    again: READ_IN_PART_AGAIN,
   };
 }
 
