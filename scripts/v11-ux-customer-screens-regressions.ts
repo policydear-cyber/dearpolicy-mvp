@@ -548,8 +548,6 @@ test("Documents: a long reading never promises a minute, keeps checking for an h
   assert.equal((page.match(/readingWaitCopy\(policy\.processing_stage, waitedMinutes\)/g) ?? []).length, 3);
 });
 
-console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);
-
 test("Coverage: the same group card under a second person folds only its benefit list, never a different card (Live tester 28 Nov)", () => {
   const rows = [{ benefit: "Death", pays: "S$1,000,000" }, { benefit: "Advance Payment Benefit", pays: "Up to S$400,000" }];
   const cover = (personId: string, extra: Record<string, unknown> = {}) => ({ personId, coverKey: "gtl", sumInsured: 1000000, premium: null, ...extra });
@@ -572,3 +570,5 @@ test("Coverage: the same group card under a second person folds only its benefit
   assert.match(src, /sameAs\?<details className="cov-repeat" data-testid="table-repeat">/);
   assert.match(src, /<header className="cov-cover-head">[\s\S]*?<\/header>[\s\S]*?\{sameAs\?/, "the header stays outside the fold");
 });
+
+console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);
