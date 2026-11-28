@@ -185,6 +185,9 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
   for (const [a, b] of [["José Garcia", "Jose Garcia"], ["Li Wei", "Liwei"], ["Anne-Marie", "AnneMarie"], ["Aisha 2", "Aisha 3"], ["ＡＩＳＨＡ", "AISHA"], ["O'Neil", "ONeil"], ["Tan Ah", "Tan Ah Kow"]]) assert.ok(!sameName(a, b), `${a} / ${b}`);
   for (const [a, b] of [["José Garcia".normalize("NFD"), "José Garcia".normalize("NFC")], ["O’Neil", "O'Neil"], ["Anne-Marie Lee", "Anne Marie Lee"], ["Ng.", "ng"]]) assert.ok(sameName(a, b), `${a} / ${b}`);
   assert.ok(!sameName("Tan Desmond", "Desmond Tan") && !sameName("Aisha", "Aisha Tan") && !sameName("", "") && !sameName("Bob Lim", "Aisha Tan"), "other words, another order or an empty name are not the same name");
+  const records = read("app/records/page.tsx");
+  assert.match(records, /setTimeout\(\(\)=>setSlow\(true\),4000\)/, "Records: after a few seconds the wait says it is still working");
+  assert.match(records, /role="status">Loading what your cover costs…\{slow\?" Still working\. This is taking longer than usual\.":""\}<\/div>/);
   assert.ok(!/schedule-summary/.test(benefits) && !/schedule-summary/.test(coverage), "no internal counts summary");
   // The one clarification: an unreadable amount, only for simple amounts.
   assert.match(benefits, /attention==="unreadable"&&CLARIFIABLE\.has/);
