@@ -163,6 +163,9 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
     assert.ok(!/method:"PATCH"[\s\S]*needsReview:false|markCorrect|rereadAll|readAll\(|action:"read"\}\)\}\)\.then\(\(\)=>load/.test(src) || src === coverage, "no confirm/re-read flows");
     assert.ok(!/method:"DELETE"/.test(src), "no row deletion");
   }
+  assert.match(benefits, /const held=\(b:Benefit\)=>!paysLine\(b\)\.established&&!\(b\.attention==="unreadable"&&CLARIFIABLE\.has\(b\.formulaKind\)\)/, "only rows with no amount used and nothing to answer are folded; an amount or a question stays open");
+  assert.match(benefits, /<details className="schedule-held" data-testid="schedule-held"><summary>\{folded\.length===1\?"1 benefit":`\$\{folded\.length\} benefits`\} with no amount used yet<\/summary><ul className="benefit-list">\{folded\.map\(item\)\}<\/ul><\/details>/, "folded rows stay on the page, whole, behind one control per policy");
+  assert.match(read("app/globals.css"), /\.schedule-held summary \{[^}]*var\(--brand-ink\)[^}]*min-height: 44px/);
   assert.ok(!/schedule-summary/.test(benefits) && !/schedule-summary/.test(coverage), "no internal counts summary");
   // The one clarification: an unreadable amount, only for simple amounts.
   assert.match(benefits, /attention==="unreadable"&&CLARIFIABLE\.has/);
