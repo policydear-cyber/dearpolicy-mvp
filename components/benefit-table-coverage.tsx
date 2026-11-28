@@ -16,6 +16,8 @@ type Source={documentId:string;document:string;page:number;excerpt:string};
 type Cover={personId:string;coverKey:string;product:string;cover:string;plan:string|null;riderOf:string|null;policyNumber:string|null;
   sumInsured:number|null;premium:number|null;premiumFrequency:string|null;startDate:string|null;endDate:string|null;currency:string|null;
   source:Source;premiumSource?:Source|null;
+  /** Set by the server when the premium's page also prints a different first-policy-year premium (check.ts); the figure only when that page prints it once. */
+  premiumNote?:string|null;firstYearPremium?:number|null;
   /** The currency the premium's own line or page settles; unset, the premium has the cover's currency (check.ts). */
   premiumCurrency?:string|null;
   /** The currency is the household's own setting, applied when shown (lib/benefit-table/household-currency.ts). */
@@ -77,6 +79,7 @@ function CoverCard({cover,rows,reading,listedWith,shared}:{cover:Cover;rows:Row[
         <small>{premium?<>Premium {premium} </>:null}<PageLink source={premium&&cover.premiumSource?cover.premiumSource:cover.source}/></small>
       </div>
     </header>
+    {premium&&cover.premiumNote?<p className="muted cov-reading" data-testid="table-first-year">The page also prints a different premium for the first policy year{cover.firstYearPremium!=null?` (${premiumCode?money(cover.firstYearPremium,premiumCode):plainFigure(cover.firstYearPremium)}${cover.premiumFrequency?` ${cover.premiumFrequency}`:""})`:""}, so the premium above is not what is charged in that year.</p>:null}
     {shared?<p className="muted cov-reading" data-testid="table-shared">{shared}</p>:null}
     {!rows.length?<p className="muted cov-reading">{listedWith?`What it pays is set out with ${coverName(listedWith)}${listedWith.cover!==listedWith.product?` (${listedWith.cover})`:""}, in the same policy wording.`:reading?"Its benefits are still being read.":NO_BENEFITS_YET}</p>:<>
       {/* Only its schedule's own cover line is on file: shown as printed, with the same ask for its wording. */}

@@ -421,6 +421,9 @@ test("Coverage: a benefit's long clauses sit behind a control, never in the row'
   assert.match(cov, /const plural=\(n:number,one:string,many=one\+"s"\)=>`\$\{n\} \$\{n===1\?one:many\}`/);
   assert.match(cov, /<details className="cov-long" data-testid="table-long-conditions"><summary>\{plural\(split\.long\.length,"longer condition"\)\}<\/summary>\{split\.long\.map\(\(c,i\)=><p key=\{i\}>\{c\}<\/p>\)\}<\/details>/);
   assert.doesNotMatch(cov, /\browDetail\(/, "the page no longer joins every clause into the line");
+  // A premium the page prints a first-year premium beside is said not to be what is charged that year, with the first-year figure only when the server read it (28 Nov: Coverage S$269.05 + S$201.80 vs Premiums S$376.68).
+  assert.match(cov, /premium&&cover\.premiumNote\?<p className="muted cov-reading" data-testid="table-first-year">The page also prints a different premium for the first policy year\{cover\.firstYearPremium!=null\?/);
+  assert.match(cov, /so the premium above is not what is charged in that year\./);
 });
 
 test("Documents: a long reading never promises a minute, keeps checking for an hour, and says it is still working", () => {
