@@ -181,7 +181,7 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
   assert.match(read("app/policies/page.tsx"), /same = who\.trim\(\)\.toLowerCase\(\) === p\.name\.trim\(\)\.toLowerCase\(\)[^\n]*same && !p\.byPart \? ""/, "Documents: a name matched to a person of the same name is shown once, never 'Name (Name)' (Live tester 28 Nov)");
   const records = read("app/records/page.tsx");
   assert.match(records, /setTimeout\(\(\)=>setSlow\(true\),4000\)/, "Records: after a few seconds the wait says it is still working");
-  assert.match(records, /role="status">Loading what your cover costs…\{slow\?" Still working: a household with many documents takes longer\.":""\}<\/div>/);
+  assert.match(records, /role="status">Loading what your cover costs…\{slow\?" Still working\. This is taking longer than usual\.":""\}<\/div>/);
   assert.ok(!/schedule-summary/.test(benefits) && !/schedule-summary/.test(coverage), "no internal counts summary");
   // The one clarification: an unreadable amount, only for simple amounts.
   assert.match(benefits, /attention==="unreadable"&&CLARIFIABLE\.has/);
