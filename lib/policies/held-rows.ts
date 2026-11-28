@@ -6,9 +6,12 @@ export function splitHeld<T>(rows: T[], isHeld: (row: T) => boolean): { open: T[
   return { open, folded };
 }
 
-/** The first `n` rows stay open and the rest sit behind one control: an exact ordered split of the same list, so no row is
- * dropped or shown twice. `n` below 0 or not a whole number is treated as 0 (nothing open) / its floor. Pure. */
-export function splitAfter<T>(rows: T[], n: number): { first: T[]; rest: T[] } {
+/** The first `n` rows stay open, and so does any row `keep` names (a question waiting for the household's answer is never
+ * hidden); the rest sit behind one control. An exact ordered split of the same list: no row is dropped or shown twice, and
+ * each list keeps the rows' own order. `n` that is not a finite number is treated as 0; a fraction is floored. Pure. */
+export function splitAfter<T>(rows: T[], n: number, keep: (row: T) => boolean = () => false): { first: T[]; rest: T[] } {
   const k = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
-  return { first: rows.slice(0, k), rest: rows.slice(k) };
+  const first: T[] = [], rest: T[] = [];
+  rows.forEach((row, i) => (i < k || keep(row) ? first : rest).push(row));
+  return { first, rest };
 }

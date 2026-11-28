@@ -181,7 +181,7 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
   }
   // A long policy: the first 12 benefits open, the rest whole and in order behind one control that opens while searching (Live tester 28 Nov: 33,330px).
   assert.match(benefits, /^const SHOWN_FIRST=12;$/m);
-  assert.match(benefits, /const \{first,rest\}=splitAfter\(open,SHOWN_FIRST\);/);
+  assert.match(benefits, /const \{first,rest\}=splitAfter\(open,SHOWN_FIRST,b=>b\.attention==="unreadable"&&CLARIFIABLE\.has\(b\.formulaKind\)\);/, "a row that asks the household a question stays open (TE #653)");
   assert.match(benefits, /\{first\.length>0&&<ul className="benefit-list">\{first\.map\(item\)\}<\/ul>\}/);
   assert.match(benefits, /\{rest\.length>0&&<details className="schedule-more" data-testid="schedule-more" open=\{search\.trim\(\)!==""\}><summary>\{rest\.length===1\?"1 more benefit":`\$\{rest\.length\} more benefits`\}<\/summary><ul className="benefit-list">\{rest\.map\(item\)\}<\/ul><\/details>\}/);
   {
@@ -194,6 +194,12 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
     assert.deepEqual(splitAfter([1, 2], -3), { first: [], rest: [1, 2] });
     assert.deepEqual(splitAfter([1, 2], Number.NaN), { first: [], rest: [1, 2] });
     assert.deepEqual(splitAfter([], 12), { first: [], rest: [] });
+    // A row that waits for the household's answer, deep in the list, stays open, in its own place (Critic #653).
+    const ask = splitAfter(rows, 12, (n) => n === 14 || n === 149);
+    assert.deepEqual(ask.first, [...rows.slice(0, 12), 14, 149]);
+    assert.deepEqual(ask.rest, rows.slice(12).filter((n) => n !== 14 && n !== 149));
+    assert.equal(ask.first.length + ask.rest.length, 150);
+    assert.deepEqual(splitAfter([1, 2, 3], 0, (n) => n === 2), { first: [2], rest: [1, 3] });
     assert.deepEqual(rows.length, 150, "the input is not changed");
   }
   assert.match(read("app/globals.css"), /\.schedule-more summary,\n\.schedule-held summary \{[^}]*min-height: 44px/);

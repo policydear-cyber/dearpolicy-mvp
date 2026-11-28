@@ -210,8 +210,8 @@ export default function BenefitsPage(){
             // behind one control: it stays on the page, whole, but does not bury the figures above it (Live tester 28 Nov: 57,664px).
             const held=(b:Benefit)=>!paysLine(b).established&&!(b.attention==="unreadable"&&CLARIFIABLE.has(b.formulaKind));
             const {open,folded}=splitHeld(rows,held);
-            // A long policy shows its first benefits and keeps the rest, whole and in order, behind one control that opens while searching.
-            const {first,rest}=splitAfter(open,SHOWN_FIRST);
+            // A long policy shows its first benefits and keeps the rest, whole and in order, behind one control that opens while searching; a row that asks the household a question is never in it.
+            const {first,rest}=splitAfter(open,SHOWN_FIRST,b=>b.attention==="unreadable"&&CLARIFIABLE.has(b.formulaKind));
             return <>
               {first.length>0&&<ul className="benefit-list">{first.map(item)}</ul>}
               {rest.length>0&&<details className="schedule-more" data-testid="schedule-more" open={search.trim()!==""}><summary>{rest.length===1?"1 more benefit":`${rest.length} more benefits`}</summary><ul className="benefit-list">{rest.map(item)}</ul></details>}
