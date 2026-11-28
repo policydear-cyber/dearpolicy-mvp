@@ -14,6 +14,7 @@ import { OwnerOnlyNote, useCanManageHousehold } from "@/components/household-rol
 import { UpgradeLink, UpgradePrompt, usePlanStatus } from "@/components/plan-status";
 import { POLL_LIMIT_MS, pollDelay } from "@/lib/documents/poll-schedule";
 import { splitAfter } from "@/lib/policies/held-rows";
+import { canFold } from "@/lib/policies/fold-documents";
 import { CONFIRM_READ_AGAIN, LONG_WAIT_MINUTES, documentReadLabel, isReadingNotice, pressReadAgain, readingFinishedSummary, readingNotice, readingWaitCopy } from "@/lib/documents/upload-problems";
 import type { ReadingDocument } from "@/components/reading-status";
 import { documentFoundLabels, documentTableKinds, OTHER_LABEL, type KindRow } from "@/components/cover-kinds";
@@ -82,9 +83,23 @@ function asksTheOwner(policy: Policy, family: Member[], notFamily: string[]) {
   if (policy.detected_people.some((p) => { const m = p.matchedFamilyMemberId ? family.find((f) => f.id === p.matchedFamilyMemberId) : null; return !!m && matchedByPart(m.display_name, p.name); })) return true;
   return !!uploadOverrideLine({ uploadChoice: policy.upload_choice, linkedIds: policy.linked_people.map((l) => l.id), named: policy.detected_people.map((p) => ({ name: p.name, memberId: p.matchedFamilyMemberId })) }, family);
 }
-/** Not simply read: still reading, held or rejected by the scan, failed, read in part, or flagged for review. Such a document stays in view. */
-function needsAttention(policy: Policy) {
-  return isProcessing(policy) || isQuarantineHeld(policy) || isScanRejected(policy) || policy.needs_review || documentReadLabel(policy).tone !== "ready";
+/** A card behind the fold has nothing to answer (lib/policies/fold-documents.ts): read, placed, plan settled, benefits read. */
+function foldable(policy: Policy, family: Member[], notFamily: string[], planChoice: boolean, benefitState: boolean) {
+  const covered = policy.linked_people.filter((p) => p.source !== "scheme_reference_match");
+  const referenceLinkCount = policy.linked_people.length - covered.length;
+  return canFold({
+    busy: isProcessing(policy) || isQuarantineHeld(policy) || isScanRejected(policy),
+    notReadyLabel: documentReadLabel(policy).tone !== "ready",
+    needsReview: !!policy.needs_review,
+    ready: policy.processing_status === "ready",
+    hasProcessingError: !!policy.processing_error,
+    asksWho: asksTheOwner(policy, family, notFamily),
+    whoIsThisBlock: !!policy.personal_coverage_confirmed,
+    coveredCount: covered.length,
+    referenceLinkCount,
+    planMissing: coversPlanPrompt({ tierOptions: policy.tier_options ?? [], covered, planChoice }).planMissing,
+    benefitState,
+  });
 }
 const isQuarantineHeld = isPolicyQuarantineHeld;
 const isScanRejected = isPolicyScanRejected;
@@ -678,7 +693,7 @@ export default function PoliciesPage() {
         </div>;
       };
       // A long library shows its first documents and the rest behind one tap; a document that needs the household's attention is never behind it.
-      const { first, rest } = splitAfter(shown, DOCUMENTS_SHOWN_FIRST, (p) => needsAttention(p) || asksTheOwner(p, family, notFamily) || detailsId === p.id || deletingId === p.id);
+      const { first, rest } = splitAfter(shown, DOCUMENTS_SHOWN_FIRST, (p) => !foldable(p, family, notFamily, planChoice, !!benefitReading[p.id]));
       return <>{first.map(card)}{rest.length > 0 && <details className="documents-more" data-testid="documents-more"><summary>{rest.length === 1 ? "1 more document" : `${rest.length} more documents`}</summary><div className="document-list rows">{rest.map(card)}</div></details>}</>; })()}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : familyKnown && !family.length ? "No documents yet. First add the people your policies cover, then upload a policy schedule, certificate, renewal notice or benefits booklet. DearPolicy reads it for you." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above, and DearPolicy reads it for you."}</div>}</div>
       {/* After the list: the folders load a few seconds after the page and grow, so above the list they pushed the pills and every row down (Live tester, 26 Nov: layout shift 0.89 on Documents). */}
       {loaded && familyKnown && family.length > 0 && <PolicyFolders documents={policies} family={family} name={documentName} onLibraryChanged={async () => { await refresh(); }} onFolders={onFolders}/>}
