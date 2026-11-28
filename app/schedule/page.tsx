@@ -1,5 +1,6 @@
 "use client";
 
+import { splitHeld } from "@/lib/policies/held-rows";
 import { Icon } from "@/components/icons";
 import { useCanManageHousehold } from "@/components/household-role";
 import Link from "next/link";
@@ -186,8 +187,8 @@ export default function BenefitsPage(){
             const plan=k.length&&k.every(x=>x.plan&&x.plan===k[0].plan)?k[0]:null;
             return <>
               {plan?.note?<p className="muted" data-testid="group-plan">{plan.note}</p>:null}</>;})()}
-          <ul className="benefit-list">
-            {rows.map(benefit=>{const line=paysLine(benefit);return <li key={benefit.id} className="benefit-item" data-testid="benefit-item" data-established={line.established?"yes":"no"}>
+          {(()=>{
+            const item=(benefit:Benefit)=>{const line=paysLine(benefit);return <li key={benefit.id} className="benefit-item" data-testid="benefit-item" data-established={line.established?"yes":"no"}>
               <div className="benefit-head"><strong>{benefit.benefitName}{benefit.nameSuffix}</strong>{benefit.owners.length>0&&!shared(rows)&&<small>{benefit.owners.join(", ")}</small>}</div>
               {line.established&&hasAlternatives(benefit.alternatives)?<AlternativeAmountsBlock alternatives={benefit.alternatives} rowId={benefit.id}/>:<>
                 <p className={line.established?"pays-cell":"muted-cell"}>{line.text}</p>
@@ -201,8 +202,16 @@ export default function BenefitsPage(){
                 {benefit.quote?<blockquote>{benefit.quote}</blockquote>:<p className="muted">No quote from the document was saved for this benefit.</p>}
                 {benefit.conditions.length>0&&<ul>{benefit.conditions.map((c,i)=><li key={i}>{c}</li>)}</ul>}
               </details>
-            </li>;})}
-          </ul>
+            </li>;};
+            // A row with no amount used and nothing the household can answer (a plan not known, a page not matched, a clause in words) sits
+            // behind one control: it stays on the page, whole, but does not bury the figures above it (Live tester 28 Nov: 57,664px).
+            const held=(b:Benefit)=>!paysLine(b).established&&!(b.attention==="unreadable"&&CLARIFIABLE.has(b.formulaKind));
+            const {open,folded}=splitHeld(rows,held);
+            return <>
+              {open.length>0&&<ul className="benefit-list">{open.map(item)}</ul>}
+              {folded.length>0&&<details className="schedule-held" data-testid="schedule-held" open={search.trim()!==""}><summary>{folded.length===1?"1 benefit":`${folded.length} benefits`} with no amount we can use yet</summary><ul className="benefit-list">{folded.map(item)}</ul></details>}
+            </>;
+          })()}
         </section>)}
 
     {!!conditions.length&&<details className="section schedule-group source-details" data-testid="benefit-conditions">

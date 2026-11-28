@@ -25,6 +25,7 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { splitHeld } from "@/lib/policies/held-rows";
 import { isoDateWords } from "@/lib/format/detail-date";
 import { waitingNote } from "@/lib/benefit-table/waiting-note";
 import { printedDay } from "@/lib/simple-chat/verify";
@@ -163,6 +164,20 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
     assert.ok(!/method:"PATCH"[\s\S]*needsReview:false|markCorrect|rereadAll|readAll\(|action:"read"\}\)\}\)\.then\(\(\)=>load/.test(src) || src === coverage, "no confirm/re-read flows");
     assert.ok(!/method:"DELETE"/.test(src), "no row deletion");
   }
+  assert.match(benefits, /const held=\(b:Benefit\)=>!paysLine\(b\)\.established&&!\(b\.attention==="unreadable"&&CLARIFIABLE\.has\(b\.formulaKind\)\)/, "only rows with no amount used and nothing to answer are folded; an amount or a question stays open");
+  assert.match(benefits, /const \{open,folded\}=splitHeld\(rows,held\);/, "one split, so each row is in exactly one list");
+  assert.match(benefits, /\{open\.length>0&&<ul className="benefit-list">\{open\.map\(item\)\}<\/ul>\}/);
+  assert.match(benefits, /\{folded\.length>0&&<details className="schedule-held" data-testid="schedule-held" open=\{search\.trim\(\)!==""\}><summary>\{folded\.length===1\?"1 benefit":`\$\{folded\.length\} benefits`\} with no amount we can use yet<\/summary><ul className="benefit-list">\{folded\.map\(item\)\}<\/ul><\/details>\}/, "folded rows stay whole behind one control per policy, open while a search is typed");
+  {
+    const rows = [1, 2, 3, 4, 5, 6], { open, folded } = splitHeld(rows, (n) => n % 2 === 0);
+    assert.deepEqual(open, [1, 3, 5]); assert.deepEqual(folded, [2, 4, 6]);
+    assert.deepEqual([...open, ...folded].sort(), rows, "every row once");
+    assert.deepEqual(splitHeld([], () => true), { open: [], folded: [] });
+    const many = Array.from({ length: 150 }, (_, i) => i), before = [...many], sp = splitHeld(many, (n) => n % 3 === 0);
+    assert.equal(sp.open.length + sp.folded.length, 150, "a long list loses no row");
+    assert.deepEqual(many, before, "the input is not changed");
+  }
+  assert.match(read("app/globals.css"), /\.schedule-held summary \{[^}]*var\(--brand-ink\)[^}]*min-height: 44px/);
   assert.match(read("app/policies/page.tsx"), /same = who\.trim\(\)\.toLowerCase\(\) === p\.name\.trim\(\)\.toLowerCase\(\)[^\n]*same && !p\.byPart \? ""/, "Documents: a name matched to a person of the same name is shown once, never 'Name (Name)' (Live tester 28 Nov)");
   assert.ok(!/schedule-summary/.test(benefits) && !/schedule-summary/.test(coverage), "no internal counts summary");
   // The one clarification: an unreadable amount, only for simple amounts.
