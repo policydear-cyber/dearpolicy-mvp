@@ -102,3 +102,12 @@ export function sourceTitle(doc:{product_name:string|null;original_filename?:str
   if(product&&!isCodeName(product))return product;
   return documentName({product_name:null,original_filename:doc.original_filename??"",insurer:doc.insurer,document_role:doc.document_role,policy_number:doc.policy_number});
 }
+
+/** Two spellings of one name: the same letters and numbers in the same order, whatever the case, spacing or punctuation
+ * ("Tan Yi Chuen, Desmond" and "Tan Yi Chuen Desmond"). A name printed as a document prints it and a person's name in the
+ * household are then shown once, not as "Name (Name)" (Live tester 28 Nov). Words in another order are different names. */
+export function sameName(a:string,b:string):boolean {
+  const key=(n:string)=>n.normalize("NFC").toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean).join(" ");
+  const x=key(a);
+  return x!==""&&x===key(b);
+}

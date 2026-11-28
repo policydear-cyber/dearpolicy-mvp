@@ -25,6 +25,7 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { sameName } from "@/lib/policies/document-name";
 import { splitHeld } from "@/lib/policies/held-rows";
 import { isoDateWords } from "@/lib/format/detail-date";
 import { waitingNote } from "@/lib/benefit-table/waiting-note";
@@ -178,7 +179,12 @@ test("Benefits and Coverage pages: what documents establish, source collapsed, n
     assert.deepEqual(many, before, "the input is not changed");
   }
   assert.match(read("app/globals.css"), /\.schedule-held summary \{[^}]*var\(--brand-ink\)[^}]*min-height: 44px/);
-  assert.match(read("app/policies/page.tsx"), /same = who\.trim\(\)\.toLowerCase\(\) === p\.name\.trim\(\)\.toLowerCase\(\)[^\n]*same && !p\.byPart \? ""/, "Documents: a name matched to a person of the same name is shown once, never 'Name (Name)' (Live tester 28 Nov)");
+  assert.match(read("app/policies/page.tsx"), /same = sameName\(who, p\.name\)[^\n]*same && !p\.byPart \? ""/, "Documents: a name matched to a person of the same name is shown once, never 'Name (Name)' (Live tester 28 Nov)");
+  assert.ok(sameName("Tan Yi Chuen, Desmond", "Tan Yi Chuen Desmond") && sameName("ONG PEI LIN CHARMAINE", "Ong Pei Lin Charmaine") && sameName(" José  Garcia ", "jose garcia".replace("jose", "josé")));
+  // Different people never collapse: accents, joined words, digits, width forms and an empty name are all different names (TE #650).
+  for (const [a, b] of [["José Garcia", "Jose Garcia"], ["Li Wei", "Liwei"], ["Anne-Marie", "AnneMarie"], ["Aisha 2", "Aisha 3"], ["ＡＩＳＨＡ", "AISHA"], ["O'Neil", "ONeil"], ["Tan Ah", "Tan Ah Kow"]]) assert.ok(!sameName(a, b), `${a} / ${b}`);
+  for (const [a, b] of [["José Garcia".normalize("NFD"), "José Garcia".normalize("NFC")], ["O’Neil", "O'Neil"], ["Anne-Marie Lee", "Anne Marie Lee"], ["Ng.", "ng"]]) assert.ok(sameName(a, b), `${a} / ${b}`);
+  assert.ok(!sameName("Tan Desmond", "Desmond Tan") && !sameName("Aisha", "Aisha Tan") && !sameName("", "") && !sameName("Bob Lim", "Aisha Tan"), "other words, another order or an empty name are not the same name");
   const records = read("app/records/page.tsx");
   assert.match(records, /setTimeout\(\(\)=>setSlow\(true\),4000\)/, "Records: after a few seconds the wait says it is still working");
   assert.match(records, /role="status">Loading what your cover costs…\{slow\?" Still working\. This is taking longer than usual\.":""\}<\/div>/);
