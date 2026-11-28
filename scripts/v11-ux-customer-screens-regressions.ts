@@ -566,6 +566,25 @@ test("Coverage: the same group card under a second person folds only its benefit
   assert.equal(cardSignature(cover("a"), []), null, "an empty card is never folded");
   const same = repeatedCards([{ id: "a", name: "Sam", covers: [cover("a")] }, { id: "b", name: "Sam", covers: [cover("b")] }], () => rows);
   assert.equal(same.get("b:0"), null, "two people with one name are never folded");
+  // Real assembled data carries whose it is on the cover and on every row (TE #655): those fields never keep a copy apart.
+  const real = (id: string, name: string, over: Record<string, unknown> = {}) => ({ personId: id, person: name, coverKey: "gtl", sumInsured: 1000000, premium: 120, source: { documentId: "d", page: 4 }, life: { household: id === "a" ? "self" : "spouse", householdBirth: id === "a" ? "1980-01-01" : null }, ...over });
+  const realRows = (id: string, name: string, pays = "S$1,000,000", benefit = "Death", page = 4) => [
+    { personId: id, person: name, benefit, pays, figure: 1000000, conditions: null, source: { documentId: "d", page } },
+    { personId: id, person: name, benefit: "Advance Payment Benefit", pays: "Up to S$400,000", figure: 400000, conditions: null, source: { documentId: "d", page: 5 } },
+  ];
+  const pair = (rowsB: unknown[], coverB = real("b", "BEN LEE")) => repeatedCards(
+    [{ id: "a", name: "Ana", covers: [real("a", "ANA TAN")] }, { id: "b", name: "Ben", covers: [coverB] }],
+    (p) => (p.id === "a" ? realRows("a", "ANA TAN") : rowsB));
+  assert.equal(pair(realRows("b", "BEN LEE")).get("b:0"), "Ana", "different ids, printed names and household facts still fold");
+  assert.equal(pair(realRows("b", "BEN LEE", "S$900,000")).get("b:0"), null, "the same number of rows with a different amount is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE", "S$1,000,000", "death")).get("b:0"), null, "a different letter case is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE", "S$1,000,000", "Death", 6)).get("b:0"), null, "a different page is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE").reverse()).get("b:0"), null, "the same rows in another order are shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE"), real("b", "BEN LEE", { sumInsured: 500000 })).get("b:0"), null, "a different sum is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE"), real("b", "BEN LEE", { premium: 99 })).get("b:0"), null, "a different premium is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE"), real("b", "BEN LEE", { source: { documentId: "d", page: 6 } })).get("b:0"), null, "a different cover page is shown in full");
+  assert.equal(pair(realRows("b", "BEN LEE").slice(0, 1)).get("b:0"), null, "a row fewer is shown in full");
+  assert.equal(pair(realRows("b", " BEN LEE", " S$1,000,000")).get("b:0"), null, "whitespace in an amount is shown in full");
   const src = read("components/benefit-table-coverage.tsx");
   assert.match(src, /sameAs\?<details className="cov-repeat" data-testid="table-repeat">/);
   assert.match(src, /repeatedCards\(listed,\(p,c\)=>rowsForCover\(c as Cover,\(listed\.find\(x=>x\.id===p\.id\) as Person\)\.covers,\(listed\.find\(x=>x\.id===p\.id\) as Person\)\.rows\)\.rows\)/, "the rows compared are the rows each card shows");

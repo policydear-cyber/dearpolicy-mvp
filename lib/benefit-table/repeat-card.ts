@@ -7,9 +7,10 @@
  */
 export type RepeatCover = { personId: string; [key: string]: unknown };
 
-/** Whose a card or row is: the id and the name printed beside them. Neither is shown inside the folded list, and they
- * are the only fields that differ between one person's copy of a shared certificate and another's. */
-const WHOSE = new Set(["personId", "person"]);
+/** Whose a card or row is: the id, the name printed beside them, and the household facts worked out for that person
+ * (`life`: relationship and birth date, used for child limits). None is shown inside the folded list, and they are the
+ * only fields that differ between one person's copy of a shared certificate and another's. */
+const WHOSE = new Set(["personId", "person", "life"]);
 
 export function cardSignature(cover: RepeatCover, rows: unknown[]): string | null {
   if (!rows.length) return null;
