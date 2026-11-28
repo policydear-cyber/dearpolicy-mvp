@@ -611,4 +611,17 @@ test("Coverage: the same group card under a second person folds only its benefit
   assert.match(src, /<header className="cov-cover-head">[\s\S]*?<\/header>[\s\S]*?\{sameAs\?/, "the header stays outside the fold");
 });
 
+test("Documents: a long library folds the documents after the first eight, and one that needs attention or is linked to is never behind the fold (Live tester 28 Nov)", () => {
+  const page = read("app/policies/page.tsx");
+  assert.match(page, /const DOCUMENTS_SHOWN_FIRST = 8;/);
+  assert.match(page, /function needsAttention\(policy: Policy\) \{\n  return isProcessing\(policy\) \|\| isQuarantineHeld\(policy\) \|\| isScanRejected\(policy\) \|\| policy\.needs_review \|\| documentReadLabel\(policy\)\.tone !== "ready";\n\}/);
+  assert.match(page, /splitAfter\(shown, DOCUMENTS_SHOWN_FIRST, \(p\) => needsAttention\(p\) \|\| detailsId === p\.id \|\| deletingId === p\.id\)/);
+  assert.match(page, /\{first\.map\(card\)\}\{rest\.length > 0 && <details className="documents-more" data-testid="documents-more"><summary>\{rest\.length === 1 \? "1 more document" : `\$\{rest\.length\} more documents`\}<\/summary><div className="document-list rows">\{rest\.map\(card\)\}<\/div><\/details>\}/);
+  assert.doesNotMatch(page, /\{shown\.map\(\(policy\)/, "every card renders through first or rest");
+  // A link to #doc-<id> (chat source, Home, a folder) opens the fold that holds the card before it scrolls there.
+  assert.match(page, /card\.closest\("details\.documents-more"\)[\s\S]*?more\.open = true;[\s\S]*?card\.scrollIntoView\(\{ block: "center" \}\);/);
+  assert.match(page, /addEventListener\("hashchange", onHash\)/);
+  assert.match(read("app/globals.css"), /\.documents-more summary,\n\.cov-repeat summary,\n\.schedule-more summary,\n\.schedule-held summary \{[^}]*min-height: 44px/);
+});
+
 console.log(`V1.1 customer-screen regressions: ${passed} passed${process.exitCode ? ", some FAILED" : ""}.`);
