@@ -567,15 +567,16 @@ test("Coverage: the same group card under a second person folds only its benefit
   const same = repeatedCards([{ id: "a", name: "Sam", covers: [cover("a")] }, { id: "b", name: "Sam", covers: [cover("b")] }], () => rows);
   assert.equal(same.get("b:0"), null, "two people with one name are never folded");
   // Real assembled data carries whose it is on the cover and on every row (TE #655): those fields never keep a copy apart.
-  const real = (id: string, name: string, over: Record<string, unknown> = {}) => ({ personId: id, person: name, coverKey: "gtl", sumInsured: 1000000, premium: 120, source: { documentId: "d", page: 4 }, life: { household: id === "a" ? "self" : "spouse", householdBirth: id === "a" ? "1980-01-01" : null }, ...over });
+  const real = (id: string, name: string, over: Record<string, unknown> = {}) => ({ personId: id, person: name, coverKey: "gtl", sumInsured: 1000000, premium: 120, source: { documentId: "d", page: 4, excerpt: id === "a" ? "ANA TAN S1234567A S$1,000,000" : "BEN LEE S7654321B S$1,000,000" }, quote: id === "a" ? "ANA TAN" : "BEN LEE", life: { household: id === "a" ? "self" : "spouse", householdBirth: id === "a" ? "1980-01-01" : null }, ...over });
   const realRows = (id: string, name: string, pays = "S$1,000,000", benefit = "Death", page = 4) => [
-    { personId: id, person: name, benefit, pays, figure: 1000000, conditions: null, source: { documentId: "d", page } },
+    { personId: id, person: name, benefit, pays, figure: 1000000, conditions: null, source: { documentId: "d", page }, baseSource: { documentId: "d", page: 1, excerpt: `${name} masked` } },
     { personId: id, person: name, benefit: "Advance Payment Benefit", pays: "Up to S$400,000", figure: 400000, conditions: null, source: { documentId: "d", page: 5 } },
   ];
   const pair = (rowsB: unknown[], coverB = real("b", "BEN LEE")) => repeatedCards(
     [{ id: "a", name: "Ana", covers: [real("a", "ANA TAN")] }, { id: "b", name: "Ben", covers: [coverB] }],
     (p) => (p.id === "a" ? realRows("a", "ANA TAN") : rowsB));
   assert.equal(pair(realRows("b", "BEN LEE")).get("b:0"), "Ana", "different ids, printed names and household facts still fold");
+  assert.equal(pair(realRows("b", "BEN LEE", "S$1,000,000", "Death", 5)).get("b:0"), null, "a different page is shown in full even when the quoted line also differs");
   assert.equal(pair(realRows("b", "BEN LEE", "S$900,000")).get("b:0"), null, "the same number of rows with a different amount is shown in full");
   assert.equal(pair(realRows("b", "BEN LEE", "S$1,000,000", "death")).get("b:0"), null, "a different letter case is shown in full");
   assert.equal(pair(realRows("b", "BEN LEE", "S$1,000,000", "Death", 6)).get("b:0"), null, "a different page is shown in full");
